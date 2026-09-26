@@ -7,6 +7,8 @@ import {
   shell,
   Menu,
   session,
+  Tray,
+  nativeImage,
 } from "electron";
 import fs from "node:fs/promises";
 import { watch } from "node:fs";
@@ -14,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FileStore, within, markdownPath } from "./files.mjs";
 import { createExporter } from "./export.mjs";
+import { createIntegration } from "./integration.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -32,6 +35,109 @@ if (profile && path.isAbsolute(profile)) app.setPath("userData", profile);
 const files = new FileStore({
   backups: path.join(app.getPath("userData"), "backups"),
 });
+const integration = createIntegration({
+  app,
+  shell,
+  profile: app.getPath("userData"),
+});
+let tray,
+  desktopWrite = Promise.resolve(),
+  pendingDisk = false;
+function showWindow() {
+  if (!win || win.isDestroyed()) return;
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+function desktopAction(action) {
+  desktopWrite = desktopWrite.catch(() => {}).then(action);
+  return desktopWrite;
+}
+function reportDesktopError(error) {
+  showWindow();
+  dialog.showMessageBox(win, {
+    type: "error",
+    message: "系统设置未完成",
+    detail: error.message,
+  });
+}
+function updateTray() {
+  if (!tray) return;
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "打开 Folio Notes", click: showWindow },
+      { label: "隐藏到托盘", click: () => send("command", "hide") },
+      { type: "separator" },
+      {
+        label: "关闭窗口后留在后台",
+        type: "checkbox",
+        checked: integration.closeToTray,
+        click: (item) =>
+          desktopAction(async () => {
+            await integration.setBackground(item.checked);
+            updateTray();
+            send("desktop-settings", null);
+          }).catch(reportDesktopError),
+      },
+      {
+        label: "开机启动",
+        type: "checkbox",
+        enabled: process.platform === "win32" && app.isPackaged,
+        checked: integration.login().openAtLogin,
+        click: (item) =>
+          desktopAction(async () => {
+            integration.setStartup(item.checked);
+            updateTray();
+            send("desktop-settings", null);
+          }).catch(reportDesktopError),
+      },
+      {
+        label: "后台与默认应用设置…",
+        click: () => {
+          showWindow();
+          send("command", "desktopSettings");
+        },
+      },
+      { type: "separator" },
+      {
+        label: "退出 Folio Notes",
+        click: () => {
+          if (allowClose || !ready) app.quit();
+          else {
+            showWindow();
+            send("command", "quit");
+          }
+        },
+      },
+    ]),
+  );
+}
+function createTray() {
+  // A small native bitmap stays crisp on both light and dark taskbars.
+  const pixels = Buffer.alloc(32 * 32 * 4);
+  for (let y = 0; y < 32; y++)
+    for (let x = 0; x < 32; x++) {
+      if ((x - 15.5) ** 2 + (y - 15.5) ** 2 > 15 ** 2) continue;
+      const ink =
+        (x >= 9 && x <= 12 && y >= 7 && y <= 25) ||
+        (x >= 9 && x <= 23 && y >= 7 && y <= 10) ||
+        (x >= 9 && x <= 20 && y >= 14 && y <= 17);
+      const i = (y * 32 + x) * 4;
+      pixels.set(ink ? [240, 244, 245, 255] : [93, 109, 36, 255], i);
+    }
+  try {
+    tray = new Tray(
+      nativeImage.createFromBitmap(pixels, { width: 32, height: 32 }),
+    );
+    tray.setToolTip("Folio Notes");
+    tray.on("click", showWindow);
+    tray.on("double-click", showWindow);
+    updateTray();
+  } catch (error) {
+    console.warn("Tray unavailable:", error.message);
+    tray = null;
+  }
+}
 let win,
   ready = false,
   pending = [],
@@ -60,7 +166,10 @@ function watchFile(id) {
     let timer;
     const watcher = watch(folder, () => {
       clearTimeout(timer);
-      timer = setTimeout(() => send("disk", null), 180);
+      timer = setTimeout(() => {
+        if (win?.isVisible()) send("disk", null);
+        else pendingDisk = true;
+      }, 180);
     });
     watcher.on("error", () => {
       watcher.close();
@@ -120,12 +229,19 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", (_event, argv) => {
     acceptArgs(argv);
-    if (win?.isMinimized()) win.restore();
-    win?.focus();
+    if (!argv.includes("--background") || argv.some(markdownPath)) showWindow();
+  });
+  app.on("before-quit", (event) => {
+    if (!allowClose && ready && win && !win.isDestroyed()) {
+      event.preventDefault();
+      showWindow();
+      send("command", "quit");
+    }
   });
   app
     .whenReady()
     .then(async () => {
+      await integration.load();
       session.defaultSession.setPermissionRequestHandler(
         (_wc, _permission, done) => done(false),
       );
@@ -206,13 +322,25 @@ else {
         },
       });
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+      win.on("show", () => {
+        if (pendingDisk) {
+          pendingDisk = false;
+          send("disk", null);
+        }
+      });
       win.webContents.on("will-navigate", (event) => event.preventDefault());
       win.on("close", (event) => {
         if (allowClose || !ready) return;
         event.preventDefault();
         send("command", "close");
       });
-      win.once("ready-to-show", () => win.show());
+      createTray();
+      win.once("ready-to-show", () => {
+        const backgroundOnly =
+          process.argv.includes("--background") &&
+          !process.argv.some(markdownPath);
+        if (!backgroundOnly || !tray) win.show();
+      });
       win.webContents.on("render-process-gone", () => {
         allowClose = true;
       });
@@ -294,6 +422,43 @@ else {
       // Keep native accelerators, but not the menu strip (including on Alt).
       // Auto-hide would let Alt reveal the strip again, so it stays disabled.
       if (process.platform !== "darwin") win.setMenuBarVisibility(false);
+      api("desktopStatus", () =>
+        integration
+          .status()
+          .then((status) => ({ ...status, trayAvailable: Boolean(tray) })),
+      );
+      api("desktopAction", (action) =>
+        desktopAction(async () => {
+          if (!action || typeof action !== "object")
+            throw Error("无效系统操作");
+          switch (action.type) {
+            case "background":
+              if (!tray && action.value)
+                throw Error("托盘不可用，无法隐藏窗口");
+              await integration.setBackground(action.value);
+              break;
+            case "startup":
+              integration.setStartup(action.value);
+              break;
+            case "register":
+              await integration.register();
+              break;
+            case "defaults":
+              await integration.defaults();
+              break;
+            case "startupSettings":
+              await integration.startupSettings();
+              break;
+            default:
+              throw Error("无效系统操作");
+          }
+          updateTray();
+          return {
+            ...(await integration.status()),
+            trayAvailable: Boolean(tray),
+          };
+        }),
+      );
       api(
         "exportNote",
         createExporter({
@@ -436,9 +601,19 @@ else {
           .then(() => persist(savedSession));
         return sessionWrite;
       });
-      api("closeReady", async () => {
+      api("closeReady", async (intent = "close") => {
+        if (!["close", "hide", "quit"].includes(intent))
+          throw Error("无效关闭操作");
         await sessionWrite;
+        if (
+          tray &&
+          (intent === "hide" || (intent === "close" && integration.closeToTray))
+        ) {
+          win.hide();
+          return;
+        }
         if (dirty) {
+          showWindow();
           const r = await dialog.showMessageBox(win, {
             type: "warning",
             buttons: ["取消", "退出并保留恢复草稿"],
@@ -450,7 +625,7 @@ else {
           if (r.response !== 1) return;
         }
         allowClose = true;
-        win.close();
+        app.quit();
       });
       api("ready", async () => {
         let old = {};
@@ -492,6 +667,7 @@ else {
       await win.loadURL("folio://app/");
       app.on("window-all-closed", () => app.quit());
       app.on("will-quit", () => {
+        tray?.destroy();
         for (const watcher of watchers.values()) watcher.close();
         watchers.clear();
       });

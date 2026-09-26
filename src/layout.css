@@ -426,6 +426,23 @@ select:focus-visible {
   line-height: 1.6;
   margin: 12px 0 0;
 }
+#desktop-settings input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+.desktop-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.desktop-actions button {
+  font-size: 12px;
+  border-color: var(--line);
+}
+#desktop-executable {
+  overflow-wrap: anywhere;
+}
 .layout-sample {
   display: flex;
   gap: 5px;

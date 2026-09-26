@@ -25,6 +25,7 @@ import {
 import { createPreviewCache } from "./render-cache.js";
 import { renderDiagrams } from "./diagrams.js";
 import { createLinkPreview, splitLink } from "./link-preview.js";
+import { wireDesktopSettings } from "./desktop-settings.js";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
 import "@fontsource-variable/jetbrains-mono";
@@ -1155,13 +1156,16 @@ const commands = {
   read: () => setMode("read"),
   edit: () => setMode("edit"),
   source: () => setMode("source"),
-  close: async () => {
+  hide: () => commands.close("hide"),
+  quit: () => commands.close("quit"),
+  desktopSettings: () => openDesktopSettings(),
+  close: async (intent = "close") => {
     if (tabs.some((t) => t.saving)) {
       toast("文件正在保存，请完成后再关闭");
       return;
     }
     await flushSession();
-    await api.closeReady();
+    await api.closeReady(intent);
   },
 };
 let exporting = false;
@@ -1207,6 +1211,11 @@ for (const [id, fn] of Object.entries({
 for (const b of document.querySelectorAll("button[data-mode]"))
   b.onclick = () => setMode(b.dataset.mode);
 wireAppearance(changeSettings);
+const openDesktopSettings = wireDesktopSettings({
+  api,
+  close: (intent) => commands.close(intent),
+  report: toast,
+});
 function closeAppMenu({ focus = false } = {}) {
   $("#app-menu").hidden = true;
   $("#app-menu-toggle").setAttribute("aria-expanded", "false");

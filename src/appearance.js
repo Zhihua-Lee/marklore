@@ -1,5 +1,6 @@
 import { icon } from "./icons.js";
 import { readingWeight } from "./typography.js";
+import { desktopSettingsMarkup } from "./desktop-settings.js";
 const $ = (selector) => document.querySelector(selector);
 
 export const appearanceMarkup = `
@@ -20,7 +21,7 @@ export const appearanceMarkup = `
     <div class="layout-sample" aria-hidden="true"><span data-panel="library">文件夹</span><span class="layout-page">正文</span><span data-panel="outline">目录</span></div>
   </fieldset>
   <fieldset><legend>主题</legend><label for="color-theme">界面颜色<select id="color-theme"><option value="light">浅色</option><option value="dark">深色</option></select><button id="theme" class="icon" aria-label="切换深浅主题" title="切换深浅主题">${icon("theme")}</button></label></fieldset>
-</dialog>`;
+${desktopSettingsMarkup}</dialog>`;
 
 export function applyAppearance(settings) {
   const root = document.documentElement;

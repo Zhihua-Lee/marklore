@@ -1,6 +1,6 @@
 {
   "name": "folio-notes",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
@@ -17,6 +17,7 @@
     "test:native-safety": "node tests/native-safety.mjs",
     "test:native-menu": "node tests/native-menu.mjs",
     "test:native-export": "node tests/native-export.mjs",
+    "test:native-background": "node tests/native-background.mjs",
     "format": "prettier --write src desktop tests tools *.mjs *.json *.md",
     "dist": "pnpm build && electron-builder --win dir --publish never",
     "licenses": "node tools/licenses.mjs"

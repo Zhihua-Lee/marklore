@@ -20,11 +20,14 @@ for (const name of [
   "reveal",
   "session",
   "closeReady",
+  "desktopStatus",
+  "desktopAction",
   "exportNote",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {
-  if (!["open", "disk", "command"].includes(name)) throw Error("Invalid event");
+  if (!["open", "disk", "command", "desktop-settings"].includes(name))
+    throw Error("Invalid event");
   const handler = (_event, payload) => callback(payload);
   ipcRenderer.on("folio:" + name, handler);
   return () => ipcRenderer.removeListener("folio:" + name, handler);

@@ -148,6 +148,11 @@ export class FileStore {
       });
     }
   }
+  async currentFolder(id) {
+    const file = this.file(id);
+    await unchangedPath(file.path);
+    return this.directory(path.dirname(file.path));
+  }
   async directory(folder) {
     const real = await fs.realpath(folder);
     const existing = [...this.directories].find(([, p]) => p === real);

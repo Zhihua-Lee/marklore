@@ -40,14 +40,13 @@
   font-weight: var(--strong-weight, 600);
 }
 :root[data-typeface="literata"] .prose h1 {
-  font-size: 2.1em;
-  font-weight: 600;
+  font-size: 1.85em;
 }
 :root[data-typeface="literata"] .prose h2 {
-  font-size: 1.6em;
+  font-size: 1.5em;
 }
 :root[data-typeface="literata"] .prose h3 {
-  font-size: 1.35em;
+  font-size: 1.25em;
 }
 :root[data-typeface="literata"] .prose pre {
   line-height: 1.65;
@@ -75,7 +74,8 @@
 :root[data-typeface="book"] {
   --font-note: Cambria, "Songti SC", SimSun, serif;
 }
-.prose strong {
+.prose strong,
+.prose b {
   font-weight: var(--strong-weight, 600);
 }
 /* KaTeX owns math family/weight/style; never smear glyphs or override its spans. */
@@ -199,6 +199,19 @@ main {
 #outline {
   font-family: var(--font-ui);
 }
+#tree,
+#tree summary,
+#tree .file,
+#file-filter,
+#outline button {
+  font-family: var(--font-ui);
+  font-size: var(--navigation-size, 12px);
+  font-weight: 400;
+}
+#tree .file[aria-current="page"] {
+  background: var(--hover);
+  color: var(--accent);
+}
 #outline button {
   overflow-wrap: anywhere;
   overflow-x: auto;
@@ -250,18 +263,42 @@ main {
   padding-left: 6px;
 }
 .modes {
-  background: transparent;
-  padding: 0;
-  gap: 2px;
+  position: relative;
+  isolation: isolate;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  padding: 2px;
+  gap: 0;
+  --mode-index: 0;
+}
+.modes::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 2px auto 2px 2px;
+  width: calc((100% - 4px) / 3);
+  border-radius: 4px;
+  background: var(--hover);
+  transform: translateX(calc(var(--mode-index) * 100%));
+  transition: transform 160ms ease;
+}
+.modes:has([data-mode="edit"][aria-pressed="true"]) {
+  --mode-index: 1;
+}
+.modes:has([data-mode="source"][aria-pressed="true"]) {
+  --mode-index: 2;
 }
 .modes button {
+  flex: 1;
   color: var(--muted);
   font-weight: 400;
 }
 .modes button[aria-pressed="true"] {
-  background: var(--hover);
+  background: transparent;
   box-shadow: none;
-  font-weight: 600;
+  font-weight: 400;
+  color: var(--accent);
 }
 .toolbar #width-toggle[aria-pressed="true"] {
   color: var(--accent);

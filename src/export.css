@@ -36,21 +36,33 @@ h6 {
   break-after: avoid;
 }
 h1 {
-  font-size: 2.1em;
+  font-size: 1.85em;
   font-weight: 600;
   margin: 0 0 0.8em;
 }
 h2 {
-  font-size: 1.6em;
+  font-size: 1.5em;
   font-weight: 600;
   margin: 1.6em 0 0.7em;
 }
 h3 {
-  font-size: 1.35em;
+  font-size: 1.25em;
   font-weight: 600;
   margin-top: 1.5em;
 }
 strong {
+  font-weight: 600;
+}
+h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+}
+h5 {
+  font-size: 1em;
+  font-weight: 600;
+}
+h6 {
+  font-size: 0.95em;
   font-weight: 600;
 }
 p {
@@ -70,7 +82,7 @@ li > p {
 hr {
   border: 0;
   height: 1px;
-  width: 72%;
+  width: 100%;
   background: #dcdad5;
   margin: 2em auto;
 }

@@ -8,6 +8,7 @@ for (const name of [
   "ready",
   "pickFiles",
   "pickFolder",
+  "currentFolder",
   "list",
   "search",
   "openChild",

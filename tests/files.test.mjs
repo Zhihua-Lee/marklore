@@ -24,6 +24,22 @@ test("UTF-8 BOM and CRLF roundtrip", () => {
   assert.equal(info.text, "# 中文\n测试\n");
   assert.deepEqual(encode(info.text, info), b);
 });
+test("current folder derives only from an opened file handle", async (t) => {
+  const { root, store } = await fixture(t);
+  const folder = path.join(root, "notes");
+  await fs.mkdir(folder);
+  await fs.writeFile(path.join(folder, "current.md"), "# Current");
+  await fs.writeFile(path.join(folder, "sibling.md"), "# Sibling");
+  const doc = await store.open(path.join(folder, "current.md"));
+  const current = await store.currentFolder(doc.id);
+  assert.equal(current.path, await fs.realpath(folder));
+  assert.deepEqual(
+    (await store.list(current.id)).map((x) => x.name),
+    ["current.md", "sibling.md"],
+  );
+  await assert.rejects(store.currentFolder(folder), /未授权/);
+  assert.equal((await store.currentFolder(doc.id)).id, current.id);
+});
 test("UTF-16LE roundtrip", () => {
   const b = Buffer.concat([
     Buffer.from([255, 254]),

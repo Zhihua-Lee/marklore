@@ -47,6 +47,11 @@ try {
   });
   await page.locator("#content h1").waitFor();
   assert.match(await page.locator("#content").innerText(), /Native test/);
+  await page.locator('#tree .file[aria-current="page"]').waitFor();
+  assert.equal(
+    await page.locator('#tree .file[aria-current="page"]').innerText(),
+    "note.md",
+  );
   assert.equal(await page.evaluate(() => typeof require), "undefined");
   await page.waitForFunction(
     () => document.querySelector("#content img")?.naturalWidth === 100,

@@ -12,8 +12,10 @@
   --hover: #e3e9df;
   --danger: #a63b31;
   --note-size: 16px;
-  --font-ui: "Inter Variable", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  --font-code: "JetBrains Mono Variable", "Microsoft YaHei UI", monospace;
+  --font-ui:
+    "Inter Variable", "Noto Sans SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+  --font-code:
+    "JetBrains Mono Variable", "Noto Sans SC", "Microsoft YaHei", monospace;
   --font-note: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
   --heading-weight: 600;
   --motion: 140ms;
@@ -163,7 +165,8 @@ button.primary {
   text-overflow: ellipsis;
   flex: 1;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--tab-size, 11px);
+  font-weight: 400;
   padding: 4px 6px 4px 12px;
 }
 .tab-close {
@@ -501,19 +504,28 @@ main[data-empty="true"] > #panes {
   letter-spacing: normal;
 }
 .prose h1 {
-  font-size: 2em;
+  font-size: 1.85em;
   margin: 0 0 0.7em;
 }
 .prose h2 {
-  font-size: 1.4em;
+  font-size: 1.5em;
   margin: 1.65em 0 0.7em;
 }
 .prose h3 {
-  font-size: 1.13em;
+  font-size: 1.25em;
   margin-top: 1.5em;
 }
 .prose p {
   margin: 0 0 1em;
+}
+.prose h4 {
+  font-size: 1.1em;
+}
+.prose h5 {
+  font-size: 1em;
+}
+.prose h6 {
+  font-size: 0.95em;
 }
 .prose ul,
 .prose ol {
@@ -533,7 +545,7 @@ main[data-empty="true"] > #panes {
 .prose hr {
   border: 0;
   height: 1px;
-  width: 72%;
+  width: 100%;
   margin: 2em auto;
   background: color-mix(in srgb, var(--reading-ink) 12%, transparent);
 }
@@ -643,28 +655,47 @@ main[data-empty="true"] > #panes {
 .prose .fold {
   position: absolute;
   left: -25px;
-  top: 0.1em;
+  top: 0;
   width: 24px;
+  height: 1.3em;
   min-height: 24px;
   padding: 0;
   z-index: 1;
-  color: var(--muted);
-  font:
-    15px "Segoe UI",
-    sans-serif;
+  color: transparent;
+  font: inherit;
+  line-height: 24px;
+  font-weight: 400;
+  text-indent: -9999px;
+  overflow: hidden;
+}
+.prose .fold::after {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: calc(50% - 4px);
+  border-block: 4px solid transparent;
+  border-left: 5px solid var(--muted);
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+.note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) > .fold::after {
+  transform: rotate(0deg);
+  border-left-color: var(--accent);
 }
 .note-section.collapsed > .section-body {
   display: none;
 }
 .note-section {
+  --section-inset: 18px;
   position: relative;
-  padding-left: 18px;
+  padding-left: var(--section-inset);
   margin-block: 1.6em;
 }
 .note-section:first-child {
   margin-top: 0;
 }
 .prose > .note-section {
+  --section-inset: 0px;
   padding-left: 0;
 }
 .note-section:last-child {
@@ -684,7 +715,7 @@ main[data-empty="true"] > #panes {
 }
 .section-rail {
   position: absolute;
-  inset: 0 auto 0 -12px;
+  inset: 0 auto 0 calc(var(--section-inset) - 20px);
   width: 14px;
   min-height: 0;
   padding: 0;
@@ -694,7 +725,7 @@ main[data-empty="true"] > #panes {
 .section-rail::before {
   content: "";
   position: absolute;
-  inset: 0 auto 0 5px;
+  inset: 0 auto 0 7px;
   border-left: 1px solid color-mix(in srgb, var(--reading-ink) 9%, transparent);
   transition: border-color 120ms ease;
 }
@@ -712,7 +743,7 @@ main[data-empty="true"] > #panes {
   margin-bottom: 0;
 }
 .note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) > .fold {
-  color: var(--accent);
+  color: transparent;
 }
 .section-summary {
   display: none;
@@ -918,7 +949,9 @@ dialog::backdrop {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
     animation: none !important;
     transition: none !important;

@@ -322,13 +322,17 @@ else {
         });
         return Promise.all(result.filePaths.map(openFile));
       });
-      api("pickFolder", async () => {
+      api("pickFolder", async (fileId = null) => {
         const r = await dialog.showOpenDialog(win, {
+          ...(fileId
+            ? { defaultPath: path.dirname(files.file(fileId).path) }
+            : {}),
           properties: ["openDirectory"],
         });
         return r.filePaths[0] ? files.directory(r.filePaths[0]) : null;
       });
       api("list", (id) => files.list(id));
+      api("currentFolder", (id) => files.currentFolder(id));
       api("search", (ids, query) => {
         if (
           !Array.isArray(ids) ||

@@ -8,9 +8,9 @@ const longText = Array.from(
     `## Section ${i}\n\nParagraph ${i}. 中文与 English retain the same position when reading width changes. ${"The current paragraph should remain in view while its lines reflow to the available width. ".repeat(4)}\n\n`,
 ).join("");
 
-async function boot(page, text = typographyText) {
+async function boot(page, text = typographyText, folder = false) {
   await page.addInitScript(
-    ({ text }) => {
+    ({ text, folder }) => {
       const file = {
         id: "minimal-note",
         name: "Layout.md",
@@ -36,12 +36,26 @@ async function boot(page, text = typographyText) {
           window.mock.session = value;
           localStorage.setItem("minimal-session", JSON.stringify(value));
         },
-        list: async () => [],
+        ...(folder
+          ? {
+              currentFolder: async () => ({
+                id: "folder",
+                path: "C:/synthetic",
+                name: "synthetic",
+              }),
+            }
+          : {}),
+        list: async () => {
+          window.mock.listCalls = (window.mock.listCalls || 0) + 1;
+          return folder
+            ? [{ name: "Layout.md", path: file.path, directory: false }]
+            : [];
+        },
         pickFiles: async () => [],
         link: async () => null,
       };
     },
-    { text },
+    { text, folder },
   );
   await page.goto("/");
   await expect(
@@ -57,6 +71,75 @@ async function openAppearance(page) {
 async function closeAppearance(page) {
   await page.locator("#appearance-close").click();
 }
+test("current folder follows the note, navigation typography persists and reopening avoids rescans", async ({
+  page,
+}) => {
+  await boot(
+    page,
+    "# One\n\n## Two\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six\n\n**Strong** and *italic*.\n\n---\n\nText",
+    true,
+  );
+  const file = page.locator('#tree .file[aria-current="page"]');
+  await expect(file).toHaveText("Layout.md");
+  const initial = await page.evaluate(() => window.mock.listCalls);
+  await page.locator("#sidebar-toggle").click();
+  await expect(page.locator("#sidebar")).toBeHidden();
+  await page.locator("#sidebar-toggle").click();
+  await expect(file).toBeVisible();
+  expect(await page.evaluate(() => window.mock.listCalls)).toBe(initial);
+  await openAppearance(page);
+  await page.locator("#navigation-size").selectOption("11");
+  await page.locator("#tab-size").selectOption("10");
+  await closeAppearance(page);
+  const values = await page.evaluate(() => {
+    const style = (q) => getComputedStyle(document.querySelector(q));
+    return {
+      file: [style("#tree .file").fontSize, style("#tree summary").fontWeight],
+      tab: style(".tab-label").fontSize,
+      headings: [
+        ...document.querySelectorAll("#content :is(h1,h2,h3,h4,h5,h6)"),
+      ].map((el) => {
+        const rail = el.parentElement.querySelector(":scope > .section-rail");
+        const fold = el.querySelector(".fold").getBoundingClientRect();
+        return {
+          size: parseFloat(getComputedStyle(el).fontSize),
+          weight: getComputedStyle(el).fontWeight,
+          alignment: Math.abs(
+            rail.getBoundingClientRect().left +
+              7 -
+              (fold.left + fold.width / 2),
+          ),
+        };
+      }),
+      em: style("#content em").fontStyle,
+    };
+  });
+  expect(values.file).toEqual(["11px", "400"]);
+  expect(values.tab).toBe("10px");
+  expect(values.em).toBe("italic");
+  for (let i = 0; i < values.headings.length; i++) {
+    expect(values.headings[i].weight).toBe("600");
+    expect(values.headings[i].alignment).toBeLessThan(1);
+    if (i)
+      expect(values.headings[i].size).toBeLessThan(values.headings[i - 1].size);
+  }
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(page.locator(".modes")).toHaveCSS("--mode-index", "1");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(
+    await page
+      .locator(".modes")
+      .evaluate((el) => getComputedStyle(el, "::before").transitionDuration),
+  ).toBe("0s");
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.mock.session?.settings.navigationSize),
+    )
+    .toBe(11);
+  await page.reload();
+  await expect(page.locator("#tree .file")).toHaveCSS("font-size", "11px");
+  await page.screenshot({ path: ".local/layout-v0111.png" });
+});
 
 for (const dpr of [1, 1.25, 1.5, 2]) {
   test.describe(`reading at device scale ${dpr}`, () => {
@@ -358,7 +441,7 @@ Retained when the other chapter is folded.
       summaryHidden: css("#content .section-summary").display,
     };
   });
-  expect(styles.rule / styles.parent).toBeCloseTo(0.72, 1);
+  expect(styles.rule / styles.parent).toBeCloseTo(1, 2);
   expect(styles.ruleHeight).toBe("1px");
   expect(styles.line).toBe("0px");
   expect(styles.mathMargin).toBe("0px");

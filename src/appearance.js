@@ -13,6 +13,8 @@ export const appearanceMarkup = `
     <p class="setting-hint">Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。</p>
   </fieldset>
   <fieldset><legend>侧栏位置</legend>
+    <label for="navigation-size">文件夹与目录字号<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select></label>
+    <label for="tab-size">标签页字号<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select></label>
     <label for="library-placement">文件夹浏览<select id="library-placement"><option value="left">左侧</option><option value="right">右侧</option><option value="hidden">隐藏</option></select></label>
     <label for="outline-placement">本文目录<select id="outline-placement"><option value="right">右侧</option><option value="left">左侧</option><option value="hidden">隐藏</option></select></label>
     <div class="layout-sample" aria-hidden="true"><span data-panel="library">文件夹</span><span class="layout-page">正文</span><span data-panel="outline">目录</span></div>
@@ -23,6 +25,8 @@ export const appearanceMarkup = `
 export function applyAppearance(settings) {
   const root = document.documentElement;
   root.dataset.typeface = settings.typeface;
+  root.style.setProperty("--navigation-size", settings.navigationSize + "px");
+  root.style.setProperty("--tab-size", settings.tabSize + "px");
   const weight = readingWeight(settings);
   root.style.setProperty("--note-weight", String(weight));
   root.style.setProperty(
@@ -33,7 +37,7 @@ export function applyAppearance(settings) {
   // Real font weights only. A weight jump should never make all math bold.
   root.style.setProperty(
     "--heading-weight",
-    ["balanced", "literata"].includes(settings.typeface) ? "600" : "700",
+    String(Math.max(600, weight + 100)),
   );
   for (const [id, visible, side] of [
     ["library-panel", settings.sidebar, settings.librarySide],
@@ -61,6 +65,8 @@ export function applyAppearance(settings) {
   $("#outline-toggle").setAttribute("aria-expanded", String(settings.outline));
   $("#typeface").value = settings.typeface;
   $("#text-weight").value = String(settings.weight);
+  $("#navigation-size").value = String(settings.navigationSize);
+  $("#tab-size").value = String(settings.tabSize);
   $("#library-placement").value = settings.sidebar
     ? settings.librarySide
     : "hidden";
@@ -89,6 +95,10 @@ export function wireAppearance(change) {
   $("#reading-preset").onclick = () =>
     change({ typeface: "literata", weight: "auto" });
   $("#color-theme").onchange = (event) => change({ theme: event.target.value });
+  $("#navigation-size").onchange = (event) =>
+    change({ navigationSize: Number(event.target.value) });
+  $("#tab-size").onchange = (event) =>
+    change({ tabSize: Number(event.target.value) });
   for (const [id, visibility, side] of [
     ["library-placement", "sidebar", "librarySide"],
     ["outline-placement", "outline", "outlineSide"],

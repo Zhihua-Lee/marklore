@@ -58,6 +58,177 @@ async function closeAppearance(page) {
   await page.locator("#appearance-close").click();
 }
 
+for (const dpr of [1, 1.25, 1.5, 2]) {
+  test.describe(`reading at device scale ${dpr}`, () => {
+    test.use({ deviceScaleFactor: dpr });
+    test("natural text spacing and boxed formulas have no vertical scrollbars", async ({
+      page,
+    }) => {
+      await boot(
+        page,
+        String.raw`# 对应位置 Typography
+
+对应的位置，普通中文 English **位置与对应 Strong**。
+
+$$
+\boxed{J(V)=V^{**}},
+$$
+
+$$
+\boxed{\frac{\sum_{n=1}^{\infty}x_n}{\sqrt{1+x^2}}}
+$$`,
+      );
+      await page.locator("#sidebar-toggle").click();
+      await page.locator("#outline-toggle").click();
+      await expect(page.locator(".dock:visible")).toHaveCount(0);
+      for (const zoom of [80, 100, 150, 200]) {
+        await openAppearance(page);
+        await page.locator("#zoom-reset").click();
+        for (let i = 0; i < Math.abs(zoom - 100) / 10; i++)
+          await page.locator(zoom < 100 ? "#zoom-out" : "#zoom-in").click();
+        await closeAppearance(page);
+        const metrics = await page.evaluate(() => ({
+          dpr: devicePixelRatio,
+          spacing: getComputedStyle(document.querySelector("#content p"))
+            .letterSpacing,
+          weight: getComputedStyle(document.querySelector("#content p"))
+            .fontWeight,
+          transform: getComputedStyle(document.querySelector("#content"))
+            .transform,
+          formulas: [...document.querySelectorAll(".math-block")].map((el) => {
+            const box = el.getBoundingClientRect();
+            const glyphs = el
+              .querySelector(".katex-html")
+              .getBoundingClientRect();
+            return {
+              vertical: getComputedStyle(el).overflowY,
+              overflow: el.scrollWidth - el.clientWidth,
+              insetTop: glyphs.top - box.top,
+              insetBottom: box.bottom - glyphs.bottom,
+            };
+          }),
+        }));
+        expect(metrics.dpr).toBeCloseTo(dpr, 5);
+        expect(metrics.spacing).toBe("normal");
+        expect(metrics.weight).toBe("400");
+        expect(metrics.transform).toBe("none");
+        for (const formula of metrics.formulas) {
+          expect(formula.vertical).toBe("hidden");
+          expect(formula.overflow).toBeLessThanOrEqual(1);
+          expect(formula.insetTop).toBeGreaterThanOrEqual(0);
+          expect(formula.insetBottom).toBeGreaterThanOrEqual(0);
+        }
+        if (zoom === 80)
+          await page.screenshot({ path: `.local/reading-v019-dpr-${dpr}.png` });
+      }
+    });
+  });
+}
+
+test("file actions, adjacent new tab, corner panels and reading controls stay grouped", async ({
+  page,
+}) => {
+  await boot(page);
+  await expect(page.locator(".document-tools > button")).toHaveCount(3);
+  expect(
+    await page
+      .locator(".document-tools > button")
+      .evaluateAll((els) => els.map((el) => el.id)),
+  ).toEqual(["open", "save", "app-menu-toggle"]);
+  await expect(
+    page.locator("main > #panel-controls-left #sidebar-toggle"),
+  ).toBeVisible();
+  await expect(
+    page.locator("main > #panel-controls-right #outline-toggle"),
+  ).toBeVisible();
+  await expect(page.locator(".reading-tools > button").last()).toHaveAttribute(
+    "id",
+    "weight",
+  );
+  await page.locator("#theme").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  for (const width of [1360, 640, 480]) {
+    await page.setViewportSize({ width, height: 900 });
+    const layout = await page.evaluate(() => {
+      const tabs = document.querySelector("#tabs").getBoundingClientRect();
+      const add = document.querySelector("#new").getBoundingClientRect();
+      const bar = document.querySelector(".topbar");
+      return {
+        gap: add.left - tabs.right,
+        excess: bar.scrollWidth - bar.clientWidth,
+      };
+    });
+    expect(layout.gap).toBeLessThanOrEqual(5);
+    expect(layout.excess).toBeLessThanOrEqual(1);
+  }
+});
+
+test("sidebars animate in both directions and reduced motion disables transitions", async ({
+  page,
+}) => {
+  await boot(page, longText);
+  await expect
+    .poll(() =>
+      page.locator("#sidebar").evaluate((el) => el.getAnimations().length),
+    )
+    .toBe(0);
+  const closing = await page.evaluate(async () => {
+    const dock = document.querySelector("#sidebar");
+    const width = dock.getBoundingClientRect().width;
+    document.querySelector("#sidebar-toggle").click();
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    return {
+      width,
+      during: dock.getBoundingClientRect().width,
+      animated: dock
+        .getAnimations()
+        .some((a) => a.transitionProperty === "width"),
+    };
+  });
+  expect(closing.animated).toBe(true);
+  expect(closing.during).toBeGreaterThan(0);
+  await expect(page.locator("#sidebar")).toBeHidden();
+  const opening = await page.evaluate(async () => {
+    const dock = document.querySelector("#sidebar");
+    document.querySelector("#sidebar-toggle").click();
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    return dock.getAnimations().some((a) => a.transitionProperty === "width");
+  });
+  expect(opening).toBe(true);
+  await expect
+    .poll(() =>
+      page.locator("#sidebar").evaluate((el) => el.getAnimations().length),
+    )
+    .toBe(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.locator("#sidebar-toggle").click();
+  await expect(page.locator("#sidebar")).toBeHidden();
+  expect(
+    await page.locator("#sidebar").evaluate((el) => el.getAnimations().length),
+  ).toBe(0);
+  await page
+    .locator("#outline button")
+    .filter({ hasText: "Section 30" })
+    .click();
+  await expect
+    .poll(() =>
+      page
+        .locator("#reader")
+        .evaluate((el) =>
+          Math.abs(
+            el.querySelector("#section-30").getBoundingClientRect().top -
+              el.getBoundingClientRect().top -
+              32,
+          ),
+        ),
+    )
+    .toBeLessThan(2);
+});
+
 test("ordinary prose has one weight across lists, quotes and tables at 80 percent", async ({
   page,
 }) => {
@@ -459,7 +630,7 @@ test("wide reading expands the measure, preserves the current paragraph and pers
   );
 });
 
-test("Aa contains zoom and theme controls instead of expanding the document toolbar", async ({
+test("Aa keeps zoom settings while the adjacent theme button is directly accessible", async ({
   page,
 }) => {
   await boot(page);
@@ -468,7 +639,7 @@ test("Aa contains zoom and theme controls instead of expanding the document tool
     "外观与布局",
   );
   await expect(
-    page.locator(".toolbar #zoom-in, .toolbar #zoom-out, .toolbar #theme"),
+    page.locator(".toolbar #zoom-in, .toolbar #zoom-out"),
   ).toHaveCount(0);
   await openAppearance(page);
   await expect(page.locator("#appearance #zoom-reset")).toHaveText("100%");
@@ -477,7 +648,7 @@ test("Aa contains zoom and theme controls instead of expanding the document tool
   await expect(page.locator("#zoom-reset")).toHaveText("50%");
   await page.locator("#zoom-reset").click();
   await expect(page.locator("#zoom-reset")).toHaveText("100%");
-  await page.locator("#appearance #theme").click();
+  await page.locator("#color-theme").selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("#color-theme")).toHaveValue("dark");
   await closeAppearance(page);

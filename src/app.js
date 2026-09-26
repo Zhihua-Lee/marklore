@@ -72,6 +72,19 @@ $("#app").innerHTML = `
 // Keep document controls beside the tabs instead of consuming a second row.
 $(".topbar").insertBefore($(".toolbar"), $("#panel-controls-right"));
 $(".topbar").insertBefore($(".document-tools"), $("#tabs-back"));
+// File actions, tabs and reading actions form three compact groups.
+$(".document-tools").append($("#app-menu-toggle"));
+$("#app-menu-toggle").innerHTML = icon("export");
+$("#app-menu-toggle").title = "导出";
+$("#app-menu-toggle").setAttribute("aria-label", "导出");
+$("#app-menu").setAttribute("aria-label", "导出");
+const tabStrip = document.createElement("div");
+tabStrip.className = "tab-strip";
+$(".topbar").insertBefore(tabStrip, $("#tabs-back"));
+tabStrip.append($("#tabs-back"), $("#tabs"), $("#tabs-forward"), $("#new"));
+for (const side of ["left", "right"])
+  $("main").prepend($("#panel-controls-" + side));
+$(".reading-tools").insertBefore($("#theme"), $("#weight"));
 
 function toast(message) {
   $("#toast").textContent = message;
@@ -220,12 +233,13 @@ function capture() {
 function restore(
   doc,
   anchor = doc.anchor,
-  { expand = false, select = false } = {},
+  { expand = false, select = false, behavior = "instant" } = {},
 ) {
   if (doc !== active) return;
   restoring = true;
   currentAnchor = { id: doc.id, anchor };
-  if (doc.mode !== "source") restoreAnchor($("#reader"), anchor, { expand });
+  if (doc.mode !== "source")
+    restoreAnchor($("#reader"), anchor, { expand, behavior });
   if (doc.mode !== "read") {
     const from = Math.min(anchor.from || 0, view.state.doc.length);
     view.dispatch({
@@ -617,8 +631,17 @@ function jump(from) {
   if (!active) return;
   const anchor = { from, y: 32 };
   active.anchor = anchor;
-  restore(active, anchor, { expand: true, select: true });
+  restore(active, anchor, {
+    expand: true,
+    select: true,
+    behavior: navigationMotion(),
+  });
   scheduleSession();
+}
+function navigationMotion() {
+  return matchMedia("(prefers-reduced-motion: reduce)").matches
+    ? "instant"
+    : "smooth";
 }
 async function navigateLink(href, source = active) {
   source ||= active;
@@ -662,7 +685,7 @@ async function navigateLink(href, source = active) {
   const el = $("#content").querySelector("#" + CSS.escape(anchor));
   if (el) {
     unfold(el);
-    el.scrollIntoView({ block: "start" });
+    el.scrollIntoView({ block: "start", behavior: navigationMotion() });
     capture();
     scheduleSession();
   } else toast("没有找到锚点：" + anchor);
@@ -1126,18 +1149,8 @@ $("#app-menu-toggle").onclick = () => {
   if (!menu.hidden) return closeAppMenu();
   menu.replaceChildren();
   for (const entry of [
-    ["新建笔记", "Ctrl N", commands.new],
-    ["打开文件…", "Ctrl O", commands.open],
-    ["打开文件夹…", "Ctrl Shift O", commands.folder],
-    null,
-    ["保存", "Ctrl S", commands.save, !active],
-    ["另存为…", "Ctrl Shift S", commands.saveAs, !active],
-    ["刷新文件", "Ctrl R", commands.refresh, !active?.fileId],
-    null,
     ["导出 PDF…", "", commands.exportPDF, !active || exporting],
     ["导出 HTML…", "", commands.exportHTML, !active || exporting],
-    null,
-    ["外观与布局", "", () => $("#appearance").showModal()],
   ]) {
     if (!entry) {
       menu.append(document.createElement("hr"));

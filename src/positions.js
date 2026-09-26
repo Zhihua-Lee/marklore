@@ -123,7 +123,11 @@ export function unfold(element) {
     }
   }
 }
-export function restoreAnchor(host, anchor, { expand = false } = {}) {
+export function restoreAnchor(
+  host,
+  anchor,
+  { expand = false, behavior = "instant" } = {},
+) {
   if (!anchor || anchor.top) {
     host.scrollTop = 0;
     return;
@@ -134,9 +138,13 @@ export function restoreAnchor(host, anchor, { expand = false } = {}) {
   const rect =
     hit.range?.getBoundingClientRect() || hit.element.getBoundingClientRect();
   if (!hit.element.getClientRects().length) return;
-  host.scrollTop +=
-    rect.top -
-    host.getBoundingClientRect().top +
-    (anchor.fraction || 0) * rect.height -
-    (anchor.y ?? 32);
+  host.scrollTo({
+    behavior,
+    top:
+      host.scrollTop +
+      rect.top -
+      host.getBoundingClientRect().top +
+      (anchor.fraction || 0) * rect.height -
+      (anchor.y ?? 32),
+  });
 }

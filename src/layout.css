@@ -26,9 +26,7 @@
   --font-note: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 :root[data-typeface="literata"] {
-  --font-note:
-    "Literata Variable", "Microsoft YaHei UI", "Microsoft YaHei",
-    "Noto Sans SC", serif;
+  --font-note: "Literata Variable", "Noto Sans SC", "Microsoft YaHei", serif;
 }
 :root[data-typeface="literata"] .prose {
   line-height: 1.7;
@@ -36,7 +34,7 @@
   font-kerning: normal;
 }
 :root[data-typeface="literata"] .prose p {
-  letter-spacing: -0.005em;
+  letter-spacing: normal;
 }
 :root[data-typeface="literata"] .prose strong {
   font-weight: var(--strong-weight, 600);
@@ -96,6 +94,33 @@
   display: flex;
   flex: none;
   gap: 2px;
+  position: absolute;
+  top: 6px;
+  z-index: 6;
+  background: var(--reading-paper);
+  border-radius: 5px;
+}
+#panel-controls-left {
+  left: 4px;
+}
+#panel-controls-right {
+  right: 14px;
+}
+main {
+  position: relative;
+}
+.tab-strip {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+.tab-strip #tabs {
+  flex: 0 1 auto;
+}
+.tab-strip > .icon {
+  flex: none;
 }
 .panel-controls:empty {
   display: none;
@@ -217,7 +242,7 @@
   color: var(--accent);
   background: var(--hover);
 }
-/* Only small UI surfaces fade. Article geometry and text never animate/scale. */
+/* Text is never transformed or faded: only panel geometry and chrome animate. */
 .topbar,
 .dock,
 .toolbar,
@@ -230,16 +255,19 @@ main,
 button {
   transition: background-color 100ms ease;
 }
-.side-panel:not([hidden]) {
-  animation: panel-appear var(--motion) ease-out;
+.dock {
+  transition:
+    width 180ms ease,
+    background-color var(--motion) ease,
+    display 180ms allow-discrete;
 }
-@keyframes panel-appear {
-  from {
-    opacity: 0.5;
-  }
-  to {
-    opacity: 1;
-  }
+#sidebar[hidden],
+#right-sidebar[hidden] {
+  width: 0;
+  border-width: 0;
+}
+.side-panel {
+  transition: display 180ms allow-discrete;
 }
 .app-menu {
   left: 7px;
@@ -369,7 +397,7 @@ select:focus-visible {
   display: none;
 }
 @media (max-width: 900px) {
-  #right-sidebar:not([hidden]) {
+  #right-sidebar {
     position: absolute;
     right: 0;
     top: 0;
@@ -386,7 +414,7 @@ select:focus-visible {
   }
 }
 @media (max-width: 760px) {
-  #sidebar:not([hidden]) {
+  #sidebar {
     position: absolute;
     left: 0;
     top: 0;
@@ -396,12 +424,12 @@ select:focus-visible {
     box-shadow: 6px 0 18px #0001;
   }
   #content.prose {
-    padding: 20px 12px 60px 28px;
+    padding: 44px 12px 60px 28px;
   }
 }
 @media (max-width: 720px) {
   .topbar > .document-tools {
-    display: none;
+    gap: 0;
   }
   .topbar {
     gap: 2px;
@@ -426,5 +454,11 @@ select:focus-visible {
   }
   .topbar .tab {
     min-width: 80px;
+  }
+}
+@starting-style {
+  #sidebar:not([hidden]),
+  #right-sidebar:not([hidden]) {
+    width: 0;
   }
 }

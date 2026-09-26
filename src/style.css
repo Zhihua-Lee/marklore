@@ -478,7 +478,7 @@ main[data-empty="true"] > #panes {
 .prose {
   max-width: 760px;
   margin: auto;
-  padding: 32px 48px 80px 32px;
+  padding: 44px 48px 80px 32px;
   font-size: var(--note-size);
   line-height: 1.8;
   font-family: var(--font-note);
@@ -498,7 +498,7 @@ main[data-empty="true"] > #panes {
   scroll-margin-top: 32px;
   font-weight: var(--heading-weight);
   color: inherit;
-  letter-spacing: -0.02em;
+  letter-spacing: normal;
 }
 .prose h1 {
   font-size: 2em;
@@ -621,9 +621,10 @@ main[data-empty="true"] > #panes {
   font-size: 1.21em;
 }
 .prose .math-block {
-  overflow: auto;
-  margin: 1.25em 0;
-  padding: 0.25em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 1.75em 0;
+  padding: 0.5em 0;
 }
 .prose .math-block .katex-display {
   margin: 0;

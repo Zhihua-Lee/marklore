@@ -84,7 +84,7 @@ export async function exportNote(format, { doc }) {
     const typeface = document.documentElement.dataset.typeface;
     const family =
       typeface === "literata"
-        ? '"Literata Variable","Microsoft YaHei UI","Microsoft YaHei","Noto Sans SC",serif'
+        ? '"Literata Variable","Noto Sans SC","Microsoft YaHei",serif'
         : typeface === "classic"
           ? 'Arial,"Microsoft YaHei",sans-serif'
           : typeface === "book"
@@ -111,7 +111,7 @@ export async function exportNote(format, { doc }) {
         monoItalicCSS +
         "\n" +
         exportCSS +
-        `\nbody{font-family:${family};font-weight:${[400, 450, 500, 600].includes(weight) ? weight : 400}} strong{font-weight:${weight >= 500 ? 700 : 600}}`,
+        `\nbody{font-family:${family};font-weight:${[400, 450, 500, 600].includes(weight) ? weight : 400}} strong{font-weight:${Math.max(600, weight + 100)}}`,
       images,
       warnings,
     });

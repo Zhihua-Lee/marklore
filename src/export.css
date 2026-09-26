@@ -14,10 +14,10 @@ body {
   color: #202625;
   font:
     400 16px/1.7 "Literata Variable",
-    "Microsoft YaHei UI",
     "Noto Sans SC",
+    "Microsoft YaHei",
     serif;
-  letter-spacing: -0.005em;
+  letter-spacing: normal;
 }
 article {
   max-width: 900px;
@@ -157,8 +157,7 @@ summary {
   font-size: 1.1616em;
 }
 .katex .cjk_fallback {
-  font-family:
-    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
   font-size: 1em;
 }
 .katex-display .cjk_fallback {
@@ -170,8 +169,8 @@ summary {
 }
 .math-block {
   break-inside: avoid;
-  margin: 1.25em 0;
-  padding: 0.25em 0;
+  margin: 1.75em 0;
+  padding: 0.5em 0;
 }
 .math-error,
 .diagram-error,

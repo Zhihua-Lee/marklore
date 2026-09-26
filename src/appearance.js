@@ -6,7 +6,7 @@ export const appearanceMarkup = `
 <dialog id="appearance" aria-labelledby="appearance-title">
   <div class="settings-title"><h2 id="appearance-title">外观与布局</h2><button id="appearance-close" aria-label="关闭外观设置">完成</button></div>
   <fieldset><legend>阅读排版</legend>
-    <label for="typeface">正文字体<select id="typeface"><option value="literata">Literata / 微软雅黑</option><option value="balanced">思源黑体</option><option value="classic">Arial / 微软雅黑</option><option value="book">Cambria / 宋体</option></select></label>
+    <label for="typeface">正文字体<select id="typeface"><option value="literata">Literata / 思源黑体</option><option value="balanced">思源黑体</option><option value="classic">Arial / 微软雅黑</option><option value="book">Cambria / 宋体</option></select></label>
     <div class="setting-row"><span>字号</span><div class="zoom-control" role="group" aria-label="字号"><button id="zoom-out" aria-label="缩小字号">${icon("minus")}</button><button id="zoom-reset" title="重置字号">100%</button><button id="zoom-in" aria-label="放大字号">${icon("plus")}</button></div></div>
     <label for="text-weight">正文浓度<select id="text-weight"><option value="auto">自然</option><option value="400">标准</option><option value="450">适中</option><option value="500">较浓</option><option value="600">浓</option></select></label>
     <button id="reading-preset" type="button">恢复书页排版</button>

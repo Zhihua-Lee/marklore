@@ -144,7 +144,7 @@ test("default layout separates the left library from the right outline", async (
   });
   expect(geometry.libraryRight).toBeLessThanOrEqual(geometry.mainLeft + 1);
   expect(geometry.outlineLeft).toBeGreaterThanOrEqual(geometry.mainRight - 1);
-  await page.getByRole("button", { name: "应用菜单", exact: true }).click();
+  await page.getByRole("button", { name: "导出", exact: true }).click();
   await page.screenshot({ path: ".local/visual-v012/menu.png" });
   await page.keyboard.press("Escape");
 });
@@ -433,7 +433,7 @@ test("theme and layout retain article nodes and semantic reading position", asyn
         ),
       );
   await appearance(page);
-  await page.locator("#theme").click();
+  await page.locator("#color-theme").selectOption("dark");
   await closeAppearance(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect.poll(delta).toBeLessThan(80);

@@ -1,4 +1,6 @@
 const paths = {
+  export:
+    '<path d="M12 15V3m-4 4 4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
   width: '<path d="M3 5v14M21 5v14M6 12h12m-9-3-3 3 3 3m6-6 3 3-3 3"/>',
   chevronLeft: '<path d="m14 6-6 6 6 6"/>',
   chevronRight: '<path d="m10 6 6 6-6 6"/>',

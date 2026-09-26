@@ -1,0 +1,228 @@
+@page {
+  size: A4;
+  margin: 17mm 16mm;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  color-scheme: light;
+  background: #fff;
+}
+body {
+  margin: 0;
+  color: #202625;
+  font:
+    400 16px/1.7 "Literata Variable",
+    "Microsoft YaHei UI",
+    "Noto Sans SC",
+    serif;
+  letter-spacing: -0.005em;
+}
+article {
+  max-width: 900px;
+  margin: auto;
+  padding: 40px 48px;
+  overflow-wrap: anywhere;
+}
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  line-height: 1.35;
+  color: #202625;
+  break-after: avoid;
+}
+h1 {
+  font-size: 2.1em;
+  font-weight: 600;
+  margin: 0 0 0.8em;
+}
+h2 {
+  font-size: 1.6em;
+  font-weight: 600;
+  margin: 1.6em 0 0.7em;
+}
+h3 {
+  font-size: 1.35em;
+  font-weight: 600;
+  margin-top: 1.5em;
+}
+strong {
+  font-weight: 600;
+}
+p {
+  margin: 0 0 1em;
+}
+ul,
+ol {
+  margin: 0.75em 0 1em;
+  padding-left: 1.6em;
+}
+li {
+  margin-block: 0.35em;
+}
+li > p {
+  margin-block: 0.4em;
+}
+hr {
+  border: 0;
+  height: 1px;
+  width: 72%;
+  background: #dcdad5;
+  margin: 2em auto;
+}
+a {
+  color: #20675d;
+  text-underline-offset: 0.15em;
+}
+img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 240mm;
+  object-fit: contain;
+  margin: 1.2em auto;
+  break-inside: avoid;
+}
+pre {
+  padding: 14px;
+  background: #f3f4f2;
+  border: 1px solid #d9ddda;
+  border-radius: 5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.65;
+  font-size: 0.82em;
+}
+code {
+  font-family:
+    "JetBrains Mono Variable", Consolas, "Microsoft YaHei", monospace;
+}
+:not(pre) > code {
+  background: #f3f4f2;
+  padding: 0.1em 0.25em;
+  font-size: 0.88em;
+}
+blockquote {
+  margin: 1.2em 0;
+  padding: 0.65em 1.1em;
+  border-left: 4px solid #246d5d;
+  color: #292e2d;
+  font-weight: inherit;
+  background: #eef2ed;
+}
+blockquote > :last-child {
+  margin-bottom: 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 1em;
+  margin: 1.2em 0;
+}
+th,
+td {
+  padding: 0.5em 0.7em;
+  border: 1px solid #d9ddda;
+  vertical-align: top;
+}
+th {
+  background: #f3f4f2;
+  text-align: left;
+}
+thead {
+  display: table-header-group;
+}
+tr {
+  break-inside: avoid;
+}
+details {
+  padding: 12px 16px;
+  border: 1px solid #d9ddda;
+  border-radius: 5px;
+  margin: 1em 0;
+}
+summary {
+  font-weight: 600;
+}
+.katex {
+  font-size: 1em;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+.katex-display > .katex {
+  font-size: 1.1616em;
+}
+.katex .cjk_fallback {
+  font-family:
+    "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  font-size: 1em;
+}
+.katex-display .cjk_fallback {
+  font-size: calc(1em / 1.1616);
+}
+.katex-display {
+  margin: 0;
+  overflow: visible;
+}
+.math-block {
+  break-inside: avoid;
+  margin: 1.25em 0;
+  padding: 0.25em 0;
+}
+.math-error,
+.diagram-error,
+.export-image-note {
+  color: #9a3731;
+  white-space: pre-wrap;
+}
+.diagram-host {
+  background: transparent;
+  border: 0;
+  text-align: center;
+  padding: 0;
+}
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+.footnotes {
+  font-size: 0.85em;
+  border-top: 1px solid #d9ddda;
+  margin-top: 2em;
+}
+.hljs-comment,
+.hljs-quote {
+  color: #65716a;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal {
+  color: #8a3d78;
+}
+.hljs-string,
+.hljs-attr {
+  color: #257255;
+}
+.hljs-number,
+.hljs-title,
+.hljs-built_in {
+  color: #2863a0;
+}
+@media print {
+  body {
+    font-size: 11pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  article {
+    padding: 0;
+    max-width: none;
+  }
+  a {
+    color: inherit;
+  }
+}

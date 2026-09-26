@@ -1,0 +1,17 @@
+.diagram-host {
+  background: transparent !important;
+  padding: 12px !important;
+  white-space: normal;
+}
+.diagram svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: auto;
+}
+.diagram-error {
+  color: var(--danger);
+  white-space: pre-wrap;
+  font-size: 12px;
+  margin-top: 10px;
+}

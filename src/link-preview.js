@@ -1,0 +1,249 @@
+import { renderMarkdown } from "./markdown.js";
+import { renderDiagrams } from "./diagrams.js";
+import { restoreAnchor, unfold } from "./positions.js";
+import { setSectionCollapsed } from "./sections.js";
+import "./link-preview.css";
+
+export function splitLink(href) {
+  const index = href.indexOf("#");
+  return {
+    target: index < 0 ? href : href.slice(0, index),
+    anchor: index < 0 ? "" : decodeURIComponent(href.slice(index + 1)),
+  };
+}
+function eligible(href) {
+  try {
+    const { target } = splitLink(href);
+    return (
+      (!target && href.startsWith("#")) ||
+      (!/^(?:https?:|mailto:|tel:|data:|javascript:|\/\/)/i.test(target) &&
+        /\.(md|markdown|mdown|mkd|txt)$/i.test(decodeURIComponent(target)))
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Independent transient surface: never changes the active tab, editor or progress.
+export function createLinkPreview({ host, load, navigate, report }) {
+  const card = document.createElement("section");
+  card.id = "link-preview";
+  card.role = "dialog";
+  card.setAttribute("aria-label", "链接预览");
+  card.tabIndex = -1;
+  card.hidden = true;
+  card.innerHTML = `<header class="preview-heading"><div><strong class="preview-title"></strong><div class="preview-path"></div></div><button class="preview-open">打开 ↗</button><button class="preview-close" aria-label="关闭链接预览">×</button></header><div class="preview-status" role="status"></div><div class="preview-scroll" tabindex="0" aria-label="链接预览正文"><article class="prose"></article></div><footer class="preview-help">悬浮阅读 · F2 进入预览 · Esc 关闭</footer>`;
+  document.body.append(card);
+  const title = card.querySelector(".preview-title"),
+    path = card.querySelector(".preview-path"),
+    status = card.querySelector(".preview-status"),
+    scroller = card.querySelector(".preview-scroll"),
+    article = card.querySelector("article");
+  let origin = null,
+    timer,
+    leaveTimer,
+    generation = 0,
+    source = null,
+    href = "",
+    positioned = false,
+    alignment = null;
+  function hide({ focus = false } = {}) {
+    generation++;
+    clearTimeout(timer);
+    clearTimeout(leaveTimer);
+    const previous = origin;
+    origin = null;
+    source = null;
+    alignment = null;
+    card.hidden = true;
+    article.replaceChildren();
+    if (previous) {
+      previous.removeAttribute("aria-controls");
+      previous.removeAttribute("aria-expanded");
+    }
+    if (focus && previous?.isConnected) {
+      // Focus first, then cancel the focus-triggered reopen.
+      previous.focus({ preventScroll: true });
+      clearTimeout(timer);
+      origin = null;
+    }
+  }
+  function place() {
+    if (!origin) return;
+    const r = origin.getBoundingClientRect();
+    const height = Math.min(440, innerHeight - 24);
+    const below = innerHeight - r.bottom - 20;
+    const above = r.top - 20;
+    const down = below >= Math.min(240, height) || below >= above;
+    const available = Math.min(height, Math.max(140, down ? below : above));
+    card.style.height = available + "px";
+    card.style.left =
+      Math.max(
+        12,
+        Math.min(r.left, innerWidth - Math.min(580, innerWidth - 24) - 12),
+      ) + "px";
+    card.style.top =
+      Math.max(
+        12,
+        Math.min(
+          innerHeight - available - 12,
+          down ? r.bottom + 8 : r.top - available - 8,
+        ),
+      ) + "px";
+  }
+  function align() {
+    if (!positioned && alignment && !card.hidden) alignment();
+  }
+  async function show(link, token) {
+    if (origin !== link || token !== generation || !link.isConnected) return;
+    href = link.getAttribute("href") || "";
+    source = null;
+    positioned = false;
+    title.textContent = "链接预览";
+    path.textContent = splitLink(href).target || "当前笔记";
+    status.textContent = "正在读取…";
+    article.replaceChildren();
+    scroller.scrollTop = 0;
+    card.hidden = false;
+    link.setAttribute("aria-controls", card.id);
+    link.setAttribute("aria-expanded", "true");
+    place();
+    try {
+      const doc = await load(href);
+      if (token !== generation || origin !== link) return;
+      if (!link.isConnected) return hide();
+      source = doc;
+      title.textContent = doc.name;
+      path.textContent = doc.path || "未保存的笔记";
+      path.title = path.textContent;
+      status.textContent = doc.draft ? "当前编辑草稿 · 未保存" : "当前文件内容";
+      article.innerHTML = renderMarkdown(doc.text, doc.fileId).html;
+      const { anchor } = splitLink(href);
+      // Leave room to align targets near EOF to the same top inset as other anchors.
+      article.style.paddingBottom = anchor
+        ? scroller.clientHeight + "px"
+        : "60px";
+      const line = anchor.match(/^L(\d+)(?:C(\d+))?$/i);
+      if (line) {
+        const lines = doc.text.split("\n"),
+          n = Number(line[1]);
+        const column = Number(line[2] || 1);
+        if (
+          n < 1 ||
+          n > lines.length ||
+          column < 1 ||
+          column > lines[n - 1].length + 1
+        ) {
+          status.textContent += " · 行列锚点超出文档范围，显示开头";
+        } else {
+          const from =
+            lines
+              .slice(0, n - 1)
+              .reduce((sum, item) => sum + item.length + 1, 0) +
+            column -
+            1;
+          alignment = () =>
+            restoreAnchor(scroller, { from, y: 12 }, { expand: true });
+        }
+      } else if (anchor) {
+        const element = article.querySelector("#" + CSS.escape(anchor));
+        if (element) {
+          unfold(element);
+          element.classList.add("preview-target");
+          alignment = () => {
+            scroller.scrollTop +=
+              element.getBoundingClientRect().top -
+              scroller.getBoundingClientRect().top -
+              12;
+          };
+        } else status.textContent += " · 未找到锚点：" + anchor;
+      }
+      requestAnimationFrame(align);
+      renderDiagrams(
+        article,
+        document.documentElement.dataset.theme || "light",
+        align,
+      );
+    } catch (e) {
+      if (token !== generation) return;
+      status.textContent = "无法预览：" + (e.message || String(e));
+    }
+  }
+  function begin(link) {
+    if (
+      !link ||
+      !host.contains(link) ||
+      !eligible(link.getAttribute("href") || "")
+    )
+      return;
+    clearTimeout(leaveTimer);
+    if (origin === link) return;
+    hide();
+    origin = link;
+    const token = ++generation;
+    timer = setTimeout(() => show(link, token), 350);
+  }
+  function leave(event) {
+    if (
+      card.contains(event.relatedTarget) ||
+      origin?.contains(event.relatedTarget)
+    )
+      return;
+    clearTimeout(leaveTimer);
+    leaveTimer = setTimeout(() => hide(), 240);
+  }
+  host.addEventListener("pointerover", (e) => begin(e.target.closest("a")));
+  host.addEventListener("focusin", (e) => begin(e.target.closest("a")));
+  host.addEventListener("pointerout", leave);
+  host.addEventListener("focusout", leave);
+  card.addEventListener("pointerenter", () => clearTimeout(leaveTimer));
+  card.addEventListener("focusin", () => clearTimeout(leaveTimer));
+  card.addEventListener("pointerleave", leave);
+  card.addEventListener("focusout", leave);
+  card.querySelector(".preview-close").onclick = () =>
+    hide({ focus: card.contains(document.activeElement) });
+  async function open(targetHref, targetSource) {
+    hide();
+    try {
+      await navigate(targetHref, targetSource);
+    } catch (e) {
+      report(e.message);
+    }
+  }
+  card.querySelector(".preview-open").onclick = () => open(href, null);
+  article.addEventListener("click", (e) => {
+    const link = e.target.closest("a"),
+      fold = e.target.closest(".fold, .section-rail");
+    if (link) {
+      e.preventDefault();
+      open(link.getAttribute("href") || "", source);
+    } else if (fold) {
+      const section = fold.closest(".note-section");
+      setSectionCollapsed(section, !section.classList.contains("collapsed"));
+      positioned = true;
+    }
+  });
+  scroller.addEventListener("load", align, true);
+  for (const event of ["wheel", "pointerdown", "keydown"])
+    scroller.addEventListener(event, () => {
+      positioned = true;
+    });
+  host.addEventListener("click", () => hide());
+  host.parentElement.addEventListener("scroll", () => hide(), {
+    passive: true,
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!card.contains(e.target) && !origin?.contains(e.target)) hide();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !card.hidden) {
+      e.preventDefault();
+      hide({ focus: card.contains(document.activeElement) });
+    } else if (e.key === "F2" && !card.hidden) {
+      e.preventDefault();
+      scroller.focus({ preventScroll: true });
+    }
+  });
+  window.addEventListener("resize", () => hide());
+  return { hide };
+}

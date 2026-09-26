@@ -1,0 +1,430 @@
+#editor-pane {
+  width: var(--split, 50%);
+}
+#split {
+  width: 5px;
+  flex: none;
+  background: var(--line);
+  cursor: col-resize;
+  touch-action: none;
+  outline-offset: -1px;
+}
+#split:hover,
+#split:focus-visible {
+  background: var(--accent);
+}
+#panes:not([data-mode="edit"]) #split {
+  display: none;
+}
+.search-info {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px;
+}
+
+:root[data-typeface="classic"] {
+  --font-note: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+:root[data-typeface="literata"] {
+  --font-note:
+    "Literata Variable", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Noto Sans SC", serif;
+}
+:root[data-typeface="literata"] .prose {
+  line-height: 1.7;
+  font-optical-sizing: auto;
+  font-kerning: normal;
+}
+:root[data-typeface="literata"] .prose p {
+  letter-spacing: -0.005em;
+}
+:root[data-typeface="literata"] .prose strong {
+  font-weight: var(--strong-weight, 600);
+}
+:root[data-typeface="literata"] .prose h1 {
+  font-size: 2.1em;
+  font-weight: 600;
+}
+:root[data-typeface="literata"] .prose h2 {
+  font-size: 1.6em;
+}
+:root[data-typeface="literata"] .prose h3 {
+  font-size: 1.35em;
+}
+:root[data-typeface="literata"] .prose pre {
+  line-height: 1.65;
+  font-weight: var(--note-weight, 400);
+}
+:root[data-typeface="literata"] .prose :not(pre) > code {
+  font-size: 0.82em;
+  font-weight: var(--inline-code-weight, 500);
+}
+:root[data-typeface="literata"] .prose .formula > .katex {
+  font-size: 1em;
+}
+:root[data-typeface="literata"] .prose .formula > .katex .cjk_fallback {
+  font-size: 1em;
+}
+:root[data-typeface="literata"] .prose .katex-display > .katex {
+  font-size: 1.1616em;
+}
+:root[data-typeface="literata"] .prose .katex-display .cjk_fallback {
+  font-size: calc(1em / 1.1616);
+}
+:root[data-wide="true"] .prose {
+  max-width: none;
+}
+:root[data-typeface="book"] {
+  --font-note: Cambria, "Songti SC", SimSun, serif;
+}
+.prose strong {
+  font-weight: var(--strong-weight, 600);
+}
+/* KaTeX owns math family/weight/style; never smear glyphs or override its spans. */
+.prose .katex .cjk_fallback {
+  font-family: var(--font-note);
+  /* CJK already has full-em glyphs; only Latin math needs the 1.21 optical scale. */
+  font-size: 0.826446em;
+}
+.topbar > .icon {
+  flex: none;
+}
+.brand-menu {
+  color: var(--accent);
+}
+.panel-controls {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+.panel-controls:empty {
+  display: none;
+}
+.panel-controls button[aria-expanded="true"] {
+  color: var(--accent);
+}
+.topbar-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 2px;
+  flex: none;
+}
+.topbar .tab-nav {
+  display: none;
+  width: 24px;
+}
+.topbar[data-overflow="true"] .tab-nav {
+  display: inline-grid;
+}
+#tabs::-webkit-scrollbar {
+  display: none;
+}
+#tabs.dragging,
+#tabs.dragging button {
+  cursor: grabbing;
+}
+.tab:hover {
+  background: var(--hover);
+}
+.tab.active:hover {
+  background: var(--paper);
+}
+.tab.active::before {
+  top: 0;
+  left: 12px;
+  right: 12px;
+}
+.tab-label:focus-visible {
+  outline-offset: -3px;
+}
+.tab-close {
+  color: var(--muted);
+}
+.tab-close:hover {
+  color: var(--ink);
+}
+.workspace {
+  position: relative;
+}
+#right-sidebar {
+  border-right: 0;
+  border-left: 1px solid var(--line);
+}
+.side-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 10px 10px;
+  gap: 12px;
+  overflow: hidden;
+}
+.dock[data-stacked="true"] > .side-panel + .side-panel {
+  border-top: 1px solid var(--line);
+}
+.sidebar-top {
+  min-height: 32px;
+  flex: none;
+}
+.eyebrow {
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+#outline {
+  font-family: var(--font-ui);
+}
+#outline:empty::after {
+  content: "暂无标题";
+  display: block;
+  padding: 8px 5px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.toolbar {
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  padding: 0;
+  height: auto;
+  border: 0;
+}
+.toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+.reading-tools {
+  border-left: 1px solid var(--line);
+  padding-left: 6px;
+}
+.modes {
+  background: transparent;
+  padding: 0;
+  gap: 2px;
+}
+.modes button {
+  color: var(--muted);
+  font-weight: 400;
+}
+.modes button[aria-pressed="true"] {
+  background: var(--hover);
+  box-shadow: none;
+  font-weight: 600;
+}
+.toolbar #width-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  background: var(--hover);
+}
+/* Only small UI surfaces fade. Article geometry and text never animate/scale. */
+.topbar,
+.dock,
+.toolbar,
+main,
+.cm-gutters {
+  transition:
+    background-color var(--motion) ease,
+    border-color var(--motion) ease;
+}
+button {
+  transition: background-color 100ms ease;
+}
+.side-panel:not([hidden]) {
+  animation: panel-appear var(--motion) ease-out;
+}
+@keyframes panel-appear {
+  from {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.app-menu {
+  left: 7px;
+  top: 42px;
+  width: 242px;
+  max-height: calc(100vh - 54px);
+  overflow-y: auto;
+}
+.app-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.app-menu kbd {
+  color: var(--muted);
+  font: 11px var(--font-ui);
+}
+.app-menu hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 5px;
+}
+#appearance {
+  width: min(440px, calc(100vw - 32px));
+  padding: 22px;
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+.settings-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.settings-title h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+#appearance fieldset {
+  margin: 0 0 18px;
+  border: 0;
+  padding: 0;
+}
+#appearance legend {
+  width: 100%;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  padding: 0 0 9px;
+  margin-bottom: 12px;
+}
+#appearance label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  font-size: 13px;
+  margin: 10px 0;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 10px 0;
+  font-size: 13px;
+}
+.zoom-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 224px;
+  max-width: 65%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+#appearance select {
+  width: 224px;
+  max-width: 65%;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  min-height: 32px;
+  padding: 4px 7px;
+}
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#appearance .setting-hint {
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 12px 0 0;
+}
+.layout-sample {
+  display: flex;
+  gap: 5px;
+  height: 54px;
+  padding: 5px;
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+}
+.layout-sample span {
+  display: grid;
+  place-items: center;
+  width: 68px;
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 10px;
+}
+.layout-sample .layout-page {
+  flex: 1;
+  order: 1;
+  background: var(--paper);
+}
+.layout-sample[data-library="right"] [data-panel="library"],
+.layout-sample[data-outline="right"] [data-panel="outline"] {
+  order: 2;
+}
+.layout-sample[data-library="hidden"] [data-panel="library"],
+.layout-sample[data-outline="hidden"] [data-panel="outline"] {
+  display: none;
+}
+@media (max-width: 900px) {
+  #right-sidebar:not([hidden]) {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 5;
+    width: 212px;
+    box-shadow: -6px 0 18px #0001;
+  }
+  .topbar {
+    gap: 2px;
+  }
+  .tab {
+    width: 160px;
+  }
+}
+@media (max-width: 760px) {
+  #sidebar:not([hidden]) {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 5;
+    width: 212px;
+    box-shadow: 6px 0 18px #0001;
+  }
+  #content.prose {
+    padding: 20px 12px 60px 28px;
+  }
+}
+@media (max-width: 720px) {
+  .topbar > .document-tools {
+    display: none;
+  }
+  .topbar {
+    gap: 2px;
+    padding-inline: 4px;
+  }
+  .topbar .icon {
+    width: 28px;
+  }
+  .topbar .toolbar {
+    gap: 2px;
+  }
+  .topbar .modes {
+    gap: 0;
+  }
+  .topbar .modes button {
+    min-width: 34px;
+    padding-inline: 4px;
+  }
+  .topbar .reading-tools {
+    padding-left: 2px;
+    gap: 0;
+  }
+  .topbar .tab {
+    min-width: 80px;
+  }
+}

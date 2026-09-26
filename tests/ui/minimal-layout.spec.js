@@ -106,7 +106,7 @@ test("current folder follows the note, navigation typography persists and reopen
           weight: getComputedStyle(el).fontWeight,
           alignment: Math.abs(
             rail.getBoundingClientRect().left +
-              7 -
+              rail.getBoundingClientRect().width / 2 -
               (fold.left + fold.width / 2),
           ),
         };
@@ -463,6 +463,100 @@ Retained when the other chapter is folded.
   await expect(child.locator(":scope > h3 > .fold")).toBeInViewport();
   await page.screenshot({ path: ".local/reading-v017-narrow.png" });
 });
+
+for (const deviceScaleFactor of [1, 1.25, 2]) {
+  test.describe(`chapter marker polish at device scale ${deviceScaleFactor}`, () => {
+    test.use({ deviceScaleFactor });
+    test("arrow stays on the first-line centre and its guide starts below the node", async ({
+      page,
+    }) => {
+      await boot(
+        page,
+        "# Chapter 章节\n\nBody.\n\n## Long heading with enough words to wrap across several lines in a narrow column\n\nBody.\n\n### Detail\n\nBody.\n\n#### Fourth\n\nBody.\n\n##### Fifth\n\nBody.\n\n###### Sixth\n\nBody.",
+      );
+      await page.setViewportSize({ width: 760, height: 900 });
+      await page.locator("#sidebar-toggle").click();
+      await page.locator("#outline-toggle").click();
+      for (const theme of ["light", "dark"]) {
+        for (const zoom of [50, 80, 100, 200]) {
+          await page.evaluate(
+            ({ theme, zoom }) => {
+              document.documentElement.dataset.theme = theme;
+              document.documentElement.style.setProperty(
+                "--note-size",
+                `${(16 * zoom) / 100}px`,
+              );
+            },
+            { theme, zoom },
+          );
+          const measurements = await page
+            .locator("#content .note-section")
+            .evaluateAll((sections) =>
+              sections.map((section) => {
+                const heading = section.firstElementChild;
+                const fold = heading.querySelector(".fold"),
+                  node = fold.getBoundingClientRect();
+                const rail = section.querySelector(":scope > .section-rail"),
+                  box = rail.getBoundingClientRect();
+                const guide = getComputedStyle(rail, "::before");
+                return {
+                  axis: Math.abs(
+                    box.left +
+                      parseFloat(guide.left) +
+                      parseFloat(guide.width) / 2 -
+                      (node.left + node.width / 2),
+                  ),
+                  baseline: Math.abs(
+                    node.top +
+                      node.height / 2 -
+                      (heading.getBoundingClientRect().top +
+                        parseFloat(getComputedStyle(heading).lineHeight) / 2),
+                  ),
+                  gap:
+                    box.top + parseFloat(guide.top) - (node.top + node.height),
+                  lineWidth: parseFloat(guide.width),
+                };
+              }),
+            );
+          for (const item of measurements) {
+            expect(item.axis).toBeLessThan(0.1);
+            expect(item.baseline).toBeLessThan(0.1);
+            expect(item.gap).toBeGreaterThanOrEqual(-0.1);
+            expect(item.lineWidth).toBe(1);
+          }
+        }
+      }
+      await page.evaluate(() =>
+        document.documentElement.style.setProperty("--note-size", "16px"),
+      );
+      const fold = page.locator("#content .fold").first();
+      await fold.hover();
+      await page.screenshot({
+        path: `.local/chapter-marker-${deviceScaleFactor}-expanded.png`,
+      });
+      await fold.click();
+      await expect(fold).toHaveAttribute("aria-expanded", "false");
+      const collapsedRail = page.locator("#content .section-rail").first();
+      expect(
+        await collapsedRail.evaluate(
+          (el) => getComputedStyle(el, "::before").height,
+        ),
+      ).toBe("12px");
+      await page.screenshot({
+        path: `.local/chapter-marker-${deviceScaleFactor}-collapsed.png`,
+      });
+      await fold.focus();
+      await page.keyboard.press("Enter");
+      await expect(fold).toHaveAttribute("aria-expanded", "true");
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      expect(
+        await fold.evaluate(
+          (el) => getComputedStyle(el, "::after").transitionDuration,
+        ),
+      ).toBe("0s");
+    });
+  });
+}
 
 test("half-screen widths keep the reader full width and toolbar reachable", async ({
   page,

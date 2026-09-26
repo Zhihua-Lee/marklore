@@ -39,15 +39,6 @@
 :root[data-typeface="literata"] .prose strong {
   font-weight: var(--strong-weight, 600);
 }
-:root[data-typeface="literata"] .prose h1 {
-  font-size: 1.85em;
-}
-:root[data-typeface="literata"] .prose h2 {
-  font-size: 1.5em;
-}
-:root[data-typeface="literata"] .prose h3 {
-  font-size: 1.25em;
-}
 :root[data-typeface="literata"] .prose pre {
   line-height: 1.65;
   font-weight: var(--note-weight, 400);

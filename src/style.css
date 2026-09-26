@@ -497,35 +497,42 @@ main[data-empty="true"] > #panes {
 .prose h5,
 .prose h6 {
   position: relative;
+  font-size: calc(1em * var(--heading-scale));
   line-height: 1.3;
   scroll-margin-top: 32px;
   font-weight: var(--heading-weight);
   color: inherit;
   letter-spacing: normal;
 }
+.prose :is(h1, .note-section[data-level="1"]) {
+  --heading-scale: 1.85;
+}
+.prose :is(h2, .note-section[data-level="2"]) {
+  --heading-scale: 1.5;
+}
+.prose :is(h3, .note-section[data-level="3"]) {
+  --heading-scale: 1.25;
+}
+.prose :is(h4, .note-section[data-level="4"]) {
+  --heading-scale: 1.1;
+}
+.prose :is(h5, .note-section[data-level="5"]) {
+  --heading-scale: 1;
+}
+.prose :is(h6, .note-section[data-level="6"]) {
+  --heading-scale: 0.95;
+}
 .prose h1 {
-  font-size: 1.85em;
   margin: 0 0 0.7em;
 }
 .prose h2 {
-  font-size: 1.5em;
   margin: 1.65em 0 0.7em;
 }
 .prose h3 {
-  font-size: 1.25em;
   margin-top: 1.5em;
 }
 .prose p {
   margin: 0 0 1em;
-}
-.prose h4 {
-  font-size: 1.1em;
-}
-.prose h5 {
-  font-size: 1em;
-}
-.prose h6 {
-  font-size: 0.95em;
 }
 .prose ul,
 .prose ol {
@@ -654,12 +661,13 @@ main[data-empty="true"] > #panes {
 }
 .prose .fold {
   position: absolute;
-  left: -25px;
-  top: 0;
+  left: calc(var(--section-axis) - 12px);
+  top: calc(0.65em - 12px);
   width: 24px;
-  height: 1.3em;
+  height: 24px;
   min-height: 24px;
   padding: 0;
+  border: 0;
   z-index: 1;
   color: transparent;
   font: inherit;
@@ -667,26 +675,46 @@ main[data-empty="true"] > #panes {
   font-weight: 400;
   text-indent: -9999px;
   overflow: hidden;
+  background: transparent;
+}
+.prose .fold::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border-radius: 5px;
+  background: transparent;
+  transition: background-color 120ms ease;
+}
+.prose .fold:is(:hover, :focus-visible)::before {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .prose .fold::after {
   content: "";
   position: absolute;
-  left: 10px;
-  top: calc(50% - 4px);
-  border-block: 4px solid transparent;
-  border-left: 5px solid var(--muted);
-  transform: rotate(90deg);
-  transition: transform 120ms ease;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  /* The triangle's area centroid, not its bounding box, sits on the rail axis. */
+  clip-path: polygon(33.333% 20.833%, 83.333% 50%, 33.333% 79.167%);
+  background: var(--section-marker);
+  transform: translate(-50%, -50%) rotate(90deg);
+  transition:
+    transform 120ms ease,
+    background-color 120ms ease;
 }
 .note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) > .fold::after {
-  transform: rotate(0deg);
-  border-left-color: var(--accent);
+  transform: translate(-50%, -50%) rotate(0deg);
 }
 .note-section.collapsed > .section-body {
   display: none;
 }
 .note-section {
   --section-inset: 18px;
+  --section-axis: -13px;
+  --section-marker: var(--muted);
+  --section-guide: color-mix(in srgb, var(--reading-ink) 12%, transparent);
+  --section-node-center: calc(0.65em * var(--heading-scale));
   position: relative;
   padding-left: var(--section-inset);
   margin-block: 1.6em;
@@ -715,8 +743,8 @@ main[data-empty="true"] > #panes {
 }
 .section-rail {
   position: absolute;
-  inset: 0 auto 0 calc(var(--section-inset) - 20px);
-  width: 14px;
+  inset: 0 auto 0 calc(var(--section-inset) + var(--section-axis) - 12px);
+  width: 24px;
   min-height: 0;
   padding: 0;
   border: 0;
@@ -725,19 +753,36 @@ main[data-empty="true"] > #panes {
 .section-rail::before {
   content: "";
   position: absolute;
-  inset: 0 auto 0 7px;
-  border-left: 1px solid color-mix(in srgb, var(--reading-ink) 9%, transparent);
-  transition: border-color 120ms ease;
+  inset: calc(var(--section-node-center) + 12px) auto 0 calc(50% - 0.5px);
+  width: 1px;
+  border-radius: 1px;
+  background: var(--section-guide);
+  transition: background-color 120ms ease;
 }
 .section-rail:hover {
   background: transparent;
 }
-.note-section:hover:not(:has(.note-section:hover)) > .section-rail::before,
-.section-rail:focus-visible::before {
-  border-color: var(--accent);
+.note-section:hover:not(:has(.note-section:hover)),
+.note-section:has(
+  > .section-rail:focus-visible,
+  > :is(h1, h2, h3, h4, h5, h6) > .fold:focus-visible
+) {
+  --section-marker: var(--accent);
+  --section-guide: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.note-section.collapsed {
+  --section-marker: var(--accent);
+  --section-guide: color-mix(in srgb, var(--accent) 45%, transparent);
+  min-height: calc(var(--section-node-center) + 24px);
 }
 .note-section.collapsed > .section-rail::before {
-  border-left: 2px dashed var(--accent);
+  bottom: auto;
+  height: 12px;
+  background: repeating-linear-gradient(
+    to bottom,
+    var(--section-guide) 0 2px,
+    transparent 2px 5px
+  );
 }
 .note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) {
   margin-bottom: 0;

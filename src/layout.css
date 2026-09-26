@@ -199,6 +199,31 @@ main {
 #outline {
   font-family: var(--font-ui);
 }
+#outline button {
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-block: 7px;
+  scrollbar-width: thin;
+}
+#outline .katex {
+  font-size: 1.08em;
+}
+#outline .katex-display {
+  display: inline;
+  margin: 0;
+}
+#outline .katex-display > .katex {
+  display: inline;
+  text-align: left;
+}
+#outline .katex .cjk_fallback {
+  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+}
+#outline code {
+  font-family: var(--font-code);
+  font-size: 0.95em;
+}
 #outline:empty::after {
   content: "暂无标题";
   display: block;

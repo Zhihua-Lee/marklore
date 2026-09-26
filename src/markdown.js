@@ -285,7 +285,9 @@ export function createParser() {
         }
       }
       if (token.type === "heading_open") {
-        const label = state.tokens[i + 1]?.content || "";
+        const label = (state.tokens[i + 1]?.content || "")
+          .split(state.env.mathPipe)
+          .join("|");
         let slug =
           label
             .toLowerCase()
@@ -333,6 +335,22 @@ function attrs(t) {
   return (t.attrs || []).map(([k, v]) => `${k}="${escape(v)}"`).join(" ");
 }
 const parser = createParser();
+const outlineParser = createParser().set({ html: false, linkify: false });
+outlineParser.renderer.rules.image = (tokens, i) => escape(tokens[i].content);
+export function renderHeadingLabel(label) {
+  const env = {};
+  const html = outlineParser
+    .renderInline(label, env)
+    .split(env.mathPipe)
+    .join("|");
+  return DOMPurify.sanitize(html, {
+    ADD_TAGS: ["annotation", "semantics"],
+    ADD_ATTR: ["encoding"],
+    ADD_URI_SAFE_ATTR: ["d"],
+    FORBID_TAGS: ["a", "img", "input", "button"],
+    ALLOW_DATA_ATTR: false,
+  });
+}
 export function parseHeadings(source) {
   const env = {};
   parser.parse(source, env);

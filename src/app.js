@@ -2,7 +2,11 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { markdown } from "@codemirror/lang-markdown";
-import { renderMarkdown, parseHeadings } from "./markdown.js";
+import {
+  renderMarkdown,
+  parseHeadings,
+  renderHeadingLabel,
+} from "./markdown.js";
 import {
   atPoint,
   visibleAnchor,
@@ -331,7 +335,8 @@ function updateOutline(headings) {
   $("#outline").replaceChildren(
     ...headings.map((h) => {
       const b = document.createElement("button");
-      b.textContent = h.label;
+      b.innerHTML = renderHeadingLabel(h.label);
+      b.title = h.label;
       b.style.paddingLeft = 12 + (h.level - 1) * 12 + "px";
       b.onclick = () => jump(h.from);
       return b;

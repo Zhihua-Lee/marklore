@@ -1,5 +1,53 @@
 import { test, expect } from "@playwright/test";
 
+test("outline renders heading math safely and source edits preserve navigation", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.getByRole("button", { name: "源码", exact: true }).click();
+  await page.locator(".cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.insertText(
+    String.raw`
+
+## **Riesz** $L^*w\\in V$ and \\(\\ell_w\\)
+
+### $|x|$ $$\\xrightarrow{Riesz}$$ [target](https://example.com) ![alt](https://example.com/a.png)
+
+### <img src=x onerror=alert(1)> safe
+`.replaceAll("\\\\", "\\"),
+  );
+  await page.keyboard.insertText("\n\nFollowing paragraph.\n\n".repeat(40));
+  const outline = page.locator("#outline");
+  const riesz = outline.locator("button").filter({ hasText: "Riesz" }).first();
+  await expect(riesz.locator(".katex")).toHaveCount(2);
+  await expect(
+    outline.locator("strong").filter({ hasText: "Riesz" }),
+  ).toHaveCount(1);
+  await expect(outline.locator("svg path[d]")).not.toHaveCount(0);
+  await expect(
+    outline.locator("a,img,script,input,button button,[onerror]"),
+  ).toHaveCount(0);
+  expect(await outline.innerHTML()).not.toMatch(/[\uE000-\uF8FF]/);
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
+  await riesz.click();
+  await expect
+    .poll(() =>
+      page.locator("#reader").evaluate((el) => {
+        const heading = [...el.querySelectorAll("h2")].find((h) =>
+          h.textContent.includes("Riesz"),
+        );
+        return Math.abs(
+          heading.getBoundingClientRect().top -
+            el.getBoundingClientRect().top -
+            32,
+        );
+      }),
+    )
+    .toBeLessThan(60);
+  await page.screenshot({ path: ".local/outline-math-v0110.png" });
+});
+
 test("source edits update the outline without redrawing the hidden preview", async ({
   page,
 }) => {

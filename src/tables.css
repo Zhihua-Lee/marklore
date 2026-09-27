@@ -1,0 +1,136 @@
+/* Shared by the reader, link previews and standalone exports. */
+.table-scroll {
+  --table-line: var(--line, #dcded6);
+  --table-paper: var(--reading-paper, #fff);
+  --table-ink: var(--reading-ink, #242424);
+  --table-accent: var(--accent, #246d5d);
+  width: fit-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.4em 0;
+  border: 1px solid color-mix(in srgb, var(--table-line) 75%, transparent);
+  border-radius: 8px;
+  background: var(--table-paper);
+  box-shadow: 0 2px 8px #00000008;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--table-ink) 22%, transparent)
+    transparent;
+}
+.table-scroll table,
+.prose .table-scroll table {
+  display: table;
+  width: auto;
+  max-width: 100%;
+  table-layout: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
+  font-size: 1em;
+  line-height: 1.6;
+}
+.table-scroll :is(th, td),
+.prose .table-scroll :is(th, td) {
+  border: 0;
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--table-line) 65%, transparent);
+  padding: 0.62em 1em;
+  min-width: 2.5em;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+.table-scroll th,
+.prose .table-scroll th {
+  background: color-mix(in srgb, var(--table-accent) 5%, var(--table-paper));
+  text-align: left;
+  font-weight: var(--strong-weight, 600);
+}
+.table-scroll tbody tr:last-child > td {
+  border-bottom: 0;
+}
+:is(
+  :root[data-table-width="full"] .table-scroll,
+  .table-scroll.folio-table-full
+) {
+  width: 100%;
+}
+:is(
+    :root[data-table-width="full"] .table-scroll,
+    .table-scroll.folio-table-full
+  )
+  table {
+  width: 100%;
+}
+:is(
+  :root[data-table-style="plain"] .table-scroll,
+  .table-scroll.folio-table-plain
+) {
+  border-left: 0;
+  border-right: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+}
+:is(
+    :root[data-table-style="plain"] .table-scroll,
+    .table-scroll.folio-table-plain
+  )
+  th {
+  background: transparent;
+}
+:is(
+  :root[data-table-style="grid"] .table-scroll,
+  .table-scroll.folio-table-grid
+) {
+  border-radius: 0;
+  box-shadow: none;
+}
+:is(
+    :root[data-table-style="grid"] .table-scroll,
+    .table-scroll.folio-table-grid
+  )
+  :is(th, td) {
+  border-right: 1px solid var(--table-line);
+  border-bottom-color: var(--table-line);
+}
+:is(
+    :root[data-table-style="grid"] .table-scroll,
+    .table-scroll.folio-table-grid
+  )
+  tr
+  > :last-child {
+  border-right: 0;
+}
+@media (hover: hover) {
+  .prose .table-scroll:hover {
+    border-color: color-mix(
+      in srgb,
+      var(--table-accent) 28%,
+      var(--table-line)
+    );
+  }
+  :root:not([data-table-style="plain"]):not([data-table-style="grid"])
+    .prose
+    .table-scroll:hover {
+    box-shadow: 0 3px 12px #00000012;
+  }
+  .prose .table-scroll tbody tr:hover {
+    background: color-mix(in srgb, var(--table-accent) 6%, var(--table-paper));
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .prose .table-scroll {
+    transition:
+      border-color 140ms,
+      box-shadow 140ms;
+  }
+  .prose .table-scroll tbody tr {
+    transition: background-color 100ms;
+  }
+}
+@media print {
+  .table-scroll {
+    overflow: visible;
+    max-width: 100%;
+    box-shadow: none;
+  }
+}

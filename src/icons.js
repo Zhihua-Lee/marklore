@@ -1,4 +1,6 @@
 const paths = {
+  inlineMath: '<path d="M4 6 1 12l3 6m16-12 3 6-3 6M9 9l6 6m0-6-6 6"/>',
+  rule: '<path d="M3 12h18"/>',
   highlight: '<path d="m14 3 7 7-8 8-7-7 8-8ZM6 11l-3 6 4 4 6-3M3 21h7"/>',
   textColor: '<path d="m6 17 6-14 6 14M8 12h8M4 21h16"/>',
   pencil: '<path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z"/>',

@@ -15,11 +15,21 @@ async function boot(page, text = "Hello 中文") {
             version: "v1",
           },
         ],
-        settings: { sidebar: false, outline: false },
+        settings: {
+          sidebar: false,
+          outline: false,
+          ...JSON.parse(localStorage.getItem("editor-test-settings") || "{}"),
+        },
       }),
       on: (name, fn) => (window.mock.handlers[name] = fn),
       read: async () => ({ unchanged: true }),
-      session: async (value) => (window.mock.session = value),
+      session: async (value) => {
+        window.mock.session = value;
+        localStorage.setItem(
+          "editor-test-settings",
+          JSON.stringify(value.settings),
+        );
+      },
       save: async (_id, text) => {
         window.mock.saved.push(text);
         return { version: "v2" };
@@ -49,20 +59,26 @@ test("grouped color/highlight tools render, clear, undo and adapt to dark mode",
 }) => {
   await boot(page, "Hello **中文**");
   await selectAll(page);
-  await page.getByRole("button", { name: "文字高亮", exact: true }).click();
+  await page
+    .getByRole("button", { name: "文字高亮", exact: true })
+    .click({ button: "right" });
   await page.getByRole("button", { name: "黄色", exact: true }).click();
   await expect(page.locator("#content mark strong")).toHaveText("中文");
   await expect(page.locator("#content mark")).toHaveCSS(
     "background-color",
     "rgb(242, 216, 120)",
   );
-  await page.getByRole("button", { name: "文字颜色", exact: true }).click();
+  await page
+    .getByRole("button", { name: "文字颜色", exact: true })
+    .click({ button: "right" });
   await page.getByRole("button", { name: "蓝色", exact: true }).click();
   await expect(page.locator('#content span[style*="--folio-color"]')).toHaveCSS(
     "color",
     "rgb(40, 107, 160)",
   );
-  await page.getByRole("button", { name: "文字颜色", exact: true }).click();
+  await page
+    .getByRole("button", { name: "文字颜色", exact: true })
+    .click({ button: "right" });
   await page.getByRole("button", { name: "恢复默认颜色", exact: true }).click();
   await expect(
     page.locator('#content span[style*="--folio-color"]'),
@@ -89,6 +105,153 @@ test("grouped color/highlight tools render, clear, undo and adapt to dark mode",
   await page.screenshot({ path: ".local/editing-colors-v017.png" });
 });
 
+test("left click applies remembered color, right click opens anchored palette and keyboard dismisses it", async ({
+  page,
+}) => {
+  await boot(page, "Selected 中文");
+  await selectAll(page);
+  const highlight = page.getByRole("button", { name: "文字高亮", exact: true });
+  await highlight.click();
+  await expect(page.locator("#content mark")).toHaveText("Selected 中文");
+  await expect(page.locator(".text-color-picker")).toHaveCount(0);
+  await highlight.click({ button: "right" });
+  const palette = page.getByRole("dialog", { name: "高亮调色板" });
+  await expect(palette).toBeVisible();
+  expect(
+    await page.evaluate(() => document.querySelectorAll("dialog[open]").length),
+  ).toBe(0);
+  const rects = await page.evaluate(() => {
+    const b = document
+        .querySelector('[data-edit="highlight"]')
+        .getBoundingClientRect(),
+      p = document.querySelector(".text-color-picker").getBoundingClientRect();
+    return { gap: p.top - b.bottom, width: p.width };
+  });
+  expect(rects.gap).toBeGreaterThanOrEqual(0);
+  expect(rects.gap).toBeLessThan(12);
+  expect(rects.width).toBeLessThan(230);
+  await page.screenshot({ path: ".local/color-palette-v018.png" });
+  await page.getByRole("button", { name: "粉色", exact: true }).click();
+  await expect(highlight).toHaveCSS("--selected-color", "#efc4d1");
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await highlight.click();
+  await expect(page.locator("#content mark")).toHaveCSS(
+    "background-color",
+    "rgb(239, 196, 209)",
+  );
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.mock.session?.settings.highlightColor),
+    )
+    .toBe("#efc4d1");
+  await page.reload();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await expect(highlight).toHaveCSS("--selected-color", "#efc4d1");
+  await selectAll(page);
+  await highlight.click();
+  await expect(page.locator("#content mark")).toHaveCSS(
+    "background-color",
+    "rgb(239, 196, 209)",
+  );
+  await highlight.focus();
+  await page.keyboard.press("ArrowDown");
+  await expect(palette).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(highlight).toBeFocused();
+  await highlight.click({ button: "right" });
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
+  await expect(palette).toHaveCount(0);
+});
+
+test("inline formula and divider are direct toolbar controls", async ({
+  page,
+}) => {
+  await boot(page, "x^2");
+  await selectAll(page);
+  await expect(page.getByRole("combobox", { name: "更多格式" })).toHaveCount(0);
+  await page.getByRole("button", { name: "行内公式", exact: true }).click();
+  await expect(page.locator("#content .formula .katex")).toHaveCount(1);
+  await page.locator("#editor .cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.getByRole("button", { name: "分割线", exact: true }).click();
+  await expect(page.locator("#content hr")).toHaveCount(1);
+});
+
+test("table styles, adaptive measure and motion-free hover remain selectable and persistent", async ({
+  page,
+}) => {
+  await boot(
+    page,
+    "# Table\n\n| Name | Value |\n| :--- | ---: |\n| Alpha | $x^2$ |\n| Beta | 中文说明 |\n\n```mermaid\nflowchart LR\nA --> B\n```",
+  );
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
+  const wrapper = page.locator("#content .table-scroll"),
+    table = page.locator("#content table");
+  await expect(wrapper).toHaveCSS("border-radius", "8px");
+  const sizes = await wrapper.evaluate((el) => ({
+    width: el.getBoundingClientRect().width,
+    parent: el.parentElement.clientWidth,
+  }));
+  expect(sizes.width).toBeLessThan(sizes.parent);
+  const original = await wrapper.boundingBox();
+  const shadow = await wrapper.evaluate((el) => getComputedStyle(el).boxShadow);
+  await page.locator("#content tbody tr").first().hover();
+  await expect
+    .poll(() => wrapper.evaluate((el) => getComputedStyle(el).boxShadow))
+    .not.toBe(shadow);
+  expect(await wrapper.boundingBox()).toEqual(original);
+  await expect(table).toHaveCSS("transform", "none");
+  await page.screenshot({ path: ".local/table-soft-hover-v018.png" });
+  await page.locator("#content .diagram svg").waitFor();
+  const chart = page.locator("#content .code-block:has(.diagram)");
+  const chartBox = await chart.boundingBox();
+  await chart.hover();
+  await expect
+    .poll(() => chart.evaluate((el) => getComputedStyle(el).boxShadow))
+    .not.toBe("none");
+  expect(await chart.boundingBox()).toEqual(chartBox);
+  await page.locator("#theme").click();
+  await page.locator("#content tbody tr").first().hover();
+  await page.screenshot({ path: ".local/table-dark-hover-v018.png" });
+  await page.locator("#theme").click();
+  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("combobox", { name: "表格风格" }).selectOption("grid");
+  await page.getByRole("combobox", { name: "表格宽度" }).selectOption("full");
+  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await expect(wrapper).toHaveCSS("border-radius", "0px");
+  // Chromium snaps CSS borders to device pixels at the current reading zoom.
+  expect(
+    await page
+      .locator("#content td")
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).borderRightWidth)),
+  ).toBeGreaterThan(0);
+  expect((await wrapper.boundingBox()).width).toBeGreaterThan(sizes.width);
+  await expect
+    .poll(() => page.evaluate(() => window.mock.session?.settings.tableStyle))
+    .toBe("grid");
+  await page.reload();
+  await expect(wrapper).toHaveCSS("border-radius", "0px");
+  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("combobox", { name: "表格风格" }).selectOption("plain");
+  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await expect(page.locator("#content td").first()).toHaveCSS(
+    "border-right-width",
+    "0px",
+  );
+  await expect(wrapper).toHaveCSS("box-shadow", "none");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(wrapper).toHaveCSS("transition-duration", "0s");
+  await page.setViewportSize({ width: 600, height: 800 });
+  expect(
+    await page
+      .locator("#content")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  await page.screenshot({ path: ".local/tables-v018.png" });
+});
+
 test("read mode has no local editing entry; edit mode offers grouped local color tools", async ({
   page,
 }) => {
@@ -105,12 +268,16 @@ test("read mode has no local editing entry; edit mode offers grouped local color
   await page.getByRole("button", { name: "就地编辑此块", exact: true }).click();
   await page.locator(".block-editor .cm-content").click();
   await page.keyboard.press("Control+a");
-  await page.getByRole("button", { name: "就地文字高亮", exact: true }).click();
+  await page
+    .getByRole("button", { name: "就地文字高亮", exact: true })
+    .click({ button: "right" });
   await page.getByRole("button", { name: "粉色", exact: true }).click();
   await expect(page.locator(".block-editor .cm-content")).toContainText(
     "<mark",
   );
-  await page.getByRole("button", { name: "就地文字颜色", exact: true }).click();
+  await page
+    .getByRole("button", { name: "就地文字颜色", exact: true })
+    .click({ button: "right" });
   await page.getByRole("button", { name: "绿色", exact: true }).click();
   await page.getByRole("button", { name: "完成", exact: true }).click();
   await expect(page.locator("#content mark")).toHaveText("Hello 中文");
@@ -123,7 +290,9 @@ test("color preserves heading structure, clean outline labels and literal code",
 }) => {
   await boot(page, "## Hello 中文");
   await selectAll(page);
-  await page.getByRole("button", { name: "文字颜色", exact: true }).click();
+  await page
+    .getByRole("button", { name: "文字颜色", exact: true })
+    .click({ button: "right" });
   await page.getByRole("button", { name: "红色", exact: true }).click();
   await expect(page.locator("#content h2")).toContainText("Hello 中文");
   await expect(page.locator("#content h2")).toHaveAttribute("id", "hello-中文");

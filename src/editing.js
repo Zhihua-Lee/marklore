@@ -5,7 +5,7 @@ import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 import { markdownEdit } from "./markdown-edits.js";
 import { icon } from "./icons.js";
-import { openColorPicker } from "./color-picker.js";
+import { wireColorButton } from "./color-picker.js";
 import "./editing.css";
 
 export const editingHighlight = syntaxHighlighting(
@@ -47,6 +47,8 @@ const buttons = [
   ["inline", "行内代码", "&lt;/&gt;", "Ctrl+E"],
   ["code", "代码块", icon("codeBlock")],
   ["math", "公式块", "∑"],
+  ["inlineMath", "行内公式", icon("inlineMath")],
+  ["rule", "分割线", icon("rule")],
   ["link", "插入链接", icon("link"), "Ctrl+K"],
   ["image", "插入图片", icon("image")],
   ["table", "插入表格", icon("table")],
@@ -56,7 +58,7 @@ export function wireEditing({ view, getDocument, insertImage }) {
   host.className = "editing-tools";
   host.setAttribute("role", "group");
   host.setAttribute("aria-label", "Markdown 格式工具");
-  host.innerHTML = `<div class="edit-history"><button type="button" data-edit="undo" aria-label="撤销" title="撤销 Ctrl+Z">${icon("undo")}</button><button type="button" data-edit="redo" aria-label="重做" title="重做 Ctrl+Shift+Z">${icon("redo")}</button></div><select aria-label="段落样式" title="段落样式"><option value="">段落</option><option value="0">正文</option>${Array.from({ length: 6 }, (_, i) => `<option value="${i + 1}">标题 ${i + 1}</option>`).join("")}</select>${buttons.map(([id, label, content, shortcut]) => `<button type="button" data-edit="${id}" aria-label="${label}" title="${label}${shortcut ? " " + shortcut : ""}">${content}</button>`).join("")}<select aria-label="更多格式" title="更多格式"><option value="">更多</option><option value="inlineMath">行内公式</option><option value="rule">分割线</option></select>`;
+  host.innerHTML = `<div class="edit-history"><button type="button" data-edit="undo" aria-label="撤销" title="撤销 Ctrl+Z">${icon("undo")}</button><button type="button" data-edit="redo" aria-label="重做" title="重做 Ctrl+Shift+Z">${icon("redo")}</button></div><select aria-label="段落样式" title="段落样式"><option value="">段落</option><option value="0">正文</option>${Array.from({ length: 6 }, (_, i) => `<option value="${i + 1}">标题 ${i + 1}</option>`).join("")}</select>${buttons.map(([id, label, content, shortcut]) => `<button type="button" data-edit="${id}" aria-label="${label}" title="${label}${shortcut ? " " + shortcut : ""}">${content}</button>`).join("")}`;
   const groups = [
     ["编辑历史", [".edit-history"]],
     [
@@ -75,10 +77,9 @@ export function wireEditing({ view, getDocument, insertImage }) {
     [
       "插入内容",
       [
-        ...["link", "image", "table", "code", "math"].map(
+        ...["link", "image", "table", "code", "math", "inlineMath", "rule"].map(
           (id) => `[data-edit="${id}"]`,
         ),
-        '[aria-label="更多格式"]',
       ],
     ],
   ];
@@ -170,22 +171,7 @@ export function wireEditing({ view, getDocument, insertImage }) {
     dialog.showModal();
   }
   function execute(action) {
-    if (["highlight", "color"].includes(action)) {
-      const doc = getDocument(),
-        state = view.state;
-      if (!doc || doc.mode === "read") return false;
-      openColorPicker(
-        action,
-        (options) => {
-          if (doc !== getDocument() || state !== view.state)
-            throw Error("笔记已改变，请重新选择文字。");
-          apply(action, options, doc);
-        },
-        () => {
-          if (doc === getDocument()) view.focus();
-        },
-      );
-    } else if (["link", "table", "code"].includes(action)) insertForm(action);
+    if (["link", "table", "code"].includes(action)) insertForm(action);
     else if (action === "image") insertImage();
     else apply(action);
     return true;
@@ -202,10 +188,30 @@ export function wireEditing({ view, getDocument, insertImage }) {
       apply("heading", { level: event.target.value });
     event.target.value = "";
   };
-  host.querySelector('[aria-label="更多格式"]').onchange = (event) => {
-    if (event.target.value) execute(event.target.value);
-    event.target.value = "";
-  };
+  for (const action of ["highlight", "color"])
+    wireColorButton(
+      host.querySelector(`[data-edit="${action}"]`),
+      action,
+      () => {
+        const doc = getDocument(),
+          state = view.state;
+        if (!doc || doc.mode === "read") return null;
+        return {
+          apply(options) {
+            if (
+              doc !== getDocument() ||
+              state.doc !== view.state.doc ||
+              state.selection !== view.state.selection
+            )
+              throw Error("笔记或选区已改变，请重新选择文字。");
+            if (!state.selection.main.empty) apply(action, options, doc);
+          },
+          focus() {
+            if (doc === getDocument()) view.focus();
+          },
+        };
+      },
+    );
   return Prec.highest(
     keymap.of([
       ...[

@@ -66,29 +66,34 @@
   padding-left: 8px;
 }
 .text-color-picker {
-  width: min(280px, calc(100vw - 32px));
-  padding: 16px;
-}
-.text-color-picker header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-.text-color-picker h2 {
-  font: 500 14px/1.5 var(--font-ui);
+  position: fixed;
+  inset: auto;
   margin: 0;
+  width: min(218px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  box-shadow: 0 5px 20px #0002;
+  font: 400 12px/1.5 var(--font-ui);
 }
 .text-color-picker .color-swatches {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 5px;
+  gap: 3px;
 }
 .text-color-picker .color-swatches button {
-  padding: 4px;
+  padding: 3px;
   min-width: 0;
-  min-height: 32px;
+  min-height: 29px;
   border: 1px solid var(--line);
+}
+.text-color-picker [aria-pressed="true"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .text-color-picker .color-swatches span {
   display: block;
@@ -103,7 +108,12 @@
   justify-content: space-between;
   gap: 8px;
   font-size: 12px;
-  margin: 16px 0 10px;
+  margin: 10px 0 6px;
+}
+.text-color-picker .custom-color label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .text-color-picker input[type="color"] {
   padding: 2px;
@@ -120,6 +130,20 @@
 .text-color-picker [role="alert"] {
   font-size: 12px;
   color: var(--danger);
+}
+button[data-color-action] {
+  position: relative;
+  padding-bottom: 7px;
+}
+button[data-color-action]::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 6px;
+  right: 6px;
+  height: 3px;
+  background: var(--selected-color);
+  border-radius: 2px;
 }
 :root[data-theme="dark"] {
   --folio-color-0: #ee9991;

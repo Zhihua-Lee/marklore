@@ -13,7 +13,7 @@ import { editingHighlight } from "./editing.js";
 import { markdownEdit } from "./markdown-edits.js";
 import { atPoint, selectionSource } from "./positions.js";
 import { icon } from "./icons.js";
-import { openColorPicker } from "./color-picker.js";
+import { wireColorButton, closeColorPicker } from "./color-picker.js";
 import "./block-editing.css";
 
 const labels = {
@@ -288,6 +288,30 @@ export function createBlockEditor({
           : (button.dataset.history === "undo" ? undo : redo)(local);
     });
     picture.onclick = insertImage;
+    for (const action of ["highlight", "color"])
+      wireColorButton(
+        panel.querySelector(`[data-format="${action}"]`),
+        action,
+        () => {
+          const s = session,
+            state = s?.editor.state;
+          if (!s) return null;
+          return {
+            apply(options) {
+              if (
+                session !== s ||
+                state.doc !== s.editor.state.doc ||
+                state.selection !== s.editor.state.selection
+              )
+                throw Error("编辑内容或选区已改变，请重新选择文字。");
+              if (!state.selection.main.empty) applyFormat(action, options);
+            },
+            focus() {
+              if (session === s) s.editor.focus();
+            },
+          };
+        },
+      );
     const form = panel.querySelector("form");
     form.onsubmit = (event) => {
       event.preventDefault();
@@ -341,21 +365,7 @@ export function createBlockEditor({
     local.focus();
   }
   function format(action) {
-    if (action === "highlight" || action === "color") {
-      const s = session,
-        state = s.editor.state;
-      openColorPicker(
-        action,
-        (options) => {
-          if (session !== s || state !== s.editor.state)
-            throw Error("编辑内容已改变，请重新选择文字。");
-          applyFormat(action, options);
-        },
-        () => {
-          if (session === s) s.editor.focus();
-        },
-      );
-    } else if (action === "link") {
+    if (action === "link") {
       const form = session.panel.querySelector("form");
       form.hidden = false;
       form.elements.url.focus();
@@ -363,6 +373,7 @@ export function createBlockEditor({
   }
   function close(notify = true) {
     if (!session) return;
+    closeColorPicker();
     const s = session,
       y =
         s.panel.getBoundingClientRect().top -

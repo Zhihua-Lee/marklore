@@ -1,6 +1,7 @@
 import { renderMarkdown } from "./markdown.js";
 import { renderDiagrams } from "./diagrams.js";
 import exportCSS from "./export.css?raw";
+import tableCSS from "./tables.css?raw";
 import katexCSS from "katex/dist/katex.min.css?raw";
 import literataCSS from "@fontsource-variable/literata/standard.css?raw";
 import literataItalicCSS from "@fontsource-variable/literata/standard-italic.css?raw";
@@ -53,6 +54,17 @@ export async function exportNote(format, { doc }) {
     for (const block of host.querySelectorAll(".code-block"))
       block.replaceWith(block.querySelector("pre"));
     for (const details of host.querySelectorAll("details")) details.open = true;
+    const tableStyle = ["soft", "plain", "grid"].includes(
+      document.documentElement.dataset.tableStyle,
+    )
+      ? document.documentElement.dataset.tableStyle
+      : "soft";
+    for (const table of host.querySelectorAll(".table-scroll")) {
+      table.classList.add("folio-table-" + tableStyle);
+      if (document.documentElement.dataset.tableWidth === "full")
+        table.classList.add("folio-table-full");
+      table.removeAttribute("tabindex");
+    }
     for (const element of host.querySelectorAll("*")) {
       element.classList.remove("collapsed", "located");
       for (const attribute of [...element.attributes])
@@ -113,6 +125,7 @@ export async function exportNote(format, { doc }) {
         monoItalicCSS +
         "\n" +
         exportCSS +
+        tableCSS +
         `\nbody{font-family:${family};font-weight:${[400, 450, 500, 600].includes(weight) ? weight : 400}} strong{font-weight:${Math.max(600, weight + 100)}}`,
       images,
       warnings,

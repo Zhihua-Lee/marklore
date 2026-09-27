@@ -14,7 +14,8 @@ const note = path.join(temp, "source.md"),
   htmlPath = path.join(temp, "export.html"),
   pdfPath = path.join(temp, "export.pdf");
 const source = `# Export fixture\n\nEnglish and 中文 paragraph with $e^{i\\pi}+1=0$.\n\n<mark style="background-color: #f2d878; color: #000000">Highlighted</mark> <span style="color: #b23c36">Colored</span>\n\n## Folded section\n\nFOLDED CONTENT INCLUDED\n\n<details><summary>Details title</summary><p>CLOSED DETAILS INCLUDED 中文</p></details>\n\n![Local illustration](image.svg)\n\n\`\`\`mermaid\nflowchart LR\nA[Draft] --> B[Export]\n\`\`\`\n\n<div style="break-before:page">SECOND PAGE END</div>\n`;
-await fs.writeFile(note, source);
+const tableSource = "\n| Name | Value |\n| --- | ---: |\n| Alpha | 42 |\n";
+await fs.writeFile(note, source + tableSource);
 await fs.writeFile(
   path.join(temp, "image.svg"),
   '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="50"><rect width="180" height="50" fill="#357d70"/><text x="15" y="32" fill="white" font-size="20">LOCAL IMAGE</text></svg>',
@@ -52,6 +53,10 @@ try {
   await page.keyboard.press("Control+End");
   await page.keyboard.type("\nUNSAVED DRAFT INCLUDED");
   await command("read");
+  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("combobox", { name: "表格风格" }).selectOption("grid");
+  await page.getByRole("combobox", { name: "表格宽度" }).selectOption("full");
+  await page.getByRole("button", { name: "关闭外观设置" }).click();
   await page.locator("#content .diagram svg").waitFor();
   await page.locator("#content .fold").first().click();
   const choose = (destination) =>
@@ -90,7 +95,7 @@ try {
     html,
     /folio-asset:|folio-export-image:|class="fold"|id="toolbar"/,
   );
-  assert.equal(await fs.readFile(note, "utf8"), source);
+  assert.equal(await fs.readFile(note, "utf8"), source + tableSource);
   await instance.evaluate(({ app }) => {
     globalThis.__exportLifecycle = {
       registered: 0,
@@ -127,7 +132,7 @@ try {
   const pdf = await fs.readFile(pdfPath);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.ok(pdf.length > 10000);
-  assert.equal(await fs.readFile(note, "utf8"), source);
+  assert.equal(await fs.readFile(note, "utf8"), source + tableSource);
   assert.deepEqual(
     await instance.evaluate(() => globalThis.__exportLifecycle),
     { registered: 1, removed: 1, requestsCleared: 1 },
@@ -196,6 +201,26 @@ try {
     true,
   );
   assert.equal(await standalone.evaluate(() => typeof require), "undefined");
+  const tableStyle = await standalone
+    .locator(".table-scroll")
+    .evaluate((el) => ({
+      grid: el.classList.contains("folio-table-grid"),
+      full: el.classList.contains("folio-table-full"),
+      radius: getComputedStyle(el).borderRadius,
+      cellBorder: parseFloat(
+        getComputedStyle(el.querySelector("td")).borderRightWidth,
+      ),
+      fills:
+        Math.abs(
+          el.getBoundingClientRect().width -
+            el.parentElement.getBoundingClientRect().width,
+        ) < 3,
+    }));
+  assert.equal(tableStyle.grid, true);
+  assert.equal(tableStyle.full, true);
+  assert.equal(tableStyle.radius, "0px");
+  assert.ok(tableStyle.cellBorder > 0);
+  assert.equal(tableStyle.fills, true);
   assert.equal(
     await standalone
       .locator("mark")

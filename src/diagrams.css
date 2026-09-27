@@ -9,6 +9,26 @@
   height: auto;
   margin: auto;
 }
+.prose .code-block:has(.diagram),
+.prose img {
+  outline: 1px solid transparent;
+  outline-offset: 2px;
+}
+@media (hover: hover) {
+  .prose .code-block:has(.diagram):hover,
+  .prose img:hover {
+    outline-color: color-mix(in srgb, var(--accent) 25%, transparent);
+    box-shadow: 0 3px 12px #00000012;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .prose .code-block:has(.diagram),
+  .prose img {
+    transition:
+      outline-color 140ms,
+      box-shadow 140ms;
+  }
+}
 .diagram-error {
   color: var(--danger);
   white-space: pre-wrap;

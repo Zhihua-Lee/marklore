@@ -32,6 +32,12 @@ import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
+import {
+  configureColorTools,
+  refreshColorButtons,
+  closeColorPicker,
+} from "./color-picker.js";
+import "./tables.css";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -67,12 +73,21 @@ let settings = {
     tabSize: 11,
     typeface: "literata",
     wide: false,
+    tableStyle: "soft",
+    tableWidth: "auto",
     outline: true,
     librarySide: "left",
     outlineSide: "right",
   },
   currentAnchor = null;
 const previewCache = createPreviewCache();
+configureColorTools(
+  () => settings,
+  (patch) => {
+    Object.assign(settings, patch);
+    scheduleSession();
+  },
+);
 let editingKeys = [];
 let blockEditor, imageInsertion;
 $("#app").innerHTML = `
@@ -315,6 +330,7 @@ function restore(
 }
 function activateTab(doc) {
   if (active === doc) return;
+  closeColorPicker();
   blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
@@ -337,6 +353,7 @@ function activateTab(doc) {
 }
 function setMode(mode) {
   if (!active || active.mode === mode) return;
+  closeColorPicker();
   blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
@@ -1255,6 +1272,7 @@ function applySettings() {
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? "切换为窄版" : "切换为宽版";
   applyAppearance(settings);
+  refreshColorButtons();
   if (themeChanged) renderDiagrams($("#content"), settings.theme, () => {});
 }
 function changeSettings(patch) {
@@ -1561,6 +1579,12 @@ if (api) {
       ? settings.typeface
       : "literata";
     settings.wide = settings.wide === true;
+    settings.tableStyle = ["soft", "plain", "grid"].includes(
+      settings.tableStyle,
+    )
+      ? settings.tableStyle
+      : "soft";
+    settings.tableWidth = settings.tableWidth === "full" ? "full" : "auto";
     settings.navigationSize = Math.max(
       10,
       Math.min(14, Number(settings.navigationSize) || 12),

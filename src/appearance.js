@@ -13,6 +13,10 @@ export const appearanceMarkup = `
     <button id="reading-preset" type="button">恢复书页排版</button>
     <p class="setting-hint">Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。</p>
   </fieldset>
+  <fieldset><legend>表格</legend>
+    <label for="table-style">表格风格<select id="table-style"><option value="soft">柔和卡片</option><option value="plain">简洁横线</option><option value="grid">经典网格</option></select></label>
+    <label for="table-width">表格宽度<select id="table-width"><option value="auto">自适应内容</option><option value="full">铺满正文</option></select></label>
+  </fieldset>
   <fieldset><legend>侧栏位置</legend>
     <label for="navigation-size">文件夹与目录字号<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select></label>
     <label for="tab-size">标签页字号<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select></label>
@@ -26,6 +30,8 @@ ${desktopSettingsMarkup}</dialog>`;
 export function applyAppearance(settings) {
   const root = document.documentElement;
   root.dataset.typeface = settings.typeface;
+  root.dataset.tableStyle = settings.tableStyle;
+  root.dataset.tableWidth = settings.tableWidth;
   root.style.setProperty("--navigation-size", settings.navigationSize + "px");
   root.style.setProperty("--tab-size", settings.tabSize + "px");
   const weight = readingWeight(settings);
@@ -65,6 +71,8 @@ export function applyAppearance(settings) {
   $("#sidebar-toggle").setAttribute("aria-expanded", String(settings.sidebar));
   $("#outline-toggle").setAttribute("aria-expanded", String(settings.outline));
   $("#typeface").value = settings.typeface;
+  $("#table-style").value = settings.tableStyle;
+  $("#table-width").value = settings.tableWidth;
   $("#text-weight").value = String(settings.weight);
   $("#navigation-size").value = String(settings.navigationSize);
   $("#tab-size").value = String(settings.tabSize);
@@ -88,6 +96,10 @@ export function wireAppearance(change) {
   };
   $("#appearance-close").onclick = () => dialog.close();
   $("#typeface").onchange = (event) => change({ typeface: event.target.value });
+  $("#table-style").onchange = (event) =>
+    change({ tableStyle: event.target.value });
+  $("#table-width").onchange = (event) =>
+    change({ tableWidth: event.target.value });
   $("#text-weight").onchange = (event) =>
     change({
       weight:

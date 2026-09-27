@@ -435,6 +435,15 @@ export function renderMarkdown(source, fileId = null) {
   const template = document.createElement("template");
   template.innerHTML = clean;
   decorateTextColors(template.content);
+  for (const table of template.content.querySelectorAll("table")) {
+    const scroll = document.createElement("div");
+    scroll.className = "table-scroll";
+    scroll.tabIndex = 0;
+    scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", "表格，可横向滚动");
+    table.before(scroll);
+    scroll.append(table);
+  }
   for (const input of template.content.querySelectorAll("input")) {
     if (input.type !== "checkbox") input.remove();
     else input.disabled = true;

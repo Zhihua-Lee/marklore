@@ -36,6 +36,24 @@ try {
   await page.keyboard.press("Control+a");
   await page.keyboard.press("Control+b");
   await expect(page.locator("#content strong")).toHaveText("Hello 中文");
+  await page.getByRole("button", { name: "文字高亮", exact: true }).click();
+  await expect(page.locator("#content mark")).toHaveText("Hello 中文");
+  await page.keyboard.press("Control+z");
+  await expect(page.locator("#content mark")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "文字颜色", exact: true })
+    .click({ button: "right" });
+  await page
+    .getByRole("dialog", { name: "文字调色板" })
+    .getByRole("button", { name: "蓝色", exact: true })
+    .click();
+  await expect(
+    page.locator('#content span[style*="--folio-color"]'),
+  ).toHaveText("Hello 中文");
+  await page.keyboard.press("Control+z");
+  await expect(
+    page.locator('#content span[style*="--folio-color"]'),
+  ).toHaveCount(0);
   await page.keyboard.press("Control+End");
   await instance.evaluate(({ dialog }, image) => {
     dialog.showOpenDialog = async (_win, options) => {

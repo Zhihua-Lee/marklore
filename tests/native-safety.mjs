@@ -131,8 +131,39 @@ try {
     await fs.readFile(source, "utf8"),
     "# Source\n\nOriginal source",
   );
+
+  // A recovery write that cannot succeed (here: a directory where the temporary
+  // session file must go) offers "quit anyway" instead of trapping the window.
+  await fs.mkdir(path.join(profile, "session.json.tmp"));
+  await instance.evaluate(({ app, dialog }) => {
+    globalThis.__persistPrompts = [];
+    dialog.showMessageBox = async (_window, options) => {
+      globalThis.__persistPrompts.push(options.message);
+      return { response: 0 };
+    };
+    app.quit();
+  });
+  const persistDeadline = Date.now() + 5000;
+  while (!(await instance.evaluate(() => globalThis.__persistPrompts.length))) {
+    assert.ok(
+      Date.now() < persistDeadline,
+      "failed recovery write did not offer a choice",
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.deepEqual(await instance.evaluate(() => globalThis.__persistPrompts), [
+    "恢复数据未能写入",
+  ]);
+  // Cancelling keeps the window and its unsaved draft.
+  assert.equal(
+    await instance.evaluate(
+      ({ BrowserWindow }) => BrowserWindow.getAllWindows().length,
+    ),
+    1,
+  );
+  await fs.rmdir(path.join(profile, "session.json.tmp"));
   console.log(
-    "Native safety passed: SaveAs excludes open destinations before write; oversized session preserves recovery; cancelled quit retains filesystem watcher.",
+    "Native safety passed: SaveAs excludes open destinations before write; oversized session preserves recovery; cancelled quit retains filesystem watcher; failed recovery write offers quit-anyway.",
   );
 } finally {
   if (instance)

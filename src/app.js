@@ -2,6 +2,11 @@ import { createNavigationHistory } from "./navigation-history.js";
 import { createTabBar } from "./tab-bar.js";
 import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
+import { defaultSettings, normalizeSettings } from "./settings.js";
+import { createLibrary } from "./library.js";
+import { wireSplitPane } from "./split-pane.js";
+import { createDocumentSync } from "./document-sync.js";
+import { createMenus } from "./menus.js";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -75,26 +80,7 @@ let active = null,
   maxSessionTimer,
   toastTimer,
   restoring = false;
-let settings = {
-    zoom: 100,
-    previewZoom: 100,
-    theme: "light",
-    sidebar: true,
-    split: 50,
-    weight: "auto",
-    navigationSize: 12,
-    tabSize: 11,
-    typeface: "literata",
-    wide: false,
-    tableStyle: "soft",
-    tableWidth: "auto",
-    tabGroups: [],
-    navigationScope: "all",
-    showHistoryButtons: false,
-    outline: true,
-    librarySide: "left",
-    outlineSide: "right",
-  },
+let settings = defaultSettings(),
   currentAnchor = null;
 const previewCache = createPreviewCache();
 const readingHistory = createNavigationHistory();
@@ -295,6 +281,12 @@ function stateFor(doc) {
       }),
     ],
   });
+}
+// Programmatic state swaps must not look like user edits to the update listener.
+function setEditorState(state) {
+  switching = true;
+  view.setState(state);
+  switching = false;
 }
 view = new EditorView({ state: stateFor(docFrom()), parent: $("#editor") });
 editingKeys = wireEditing({
@@ -527,9 +519,7 @@ function activateTab(doc, { revealGroup = true } = {}) {
   if (revealGroup) tabBar.reveal(doc);
   $("main").dataset.empty = "false";
   $("#home").hidden = true;
-  switching = true;
-  view.setState(doc.state || stateFor(doc));
-  switching = false;
+  setEditorState(doc.state || stateFor(doc));
   $("#panes").dataset.mode = doc.mode;
   render(false);
   updateTabs();
@@ -676,9 +666,7 @@ function showHome() {
   pendingLocation = null;
   locationVersion++;
   updateHistoryButtons();
-  switching = true;
-  view.setState(stateFor(docFrom()));
-  switching = false;
+  setEditorState(stateFor(docFrom()));
   $("#content").replaceChildren();
   previewCache.clear();
   $("#outline").replaceChildren();
@@ -739,158 +727,25 @@ async function closeTab(doc) {
     doc.closing = false;
   }
 }
-async function save(as = false, doc = active) {
-  if (!doc) return false;
-  if (!api) {
-    toast("浏览器演示不写入磁盘；请运行桌面版");
-    return false;
-  }
-  if (doc.saving) return false;
-  doc.saving = true;
-  let conflict = false;
-  try {
-    const text = doc.text;
-    if (as || !doc.fileId) {
-      const excludedIds = tabs
-        .filter((t) => t !== doc && t.fileId)
-        .map((t) => t.fileId);
-      const file = await api.saveAs(text, doc.name, excludedIds);
-      if (!file) return false;
-      const other = tabs.find(
-        (t) => t !== doc && (t.fileId === file.id || t.path === file.path),
-      );
-      if (other) {
-        toast(
-          "目标已在另一标签中打开，未合并标签；两份编辑内容均已保留，请检查目标文件。",
-        );
-        run(() => checkDisk(other))();
-        return false;
-      }
-      doc.fileId = file.id;
-      doc.path = file.path;
-      doc.name = file.name;
-      doc.version = file.version;
-    } else {
-      const result = await api.save(doc.fileId, text, doc.version);
-      if (result.conflict) {
-        conflict = true;
-        return false;
-      }
-      doc.version = result.version;
-    }
-    doc.base = text;
-    doc.conflict = null;
-    doc.epoch++;
-    doc.htmlText = null;
-    if (doc === active) {
-      showConflict();
-      updateStatus();
-    }
-    updateTabs();
-    scheduleSession();
-    return true;
-  } finally {
-    doc.saving = false;
-    if (conflict) {
-      // checkDisk deliberately ignores saves in flight; release that guard first.
-      await checkDisk(doc, true);
-      toast("磁盘内容已改变，未覆盖。请处理冲突或另存副本。");
-    }
-  }
-}
-async function checkDisk(doc = active, manual = false) {
-  if (!api || !doc?.fileId || doc.checking || doc.saving) return;
-  doc.checking = true;
-  const epoch = doc.epoch,
-    text = doc.text;
-  try {
-    const result = await api.read(doc.fileId, doc.version);
-    if (
-      !tabs.includes(doc) ||
-      doc.epoch !== epoch ||
-      doc.text !== text ||
-      doc.saving
-    )
-      return;
-    if (result.unchanged) {
-      if (manual) toast("已是磁盘最新版本");
-      return;
-    }
-    if (dirty(doc)) {
-      doc.conflict = result;
-      if (doc === active) showConflict();
-      return;
-    }
-    if (doc === active) {
-      blockEditor?.finish();
-      capture();
-    }
-    doc.text = result.text;
-    doc.base = result.text;
-    doc.version = result.version;
-    doc.epoch++;
-    doc.htmlText = null;
-    doc.state = null;
-    if (doc === active) {
-      switching = true;
-      view.setState(stateFor(doc));
-      switching = false;
-      render(false);
-      restore(doc);
-      updateStatus();
-    }
-    scheduleSession();
-    if (manual) toast("已从磁盘刷新");
-  } catch (e) {
-    if (manual || doc === active) toast("保留当前内容：" + e.message);
-  } finally {
-    doc.checking = false;
-  }
-}
-function showConflict() {
-  const bar = $("#conflict");
-  bar.replaceChildren();
-  bar.hidden = !active?.conflict;
-  if (bar.hidden) return;
-  const doc = active,
-    label = document.createElement("span");
-  label.textContent = "磁盘有新版本，你的未保存内容已保留。";
-  bar.append(label);
-  const load = document.createElement("button");
-  load.textContent = "加载磁盘版本";
-  load.onclick = async () => {
-    // Destructive resolution uses an explicit confirmation, not a one-click discard.
-    if (!window.confirm("放弃当前未保存修改，加载磁盘版本？建议先另存副本。"))
-      return;
-    blockEditor?.finish();
-    capture();
-    doc.text = doc.conflict.text;
-    doc.base = doc.text;
-    doc.version = doc.conflict.version;
-    doc.conflict = null;
-    doc.epoch++;
-    doc.htmlText = null;
-    doc.state = null;
-    switching = true;
-    view.setState(stateFor(doc));
-    switching = false;
+const { save, checkDisk, showConflict } = createDocumentSync({
+  api,
+  tabs,
+  getActive: () => active,
+  dirty,
+  run,
+  report: toast,
+  conflictBar: $("#conflict"),
+  capture,
+  finishEditing: () => blockEditor?.finish(),
+  redisplay: (doc) => {
+    setEditorState(stateFor(doc));
     render(false);
     restore(doc);
-    showConflict();
-    updateTabs();
-    scheduleSession();
-  };
-  const copy = document.createElement("button");
-  copy.textContent = "另存我的副本";
-  copy.onclick = run(() => save(true, doc));
-  const keep = document.createElement("button");
-  keep.textContent = "继续编辑";
-  keep.onclick = () => {
-    bar.hidden = true;
-    toast("保留编辑；原文件仍有冲突，保存时会再次检查。");
-  };
-  bar.append(load, copy, keep);
-}
+  },
+  updateStatus,
+  updateTabs,
+  changed: scheduleSession,
+});
 function jump(from, { record = true } = {}) {
   if (!active) return;
   blockEditor?.finish();
@@ -1137,156 +992,16 @@ async function openFiles() {
   if (!api) return toast("请运行桌面版以访问本地文件");
   for (const file of await api.pickFiles()) add(file);
 }
-async function openFolder() {
-  if (!api) return toast("请运行桌面版以访问文件夹");
-  const root = await api.pickFolder(active?.fileId || null);
-  if (root && !roots.some((r) => r.path === root.path)) {
-    roots.push(root);
-    await renderTree();
-    scheduleSession();
-  }
-}
-let currentFolder = null;
-let folderEpoch = 0;
-let treeEpoch = 0;
-function browsingRoots() {
-  return currentFolder
-    ? [currentFolder, ...roots.filter((r) => r.path !== currentFolder.path)]
-    : roots;
-}
-function markCurrentFile() {
-  for (const button of $("#tree").querySelectorAll(".file")) {
-    if (button.title === active?.path)
-      button.setAttribute("aria-current", "page");
-    else button.removeAttribute("aria-current");
-  }
-}
-async function followCurrentFolder() {
-  const doc = active,
-    epoch = ++folderEpoch;
-  if (!doc?.fileId || !api?.currentFolder) return;
-  const folder = await api.currentFolder(doc.fileId);
-  if (epoch !== folderEpoch || active !== doc || !settings.sidebar) return;
-  if (currentFolder?.path !== folder.path || $("#file-filter").value) {
-    currentFolder = folder;
-    $("#file-filter").value = "";
-    ++searchEpoch;
-    clearTimeout(searchTimer);
-    await renderTree();
-  }
-  const currentBranch = [...$("#tree").children].find(
-    (el) => el.dataset.path === folder.path,
-  );
-  if (currentBranch) currentBranch.open = true;
-  markCurrentFile();
-  $("#tree")
-    .querySelector('[aria-current="page"]')
-    ?.scrollIntoView({ block: "nearest" });
-}
-async function branch(entry) {
-  const details = document.createElement("details");
-  details.className = "folder";
-  details.dataset.path = entry.path;
-  const summary = document.createElement("summary");
-  summary.textContent = entry.name;
-  summary.title = entry.path;
-  details.append(summary);
-  let loaded = false;
-  details.addEventListener(
-    "toggle",
-    run(async () => {
-      if (!details.open || loaded) return;
-      loaded = true;
-      try {
-        for (const child of await api.list(entry.id)) {
-          if (child.directory) details.append(await branch(child));
-          else {
-            const b = document.createElement("button");
-            b.className = "file";
-            b.textContent = child.name;
-            b.title = child.path;
-            b.onclick = run(async () =>
-              add(await api.openChild(entry.id, child.name)),
-            );
-            details.append(b);
-          }
-        }
-        markCurrentFile();
-        const selected = details.querySelector('[aria-current="page"]');
-        if (details.isConnected && selected)
-          selected.scrollIntoView({ block: "nearest" });
-      } catch (e) {
-        loaded = false;
-        throw e;
-      }
-    }),
-  );
-  return details;
-}
-async function renderTree() {
-  const tree = $("#tree");
-  const fragment = document.createDocumentFragment(),
-    epoch = ++treeEpoch;
-  const displayedRoots = browsingRoots();
-  if (!displayedRoots.length) {
-    const empty = document.createElement("div");
-    empty.className = "empty-tree";
-    empty.innerHTML = "尚未添加文件夹<br><button>打开文件夹</button>";
-    empty.querySelector("button").onclick = run(openFolder);
-    fragment.append(empty);
-  }
-  for (const root of displayedRoots) {
-    const el = await branch(root);
-    fragment.append(el);
-    el.open = true;
-  }
-  if (epoch === treeEpoch) tree.replaceChildren(fragment);
-}
-let searchTimer,
-  searchEpoch = 0;
-$("#file-filter").oninput = (e) => {
-  clearTimeout(searchTimer);
-  const q = e.target.value.trim(),
-    epoch = ++searchEpoch;
-  if (!q) {
-    run(renderTree)();
-    return;
-  }
-  if (!api || !browsingRoots().length) return;
-  searchTimer = setTimeout(
-    () =>
-      run(async () => {
-        const result = await api.search(
-          browsingRoots()
-            .slice(0, 10)
-            .map((r) => r.id),
-          q,
-        );
-        if (epoch !== searchEpoch) return;
-        const tree = $("#tree");
-        tree.replaceChildren();
-        for (const file of result.items) {
-          const b = document.createElement("button");
-          b.className = "file";
-          b.textContent = file.name;
-          b.title = file.path;
-          b.onclick = run(async () =>
-            add(await api.openChild(file.parent, file.name)),
-          );
-          tree.append(b);
-        }
-        const info = document.createElement("p");
-        info.className = "search-info";
-        info.textContent = result.items.length
-          ? result.truncated
-            ? "结果较多，仅显示前 200 项"
-            : "共 " + result.items.length + " 项"
-          : "没有匹配的笔记";
-        tree.append(info);
-      })(),
-    250,
-  );
-};
+const { openFolder, renderTree, followCurrentFolder } = createLibrary({
+  api,
+  roots,
+  getActive: () => active,
+  getSettings: () => settings,
+  add,
+  run,
+  report: toast,
+  changed: scheduleSession,
+});
 function contextMenu(e, doc) {
   showContext(e, [
     ["在文件夹中显示", () => api.reveal(doc.fileId), !doc.fileId],
@@ -1295,31 +1010,12 @@ function contextMenu(e, doc) {
     ["关闭标签", () => closeTab(doc), false],
   ]);
 }
-function showContext(e, actions) {
-  const menu = $("#context");
-  menu.replaceChildren();
-  for (const [name, fn, disabled] of actions) {
-    const b = document.createElement("button");
-    b.textContent = name;
-    b.setAttribute("role", "menuitem");
-    b.disabled = !!disabled;
-    b.onclick = run(() => {
-      menu.hidden = true;
-      return fn();
-    });
-    menu.append(b);
-  }
-  menu.hidden = false;
-  menu.style.left =
-    Math.max(8, Math.min(e.clientX, innerWidth - menu.offsetWidth - 8)) + "px";
-  menu.style.top =
-    Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8)) +
-    "px";
-  menu.querySelector("button:not(:disabled)")?.focus();
-}
-document.addEventListener("pointerdown", (e) => {
-  if (!e.target.closest("#context")) $("#context").hidden = true;
-  if (!e.target.closest("#app-menu, #app-menu-toggle")) closeAppMenu();
+const { showContext, dismiss: dismissMenus } = createMenus({
+  run,
+  appMenuEntries: () => [
+    ["导出 PDF…", "", commands.exportPDF, !active || exporting],
+    ["导出 HTML…", "", commands.exportHTML, !active || exporting],
+  ],
 });
 wireFileDrop({
   insertImages: (files, event) => imageInsertion.insert(files, event),
@@ -1516,110 +1212,19 @@ const openDesktopSettings = wireDesktopSettings({
   close: (intent) => commands.close(intent),
   report: toast,
 });
-function closeAppMenu({ focus = false } = {}) {
-  $("#app-menu").hidden = true;
-  $("#app-menu-toggle").setAttribute("aria-expanded", "false");
-  if (focus) $("#app-menu-toggle").focus();
-}
-$("#app-menu-toggle").onclick = () => {
-  const menu = $("#app-menu");
-  if (!menu.hidden) return closeAppMenu();
-  menu.replaceChildren();
-  for (const entry of [
-    ["导出 PDF…", "", commands.exportPDF, !active || exporting],
-    ["导出 HTML…", "", commands.exportHTML, !active || exporting],
-  ]) {
-    if (!entry) {
-      menu.append(document.createElement("hr"));
-      continue;
-    }
-    const [label, shortcut, action, disabled] = entry;
-    const button = document.createElement("button"),
-      key = document.createElement("kbd");
-    button.textContent = label;
-    button.setAttribute("role", "menuitem");
-    button.disabled = !!disabled;
-    key.textContent = shortcut;
-    button.append(key);
-    button.onclick = run(() => {
-      closeAppMenu();
-      return action();
-    });
-    menu.append(button);
-  }
-  menu.hidden = false;
-  $("#app-menu-toggle").setAttribute("aria-expanded", "true");
-  menu.querySelector("button")?.focus();
-};
-for (const menu of [$("#app-menu"), $("#context")])
-  menu.addEventListener("keydown", (event) => {
-    const buttons = [...menu.querySelectorAll("button:not(:disabled)")];
-    const index = buttons.indexOf(document.activeElement);
-    const next = {
-      ArrowDown: (index + 1) % buttons.length,
-      ArrowUp: (index - 1 + buttons.length) % buttons.length,
-      Home: 0,
-      End: buttons.length - 1,
-    }[event.key];
-    if (next === undefined) return;
-    event.preventDefault();
-    buttons[next]?.focus();
-  });
-$("#tree-refresh").onclick = run(async () => {
-  $("#file-filter").value = "";
-  searchEpoch++;
-  await renderTree();
+wireSplitPane({
+  handle: $("#split"),
+  panes: $("#panes"),
+  getSettings: () => settings,
+  capture,
+  applySettings,
+  restore: () => {
+    if (active) restore(active);
+  },
+  changed: scheduleSession,
 });
-let resizing = false,
-  splitBounds,
-  splitFrame = 0,
-  pendingSplit;
-function updateSplit() {
-  splitFrame = 0;
-  if (pendingSplit === undefined || settings.split === pendingSplit) return;
-  settings.split = pendingSplit;
-  document.documentElement.style.setProperty("--split", settings.split + "%");
-  $("#split").setAttribute("aria-valuenow", String(settings.split));
-}
-$("#split").onpointerdown = (e) => {
-  resizing = true;
-  splitBounds = $("#panes").getBoundingClientRect();
-  capture();
-  $("#split").setPointerCapture(e.pointerId);
-};
-$("#split").onpointermove = (e) => {
-  if (!resizing) return;
-  const r = splitBounds;
-  pendingSplit = Math.max(
-    25,
-    Math.min(75, Math.round(((e.clientX - r.left) / r.width) * 100)),
-  );
-  if (!splitFrame) splitFrame = requestAnimationFrame(updateSplit);
-};
-$("#split").onpointerup = $("#split").onpointercancel = () => {
-  resizing = false;
-  cancelAnimationFrame(splitFrame);
-  updateSplit();
-  if (active) restore(active);
-  scheduleSession();
-};
-$("#split").onkeydown = (e) => {
-  if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
-  e.preventDefault();
-  capture();
-  settings.split = Math.max(
-    25,
-    Math.min(75, settings.split + (e.key === "ArrowLeft" ? -5 : 5)),
-  );
-  applySettings();
-  if (active) restore(active);
-  scheduleSession();
-};
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    $("#context").hidden = true;
-    if (!$("#app-menu").hidden) closeAppMenu({ focus: true });
-  }
+  if (e.key === "Escape") dismissMenus();
   if ($("dialog[open]")) return;
   if (!(e.ctrlKey || e.metaKey)) return;
   const key = e.key.toLowerCase(),
@@ -1690,49 +1295,8 @@ if (api) {
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
   run(async () => {
     const boot = await api.ready();
-    settings = { ...settings, ...boot.settings };
-    // The old automatic sans-serif preset becomes the bundled reading preset.
-    // Preserve alternatives explicitly stored by earlier versions.
-    if (!settings.typographyVersion && settings.typeface === "balanced")
-      settings.typeface = "literata";
-    settings.typographyVersion = 1;
-    settings.zoom = Math.max(50, Math.min(200, Number(settings.zoom) || 100));
-    settings.previewZoom = Math.max(
-      50,
-      Math.min(200, Number(settings.previewZoom) || 100),
-    );
-    settings.typeface = ["literata", "balanced", "classic", "book"].includes(
-      settings.typeface,
-    )
-      ? settings.typeface
-      : "literata";
-    settings.wide = settings.wide === true;
-    settings.tabGroups = Array.isArray(settings.tabGroups)
-      ? settings.tabGroups
-      : [];
-    settings.navigationScope =
-      settings.navigationScope === "current" ? "current" : "all";
-    settings.showHistoryButtons = settings.showHistoryButtons === true;
-    settings.tableStyle = ["soft", "plain", "grid"].includes(
-      settings.tableStyle,
-    )
-      ? settings.tableStyle
-      : "soft";
-    settings.tableWidth = settings.tableWidth === "full" ? "full" : "auto";
-    settings.navigationSize = Math.max(
-      10,
-      Math.min(14, Number(settings.navigationSize) || 12),
-    );
-    settings.tabSize = Math.max(
-      10,
-      Math.min(13, Number(settings.tabSize) || 11),
-    );
-    settings.weight = [400, 450, 500, 600].includes(Number(settings.weight))
-      ? Number(settings.weight)
-      : "auto";
-    settings.librarySide = settings.librarySide === "right" ? "right" : "left";
-    settings.outlineSide = settings.outlineSide === "left" ? "left" : "right";
-    settings.theme = settings.theme === "dark" ? "dark" : "light";
+    // Changes made while booting (e.g. zoom) stay underneath the stored values.
+    settings = normalizeSettings({ ...settings, ...boot.settings });
     applySettings();
     for (const entry of boot.restored || []) {
       // Retire only the exact unedited app-generated welcome. Never alter a user document.

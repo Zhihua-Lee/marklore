@@ -1,5 +1,39 @@
 # Verification — 2026-09-27
 
+## v0.1.25 reading regressions after #1
+
+Outline jumps with real smooth scrolling (not reduced motion) previously landed
+short when jumping forwards: on a 38k-character note with tables the heading
+ended 119–1,042px below its target, and on a 96k-character formula-heavy note
+by up to ~50,000px; backward jumps were exact. Disabling mechanisms one at a
+time attributed this to `content-visibility` estimates and to progressive
+formula expansion along the scroll path. A navigation now pauses lazy formula
+and table work while it moves, verifies and corrects its landing, and keeps
+its target through late layout until anything else scrolls. Across 7 forward
+and backward jumps on plain, table and formula-heavy notes every heading
+landed at 32px (formerly the first jump after opening could also miss).
+Removing `content-visibility` showed no consistent open/scroll difference on a
+248k-character note in this harness (run-to-run variance exceeded any gap).
+
+Clicking table header text no longer sorts; only the sort button does, and a
+double-click on header text again enters edit mode at its source. A sorted
+table's cell double-click still locates that cell's source, and the sort and
+source maps survive an edit above the table. Ungrouped tabs use a neutral
+ink-derived surface (accent tint when active) in both themes. Folded long code
+fades out at the cut and prints in full.
+
+The sidebar animation case failed 3/10 after #1 and 0/10 before. The cause
+predates #1: reopening during the 180ms close transition produced no slide-in
+(20/20 in a probe, before and after #1). Settling the close first gives 0/20
+and 15/15 repeated test passes.
+
+All 48 unit tests and 131 browser cases (Edge) pass, including new smooth-scroll
+regressions for lazy long-note jumps and table header interaction; both fail
+on the #1 code. The packaged v0.1.25 passes all nine native suites: smoke,
+background, drop/copy, editing, export (PDF and standalone HTML), image access,
+menu, navigation and safety. Only synthetic notes and isolated profiles were
+used; physical mouse hardware was not exercised.
+
 ## v0.1.24 derived-tab group closure and interruptible easing
 
 New tabs opened from a note's links, hover-preview links or the new-note command

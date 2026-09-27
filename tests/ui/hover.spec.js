@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 async function boot(page, { opened = false } = {}) {
+  await installFolio(page);
   await page.addInitScript(
     ({ opened }) => {
       const text =
@@ -16,8 +18,7 @@ async function boot(page, { opened = false } = {}) {
           "\n\n## Destination\n\nPrecise destination 中文与 $x^2$.\n\n<details><summary>Proof</summary>\n\nHidden proof\n\n</details>",
       };
       window.mock = { other, previews: [], links: [], handlers: {} };
-      window.folio = {
-        on: (name, fn) => (window.mock.handlers[name] = fn),
+      window.folio = folioTest.mock({
         ready: async () => ({
           incoming: [
             {
@@ -67,9 +68,7 @@ async function boot(page, { opened = false } = {}) {
           window.mock.links.push({ id, href });
           return window.mock.other;
         },
-        session: async () => {},
-        list: async () => [],
-      };
+      });
     },
     { opened },
   );

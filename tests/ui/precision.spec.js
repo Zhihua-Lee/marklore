@@ -5,7 +5,9 @@ test("math environments, table bars, inline display, task checkboxes and unknown
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const source =
       "| A | B |\n| - | - |\n| $|x|$ | $P(A|B)$ |\n\n\\begin{align}\na&=b+c\\\\\nd&=e\n\\end{align}\n\nInline $$x^2$$ end.\n\n- [x] Done\n- [ ] Todo\n\n$\\commandThatDoesNotExist{x}$";
     const html = renderMarkdown(source).html,
@@ -38,7 +40,9 @@ test("raw HTML image and Markdown Windows image keep local resource paths", asyn
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const box = document.createElement("div");
     box.innerHTML = renderMarkdown(
       '![win](<D:/notes/a b.png>)\n\n<img src="D:/notes/raw.png">\n\n![remote](https://example.com/tracker.png)',
@@ -56,7 +60,9 @@ test("source spans distinguish repeated words in nested list and quote", async (
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const source =
       "## Map\n\nSame word **same** word.\n\n> Quote same word.\n\n- first same\n- second same";
     const box = document.createElement("div");
@@ -75,7 +81,9 @@ test("note content cannot create active scripts, forms, or dangerous navigation"
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const box = document.createElement("div");
     box.innerHTML = renderMarkdown(
       '<iframe src="file:///C:/secret"></iframe>\n<form><button formaction="https://example.com">go</button></form>\n<a href="javascript:alert(1)">bad</a><svg onload="alert(1)"></svg>',
@@ -95,7 +103,9 @@ test("Mermaid renders offline SVG without exposing clickable external content", 
   await page.goto("/");
   await page.getByRole("button", { name: "新笔记", exact: true }).click();
   await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js"),
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+        async (m) => (await m.loadMath(), m),
+      ),
       { renderDiagrams } = await import("/src/diagrams.js");
     document.querySelector("#content").innerHTML = renderMarkdown(
       "```mermaid\nflowchart LR\n  A[Read] --> B[Think]\n```",
@@ -110,7 +120,9 @@ test("malformed dollars cannot leak internal table markers", async ({
 }) => {
   await page.goto("/");
   const html = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     return renderMarkdown("| Cost | Item |\n| - | - |\n| $ price | other $ |")
       .html;
   });
@@ -122,7 +134,9 @@ test("identical table cells have distinct source locations", async ({
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const source = "| A | B |\n| - | - |\n| same | same |";
     const box = document.createElement("div");
     box.innerHTML = renderMarkdown(source).html;

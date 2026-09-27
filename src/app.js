@@ -10,7 +10,11 @@ import {
   renderMarkdown,
   parseHeadings,
   renderHeadingLabel,
+  loadMath,
+  mathReady,
+  mayContainMath,
 } from "./markdown.js";
+import { onHighlighterReady, mayContainCode } from "./highlighting.js";
 import {
   atPoint,
   visibleAnchor,
@@ -626,6 +630,13 @@ function updateOutline(headings) {
       return b;
     }),
   );
+  // Math in headings renders as TeX until KaTeX loads; then redraw this outline.
+  if (!mathReady() && headings.some((h) => mayContainMath(h.label)))
+    loadMath().then(() => {
+      if (outlineSignature !== signature) return;
+      outlineSignature = "";
+      updateOutline(headings);
+    });
 }
 function updateTabs() {
   tabBar.update();
@@ -1375,30 +1386,53 @@ function scheduleSession() {
   sessionTimer = setTimeout(() => run(flushSession)(), 700);
   maxSessionTimer ??= setTimeout(() => run(flushSession)(), 5000);
 }
+// Tab id -> epoch of the draft main last accepted. Unchanged drafts are not
+// resent on every scroll/5 s flush; main keeps the last copy it received.
+const sentDrafts = new Map();
 async function flushSession() {
   clearTimeout(sessionTimer);
   clearTimeout(maxSessionTimer);
   maxSessionTimer = null;
   if (!api) return;
   capture();
-  await api.session({
-    settings,
-    roots: roots.map((r) => r.id),
-    active: active?.path || active?.id,
-    tabs: tabs.map((t) => ({
+  const drafts = new Map();
+  const entries = tabs.map((t) => {
+    const changed = dirty(t);
+    if (changed) drafts.set(t.id, t.epoch);
+    return {
       id: t.id,
       fileId: t.fileId,
       name: t.name,
-      content: t.fileId ? undefined : t.text,
+      // A dirty untitled note travels once, as its draft.
+      content: t.fileId || changed ? undefined : t.text,
       mode: t.mode,
       groupId: t.groupId || null,
       pane: t.pane,
       anchor: t.anchor,
       folds: t.folds,
       details: t.details,
-      ...(dirty(t) ? { draft: t.text, base: t.base, version: t.version } : {}),
-    })),
+      ...(!changed
+        ? {}
+        : sentDrafts.get(t.id) === t.epoch
+          ? { keepDraft: true }
+          : { draft: t.text, base: t.base, version: t.version }),
+    };
   });
+  try {
+    await api.session({
+      settings,
+      roots: roots.map((r) => r.id),
+      active: active?.path || active?.id,
+      tabs: entries,
+    });
+  } catch (error) {
+    // Never trust main's copy after a failure; retry once with every draft in full.
+    sentDrafts.clear();
+    if (entries.some((entry) => entry.keepDraft)) return flushSession();
+    throw error;
+  }
+  sentDrafts.clear();
+  for (const [id, epoch] of drafts) sentDrafts.set(id, epoch);
 }
 const commands = {
   back: () => hardwareNavigation(-1, "native"),
@@ -1426,8 +1460,12 @@ const commands = {
       toast("文件正在保存，请完成后再关闭");
       return;
     }
-    await flushSession();
-    await api.closeReady(intent);
+    // Report a failed recovery write instead of aborting: main asks whether to quit anyway.
+    const failure = await flushSession().then(
+      () => null,
+      (error) => error.message || String(error),
+    );
+    await api.closeReady(intent, failure);
   },
 };
 let exporting = false;
@@ -1641,6 +1679,11 @@ async function untouchedLegacyWelcome(entry) {
     hash === "fd9154e2926f7061c527b3d33011588e02f70e5b2137fdff7333b49fe28521b3"
   );
 }
+// Code rendered before highlight.js loaded is plain; re-render such notes once.
+onHighlighterReady(() => {
+  for (const t of tabs) if (mayContainCode(t.text)) t.htmlText = null;
+  if (active && mayContainCode(active.text)) render(true);
+});
 if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());

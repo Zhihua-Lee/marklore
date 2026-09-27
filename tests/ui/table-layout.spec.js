@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 test("measured column allocation reduces actual table height without shrinking text", async ({
   page,
@@ -6,7 +7,9 @@ test("measured column allocation reduces actual table height without shrinking t
   await page.goto("/");
   await page.evaluate(() => document.fonts.ready);
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const { optimizeTable } = await import("/src/table-layout.js");
     const text =
       "| ID | Description | Notes |\n| --- | --- | --- |\n" +
@@ -57,7 +60,9 @@ test("CJK, formulas and narrow containers keep readable minimums; merged cells r
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js"),
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+        async (m) => (await m.loadMath(), m),
+      ),
       { optimizeTable } = await import("/src/table-layout.js");
     const host = document.createElement("article");
     host.className = "prose";
@@ -103,6 +108,7 @@ test("CJK, formulas and narrow containers keep readable minimums; merged cells r
 test("live reader and hover preview optimize automatically and retain cached layouts", async ({
   page,
 }) => {
+  await installFolio(page);
   await page.addInitScript(() => {
     const table =
       "| ID | Explanation | Notes |\n| --- | --- | --- |\n" +
@@ -118,22 +124,19 @@ test("live reader and hover preview optimize automatically and retain cached lay
       version: "v1",
       text: "# Tables\n\n[Preview](Other.md)\n\n" + table,
     };
-    window.folio = {
-      on: () => {},
+    window.folio = folioTest.mock({
       ready: async () => ({
         incoming: [file],
         roots: [],
         settings: { sidebar: false, outline: false },
       }),
-      read: async () => ({ unchanged: true }),
-      session: async () => {},
       preview: async () => ({
         ...file,
         id: "other",
         name: "Other.md",
         text: table,
       }),
-    };
+    });
   });
   await page.goto("/");
   await expect(page.locator("#content table.reading-columns")).toHaveCount(1);

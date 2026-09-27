@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 const sample =
   '# Blocks\n\n[Preview](Beta.md)\n\n```js\nconst greeting = "你好";\n\tconsole.log(greeting);\n```\n\n```unknown-language\n<raw> & exact\n```\n\n> Quoted **emphasis**\n\n| A | B |\n| - | - |\n| $x^2$ | value |\n\n- [x] done\n- [ ] todo\n\n<details><summary>Proof</summary>\n\nHidden $x+1$.\n\n</details>\n\nNote[^1].\n\n[^1]: Footnote text.\n\n---\n\n$$\nx^2+1\n$$\n';
 async function boot(page) {
+  await installFolio(page);
   await page.addInitScript((sample) => {
     const files = ["Alpha", "Beta", "Gamma"].map((name, i) => ({
       id: String(i),
@@ -12,8 +14,7 @@ async function boot(page) {
       version: "v1",
     }));
     window.mock = { handlers: {}, copied: [], files, drops: [] };
-    window.folio = {
-      on: (name, callback) => (window.mock.handlers[name] = callback),
+    window.folio = folioTest.mock({
       ready: async () => {
         const saved = JSON.parse(
           localStorage.getItem("blocks-session") || "null",
@@ -31,8 +32,6 @@ async function boot(page) {
           active: saved?.active,
         };
       },
-      read: async () => ({ unchanged: true }),
-      list: async () => [],
       session: async (state) => {
         window.mock.saved = state;
         localStorage.setItem("blocks-session", JSON.stringify(state));
@@ -58,7 +57,7 @@ async function boot(page) {
           errors: [],
         };
       },
-    };
+    });
   }, sample);
   await page.goto("/");
   await expect(page.getByRole("tab")).toHaveCount(3);

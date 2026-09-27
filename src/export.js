@@ -1,4 +1,5 @@
-import { renderMarkdown } from "./markdown.js";
+import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
+import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
 import exportCSS from "./export.css?raw";
 import tableCSS from "./tables.css?raw";
@@ -45,6 +46,10 @@ export async function exportNote(format, { doc }) {
   host.style.cssText =
     "position:fixed;left:-20000px;top:0;width:760px;visibility:hidden;pointer-events:none";
   host.setAttribute("aria-hidden", "true");
+  await Promise.all([
+    mayContainMath(doc.text) && loadMath(),
+    mayContainCode(doc.text) && loadHighlighter(),
+  ]);
   host.innerHTML = renderMarkdown(doc.text, doc.fileId).html;
   document.body.append(host);
   try {

@@ -43,6 +43,14 @@ export function encode(text, info) {
       ? Buffer.concat([Buffer.from([239, 187, 191]), body])
       : body;
 }
+// Authorization records keep only what saving needs; the renderer owns the text.
+// Holding decoded documents here retained up to 32 MB per file for the session.
+const record = (real, { encoding, bom, eol }) => ({
+  path: real,
+  encoding,
+  bom,
+  eol,
+});
 export class FileStore {
   files = new Map();
   directories = new Map();
@@ -77,7 +85,7 @@ export class FileStore {
     const id = existing?.[0] ?? randomUUID();
     const bytes = await this.readBytes(real),
       info = decode(bytes);
-    this.files.set(id, { path: real, ...info });
+    this.files.set(id, record(real, info));
     return {
       id,
       path: real,
@@ -92,7 +100,7 @@ export class FileStore {
       digest = hash(bytes);
     if (digest === version) return { unchanged: true, version: digest };
     const info = decode(bytes);
-    Object.assign(file, info);
+    Object.assign(file, record(file.path, info));
     return { text: info.text, version: digest };
   }
   async save(id, text, version) {
@@ -141,12 +149,15 @@ export class FileStore {
       if (hash(await this.readBytes(file.path)) !== version)
         return { conflict: true };
       await fs.rename(temp, file.path);
-      Object.assign(file, info, { text });
+      Object.assign(file, record(file.path, info));
       return { version: hash(bytes) };
     } finally {
       this.locks.delete(file.path);
+      // Cleanup must not replace the save result or the original error
+      // (e.g. an antivirus scanner briefly holding the temporary file).
       await fs.unlink(temp).catch((e) => {
-        if (e.code !== "ENOENT") throw e;
+        if (e.code !== "ENOENT")
+          console.warn("Folio: temporary file not removed", temp, e.code);
       });
     }
   }

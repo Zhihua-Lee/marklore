@@ -1,6 +1,8 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 async function boot(page, count = 2) {
+  await installFolio(page);
   await page.addInitScript(
     ({ count }) => {
       const files = Array.from({ length: count }, (_, i) => ({
@@ -18,7 +20,7 @@ async function boot(page, count = 2) {
         saveAsCalls: [],
         session: null,
       };
-      window.folio = {
+      window.folio = folioTest.mock({
         on: (name, handler) => {
           window.mock.handlers[name] = handler;
         },
@@ -48,9 +50,8 @@ async function boot(page, count = 2) {
           window.mock.session = value;
         },
         pickFiles: async () => [{ ...files[0] }],
-        list: async () => [],
         link: async () => null,
-      };
+      });
     },
     { count },
   );

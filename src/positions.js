@@ -42,9 +42,11 @@ export function selectionSource(host) {
     return null;
   // A view-sorted table is not a contiguous source range across cells/rows.
   // Single-cell text editing remains precise; cross-cell source edits are unsafe.
-  const sortedTable = start.closest('table[data-view-sorted="true"]') ||
+  const sortedTable =
+    start.closest('table[data-view-sorted="true"]') ||
     end.closest('table[data-view-sorted="true"]');
-  if (sortedTable && start.closest("th,td") !== end.closest("th,td")) return null;
+  if (sortedTable && start.closest("th,td") !== end.closest("th,td"))
+    return null;
   return {
     from:
       Number(start.dataset.textFrom) +
@@ -222,7 +224,8 @@ export function navigateToAnchor(
   const navigation = { anchor, moving: smooth, expected: null, corrections: 0 };
   let quiet = null;
   const moved = () =>
-    navigation.expected !== null && Math.abs(host.scrollTop - navigation.expected) > 2;
+    navigation.expected !== null &&
+    Math.abs(host.scrollTop - navigation.expected) > 2;
   const settle = () => {
     if (navigations.get(host) !== navigation) return;
     // Anything else that scrolled after landing (code, scrollbar, anchoring) wins.
@@ -230,7 +233,10 @@ export function navigateToAnchor(
     navigation.moving = false;
     const next = anchorTop(host, anchor, false);
     if (next === null) return navigation.stop();
-    const goal = Math.max(0, Math.min(host.scrollHeight - host.clientHeight, next));
+    const goal = Math.max(
+      0,
+      Math.min(host.scrollHeight - host.clientHeight, next),
+    );
     if (Math.abs(goal - host.scrollTop) > 2 && navigation.corrections++ < 8) {
       place(host, navigation, goal);
       view.requestAnimationFrame(() => view.requestAnimationFrame(settle));
@@ -251,7 +257,8 @@ export function navigateToAnchor(
     clearTimeout(navigation.timeout);
     host.removeEventListener("scrollend", settle);
     host.removeEventListener("scroll", onScroll);
-    for (const name of inputs) host.ownerDocument.removeEventListener(name, cancel, true);
+    for (const name of inputs)
+      host.ownerDocument.removeEventListener(name, cancel, true);
     if (navigations.get(host) === navigation) navigations.delete(host);
   };
   navigations.set(host, navigation);
@@ -259,13 +266,19 @@ export function navigateToAnchor(
   host.addEventListener("scroll", onScroll, { passive: true });
   // A user gesture takes over; never fight manual scrolling.
   for (const name of inputs)
-    host.ownerDocument.addEventListener(name, cancel, { capture: true, passive: true });
+    host.ownerDocument.addEventListener(name, cancel, {
+      capture: true,
+      passive: true,
+    });
   navigation.timeout = setTimeout(() => navigation.stop(), 6000);
   const before = host.scrollTop;
   if (smooth) host.scrollTo({ behavior, top });
   else place(host, navigation, top);
   // Instant or no-op scrolls may not produce a scrollend; verify on the next frames.
-  if (!smooth || (Math.abs(host.scrollTop - before) < 1 && Math.abs(top - before) < 1))
+  if (
+    !smooth ||
+    (Math.abs(host.scrollTop - before) < 1 && Math.abs(top - before) < 1)
+  )
     view.requestAnimationFrame(() => view.requestAnimationFrame(settle));
 }
 

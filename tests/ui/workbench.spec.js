@@ -1,10 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 const long = Array.from(
   { length: 70 },
   (_, i) =>
     `## Section ${i}\n\nParagraph ${i} 中文笔记 plain text repeated for source mapping.\n\n$$\nx_{${i}}^2\n$$\n\n`,
 ).join("");
 export async function boot(page, text = long) {
+  await installFolio(page);
   await page.addInitScript(
     ({ text }) => {
       window.mock = {
@@ -14,8 +16,7 @@ export async function boot(page, text = long) {
         saved: [],
         session: null,
       };
-      window.folio = {
-        on: (name, fn) => (window.mock.handlers[name] = fn),
+      window.folio = folioTest.mock({
         ready: async () => ({
           restored: [],
           incoming: [
@@ -53,9 +54,8 @@ export async function boot(page, text = long) {
           },
         ],
         reveal: async () => {},
-        list: async () => [],
         link: async () => null,
-      };
+      });
     },
     { text },
   );

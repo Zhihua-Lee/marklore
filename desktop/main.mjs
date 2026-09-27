@@ -25,7 +25,13 @@ const here = path.dirname(fileURLToPath(import.meta.url)),
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "folio",
-    privileges: { standard: true, secure: true, supportFetchAPI: true },
+    // codeCache: V8 keeps compiled bundles between launches instead of reparsing ~1.3 MB.
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      codeCache: true,
+    },
   },
   {
     scheme: "folio-asset",
@@ -136,6 +142,8 @@ let win,
   sessionWrite = Promise.resolve(),
   allowClose = false;
 const watchers = new Map();
+// Tab id -> last draft received from the renderer (see the "session" handler).
+const draftCache = new Map();
 const send = (name, data) => {
   if (win && !win.isDestroyed()) win.webContents.send("folio:" + name, data);
 };
@@ -149,25 +157,61 @@ const allowedImage = {
   ".bmp": "image/bmp",
   ".svg": "image/svg+xml",
 };
+// One watcher per folder, reacting only to the open notes it contains. Unrelated
+// files (Downloads, our own .folio-*.tmp saves) no longer trigger disk re-reads.
 function watchFile(id) {
-  const folder = path.dirname(files.file(id).path);
-  if (watchers.has(folder)) return;
+  const file = files.file(id).path,
+    folder = path.dirname(file),
+    name = path.basename(file).toLowerCase();
+  const existing = watchers.get(folder);
+  if (existing) {
+    existing.names.set(name, Date.now());
+    return;
+  }
   try {
     let timer;
-    const watcher = watch(folder, () => {
+    const entry = { names: new Map([[name, Date.now()]]) };
+    entry.watcher = watch(folder, (_type, changed) => {
+      // Windows reports the entry name; without one, stay conservative and refresh.
+      if (changed && !entry.names.has(String(changed).toLowerCase())) return;
       clearTimeout(timer);
       timer = setTimeout(() => {
         if (win?.isVisible()) send("disk", null);
         else pendingDisk = true;
       }, 180);
     });
-    watcher.on("error", () => {
-      watcher.close();
+    entry.watcher.on("error", () => {
+      entry.watcher.close();
       watchers.delete(folder);
     });
-    watchers.set(folder, watcher);
+    watchers.set(folder, entry);
   } catch {
     /* Focus refresh still works on filesystems without watch support. */
+  }
+}
+// Release watchers for notes no open tab references. A just-opened file may not
+// be in the renderer's session yet, so keep recent additions for a grace period.
+function retainWatchers(fileIds) {
+  const open = new Set();
+  for (const id of fileIds) {
+    try {
+      open.add(files.file(id).path.toLowerCase());
+    } catch {
+      /* Unknown ids are validated by the session handler. */
+    }
+  }
+  const now = Date.now();
+  for (const [folder, entry] of watchers) {
+    for (const [name, added] of entry.names)
+      if (
+        !open.has(path.join(folder, name).toLowerCase()) &&
+        now - added > 10000
+      )
+        entry.names.delete(name);
+    if (!entry.names.size) {
+      entry.watcher.close();
+      watchers.delete(folder);
+    }
   }
 }
 async function openFile(p) {
@@ -201,6 +245,14 @@ function api(name, callback) {
   });
 }
 const sessionFile = path.join(app.getPath("userData"), "session.json");
+let firstSessionRead = null;
+async function readSession() {
+  try {
+    return JSON.parse(await fs.readFile(sessionFile, "utf8"));
+  } catch {
+    return {}; /* First run / damaged session. */
+  }
+}
 async function persist(value) {
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text) > 64 * 1024 * 1024) throw Error("恢复数据过大");
@@ -213,7 +265,17 @@ async function persist(value) {
   } finally {
     await handle.close();
   }
-  await fs.rename(temp, sessionFile);
+  // Antivirus and sync clients briefly lock files on Windows; retry before failing.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fs.rename(temp, sessionFile);
+      return;
+    } catch (error) {
+      if (attempt >= 4 || !["EPERM", "EBUSY", "EACCES"].includes(error.code))
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 50 * 2 ** attempt));
+    }
+  }
 }
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
@@ -299,6 +361,9 @@ else {
           });
         }
       });
+      // Paint the saved theme's page colour before the renderer loads (no light flash in dark mode).
+      firstSessionRead = readSession();
+      const dark = (await firstSessionRead).settings?.theme === "dark";
       win = new BrowserWindow({
         width: 1360,
         height: 920,
@@ -306,7 +371,7 @@ else {
         minHeight: 360,
         show: false,
         autoHideMenuBar: false,
-        backgroundColor: "#f6f5f1",
+        backgroundColor: dark ? "#202523" : "#f6f5f1",
         title: "Folio Notes",
         icon: path.join(here, "icons/folio.png"),
         webPreferences: {
@@ -702,11 +767,25 @@ else {
             "最多恢复 100 个标签；请先保存并关闭多余标签。现有恢复数据未改动。",
           );
         // Resolve document paths from native handles; renderer cannot plant arbitrary reopen paths.
-        const tabs = value.tabs.map((t) => ({
-          ...t,
-          path: t.fileId ? files.file(t.fileId).path : null,
-        }));
+        const tabs = value.tabs.map(({ keepDraft, ...t }) => {
+          // Unchanged drafts arrive as a reference to the copy received earlier.
+          if (keepDraft) {
+            const kept = draftCache.get(t.id);
+            if (!kept) throw Error("恢复草稿需要重新发送");
+            Object.assign(t, kept);
+          }
+          return { ...t, path: t.fileId ? files.file(t.fileId).path : null };
+        });
+        draftCache.clear();
+        for (const t of tabs)
+          if (typeof t.draft === "string")
+            draftCache.set(t.id, {
+              draft: t.draft,
+              base: t.base,
+              version: t.version,
+            });
         dirty = tabs.some((t) => typeof t.draft === "string");
+        retainWatchers(value.tabs.map((t) => t.fileId).filter(Boolean));
         const roots = (value.roots || [])
           .map((id) => files.directories.get(id))
           .filter(Boolean);
@@ -721,15 +800,38 @@ else {
           .then(() => persist(savedSession));
         return sessionWrite;
       });
-      api("closeReady", async (intent = "close") => {
+      api("closeReady", async (intent = "close", flushError = null) => {
         if (!["close", "hide", "quit"].includes(intent))
           throw Error("无效关闭操作");
-        await sessionWrite;
+        // A failed recovery write (full disk, locked file, size limit) must not
+        // trap the user in a window that can never close.
+        let failure =
+          typeof flushError === "string" ? flushError.slice(0, 500) : null;
+        try {
+          await sessionWrite;
+        } catch (error) {
+          failure ??= error.message;
+        }
         if (
           tray &&
           (intent === "hide" || (intent === "close" && integration.closeToTray))
         ) {
           win.hide();
+          return;
+        }
+        if (failure) {
+          showWindow();
+          const r = await dialog.showMessageBox(win, {
+            type: "error",
+            buttons: ["取消", "仍然退出"],
+            defaultId: 0,
+            cancelId: 0,
+            message: "恢复数据未能写入",
+            detail: `${failure}\n\n${dirty ? "未保存的草稿不会在下次启动时恢复。建议取消，先保存笔记。" : "下次启动时可能无法恢复标签页和阅读位置。"}`,
+          });
+          if (r.response !== 1) return;
+          allowClose = true;
+          app.quit();
           return;
         }
         if (dirty) {
@@ -748,12 +850,10 @@ else {
         app.quit();
       });
       api("ready", async () => {
-        let old = {};
-        try {
-          old = JSON.parse(await fs.readFile(sessionFile, "utf8"));
-        } catch {
-          /* First run / damaged session. */
-        }
+        // The first boot reuses the read started before the window existed; a
+        // renderer reload must see what was persisted since.
+        const old = await (firstSessionRead || readSession());
+        firstSessionRead = null;
         savedSession = old;
         for (const folder of (Array.isArray(old.imageDirectories)
           ? old.imageDirectories
@@ -805,7 +905,7 @@ else {
       app.on("window-all-closed", () => app.quit());
       app.on("will-quit", () => {
         tray?.destroy();
-        for (const watcher of watchers.values()) watcher.close();
+        for (const entry of watchers.values()) entry.watcher.close();
         watchers.clear();
       });
     })

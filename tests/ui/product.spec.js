@@ -1,13 +1,12 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 import { legacyWelcome } from "../fixtures/legacy-welcome.mjs";
 async function boot(page, restored = [], settings = {}) {
+  await installFolio(page);
   await page.addInitScript(
     ({ restored, settings }) => {
-      window.folio = {
+      window.folio = folioTest.mock({
         ready: async () => ({ restored, settings, incoming: [], roots: [] }),
-        on: () => {},
-        session: async () => {},
-        read: async () => ({ unchanged: true }),
         pickFiles: async () => [
           {
             id: "note",
@@ -17,7 +16,7 @@ async function boot(page, restored = [], settings = {}) {
             text: "# 观察与记录\n\n让正文成为界面的中心。\n\n## 下一步\n\n- 阅读\n- 整理\n- 推敲",
           },
         ],
-      };
+      });
     },
     { restored, settings },
   );

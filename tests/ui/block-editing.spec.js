@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 const note =
   "# Title\n\nFirst **paragraph** with $x^2$ and 中文.\n\nSecond paragraph stays exact.\n\n```python\nx = 1\n```\n\n$$\n\\boxed{x^2}\n$$\n\n- one\n- two\n\n| A | B |\n| - | - |\n| 1 | 2 |\n\n<details><summary>Proof</summary>\n\nNested paragraph.\n\n</details>\n";
 async function boot(page, text = note) {
+  await installFolio(page);
   await page.addInitScript((text) => {
     const file = {
       id: "one",
@@ -11,8 +13,7 @@ async function boot(page, text = note) {
       version: "v1",
     };
     window.mock = { handlers: {}, disk: text, version: "v1", saved: [] };
-    window.folio = {
-      on: (name, fn) => (window.mock.handlers[name] = fn),
+    window.folio = folioTest.mock({
       ready: async () => {
         const saved = JSON.parse(
           localStorage.getItem("block-session") || "null",
@@ -45,7 +46,6 @@ async function boot(page, text = note) {
         window.mock.session = state;
         localStorage.setItem("block-session", JSON.stringify(state));
       },
-      list: async () => [],
       pickImage: async () => ({ url: "assets/picked.png", label: "Picked" }),
       insertImages: async (_id, files) => {
         window.mock.images = files.map((file) => file.name);
@@ -68,7 +68,7 @@ async function boot(page, text = note) {
           text: "# Other",
         },
       ],
-    };
+    });
   }, text);
   await page.goto("/");
   await expect(page.getByRole("tab").first()).toBeVisible();
@@ -208,7 +208,9 @@ test("list/table edits keep their complete container; note HTML cannot forge blo
   );
   await page.getByRole("button", { name: "取消", exact: true }).click();
   const forged = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const box = document.createElement("div");
     box.innerHTML = renderMarkdown(
       '<div data-edit-from="0" data-edit-to="100" data-edit-kind="paragraph_open" data-folio-edit="guessed">forged</div>',

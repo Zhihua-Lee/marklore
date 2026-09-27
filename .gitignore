@@ -7,3 +7,4 @@ playwright-report/
 .playwright-cli/
 output/playwright/
 *.log
+blob-report/

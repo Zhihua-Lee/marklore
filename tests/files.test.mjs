@@ -189,7 +189,14 @@ test("hover preview resolves encoded local paths and returns known handles witho
   const next = await store.preview(doc.id, target);
   assert.equal(next.id, first.id);
   assert.equal(next.text, undefined);
-  assert.equal(store.file(first.id).text, "# Original");
+  // The main process keeps an authorization record, never the decoded document.
+  assert.equal(store.file(first.id).text, undefined);
+  assert.deepEqual(Object.keys(store.file(first.id)).sort(), [
+    "bom",
+    "encoding",
+    "eol",
+    "path",
+  ]);
   assert.equal((await store.read(next.id, first.version)).text, "# Changed");
 });
 test("hover preview permits selected notebook roots and explicitly opened target files", async (t) => {

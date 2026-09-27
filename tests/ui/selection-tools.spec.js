@@ -1,9 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 async function boot(
   page,
   text = "# Note\n\nHello 中文 selection.\n\nOther paragraph.",
 ) {
+  await installFolio(page);
   await page.addInitScript((text) => {
     window.mock = { saved: [], handlers: {} };
     const file = {
@@ -13,16 +15,13 @@ async function boot(
       text,
       version: "v1",
     };
-    window.folio = {
+    window.folio = folioTest.mock({
       ready: async () => ({
         roots: [],
         restored: [],
         incoming: [file],
         settings: { sidebar: false, outline: false },
       }),
-      on: (name, fn) => (window.mock.handlers[name] = fn),
-      read: async () => ({ unchanged: true }),
-      list: async () => [],
       save: async (_id, text) => {
         window.mock.saved.push(text);
         return { version: "v2" };
@@ -37,7 +36,7 @@ async function boot(
           text: "# Other\n\nHello",
         },
       ],
-    };
+    });
   }, text);
   await page.goto("/");
   await expect(page.locator("#content h1")).toBeVisible();
@@ -184,6 +183,13 @@ test("actual drag and double-click select naturally; toolbar fits narrow and dar
   await expect(page.locator("#editor .cm-content")).not.toBeFocused();
   await page.setViewportSize({ width: 700, height: 660 });
   await page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
+  // Resizing hides the toolbar asynchronously; select only after that has run.
+  await page.evaluate(
+    () =>
+      new Promise((resolve) =>
+        requestAnimationFrame(() => requestAnimationFrame(resolve)),
+      ),
+  );
   await select(page, "中文");
   await expect(tools(page)).toBeVisible();
   const bounds = await tools(page).boundingBox();

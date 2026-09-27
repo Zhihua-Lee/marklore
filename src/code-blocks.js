@@ -20,7 +20,10 @@ export function decorateCodeBlocks(fragment) {
     const toolbar = document.createElement("figcaption");
     toolbar.className = "code-toolbar";
     const language = document.createElement("span");
-    const name = [...code.classList].find((value) => value.startsWith("language-"))?.slice(9) || "text";
+    const name =
+      [...code.classList]
+        .find((value) => value.startsWith("language-"))
+        ?.slice(9) || "text";
     language.textContent = name.slice(0, 40);
     const actions = document.createElement("span");
     actions.className = "code-actions";
@@ -33,7 +36,12 @@ export function decorateCodeBlocks(fragment) {
       const lines = source.replace(/\r?\n$/, "").split("\n").length;
       if (lines > 30 || source.length > 4000) {
         frame.classList.add("code-collapsed");
-        const fold = action(document, "code-fold", `展开 · ${lines} 行`, "展开完整代码");
+        const fold = action(
+          document,
+          "code-fold",
+          `展开 · ${lines} 行`,
+          "展开完整代码",
+        );
         fold.dataset.lines = String(lines);
         fold.setAttribute("aria-expanded", "false");
         actions.append(fold);
@@ -68,7 +76,10 @@ export function wireCodeBlocks(host, report) {
     event.preventDefault();
     event.stopPropagation();
     if (button.classList.contains("code-wrap-toggle")) {
-      button.setAttribute("aria-pressed", String(frame.classList.toggle("code-wrap")));
+      button.setAttribute(
+        "aria-pressed",
+        String(frame.classList.toggle("code-wrap")),
+      );
       return;
     }
     if (button.classList.contains("code-fold")) {
@@ -79,10 +90,12 @@ export function wireCodeBlocks(host, report) {
     try {
       if (window.folio?.copyText) await window.folio.copyText(code.textContent);
       else await navigator.clipboard.writeText(code.textContent);
-      button.innerHTML = icon("check") + '<span aria-live="polite">已复制</span>';
+      button.innerHTML =
+        icon("check") + '<span aria-live="polite">已复制</span>';
       button.setAttribute("aria-label", "已复制代码");
       setTimeout(() => {
-        button.innerHTML = icon("copy") + '<span aria-live="polite">复制</span>';
+        button.innerHTML =
+          icon("copy") + '<span aria-live="polite">复制</span>';
         button.setAttribute("aria-label", "复制代码");
         button.disabled = false;
       }, 1600);
@@ -91,7 +104,12 @@ export function wireCodeBlocks(host, report) {
       report("复制失败：" + error.message);
     }
   });
-  host.addEventListener("dblclick", (event) => {
-    if (event.target.closest?.(".code-action,.code-copy")) event.stopImmediatePropagation();
-  }, true);
+  host.addEventListener(
+    "dblclick",
+    (event) => {
+      if (event.target.closest?.(".code-action,.code-copy"))
+        event.stopImmediatePropagation();
+    },
+    true,
+  );
 }

@@ -1,7 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
+// Motion comes from the Playwright project: these run with smooth scrolling and
+// again under the "reduced-motion" project (see playwright.config.mjs).
 async function boot(page) {
-  await page.emulateMedia({ reducedMotion: "reduce" });
+  await installFolio(page);
   await page.addInitScript(() => {
     const files = ["A", "B", "C", "D"].map((name, i) => ({
       id: name,
@@ -17,8 +20,7 @@ async function boot(page) {
         ).join(""),
     }));
     window.mock = { files, handlers: {} };
-    window.folio = {
-      on: (name, fn) => (window.mock.handlers[name] = fn),
+    window.folio = folioTest.mock({
       ready: async () => {
         const saved = JSON.parse(localStorage.getItem("nav-session") || "null");
         return {
@@ -33,27 +35,42 @@ async function boot(page) {
           active: saved?.active || files[0].path,
         };
       },
-      read: async () => ({ unchanged: true }),
-      list: async () => [],
       session: async (state) => {
         window.mock.saved = state;
         localStorage.setItem("nav-session", JSON.stringify(state));
       },
       link: async (_id, target) => files.find((f) => f.name === target),
       preview: async (_id, target) => files.find((f) => f.name === target),
-    };
+    });
   });
   await page.goto("/");
   await expect(page.getByRole("tab", { selected: true })).toHaveText("A.md");
 }
 const selected = (page) => page.getByRole("tab", { selected: true });
 const scroll = (page) => page.locator("#reader").evaluate((el) => el.scrollTop);
+// Smooth jumps animate; read a location only once scrolling has come to rest.
+async function settled(page) {
+  let last = -1;
+  await expect
+    .poll(
+      async () => {
+        const now = await scroll(page);
+        const still = now === last;
+        last = now;
+        return still;
+      },
+      { intervals: [120] },
+    )
+    .toBe(true);
+  return last;
+}
 async function section(page, number) {
   await page
     .locator("#outline")
     .getByRole("button", { name: `Section ${number}`, exact: true })
     .click();
   await expect.poll(() => scroll(page)).toBeGreaterThan(number ? 100 : -1);
+  return settled(page);
 }
 async function appearance(page, name, value) {
   await page.getByRole("button", { name: "外观与布局", exact: true }).click();
@@ -77,8 +94,7 @@ test("mouse/keyboard history restores linked reading locations without closing o
 }) => {
   await boot(page);
   await expect(page.locator(".history-controls")).toBeHidden();
-  await section(page, 8);
-  const a = await scroll(page);
+  const a = await section(page, 8);
   await page
     .locator("#section-8")
     .locator("..")
@@ -86,7 +102,7 @@ test("mouse/keyboard history restores linked reading locations without closing o
     .click();
   await expect(selected(page)).toHaveText("B.md");
   await expect.poll(() => scroll(page)).toBeGreaterThan(a);
-  const b = await scroll(page);
+  const b = await settled(page);
   await page
     .locator("#section-12")
     .locator("..")
@@ -127,8 +143,7 @@ test("current-note scope, closed tabs, edit drafts and dual hardware events are 
   page,
 }) => {
   await boot(page);
-  await section(page, 3);
-  const first = await scroll(page);
+  const first = await section(page, 3);
   await page.getByRole("tab", { name: "B.md", exact: true }).click();
   await page.getByRole("tab", { name: "A.md", exact: true }).click();
   await section(page, 20);
@@ -274,6 +289,8 @@ test("dragging into/out of groups, whole-group reordering and escape work at nar
 test("collapsed sections have unified hover and keyboard feedback without layout shift", async ({
   page,
 }) => {
+  // Asserts the reduced-motion contract (no transition), so request it explicitly.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await boot(page);
   const block = page.locator("#section-0").locator("..");
   await block.locator(":scope > h2 > .fold").click();
@@ -298,6 +315,8 @@ test("collapsed sections have unified hover and keyboard feedback without layout
 test("details cards coordinate border, summary and marker feedback without changing author colors", async ({
   page,
 }) => {
+  // Asserts the reduced-motion contract (no transition), so request it explicitly.
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await boot(page);
   await page.evaluate(() =>
     window.mock.handlers.open([

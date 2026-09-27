@@ -78,9 +78,11 @@ export function optimizeTable(table) {
     if (all.length <= 16) return all;
     const selected = new Set([
       all[0],
-      ...all.map((cell) => ({ cell, length: cell.textContent.length }))
+      ...all
+        .map((cell) => ({ cell, length: cell.textContent.length }))
         .sort((a, b) => b.length - a.length)
-        .slice(0, 7).map(({ cell }) => cell),
+        .slice(0, 7)
+        .map(({ cell }) => cell),
     ]);
     for (let i = 0; i < 8; i++)
       selected.add(all[Math.round((i * (all.length - 1)) / 7)]);
@@ -220,7 +222,10 @@ export function watchTableLayout(host, scroller) {
           const table = pending[cursor++];
           if (host.contains(table)) {
             const rect = table.getBoundingClientRect();
-            if (rect.bottom >= viewport.top - 600 && rect.top <= viewport.bottom + 600)
+            if (
+              rect.bottom >= viewport.top - 600 &&
+              rect.top <= viewport.bottom + 600
+            )
               changed = optimizeTable(table) || changed;
           }
         } while (cursor < pending.length && performance.now() - start < 12);

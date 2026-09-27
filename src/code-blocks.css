@@ -164,11 +164,17 @@
   max-height: 18em;
   overflow-y: hidden;
   /* Fade the cut into the frame so a folded block never looks like it ends there. */
-  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 7em), transparent);
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 calc(100% - 7em),
+    transparent
+  );
   mask-image: linear-gradient(to bottom, #000 calc(100% - 7em), transparent);
 }
 @media print {
-  .code-toolbar { display: none; }
+  .code-toolbar {
+    display: none;
+  }
   .prose .code-block.code-collapsed pre:not(.diagram-host) {
     max-height: none;
     overflow: visible;

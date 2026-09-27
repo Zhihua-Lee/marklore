@@ -1,5 +1,8 @@
 // Byte- and entry-bounded LRU for derived strings; never retain an oversized item.
-export function createBoundedCache({ maxEntries = 128, maxBytes = 4 * 1024 * 1024 } = {}) {
+export function createBoundedCache({
+  maxEntries = 128,
+  maxBytes = 4 * 1024 * 1024,
+} = {}) {
   const entries = new Map();
   let bytes = 0;
   function remove(key) {

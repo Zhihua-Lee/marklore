@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 const typographyText =
   "# Typography 字体\n\nLiterata makes long-form English reading feel familiar. 中文与英文并列，**Strong emphasis** 保留层次。\n\nInline $x + \\mathbf{v}$ and code `monospace_code`\n\n```js\nconst readable = true;\n```\n";
@@ -9,6 +10,7 @@ const longText = Array.from(
 ).join("");
 
 async function boot(page, text = typographyText, folder = false) {
+  await installFolio(page);
   await page.addInitScript(
     ({ text, folder }) => {
       const file = {
@@ -19,7 +21,7 @@ async function boot(page, text = typographyText, folder = false) {
         version: "v1",
       };
       window.mock = { session: null, handlers: {} };
-      window.folio = {
+      window.folio = folioTest.mock({
         on: (name, callback) => {
           window.mock.handlers[name] = callback;
         },
@@ -31,7 +33,6 @@ async function boot(page, text = typographyText, folder = false) {
             localStorage.getItem("minimal-session") || "null",
           )?.settings,
         }),
-        read: async () => ({ unchanged: true }),
         session: async (value) => {
           window.mock.session = value;
           localStorage.setItem("minimal-session", JSON.stringify(value));
@@ -53,7 +54,7 @@ async function boot(page, text = typographyText, folder = false) {
         },
         pickFiles: async () => [],
         link: async () => null,
-      };
+      });
     },
     { text, folder },
   );

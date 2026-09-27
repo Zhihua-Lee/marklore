@@ -1,4 +1,5 @@
-import { renderMarkdown } from "./markdown.js";
+import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
+import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
 import { restoreAnchor, visibleAnchor, unfold } from "./positions.js";
 import { setSectionCollapsed } from "./sections.js";
@@ -148,6 +149,14 @@ export function createLinkPreview({
       path.textContent = doc.path || "未保存的笔记";
       path.title = path.textContent;
       status.textContent = doc.draft ? "当前编辑草稿 · 未保存" : "当前文件内容";
+      if (mayContainMath(doc.text) || mayContainCode(doc.text)) {
+        await Promise.all([
+          mayContainMath(doc.text) && loadMath(),
+          mayContainCode(doc.text) && loadHighlighter(),
+        ]);
+        if (token !== generation || origin !== link) return;
+        if (!link.isConnected) return hide();
+      }
       article.innerHTML = renderMarkdown(doc.text, doc.fileId).html;
       const { anchor } = splitLink(href);
       // Leave room to align targets near EOF to the same top inset as other anchors.

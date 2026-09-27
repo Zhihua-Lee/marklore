@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 // Deliberately NOT reduced motion: lazy formulas/tables and smooth scrolling
 // interact only when the jump actually animates.
 async function boot(page, text) {
+  await installFolio(page);
   await page.addInitScript((text) => {
     const file = {
       id: "note",
@@ -11,18 +13,14 @@ async function boot(page, text) {
       version: "v1",
       text,
     };
-    window.folio = {
-      on: () => {},
+    window.folio = folioTest.mock({
       ready: async () => ({
         incoming: [file],
         restored: [],
         roots: [],
         settings: { sidebar: false, outline: true },
       }),
-      read: async () => ({ unchanged: true }),
-      list: async () => [],
-      session: async () => {},
-    };
+    });
   }, text);
   await page.goto("/");
   await expect(page.locator("#outline button").first()).toBeVisible();
@@ -37,12 +35,14 @@ const longNote =
       `## Section ${n}\n\n${("Reading paragraph 中文段落 " + n + ". ").repeat(20)}\n\n` +
       Array.from(
         { length: 6 },
-        (_, f) => `Inline $a_${f}^2 + b_${n}$ text.\n\n$$\\sum_{k=0}^{${n + f}} \\frac{k^2}{k+1}$$\n\n`,
+        (_, f) =>
+          `Inline $a_${f}^2 + b_${n}$ text.\n\n$$\\sum_{k=0}^{${n + f}} \\frac{k^2}{k+1}$$\n\n`,
       ).join("") +
       "| Name | Value | Note |\n|---|---|---|\n" +
       Array.from(
         { length: 6 },
-        (_, r) => `| row ${r} | ${(r * 37) % 11} | ${"long cell text ".repeat(r + 2)} |`,
+        (_, r) =>
+          `| row ${r} | ${(r * 37) % 11} | ${"long cell text ".repeat(r + 2)} |`,
       ).join("\n") +
       "\n\n",
   ).join("");
@@ -79,18 +79,26 @@ test("smooth outline jumps land on their heading forwards and backwards in a laz
     // Late formula batches and table widths after landing keep the heading in place.
     await page.waitForTimeout(700);
     const settled = await headingOffset(page, n);
-    expect(Math.abs(settled - 32), `Section ${n} drifted to ${settled}`).toBeLessThanOrEqual(4);
+    expect(
+      Math.abs(settled - 32),
+      `Section ${n} drifted to ${settled}`,
+    ).toBeLessThanOrEqual(4);
   }
 });
 
 test("table headers: text double-click locates source, only the button sorts", async ({
   page,
 }) => {
-  await boot(page, "# T\n\n| Name | Value |\n|---|---|\n| b | 2 |\n| a | 1 |\n| c | 3 |\n");
+  await boot(
+    page,
+    "# T\n\n| Name | Value |\n|---|---|\n| b | 2 |\n| a | 1 |\n| c | 3 |\n",
+  );
   const order = () =>
     page
       .locator("#content tbody tr")
-      .evaluateAll((rows) => rows.map((r) => r.cells[0].textContent.trim()).join(","));
+      .evaluateAll((rows) =>
+        rows.map((r) => r.cells[0].textContent.trim()).join(","),
+      );
   const header = page.locator("#content th").first();
   await header.locator("[data-text-from]").click();
   expect(await order()).toBe("b,a,c");

@@ -22,5 +22,7 @@ th[aria-sort="descending"] .table-sort {
   font-weight: 600;
 }
 @media print {
-  .table-sort { display: none; }
+  .table-sort {
+    display: none;
+  }
 }

@@ -5,7 +5,9 @@ test("stretchy arrows retain SVG geometry after sanitizing", async ({
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const tex = String.raw`\boxed{\text{weak convergence}\Rightarrow\text{pointwise bounded family in }V^{**}\xRightarrow{\text{UBP}}\text{uniformly bounded norms}.}`;
     const host = document.querySelector("#content");
     document.querySelector("main").dataset.empty = "false";
@@ -31,7 +33,9 @@ test("SVG geometry survives for arrows and accents while active content is strip
 }) => {
   await page.goto("/");
   const result = await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const host = document.createElement("article");
     host.innerHTML = renderMarkdown(
       String.raw`$$\xrightarrow{Riesz}\xleftarrow{A}\xRightarrow{UBP}\overrightarrow{AB}\widehat{ABC}\underbrace{a+b}_{c}\sqrt{x}$$` +
@@ -58,7 +62,9 @@ test("quotes emphasize text in light and dark themes without making all math bol
 }) => {
   await page.goto("/");
   await page.evaluate(async () => {
-    const { renderMarkdown } = await import("/src/markdown.js");
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     document.querySelector("main").dataset.empty = "false";
     document.querySelector("#content").innerHTML = renderMarkdown(
       String.raw`> Banach 空间 \(V\) reflexive，当且仅当每个有界序列都存在弱收敛子列。`,
@@ -110,7 +116,9 @@ L^*w\in V.
 
 async function render(page, source) {
   return page.evaluate(async (source) => {
-    const { renderMarkdown } = await import("/src/markdown.js"),
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+        async (m) => (await m.loadMath(), m),
+      ),
       host = document.createElement("article");
     host.innerHTML = renderMarkdown(source).html;
     return {

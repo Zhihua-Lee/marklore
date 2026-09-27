@@ -6,11 +6,11 @@
 
 ## 环境准备
 
-| 工具 | 项目开发基线 |
-| --- | --- |
-| 操作系统 | Windows；当前桌面打包目标为 Windows 目录包。 |
-| Node.js | 24 |
-| pnpm | 11 |
+| 工具       | 项目开发基线                                              |
+| ---------- | --------------------------------------------------------- |
+| 操作系统   | Windows；当前桌面打包目标为 Windows 目录包。              |
+| Node.js    | 24                                                        |
+| pnpm       | 11                                                        |
 | 浏览器测试 | Microsoft Edge；Playwright 配置使用 `channel: "msedge"`。 |
 
 依赖版本由 [package.json](../package.json) 与 [pnpm-lock.yaml](../pnpm-lock.yaml) 管理。首次安装和 Electron 下载需要联网；日常使用不依赖网络服务。
@@ -56,26 +56,31 @@ pnpm dev
 
 在仓库根目录运行。修改涉及桌面渲染内容时，先执行 `pnpm build`，确保原生测试使用最新前端。
 
-| 命令 | 覆盖范围 |
-| --- | --- |
-| `pnpm test` | Node 单元测试。 |
-| `pnpm test:ui` | Playwright 浏览器交互回归。 |
-| `pnpm test:native` | Electron 桌面基础流程。 |
-| `pnpm test:native-safety` | 原生文件操作安全。 |
-| `pnpm test:native-menu` | 原生菜单与相关入口。 |
-| `pnpm test:native-export` | 桌面 PDF／HTML 导出。 |
-| `pnpm test:native-background` | 托盘、后台与恢复行为。 |
-| `pnpm test:native-drop-copy` | 拖入文件与代码复制。 |
-| `pnpm test:native-editing` | 桌面编辑流程。 |
+| 命令                            | 覆盖范围                    |
+| ------------------------------- | --------------------------- |
+| `pnpm test`                     | Node 单元测试。             |
+| `pnpm test:ui`                  | Playwright 浏览器交互回归。 |
+| `pnpm test:native`              | Electron 桌面基础流程。     |
+| `pnpm test:native-safety`       | 原生文件操作安全。          |
+| `pnpm test:native-menu`         | 原生菜单与相关入口。        |
+| `pnpm test:native-export`       | 桌面 PDF／HTML 导出。       |
+| `pnpm test:native-background`   | 托盘、后台与恢复行为。      |
+| `pnpm test:native-drop-copy`    | 拖入文件与代码复制。        |
+| `pnpm test:native-editing`      | 桌面编辑流程。              |
+| `pnpm test:native-navigation`   | 系统前进／后退与阅读位置。  |
+| `pnpm test:native-image-access` | 本地图片授权与错误说明。    |
+| `pnpm test:native:all`          | 依次运行全部原生套件。      |
+| `pnpm format:check`             | Prettier 格式检查。         |
 
 浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。
 
-其他独立原生入口包括：
+- 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
+- UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。
+- 已有开发服务器时，设置 `FOLIO_BASE_URL`（如 `http://127.0.0.1:5173`）可跳过自动启动；`FOLIO_BROWSER_CHANNEL=""` 使用 Playwright 自带的 Chromium。
 
-```powershell
-node tests/native-navigation.mjs
-node tests/native-image-access.mjs
-```
+### 持续集成
+
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) 在 `windows-latest` 上对每次推送到 `main` 和每个 PR 运行格式检查、单元测试、第三方声明一致性检查、构建和浏览器测试。原生套件较慢，只在手动触发（`workflow_dispatch` 勾选 native）时运行。
 
 具体版本执行了哪些测试，以 [VERIFICATION.md](../VERIFICATION.md) 为准。历史通过记录不代表后续提交已自动验证，也不代表所有个人笔记已通过人工验收。
 
@@ -113,19 +118,19 @@ pnpm prune-releases --apply    # 移到回收站
 
 ## 源码结构
 
-| 路径 | 职责 |
-| --- | --- |
-| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs) | 窗口、隔离接口、文件监听与会话恢复。 |
-| [`desktop/files.mjs`](../desktop/files.mjs) | 文件授权、编码、版本校验、备份与目录操作。 |
-| [`desktop/integration.mjs`](../desktop/integration.mjs) | Windows 系统集成。 |
-| [`src/app.js`](../src/app.js) | 文档状态、编辑器和交互协调。 |
-| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js) | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。 |
-| [`src/render-cache.js`](../src/render-cache.js) | 有界的近期预览 DOM 复用。 |
-| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js) | 标签交互、排序与分组。 |
-| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js) | 源码格式工具与块级就地编辑。 |
-| [`src/link-preview.js`](../src/link-preview.js) | 链接悬浮预览与异步状态管理。 |
-| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs) | 内容快照、离线资源嵌入和 PDF／HTML 导出。 |
-| [`tests/`](../tests/) | 单元、浏览器与原生回归用例。 |
+| 路径                                                                                       | 职责                                                |
+| ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs) | 窗口、隔离接口、文件监听与会话恢复。                |
+| [`desktop/files.mjs`](../desktop/files.mjs)                                                | 文件授权、编码、版本校验、备份与目录操作。          |
+| [`desktop/integration.mjs`](../desktop/integration.mjs)                                    | Windows 系统集成。                                  |
+| [`src/app.js`](../src/app.js)                                                              | 文档状态、编辑器和交互协调。                        |
+| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)         | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。 |
+| [`src/render-cache.js`](../src/render-cache.js)                                            | 有界的近期预览 DOM 复用。                           |
+| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)         | 标签交互、排序与分组。                              |
+| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)   | 源码格式工具与块级就地编辑。                        |
+| [`src/link-preview.js`](../src/link-preview.js)                                            | 链接悬浮预览与异步状态管理。                        |
+| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)         | 内容快照、离线资源嵌入和 PDF／HTML 导出。           |
+| [`tests/`](../tests/)                                                                      | 单元、浏览器与原生回归用例。                        |
 
 渲染进程没有直接的 Node／文件系统访问权限，本地文件操作经过主进程的授权接口。新增渲染能力应保持 HTML 清理、图表限制和本地资源授权边界，不通过放开远程加载来解决展示问题。
 

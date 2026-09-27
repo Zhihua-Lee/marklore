@@ -24,9 +24,9 @@ async function visit(name, from) {
   const key = pkg.name + "@" + pkg.version;
   if (seen.has(key)) return;
   seen.add(key);
-  const names = (await fs.readdir(folder)).filter((f) =>
-    /^(license|licence|copying|notice)([-.]|$)/i.test(f),
-  );
+  const names = (await fs.readdir(folder))
+    .filter((f) => /^(license|licence|copying|notice)([-.]|$)/i.test(f))
+    .sort();
   if (!names.length) throw Error("License text missing for " + key);
   const texts = await Promise.all(
     names.map((f) => fs.readFile(path.join(folder, f), "utf8")),
@@ -39,6 +39,8 @@ async function visit(name, from) {
 }
 const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
 for (const name of Object.keys(pkg.dependencies)) await visit(name, root);
+// Sort by package@version so regeneration is byte-stable (CI diffs this file).
+sections.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 await fs.writeFile(
   "THIRD-PARTY-NOTICES.txt",
   "Folio Notes — bundled application dependencies\nElectron/Chromium runtime licenses are also supplied beside the executable.\n\n" +

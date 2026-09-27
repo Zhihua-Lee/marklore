@@ -4,17 +4,25 @@ export function createPreviewCache({
   maxDocuments = 4,
   maxHtmlBytes = 4 * 1024 * 1024,
 } = {}) {
-  const entries = new Map(), signatures = new WeakMap();
-  let active = null, bytes = 0;
+  const entries = new Map(),
+    signatures = new WeakMap();
+  let active = null,
+    bytes = 0;
   const keys = ["from", "to", "textFrom", "textTo", "editFrom", "editTo"];
-  const mappedSelector = "[data-from],[data-to],[data-text-from],[data-text-to],[data-edit-from],[data-edit-to]";
-  const mapped = (node) => node.nodeType === 1
-    ? [node, ...node.querySelectorAll(mappedSelector)] : [];
-  const shell = (node) => node.nodeType === 1 &&
-    (node.classList.contains("note-section") || node.classList.contains("section-body"));
-  const shellKey = (node) => JSON.stringify([
-    node.className.replace(/\s*collapsed\b/, ""), node.dataset.foldKey, node.dataset.level,
-  ]);
+  const mappedSelector =
+    "[data-from],[data-to],[data-text-from],[data-text-to],[data-edit-from],[data-edit-to]";
+  const mapped = (node) =>
+    node.nodeType === 1 ? [node, ...node.querySelectorAll(mappedSelector)] : [];
+  const shell = (node) =>
+    node.nodeType === 1 &&
+    (node.classList.contains("note-section") ||
+      node.classList.contains("section-body"));
+  const shellKey = (node) =>
+    JSON.stringify([
+      node.className.replace(/\s*collapsed\b/, ""),
+      node.dataset.foldKey,
+      node.dataset.level,
+    ]);
 
   function describe(node) {
     let value = signatures.get(node);
@@ -22,16 +30,22 @@ export function createPreviewCache({
       const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
       value = {
         raw,
-        signature: node.nodeType === 1
-          ? raw.replace(/ data-(?:text-|edit-)?(?:from|to)="\d+"/g, "") : raw,
-        ranges: mapped(node).map((element) => keys.map((key) => element.dataset[key])),
+        signature:
+          node.nodeType === 1
+            ? raw.replace(/ data-(?:text-|edit-)?(?:from|to)="\d+"/g, "")
+            : raw,
+        ranges: mapped(node).map((element) =>
+          keys.map((key) => element.dataset[key]),
+        ),
       };
       signatures.set(node, value);
     }
     return value;
   }
   function identity(node) {
-    return shell(node) ? "shell:" + shellKey(node) : "leaf:" + describe(node).signature;
+    return shell(node)
+      ? "shell:" + shellKey(node)
+      : "leaf:" + describe(node).signature;
   }
   function remove(key) {
     const entry = entries.get(key);
@@ -45,20 +59,31 @@ export function createPreviewCache({
   // moves rows without moving their source ranges. Keep every row's mapping intact.
   function remap(old, before, after) {
     const elements = mapped(old);
-    if (before.ranges.length !== after.ranges.length ||
-        elements.length !== after.ranges.length) return false;
+    if (
+      before.ranges.length !== after.ranges.length ||
+      elements.length !== after.ranges.length
+    )
+      return false;
     const translations = keys.map(() => new Map());
     for (let i = 0; i < before.ranges.length; i++) {
       for (let k = 0; k < keys.length; k++) {
-        const previous = before.ranges[i][k], next = after.ranges[i][k];
-        if (translations[k].has(previous) && translations[k].get(previous) !== next)
+        const previous = before.ranges[i][k],
+          next = after.ranges[i][k];
+        if (
+          translations[k].has(previous) &&
+          translations[k].get(previous) !== next
+        )
           return false;
         translations[k].set(previous, next);
       }
     }
     // Validate everything before mutating anything; external DOM edits may add ranges.
-    if (elements.some((element) => keys.some((key, k) =>
-      !translations[k].has(element.dataset[key])))) return false;
+    if (
+      elements.some((element) =>
+        keys.some((key, k) => !translations[k].has(element.dataset[key])),
+      )
+    )
+      return false;
     for (const element of elements) {
       keys.forEach((key, k) => {
         const next = translations[k].get(element.dataset[key]);
@@ -71,18 +96,26 @@ export function createPreviewCache({
   function reuse(node, old, hydrate) {
     if (shell(node)) {
       if (old && shell(old) && shellKey(node) === shellKey(old)) {
-        if (node.dataset.blockCount !== undefined &&
-            node.dataset.blockCount !== old.dataset.blockCount)
+        if (
+          node.dataset.blockCount !== undefined &&
+          node.dataset.blockCount !== old.dataset.blockCount
+        )
           old.dataset.blockCount = node.dataset.blockCount;
-        reconcile(old, children([...node.childNodes], [...old.childNodes], hydrate));
+        reconcile(
+          old,
+          children([...node.childNodes], [...old.childNodes], hydrate),
+        );
         return old;
       }
       children([...node.childNodes], [], hydrate);
       return node;
     }
-    const next = describe(node), previous = old && describe(old);
-    if (previous?.signature === next.signature &&
-        (previous.raw === next.raw || remap(old, previous, next))) {
+    const next = describe(node),
+      previous = old && describe(old);
+    if (
+      previous?.signature === next.signature &&
+      (previous.raw === next.raw || remap(old, previous, next))
+    ) {
       signatures.set(old, next);
       return old;
     }
@@ -104,7 +137,8 @@ export function createPreviewCache({
   }
   function reconcile(parent, nodes) {
     const keep = new Set(nodes);
-    for (const node of [...parent.childNodes]) if (!keep.has(node)) node.remove();
+    for (const node of [...parent.childNodes])
+      if (!keep.has(node)) node.remove();
     let cursor = parent.firstChild;
     for (const node of nodes) {
       if (cursor === node) cursor = cursor.nextSibling;
@@ -113,7 +147,13 @@ export function createPreviewCache({
   }
 
   return {
-    update(container, key, html, fragment = null, { hydrate, bytes: cost } = {}) {
+    update(
+      container,
+      key,
+      html,
+      fragment = null,
+      { hydrate, bytes: cost } = {},
+    ) {
       if (active?.key === key && active.html === html) return false;
       active?.hydrate?.deactivate?.();
       let entry = entries.get(key);
@@ -123,7 +163,8 @@ export function createPreviewCache({
           template.innerHTML = html;
           fragment = template.content;
         }
-        const previous = active?.key === key ? active.nodes : entry?.nodes || [];
+        const previous =
+          active?.key === key ? active.nodes : entry?.nodes || [];
         const nodes = children([...fragment.childNodes], previous, hydrate);
         entry = { key, html, nodes, hydrate, bytes: cost ?? html.length * 2 };
       }
@@ -135,7 +176,10 @@ export function createPreviewCache({
       active = entry;
       entry.hydrate?.activate?.(container);
       // Keep the visible note, even when it exceeds the retention budget.
-      while (entries.size > 1 && (entries.size > maxDocuments || bytes > maxHtmlBytes))
+      while (
+        entries.size > 1 &&
+        (entries.size > maxDocuments || bytes > maxHtmlBytes)
+      )
         remove(entries.keys().next().value);
       return true;
     },

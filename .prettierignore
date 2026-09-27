@@ -1,0 +1,10 @@
+# Generated or third-party text; formatting would only churn diffs.
+THIRD-PARTY-NOTICES.txt
+pnpm-lock.yaml
+dist/
+release/
+node_modules/
+test-results/
+playwright-report/
+blob-report/
+.local/

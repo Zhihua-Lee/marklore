@@ -1,7 +1,6 @@
 import MarkdownIt from "markdown-it";
 import footnote from "markdown-it-footnote";
 import tasks from "markdown-it-task-lists";
-import katex from "katex";
 import { highlightCode } from "./highlighting.js";
 import { createFormulaHydrator } from "./formula-hydration.js";
 import { decorateSortableTables } from "./table-sort.js";
@@ -24,6 +23,18 @@ const escape = (value) =>
         c
       ],
   );
+// KaTeX (~256 KB) loads on first use, so startup and math-free notes skip it.
+// Until it arrives, formulas stay as their TeX source (never cached as such).
+let katex = null,
+  katexLoad = null;
+export function loadMath() {
+  return (katexLoad ??= import("katex").then((module) => {
+    katex = module.default;
+  }));
+}
+export const mathReady = () => katex !== null;
+// Cheap pre-check for callers that must render synchronously after loading.
+export const mayContainMath = (text) => /\$|\\[([]/.test(text);
 const mathCache = new Map();
 let mathCacheBytes = 0;
 const mathDOMCache = new Map();
@@ -32,7 +43,13 @@ function formulaMarkup(source, display, env) {
   if (!env?.mathFragments) return math(source, display);
   const html = env.deferMath ? null : math(source, display);
   const key = env.editNonce + ":" + env.mathFragments.length;
-  env.mathFragments.push({ key, html, source, display, sourceKey: String(display) + source });
+  env.mathFragments.push({
+    key,
+    html,
+    source,
+    display,
+    sourceKey: String(display) + source,
+  });
   return `<span data-folio-formula="${key}"></span>`;
 }
 function formulaFragment(html) {
@@ -106,6 +123,10 @@ function escapedDisplayMath(source) {
   return result;
 }
 function math(source, display) {
+  if (!katex) {
+    loadMath();
+    return `<span class="math-pending">${escape(source)}</span>`;
+  }
   const key = display + source;
   if (mathCache.has(key)) {
     const cached = mathCache.get(key);
@@ -275,8 +296,6 @@ export function createParser() {
     },
     { alt: ["paragraph", "reference", "blockquote", "list"] },
   );
-  md.renderer.rules.folio_math = (_tokens, index) =>
-    `<span class="formula">${math(_tokens[index].content, false)}</span>`;
   md.renderer.rules.folio_math_block = (tokens, index, _options, env) =>
     `<div class="math-block" ${attrs(tokens[index])}>${formulaMarkup(tokens[index].content.split(env.mathPipe).join("|"), true, env)}</div>\n`;
   md.core.ruler.after("inline", "folio_locations", (state) => {
@@ -323,7 +342,10 @@ export function createParser() {
           let cursor = inlineCursors.get(range) ?? from;
           for (const child of token.children || []) {
             if (child.type === "text" || child.type === "code_inline") {
-              const relative = inlineSource.indexOf(child.content, cursor - from);
+              const relative = inlineSource.indexOf(
+                child.content,
+                cursor - from,
+              );
               const at = relative < 0 ? -1 : from + relative;
               if (
                 child.content &&
@@ -335,7 +357,8 @@ export function createParser() {
               }
             } else if (child.type === "folio_math") {
               const relative = inlineSource.indexOf(
-                child.markup + child.content, cursor - from,
+                child.markup + child.content,
+                cursor - from,
               );
               const at = relative < 0 ? -1 : from + relative;
               if (at >= cursor && at < to) {
@@ -627,13 +650,23 @@ export function renderMarkdown(
       ? createFormulaHydrator(
           deferred,
           (formula) => formulaFragment(math(formula.source, formula.display)),
-          { progressive: source.length > 80000 || env.mathFragments.length > 200 },
+          {
+            progressive:
+              source.length > 80000 || env.mathFragments.length > 200,
+            ready: mathReady,
+            load: loadMath,
+          },
         )
       : null,
     // Account conservatively for future expanded math, not just placeholder HTML.
-    bytes: html.length * 2 + (deferMath
-      ? env.mathFragments.reduce((n, f) => n + Math.max(8192, f.source.length * 256), 0)
-      : 0),
+    bytes:
+      html.length * 2 +
+      (deferMath
+        ? env.mathFragments.reduce(
+            (n, f) => n + Math.max(8192, f.source.length * 256),
+            0,
+          )
+        : 0),
     formulaCount: env.mathFragments.length,
   };
 }

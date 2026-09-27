@@ -1,8 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 async function boot(page, text = "Hello 中文") {
+  await installFolio(page);
   await page.addInitScript((text) => {
     window.mock = { handlers: {}, images: [], saved: [] };
-    window.folio = {
+    window.folio = folioTest.mock({
       ready: async () => ({
         roots: [],
         restored: [],
@@ -21,8 +23,6 @@ async function boot(page, text = "Hello 中文") {
           ...JSON.parse(localStorage.getItem("editor-test-settings") || "{}"),
         },
       }),
-      on: (name, fn) => (window.mock.handlers[name] = fn),
-      read: async () => ({ unchanged: true }),
       session: async (value) => {
         window.mock.session = value;
         localStorage.setItem(
@@ -38,8 +38,7 @@ async function boot(page, text = "Hello 中文") {
         window.mock.images.push(id);
         return { url: "assets/image.png", label: "My picture" };
       },
-      list: async () => [],
-    };
+    });
   }, text);
   await page.goto("/");
   await page.getByRole("button", { name: "编辑", exact: true }).click();
@@ -297,7 +296,9 @@ test("color preserves heading structure, clean outline labels and literal code",
   await expect(page.locator("#content h2")).toContainText("Hello 中文");
   await expect(page.locator("#content h2")).toHaveAttribute("id", "hello-中文");
   const label = await page.evaluate(async () => {
-    const { renderHeadingLabel } = await import("/src/markdown.js");
+    const { renderHeadingLabel } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
     const el = document.createElement("div");
     el.innerHTML = renderHeadingLabel(
       '<span style="color:red">Hello</span> `<span>` <img src=x onerror=alert(1)>',

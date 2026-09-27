@@ -13,7 +13,12 @@ function markers(node) {
 export function createFormulaHydrator(
   formulas,
   render,
-  { progressive = false, budgetMs = 8 } = {},
+  {
+    progressive = false,
+    budgetMs = 8,
+    ready: rendererReady = () => true,
+    load = null,
+  } = {},
 ) {
   let host = null,
     scroller = null,
@@ -23,6 +28,9 @@ export function createFormulaHydrator(
   const ready = new Set();
 
   function expand(marker) {
+    // Never replace a marker before the math renderer has loaded; activate()
+    // retries once it arrives, so the TeX source placeholder is temporary.
+    if (!rendererReady()) return false;
     const formula = formulas.get(marker.getAttribute("data-folio-math"));
     if (formula === undefined) return false;
     marker.replaceWith(render(formula));
@@ -82,8 +90,14 @@ export function createFormulaHydrator(
     deactivate();
     host = container;
     ownerWindow = container.ownerDocument.defaultView;
-    for (let parent = container.parentElement; parent; parent = parent.parentElement) {
-      if (/(auto|scroll)/.test(ownerWindow.getComputedStyle(parent).overflowY)) {
+    for (
+      let parent = container.parentElement;
+      parent;
+      parent = parent.parentElement
+    ) {
+      if (
+        /(auto|scroll)/.test(ownerWindow.getComputedStyle(parent).overflowY)
+      ) {
         scroller = parent;
         break;
       }
@@ -91,17 +105,26 @@ export function createFormulaHydrator(
     // Also picks up unresolved markers in reused leaves or a restored cached tab.
     const pending = markers(container);
     if (!pending.length) return;
+    if (!rendererReady() && load) {
+      load().then(() => {
+        if (host === container) activate(container);
+      });
+      return;
+    }
     if (!progressive || !ownerWindow.IntersectionObserver) {
       flush();
       return;
     }
-    observer = new ownerWindow.IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) ready.add(entry.target);
-        else ready.delete(entry.target);
-      }
-      if (ready.size && timer === null) timer = setTimeout(work, 0);
-    }, { root: scroller, rootMargin: "600px 0px" });
+    observer = new ownerWindow.IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) ready.add(entry.target);
+          else ready.delete(entry.target);
+        }
+        if (ready.size && timer === null) timer = setTimeout(work, 0);
+      },
+      { root: scroller, rootMargin: "600px 0px" },
+    );
     for (const marker of pending) observer.observe(marker);
     ownerWindow.addEventListener("beforeprint", flush);
   }

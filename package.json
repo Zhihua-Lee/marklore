@@ -23,7 +23,8 @@
     "icons": "node tools/build-icons.mjs",
     "format": "prettier --write src desktop tests tools *.mjs *.json *.md",
     "dist": "pnpm build && electron-builder --win dir --publish never",
-    "licenses": "node tools/licenses.mjs"
+    "licenses": "node tools/licenses.mjs",
+    "prune-releases": "node tools/prune-releases.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "6.11.1",

@@ -98,6 +98,17 @@ pnpm test:native
 Remove-Item Env:FOLIO_TEST_EXE
 ```
 
+### 发布与清理本地产物
+
+版本发布到 GitHub Releases（win-x64 zip、source zip、`SHA256SUMS-vX.Y.Z.txt`）后，本地只需保留最近几个版本：
+
+```powershell
+pnpm prune-releases            # 预览：列出将被清理的项目
+pnpm prune-releases --apply    # 移到回收站
+```
+
+默认保留最近 3 个版本的 zip／校验文件（`--keep N`）和最近 1 个版本的解包目录（`--keep-dirs N`）。只处理带版本号的项目；`release/win-unpacked` 等无版本号的输出不会被改动。清空回收站后才释放磁盘空间。
+
 `package.json` 当前只将 README、LICENSE 和第三方声明作为额外文件复制到发行目录，不包含本仓库的 `docs/`。发行包中的 README 保留了基本运行说明；完整指南需在仓库内阅读。
 
 ## 源码结构

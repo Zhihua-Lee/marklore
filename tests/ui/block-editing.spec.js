@@ -110,7 +110,24 @@ test("preview paragraph editing changes only the source block and preserves surr
   await expect(page.locator("#content strong").first()).toHaveText(
     "New 中文 paragraph",
   );
-  expect(await page.evaluate(() => window.untouched.isConnected)).toBe(false); // shifted source offsets require new mapping
+  expect(await page.evaluate(() => window.untouched.isConnected)).toBe(true);
+  const secondFrom = note
+    .replace(
+      "First **paragraph** with $x^2$ and 中文.",
+      "**New 中文 paragraph**",
+    )
+    .indexOf("Second paragraph");
+  // Retained nodes must receive fresh mappings, not preserve stale offsets.
+  expect(await page.evaluate(() => Number(window.untouched.dataset.from))).toBe(
+    secondFrom,
+  );
+  expect(
+    await page.evaluate(() =>
+      Number(
+        window.untouched.querySelector("[data-text-from]").dataset.textFrom,
+      ),
+    ),
+  ).toBe(secondFrom);
   await expect
     .poll(() => draft(page))
     .toBe(

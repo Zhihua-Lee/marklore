@@ -267,11 +267,15 @@ test("sidebars animate in both directions and reduced motion disables transition
       during: dock.getBoundingClientRect().width,
       animated: dock
         .getAnimations()
+        .some((a) => a.transitionProperty === "transform"),
+      widthAnimated: dock
+        .getAnimations()
         .some((a) => a.transitionProperty === "width"),
     };
   });
   expect(closing.animated).toBe(true);
-  expect(closing.during).toBeGreaterThan(0);
+  expect(closing.during).toBe(0);
+  expect(closing.widthAnimated).toBe(false);
   await expect(page.locator("#sidebar")).toBeHidden();
   const opening = await page.evaluate(async () => {
     const dock = document.querySelector("#sidebar");
@@ -279,7 +283,9 @@ test("sidebars animate in both directions and reduced motion disables transition
     await new Promise((resolve) =>
       requestAnimationFrame(() => requestAnimationFrame(resolve)),
     );
-    return dock.getAnimations().some((a) => a.transitionProperty === "width");
+    return dock
+      .getAnimations()
+      .some((a) => a.transitionProperty === "transform");
   });
   expect(opening).toBe(true);
   await expect

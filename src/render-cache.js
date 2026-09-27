@@ -20,7 +20,7 @@ export function createPreviewCache({
     node.nodeType === 1 &&
     (node.classList.contains("note-section") ||
       node.classList.contains("section-body"));
-  function reuse(node, old) {
+  function reuse(node, old, hydrate) {
     if (shell(node)) {
       const match =
         old &&
@@ -34,21 +34,59 @@ export function createPreviewCache({
           node.dataset.blockCount !== undefined
         )
           old.dataset.blockCount = node.dataset.blockCount;
-        reconcile(old, [...node.childNodes], [...old.childNodes]);
+        reconcile(old, [...node.childNodes], [...old.childNodes], hydrate);
         return old;
       }
       // Seed leaf signatures before user state (folds, table widths, diagrams)
       // changes the DOM. Unchanged descendants must never be serialized again.
-      for (const child of [...node.childNodes]) reuse(child, null);
+      for (const child of [...node.childNodes]) reuse(child, null, hydrate);
       return node;
     }
-    const signature = node.nodeType === 1 ? node.outerHTML : node.textContent;
-    if (old && signatures.get(old) === signature) return old;
-    signatures.set(node, signature);
+    const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
+    const signature =
+      node.nodeType === 1
+        ? raw.replace(/ data-(?:text-|edit-)?(?:from|to)="\d+"/g, "")
+        : raw;
+    const previousSignature = old && signatures.get(old);
+    if (previousSignature?.signature === signature) {
+      if (previousSignature.raw === raw) return old;
+      if (node.nodeType === 1) {
+        const selector = "[data-from],[data-text-from],[data-edit-from]";
+        const next = [node, ...node.querySelectorAll(selector)];
+        const previous = [old, ...old.querySelectorAll(selector)];
+        // Formula expansion adds no source-map attributes. Align only mapped
+        // elements, not the many KaTeX layout nodes between them.
+        if (next.length !== previous.length) {
+          signatures.set(node, { signature, raw });
+          hydrate?.(node);
+          return node;
+        }
+        for (let i = 0; i < next.length; i++)
+          for (const key of [
+            "from",
+            "to",
+            "textFrom",
+            "textTo",
+            "editFrom",
+            "editTo",
+          ])
+            if (next[i].dataset[key] !== previous[i].dataset[key]) {
+              if (next[i].dataset[key] === undefined)
+                delete previous[i].dataset[key];
+              else previous[i].dataset[key] = next[i].dataset[key];
+            }
+      }
+      signatures.set(old, { signature, raw });
+      return old;
+    }
+    signatures.set(node, { signature, raw });
+    hydrate?.(node);
     return node;
   }
-  function reconcile(parent, candidates, previous) {
-    const nodes = candidates.map((node, i) => reuse(node, previous[i]));
+  function reconcile(parent, candidates, previous, hydrate) {
+    const nodes = candidates.map((node, i) =>
+      reuse(node, previous[i], hydrate),
+    );
     const keep = new Set(nodes);
     for (const node of [...parent.childNodes])
       if (!keep.has(node)) node.remove();
@@ -61,7 +99,13 @@ export function createPreviewCache({
   }
 
   return {
-    update(container, key, html, fragment = null) {
+    update(
+      container,
+      key,
+      html,
+      fragment = null,
+      { hydrate, bytes: cost } = {},
+    ) {
       if (active?.key === key && active.html === html) return false;
       let entry = entries.get(key);
       if (!entry || entry.html !== html) {
@@ -72,9 +116,9 @@ export function createPreviewCache({
         }
         const previous = active?.key === key ? active.nodes : [];
         const nodes = [...fragment.childNodes].map((node, index) =>
-          reuse(node, previous[index]),
+          reuse(node, previous[index], hydrate),
         );
-        entry = { key, html, nodes, bytes: html.length * 2 };
+        entry = { key, html, nodes, bytes: cost ?? html.length * 2 };
       }
 
       if (active?.key === key) {

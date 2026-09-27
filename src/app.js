@@ -253,7 +253,7 @@ function stateFor(doc) {
           clearTimeout(renderingTimer);
           const refreshEditedPreview = () => {
             if (
-              active?.text.length > 80000 &&
+              (active?.text.length > 80000 || active?.formulaCount > 200) &&
               performance.now() - lastScrollAt < 140
             ) {
               renderingTimer = setTimeout(refreshEditedPreview, 150);
@@ -266,7 +266,7 @@ function stateFor(doc) {
           };
           renderingTimer = setTimeout(
             refreshEditedPreview,
-            active.text.length > 80000 ? 320 : 160,
+            active.text.length > 80000 || active.formulaCount > 200 ? 320 : 160,
           );
         }
         if (update.selectionSet) updateStatus();
@@ -568,14 +568,20 @@ function render(preserve) {
   let fragment = null;
   if (doc.htmlText !== doc.text) {
     linkPreview.hide();
-    const result = renderMarkdown(doc.text, doc.fileId);
+    const result = renderMarkdown(doc.text, doc.fileId, { deferMath: true });
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = doc.text;
+    doc.hydrate = result.hydrate;
+    doc.renderBytes = result.bytes;
+    doc.formulaCount = result.formulaCount;
     fragment = result.fragment;
   }
   const container = $("#content");
-  const changed = previewCache.update(container, doc.id, doc.html, fragment);
+  const changed = previewCache.update(container, doc.id, doc.html, fragment, {
+    hydrate: doc.hydrate,
+    bytes: doc.renderBytes,
+  });
   doc.previewText = doc.text;
   if (changed) {
     for (const el of container.querySelectorAll(".note-section"))
@@ -597,8 +603,15 @@ function render(preserve) {
 }
 let outlineSignature = "";
 function updateOutline(headings) {
-  const signature = JSON.stringify(headings);
-  if (outlineSignature === signature) return;
+  const signature = JSON.stringify(
+    headings.map(({ label, id, level }) => ({ label, id, level })),
+  );
+  if (outlineSignature === signature) {
+    [...$("#outline").children].forEach((button, i) => {
+      button.dataset.from = String(headings[i].from);
+    });
+    return;
+  }
   outlineSignature = signature;
   $("#outline").replaceChildren(
     ...headings.map((h) => {
@@ -606,7 +619,8 @@ function updateOutline(headings) {
       b.innerHTML = renderHeadingLabel(h.label);
       b.title = h.label;
       b.style.paddingLeft = 12 + (h.level - 1) * 12 + "px";
-      b.onclick = () => jump(h.from);
+      b.dataset.from = String(h.from);
+      b.onclick = () => jump(Number(b.dataset.from));
       return b;
     }),
   );

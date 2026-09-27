@@ -39,8 +39,14 @@ export function previewTextSelection(content, doc) {
   )
     return null;
   // Legacy source maps can be approximate around author HTML attributes.
-  const prefix = doc.text.slice(0, source.from);
-  if (prefix.lastIndexOf("<") > prefix.lastIndexOf(">")) return null;
+  const blockFrom = Number(block.closest("[data-from]")?.dataset.from) || 0;
+  const prefix = doc.text.slice(blockFrom, source.from);
+  const opening = prefix.lastIndexOf("<");
+  if (
+    opening > prefix.lastIndexOf(">") &&
+    /^<\/?[A-Za-z][\w:-]*(?:\s|$)/.test(prefix.slice(opening))
+  )
+    return null;
   return { ...source, range: range.cloneRange(), doc, text: doc.text };
 }
 

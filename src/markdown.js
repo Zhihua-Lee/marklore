@@ -30,7 +30,7 @@ function formulaMarkup(source, display, env) {
   const html = math(source, display);
   if (!env?.mathFragments) return html;
   const key = env.editNonce + ":" + env.mathFragments.length;
-  env.mathFragments.push({ key, html });
+  env.mathFragments.push({ key, html, sourceKey: String(display) + source });
   return `<span data-folio-formula="${key}"></span>`;
 }
 function formulaFragment(html) {
@@ -441,7 +441,11 @@ export function parseHeadings(source) {
   parser.parse(source, env);
   return env.headings || [];
 }
-export function renderMarkdown(source, fileId = null) {
+export function renderMarkdown(
+  source,
+  fileId = null,
+  { deferMath = false } = {},
+) {
   const env = { mathFragments: [] };
   let raw = parser.render(source, env);
   raw = raw.split(env.mathPipe).join("|");
@@ -480,14 +484,23 @@ export function renderMarkdown(source, fileId = null) {
   // Sanitize generated math once, then clone it. Author HTML still goes through
   // the full sanitizer; only per-render unpredictable markers accept cached math.
   const formulas = new Map(
-    env.mathFragments.map(({ key, html }) => [key, html]),
+    env.mathFragments.map((formula) => [formula.key, formula]),
   );
+  const deferred = new Map();
+  // This stable marker is internal, never accepted from authored HTML.
+  for (const element of template.content.querySelectorAll("[data-folio-math]"))
+    element.removeAttribute("data-folio-math");
   for (const marker of template.content.querySelectorAll(
     "[data-folio-formula]",
   )) {
-    const html = formulas.get(marker.getAttribute("data-folio-formula"));
-    if (html !== undefined) marker.replaceWith(formulaFragment(html));
-    else marker.removeAttribute("data-folio-formula");
+    const formula = formulas.get(marker.getAttribute("data-folio-formula"));
+    marker.removeAttribute("data-folio-formula");
+    if (!formula) continue;
+    if (deferMath) {
+      deferred.set(formula.sourceKey, formula.html);
+      marker.setAttribute("data-folio-math", formula.sourceKey);
+      marker.textContent = formula.sourceKey.replace(/^(true|false)/, "");
+    } else marker.replaceWith(formulaFragment(formula.html));
   }
   decorateTextColors(template.content);
   for (const table of template.content.querySelectorAll("table")) {
@@ -601,9 +614,28 @@ export function renderMarkdown(source, fileId = null) {
     summary.setAttribute("aria-hidden", "true");
     section.firstElementChild.append(summary);
   }
+  const html = template.innerHTML;
   return {
-    html: template.innerHTML,
+    html,
     headings: env.headings || [],
     fragment: template.content,
+    // Reconcile the small source-mapped skeleton before expanding formula DOM.
+    // Unchanged leaves keep their existing math, selection and decoded images.
+    hydrate: deferMath
+      ? (node) => {
+          for (const marker of node.querySelectorAll?.("[data-folio-math]") ||
+            []) {
+            const html = deferred.get(marker.getAttribute("data-folio-math"));
+            if (html !== undefined) marker.replaceWith(formulaFragment(html));
+          }
+        }
+      : null,
+    bytes:
+      (html.length +
+        (deferMath
+          ? env.mathFragments.reduce((n, f) => n + f.html.length, 0)
+          : 0)) *
+      2,
+    formulaCount: env.mathFragments.length,
   };
 }

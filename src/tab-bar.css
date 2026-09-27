@@ -1,24 +1,28 @@
+.tab .tab-label,
+.tab .tab-label:hover {
+  background: transparent;
+}
 .tab-group {
   position: relative;
   flex: none;
   max-width: 140px;
-  height: 28px;
-  min-height: 28px;
+  height: 30px;
+  min-height: 30px;
   padding: 3px 8px;
-  margin-inline: 4px 1px;
-  border-radius: 7px 7px 0 0;
-  border-bottom: 2px solid var(--group-color);
+  margin-inline: 4px 0;
+  border-radius: 8px 8px 0 0;
+  border-bottom: 1px solid var(--group-color);
   font-size: var(--tab-size, 11px);
   font-weight: 400;
   color: var(--ink);
-  background: color-mix(in srgb, var(--group-color) 22%, var(--bg));
+  background: color-mix(in srgb, var(--group-color) 18%, var(--bg));
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .tab-group:hover,
 .tab-group.contains-active {
-  background: color-mix(in srgb, var(--group-color) 13%, transparent);
+  background: color-mix(in srgb, var(--group-color) 23%, var(--bg));
 }
 .tab.grouped {
   border-bottom-color: transparent;
@@ -30,30 +34,30 @@
   left: -4px;
   right: -1px;
   bottom: -1px;
-  height: 2px;
+  height: 1px;
   background: var(--group-color);
 }
 .tab.grouped.active,
 .tab.grouped.active:hover {
-  background: color-mix(in srgb, var(--group-color) 12%, var(--bg));
-  border: 2px solid var(--group-color);
+  background: color-mix(in srgb, var(--group-color) 18%, var(--bg));
+  border: 1px solid var(--group-color);
   border-bottom-color: transparent;
-  border-radius: 10px 10px 0 0;
+  border-radius: 8px 8px 0 0;
 }
 .tab.grouped.active::after {
-  left: -5px;
+  left: -4px;
   right: auto;
   width: 3px;
-  bottom: -2px;
+  bottom: -1px;
 }
 .tab.grouped.active::before {
   content: "";
   top: auto;
   position: absolute;
   left: auto;
-  right: -5px;
-  bottom: -2px;
-  height: 2px;
+  right: -4px;
+  bottom: -1px;
+  height: 1px;
   width: 3px;
   background: var(--group-color);
   pointer-events: none;

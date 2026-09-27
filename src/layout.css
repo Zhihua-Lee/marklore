@@ -144,7 +144,7 @@ main {
   background: var(--hover);
 }
 .tab.active:hover {
-  background: var(--paper);
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg));
 }
 .tab.active::before {
   top: 0;

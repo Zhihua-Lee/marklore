@@ -29,6 +29,9 @@ try {
     timeout: 30000,
   });
   const page = await instance.firstWindow();
+  await instance.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].hide(),
+  );
   page.setDefaultTimeout(15000);
   await expect(page.locator("#content")).toContainText("Hello 中文");
   await page

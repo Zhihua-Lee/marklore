@@ -168,7 +168,7 @@ button.primary {
   position: relative;
 }
 .tab.active {
-  background: var(--paper);
+  background: color-mix(in srgb, var(--accent) 11%, var(--bg));
   border-color: transparent;
   color: var(--ink);
 }
@@ -838,12 +838,25 @@ main[data-empty="true"] > #panes {
 .section-rail:hover {
   background: transparent;
 }
-.note-section:hover:not(:has(.note-section:hover)),
-.note-section:has(
-  > .section-rail:focus-visible,
-  > :is(h1, h2, h3, h4, h5, h6) > .fold:focus-visible
-) {
+:is(
+    .note-section:hover:not(:has(.note-section:hover)),
+    .note-section:has(
+      > .section-rail:focus-visible,
+      > :is(h1, h2, h3, h4, h5, h6) > .fold:focus-visible
+    )
+  )
+  > :is(h1, h2, h3, h4, h5, h6)
+  > .fold {
   --section-marker: var(--accent);
+}
+:is(
+    .note-section:hover:not(:has(.note-section:hover)),
+    .note-section:has(
+      > .section-rail:focus-visible,
+      > :is(h1, h2, h3, h4, h5, h6) > .fold:focus-visible
+    )
+  )
+  > .section-rail {
   --section-guide: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .note-section.collapsed {
@@ -881,8 +894,7 @@ main[data-empty="true"] > #panes {
 .note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) {
   border-radius: 5px;
 }
-.note-section.collapsed:is(:hover, :focus-within) {
-  --section-marker: var(--accent);
+.note-section.collapsed:is(:hover, :focus-within) > .section-rail {
   --section-guide: color-mix(in srgb, var(--accent) 75%, transparent);
 }
 .note-section.collapsed:is(:hover, :focus-within)

@@ -116,6 +116,14 @@ export function createBlockEditor({
   resize.observe(reader);
   reader.addEventListener("focus", () => {
     const viewport = reader.getBoundingClientRect();
+    // Preview selection should not measure every preceding block in a long note.
+    for (const x of [viewport.left + viewport.width / 2, viewport.left + 48]) {
+      const element = document.elementFromPoint(x, viewport.top + 48);
+      if (element?.closest("[data-edit-from]") && content.contains(element)) {
+        selectTarget(element);
+        return;
+      }
+    }
     selectTarget(
       [...content.querySelectorAll("[data-edit-from]")].find(
         (el) =>

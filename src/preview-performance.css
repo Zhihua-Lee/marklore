@@ -9,11 +9,5 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-/* Native containment retains DOM/source mapping and browser find-in-page. */
-@media screen {
-  .prose[data-large-preview="true"] > :is(p, .math-block, .code-block),
-  .prose[data-large-preview="true"] .section-body > :is(p, .math-block, .code-block) {
-    content-visibility: auto;
-    contain-intrinsic-block-size: auto 80px;
-  }
-}
+/* No content-visibility here: its estimated off-screen heights made outline and
+   link jumps land short, and measured no clear gain on 250k-character notes. */

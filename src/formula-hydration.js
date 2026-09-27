@@ -1,4 +1,4 @@
-import { visibleAnchor, restoreAnchor } from "./positions.js";
+import { visibleAnchor, restoreAnchor, navigationMoving } from "./positions.js";
 
 const selector = "[data-folio-math]";
 function markers(node) {
@@ -38,6 +38,11 @@ export function createFormulaHydrator(
   function work() {
     timer = null;
     if (!host?.isConnected || !host.getClientRects().length) return;
+    // Do not grow content along an outline/link jump's path; expand on arrival.
+    if (scroller && navigationMoving(scroller)) {
+      timer = setTimeout(work, 100);
+      return;
+    }
     const anchor = scroller ? visibleAnchor(scroller) : null;
     const start = performance.now();
     let count = 0;

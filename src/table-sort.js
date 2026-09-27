@@ -105,18 +105,14 @@ export function sortTable(table, column) {
 export function wireSortableTables(host) {
   if (wired.has(host)) return;
   wired.add(host);
+  // Only the explicit button sorts: header text stays selectable, and a
+  // double-click on it keeps the read-to-edit source location gesture.
   host.addEventListener("click", (event) => {
-    const header = event.target.closest?.("th.sortable-header");
-    if (!header || !host.contains(header) ||
-        event.target.closest("a,input,select,textarea,button:not(.table-sort)")) return;
+    const button = event.target.closest?.("th.sortable-header > .table-sort");
+    if (!button || !host.contains(button)) return;
     event.preventDefault();
     event.stopImmediatePropagation();
+    const header = button.parentElement;
     sortTable(header.closest("table"), header.cellIndex);
   });
-  host.addEventListener("dblclick", (event) => {
-    if (event.target.closest?.("th.sortable-header")) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-    }
-  }, true);
 }

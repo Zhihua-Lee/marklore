@@ -70,7 +70,14 @@ export function applyAppearance(settings) {
   }
   for (const dock of document.querySelectorAll(".dock")) {
     const visible = [...dock.children].filter((panel) => !panel.hidden);
-    dock.hidden = visible.length === 0;
+    const hidden = visible.length === 0;
+    if (dock.hidden && !hidden && dock.getAnimations().length) {
+      // Reopening during the close transition would reverse nothing visible and
+      // skip the slide-in. Settle the close (display:none) so @starting-style applies.
+      for (const animation of dock.getAnimations()) animation.finish();
+      getComputedStyle(dock).display;
+    }
+    dock.hidden = hidden;
     dock.dataset.stacked = String(visible.length > 1);
   }
   $("#sidebar-toggle").setAttribute("aria-expanded", String(settings.sidebar));

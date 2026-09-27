@@ -133,7 +133,6 @@ export function createPreviewCache({
       entries.set(key, entry);
       bytes += entry.bytes;
       active = entry;
-      container.dataset.largePreview = String(entry.bytes > 2 * 1024 * 1024 || html.length > 80000);
       entry.hydrate?.activate?.(container);
       // Keep the visible note, even when it exceeds the retention budget.
       while (entries.size > 1 && (entries.size > maxDocuments || bytes > maxHtmlBytes))

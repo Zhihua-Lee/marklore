@@ -15,6 +15,7 @@ import {
   atPoint,
   visibleAnchor,
   restoreAnchor,
+  navigateToAnchor,
   findPosition,
   unfold,
   selectionSource,
@@ -307,7 +308,7 @@ blockEditor = createBlockEditor({
   onFinish: (anchor) => {
     clearTimeout(renderingTimer);
     render(false);
-    restoreAnchor($("#reader"), anchor, { expand: true });
+    navigateToAnchor($("#reader"), anchor, { expand: true });
     if (active) {
       active.anchor = anchor;
       active.pane = "preview";
@@ -372,7 +373,7 @@ function restore(
   restoring = true;
   currentAnchor = { id: doc.id, anchor };
   if (doc.mode !== "source")
-    restoreAnchor($("#reader"), anchor, { expand, behavior });
+    navigateToAnchor($("#reader"), anchor, { expand, behavior });
   if (doc.mode !== "read") {
     const from = Math.min(anchor.from || 0, view.state.doc.length);
     view.dispatch({
@@ -1026,7 +1027,7 @@ function sourceToPreview() {
   if (!active || active.mode === "read") return;
   render(false);
   const { from, to } = view.state.selection.main;
-  restoreAnchor($("#reader"), { from, y: 32 }, { expand: true });
+  navigateToAnchor($("#reader"), { from, y: 32 }, { expand: true });
   highlightLocation(from, to);
   active.pane = "editor";
 }
@@ -1054,7 +1055,7 @@ $("#content").addEventListener("dblclick", (event) => {
   const doc = active;
   requestAnimationFrame(() => {
     if (active !== doc || doc.mode === "read") return;
-    restoreAnchor($("#reader"), anchor, { expand: true });
+    navigateToAnchor($("#reader"), anchor, { expand: true });
     view.dispatch({
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),

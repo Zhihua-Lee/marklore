@@ -1,10 +1,7 @@
-.prose th.sortable-header {
-  cursor: pointer;
-}
-.prose th.sortable-header:hover {
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
-}
+/* Only the button sorts; the header text keeps normal text selection. */
 .table-sort {
+  cursor: pointer;
+  border-radius: 4px;
   display: inline-grid;
   place-items: center;
   min-height: 26px;
@@ -14,6 +11,10 @@
   font: inherit;
   color: var(--muted);
   vertical-align: baseline;
+}
+.table-sort:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--ink);
 }
 th[aria-sort="ascending"] .table-sort,
 th[aria-sort="descending"] .table-sort {

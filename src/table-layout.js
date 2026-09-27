@@ -1,6 +1,6 @@
 import { wireSortableTables } from "./table-sort.js";
 import { chooseColumnWidths } from "./table-widths.js";
-import { visibleAnchor, restoreAnchor } from "./positions.js";
+import { visibleAnchor, restoreAnchor, navigationMoving } from "./positions.js";
 
 const cache = new WeakMap();
 function clearWidths(table) {
@@ -201,6 +201,11 @@ export function watchTableLayout(host, scroller) {
     clearTimeout(timer);
     timer = setTimeout(() => {
       if (!host.getClientRects().length) return;
+      // Measure tables where a jump lands, not the ones it flies past.
+      if (navigationMoving(scroller)) {
+        schedule();
+        return;
+      }
       const pending = [
         ...host.querySelectorAll(".table-scroll > table:not(.table-measure)"),
       ];

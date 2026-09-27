@@ -104,19 +104,23 @@
   width: 26px;
 }
 
-/* Ungrouped tabs have a visible blue-grey surface, independent of group colors. */
+/* Ungrouped tabs read as tabs on the panel without borrowing a hue: a quiet
+   neutral surface from the theme's own ink, the accent tint only when active. */
 #tabs .tab:not(.grouped) {
-  --ungrouped-color: #718bb8;
-  background: color-mix(in srgb, var(--ungrouped-color) 18%, var(--bg));
-  border-color: color-mix(in srgb, var(--ungrouped-color) 32%, var(--line));
-  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, var(--panel));
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--muted);
 }
 #tabs .tab:not(.grouped):hover,
 #tabs .tab:not(.grouped):focus-within {
-  background: color-mix(in srgb, var(--ungrouped-color) 27%, var(--bg));
+  background: color-mix(in srgb, var(--ink) 9%, var(--panel));
+  color: var(--ink);
 }
-#tabs .tab:not(.grouped).active {
-  background: color-mix(in srgb, var(--ungrouped-color) 38%, var(--bg));
-  border-color: color-mix(in srgb, var(--ungrouped-color) 65%, var(--line));
-  border-bottom-color: var(--accent);
+#tabs .tab:not(.grouped).active,
+#tabs .tab:not(.grouped).active:hover {
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg));
+  /* A border, not box-shadow: drag-reorder indicators already use box-shadow. */
+  border-bottom-color: color-mix(in srgb, var(--accent) 75%, transparent);
+  color: var(--ink);
 }

@@ -88,8 +88,8 @@ export const cases = {
       wireSortableTables(host);
       const table = host.querySelector("table"), rows = [...table.tBodies[0].rows];
       const cols = table.querySelector("colgroup"), footer = table.tFoot;
-      const header = table.tHead.rows[0].cells[0];
-      header.click();
+      const header = table.tHead.rows[0].cells[0], sort = header.querySelector(".table-sort");
+      sort.click();
       check([...table.tBodies[0].rows].every((row, i) => row === [rows[1], rows[2], rows[0], rows[3]][i]), "numeric ascending/ties/empty");
       check(header.getAttribute("aria-sort") === "ascending", "missing accessible sort state");
       result = tableSkeleton(100);
@@ -107,10 +107,14 @@ export const cases = {
       selected.removeAllRanges(); selected.addRange(range);
       check(selectionSource(host) === null, "unsafe sorted cross-row source selection accepted");
       selected.removeAllRanges();
-      header.click();
+      sort.click();
       check(table.tBodies[0].rows[0] === rows[0], "descending is lexicographic");
-      header.click();
+      sort.click();
       check(rows.every((row, i) => table.tBodies[0].rows[i] === row), "original order not restored");
+      header.click();
+      header.dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+      check(rows.every((row, i) => table.tBodies[0].rows[i] === row) && header.getAttribute("aria-sort") === "none",
+        "header text click must not sort; only the button does");
       check(table.querySelector("colgroup") === cols && table.tFoot === footer, "table layout/footer lost");
       const irregular = document.createElement("template");
       irregular.innerHTML = "<table><thead><tr><th colspan=2>Merged</th></tr></thead><tbody><tr><td>x</td><td>y</td></tr></tbody></table>";

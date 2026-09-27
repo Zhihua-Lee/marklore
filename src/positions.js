@@ -171,30 +171,115 @@ export function unfold(element) {
     }
   }
 }
+function anchorTop(host, anchor, expand) {
+  if (!anchor || anchor.top) return 0;
+  const target =
+    anchor.targetId && host.querySelector("#" + CSS.escape(anchor.targetId));
+  const hit = target ? { element: target } : findPosition(host, anchor.from);
+  if (!hit) return null;
+  if (expand) unfold(hit.element);
+  const rect =
+    hit.range?.getBoundingClientRect() || hit.element.getBoundingClientRect();
+  if (!hit.element.getClientRects().length) return null;
+  return (
+    host.scrollTop +
+    rect.top -
+    host.getBoundingClientRect().top +
+    (anchor.fraction || 0) * rect.height -
+    (anchor.y ?? 32)
+  );
+}
+
+// One in-flight navigation per scroller. Lazy formulas and tables pause while it
+// moves (see navigationMoving), so the path keeps its measured height and the
+// target stays valid. Once it lands, their layout-preserving restores keep the
+// target in place instead of pinning whatever block is at the viewport top.
+const navigations = new WeakMap();
+export function navigationMoving(host) {
+  return navigations.get(host)?.moving === true;
+}
+function place(host, navigation, top) {
+  host.scrollTo({ behavior: "instant", top });
+  navigation.expected = host.scrollTop;
+}
+function retarget(host, navigation) {
+  // Re-aiming a smooth scroll restarts its easing; the landing check corrects it.
+  if (navigation.moving) return;
+  const top = anchorTop(host, navigation.anchor, false);
+  if (top !== null) place(host, navigation, top);
+}
+
+export function navigateToAnchor(
+  host,
+  anchor,
+  { expand = false, behavior = "instant" } = {},
+) {
+  navigations.get(host)?.stop();
+  const top = anchorTop(host, anchor, expand);
+  if (top === null) return;
+  const view = host.ownerDocument.defaultView;
+  const smooth = behavior === "smooth";
+  const navigation = { anchor, moving: smooth, expected: null, corrections: 0 };
+  let quiet = null;
+  const moved = () =>
+    navigation.expected !== null && Math.abs(host.scrollTop - navigation.expected) > 2;
+  const settle = () => {
+    if (navigations.get(host) !== navigation) return;
+    // Anything else that scrolled after landing (code, scrollbar, anchoring) wins.
+    if (!navigation.moving && moved()) return navigation.stop();
+    navigation.moving = false;
+    const next = anchorTop(host, anchor, false);
+    if (next === null) return navigation.stop();
+    const goal = Math.max(0, Math.min(host.scrollHeight - host.clientHeight, next));
+    if (Math.abs(goal - host.scrollTop) > 2 && navigation.corrections++ < 8) {
+      place(host, navigation, goal);
+      view.requestAnimationFrame(() => view.requestAnimationFrame(settle));
+      return;
+    }
+    navigation.expected = host.scrollTop;
+    // Stay armed briefly so late formula batches or table widths still re-aim.
+    clearTimeout(quiet);
+    quiet = setTimeout(() => navigation.stop(), 500);
+  };
+  const cancel = () => navigation.stop();
+  const onScroll = () => {
+    if (!navigation.moving && moved()) navigation.stop();
+  };
+  const inputs = ["wheel", "pointerdown", "touchstart", "keydown"];
+  navigation.stop = () => {
+    clearTimeout(quiet);
+    clearTimeout(navigation.timeout);
+    host.removeEventListener("scrollend", settle);
+    host.removeEventListener("scroll", onScroll);
+    for (const name of inputs) host.ownerDocument.removeEventListener(name, cancel, true);
+    if (navigations.get(host) === navigation) navigations.delete(host);
+  };
+  navigations.set(host, navigation);
+  host.addEventListener("scrollend", settle);
+  host.addEventListener("scroll", onScroll, { passive: true });
+  // A user gesture takes over; never fight manual scrolling.
+  for (const name of inputs)
+    host.ownerDocument.addEventListener(name, cancel, { capture: true, passive: true });
+  navigation.timeout = setTimeout(() => navigation.stop(), 6000);
+  const before = host.scrollTop;
+  if (smooth) host.scrollTo({ behavior, top });
+  else place(host, navigation, top);
+  // Instant or no-op scrolls may not produce a scrollend; verify on the next frames.
+  if (!smooth || (Math.abs(host.scrollTop - before) < 1 && Math.abs(top - before) < 1))
+    view.requestAnimationFrame(() => view.requestAnimationFrame(settle));
+}
+
 export function restoreAnchor(
   host,
   anchor,
   { expand = false, behavior = "instant" } = {},
 ) {
+  const navigation = navigations.get(host);
+  if (navigation) return retarget(host, navigation);
   if (!anchor || anchor.top) {
     host.scrollTop = 0;
     return;
   }
-  const target =
-    anchor.targetId && host.querySelector("#" + CSS.escape(anchor.targetId));
-  const hit = target ? { element: target } : findPosition(host, anchor.from);
-  if (!hit) return;
-  if (expand) unfold(hit.element);
-  const rect =
-    hit.range?.getBoundingClientRect() || hit.element.getBoundingClientRect();
-  if (!hit.element.getClientRects().length) return;
-  host.scrollTo({
-    behavior,
-    top:
-      host.scrollTop +
-      rect.top -
-      host.getBoundingClientRect().top +
-      (anchor.fraction || 0) * rect.height -
-      (anchor.y ?? 32),
-  });
+  const top = anchorTop(host, anchor, expand);
+  if (top !== null) host.scrollTo({ behavior, top });
 }

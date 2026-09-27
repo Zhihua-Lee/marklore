@@ -1,5 +1,31 @@
 # Verification — 2026-09-26
 
+## v0.1.20 preview selection tools and read-to-edit location
+
+41 unit tests pass. Browser runs pass 37 editing/block/workbench/selection cases,
+then 18 final selection/mapping/save-safety cases (overlapping suites, not summed).
+The packaged v0.1.20 native editing suite also passes with an isolated profile and
+synthetic note: real read double-click, matching preview highlight, floating bold,
+preview undo, unchanged disk until save, and existing image/attachment workflows.
+
+The floating toolbar reuses source-only formatting and the shared color picker;
+no HTML-to-Markdown conversion or second document model is introduced. Checks cover
+mouse drag, word selection, chained bold/italic, remembered highlight, anchored
+link input, Escape, read-mode exclusion, tab/mode dismissal and narrow dark layout.
+The narrow screenshot was inspected. Formatting never runs on a stale preview or
+an approximate range. Mixed-markup selections, formulas, code, links and author HTML
+without verbatim source mapping retain source/block editing instead.
+
+The long-document test double-clicks a bold word in section 37, checks both-pane
+location after read-to-edit reflow, then replaces the source selection and compares
+the complete saved document. It exposed Windows selecting a trailing space across
+the closing bold marker; double-click selection now stays within the clicked text
+leaf. A temporary CSS Highlight marks the precise preview range without changing
+its DOM or text metrics. Formulas retain block-level location, not glyph precision.
+
+Production build/package, formatting and diff checks pass. Test fixtures do not
+modify personal notes or terminate the user's running app.
+
 ## v0.1.19 tab groups, reading navigation and disclosure feedback
 
 41 unit tests pass, including measured column allocation, bounded reading history, departure anchors, branch

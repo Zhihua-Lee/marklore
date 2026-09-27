@@ -17,6 +17,7 @@ import {
   findPosition,
   unfold,
   selectionSource,
+  constrainWordSelection,
 } from "./positions.js";
 import { icon } from "./icons.js";
 import { setSectionCollapsed } from "./sections.js";
@@ -33,6 +34,7 @@ import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
 import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
+import { createSelectionTools } from "./selection-tools.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
 import {
@@ -58,6 +60,7 @@ const api = window.folio;
 const tabs = [],
   roots = [];
 let active = null,
+  selectionTools,
   view,
   switching = false,
   renderingTimer,
@@ -236,6 +239,7 @@ function stateFor(doc) {
       EditorView.updateListener.of((update) => {
         if (!active || switching) return;
         if (update.docChanged) {
+          selectionTools?.hide();
           readingHistory.map(active.id, update.changes);
           blockEditor?.sourceChanged();
           active.text = update.state.doc.toString();
@@ -304,6 +308,18 @@ imageInsertion = createImageInsertion({
   getBlockEditor: () => blockEditor,
   api,
   report: toast,
+});
+selectionTools = createSelectionTools({
+  content: $("#content"),
+  reader: $("#reader"),
+  view,
+  getDocument: () => active,
+  blocked: () => blockEditor.active,
+  report: toast,
+  render: () => {
+    clearTimeout(renderingTimer);
+    render(true);
+  },
 });
 function editorAnchor() {
   if (view.scrollDOM.scrollTop < 2) return { from: 0, top: true };
@@ -483,6 +499,7 @@ function activateTab(doc, { revealGroup = true } = {}) {
     }
     return;
   }
+  selectionTools?.hide();
   closeColorPicker();
   blockEditor?.finish();
   linkPreview.hide();
@@ -508,15 +525,17 @@ function activateTab(doc, { revealGroup = true } = {}) {
   run(() => checkDisk(doc))();
   if (settings.sidebar) run(followCurrentFolder)();
 }
-function setMode(mode) {
+function setMode(mode, { anchor: destination } = {}) {
   if (!active || active.mode === mode) return;
+  selectionTools?.hide();
   closeColorPicker();
   blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
   capture();
   const doc = active,
-    anchor = doc.anchor;
+    anchor = destination || doc.anchor;
+  doc.anchor = anchor;
   doc.mode = mode;
   $("#panes").dataset.mode = mode;
   render(false);
@@ -947,16 +966,32 @@ const linkPreview = createLinkPreview({
 });
 wireCodeBlocks($("#content"), toast);
 wireImageErrors(api, toast);
+let locationTimer;
+function highlightLocation(from, to = from + 1) {
+  clearTimeout(locationTimer);
+  CSS.highlights?.delete("folio-location");
+  $("#content")
+    .querySelectorAll(".located")
+    .forEach((el) => el.classList.remove("located"));
+  const first = findPosition($("#content"), from);
+  const last = findPosition($("#content"), Math.max(from, to - 1));
+  if (first?.range && last?.range && CSS.highlights) {
+    const range = document.createRange();
+    range.setStart(first.range.startContainer, first.range.startOffset);
+    range.setEnd(last.range.endContainer, last.range.endOffset);
+    CSS.highlights.set("folio-location", new Highlight(range));
+  } else first?.element.classList.add("located");
+  locationTimer = setTimeout(() => {
+    CSS.highlights?.delete("folio-location");
+    first?.element.classList.remove("located");
+  }, 1800);
+}
 function sourceToPreview() {
   if (!active || active.mode === "read") return;
   render(false);
-  const from = view.state.selection.main.from;
+  const { from, to } = view.state.selection.main;
   restoreAnchor($("#reader"), { from, y: 32 }, { expand: true });
-  const hit = findPosition($("#content"), from);
-  if (hit) {
-    hit.element.classList.add("located");
-    setTimeout(() => hit.element.classList.remove("located"), 1200);
-  }
+  highlightLocation(from, to);
   active.pane = "editor";
 }
 $("#content").addEventListener("dblclick", (event) => {
@@ -964,22 +999,35 @@ $("#content").addEventListener("dblclick", (event) => {
   if (event.target.closest("button,a,summary")) return;
   const hit = atPoint($("#content"), event.clientX, event.clientY);
   if (!hit) return;
+  constrainWordSelection($("#content"), hit);
   const selected = selectionSource($("#content"));
-  if (active.mode === "read") setMode("edit");
+  // In split editing, a word selection belongs to the preview formatting tools.
+  // Alt-double-click retains the explicit source-location gesture.
+  if (active.mode === "edit" && selected && !event.altKey) {
+    view.dispatch({
+      selection: { anchor: selected.from, head: selected.to },
+      effects: EditorView.scrollIntoView(selected.from, { y: "center" }),
+    });
+    active.pane = "preview";
+    return;
+  }
+  const from = Math.min(selected?.from ?? hit.from, view.state.doc.length),
+    to = Math.min(selected?.to ?? hit.to ?? from + 1, view.state.doc.length);
+  const anchor = { from, y: 80 };
+  if (active.mode === "read") setMode("edit", { anchor });
   const doc = active;
   requestAnimationFrame(() => {
     if (active !== doc || doc.mode === "read") return;
-    const from = Math.min(selected?.from ?? hit.from, view.state.doc.length),
-      to = Math.min(selected?.to ?? hit.to ?? from, view.state.doc.length);
+    restoreAnchor($("#reader"), anchor, { expand: true });
     view.dispatch({
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
     });
     view.focus();
     active.pane = "preview";
-    toast(
-      hit.exact ? "已定位对应文字" : "已定位对应源码块（公式与结构按块定位）",
-    );
+    active.anchor = anchor;
+    currentAnchor = { id: doc.id, anchor };
+    highlightLocation(from, to);
   });
 });
 $("#content").addEventListener(

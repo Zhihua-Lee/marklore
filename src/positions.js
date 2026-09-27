@@ -48,6 +48,33 @@ export function selectionSource(host) {
       textOffset(end, range.endContainer, range.endOffset),
   };
 }
+// Windows word selection may include the following space, even across an inline
+// formatting boundary. Keep a double-click inside its actual text leaf so source
+// replacement cannot accidentally consume a closing **, link target or HTML tag.
+export function constrainWordSelection(host, hit) {
+  if (!hit?.exact) return;
+  const selected = selectionSource(host),
+    leaf = findPosition(host, hit.from)?.element;
+  if (
+    !selected ||
+    !leaf?.hasAttribute("data-text-from") ||
+    leaf.childNodes.length !== 1 ||
+    leaf.firstChild.nodeType !== Node.TEXT_NODE
+  )
+    return;
+  const base = Number(leaf.dataset.textFrom),
+    text = leaf.textContent;
+  let start = Math.max(0, selected.from - base),
+    end = Math.min(text.length, selected.to - base);
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  if (end <= start) return;
+  const range = document.createRange();
+  range.setStart(leaf.firstChild, start);
+  range.setEnd(leaf.firstChild, end);
+  window.getSelection().removeAllRanges();
+  window.getSelection().addRange(range);
+}
 export function visibleAnchor(host) {
   if (host.scrollTop < 2) return { from: 0, y: 0, top: true };
   const rect = host.getBoundingClientRect(),

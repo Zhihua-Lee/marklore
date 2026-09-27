@@ -31,6 +31,31 @@ try {
   const page = await instance.firstWindow();
   page.setDefaultTimeout(15000);
   await expect(page.locator("#content")).toContainText("Hello 中文");
+  await page
+    .locator("#content p")
+    .first()
+    .dblclick({ position: { x: 14, y: 10 } });
+  await expect(page.locator("#editor .cm-content")).toBeFocused();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        [...(CSS.highlights.get("folio-location") || [])]
+          .map((r) => r.toString())
+          .join(""),
+      ),
+    )
+    .toBe("Hello");
+  await page
+    .locator("#content [data-text-from]")
+    .first()
+    .dblclick({ position: { x: 14, y: 10 } });
+  const floating = page.getByRole("toolbar", { name: "选中文字格式" });
+  await expect(floating).toBeVisible();
+  await floating.getByRole("button", { name: "加粗", exact: true }).click();
+  await expect(page.locator("#content strong")).toHaveText("Hello");
+  assert.equal(await fs.readFile(source, "utf8"), "Hello 中文");
+  await page.keyboard.press("Control+z");
+  await expect(page.locator("#content strong")).toHaveCount(0);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+a");

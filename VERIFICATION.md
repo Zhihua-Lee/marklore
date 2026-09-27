@@ -1,4 +1,43 @@
-# Verification — 2026-09-26
+# Verification — 2026-09-27
+
+## v0.1.21 long-document performance and group indicators
+
+Playwright CLI measurements used a synthetic 209,277-character document with
+450 sections and 450 distinct display formulas, at 1440 × 960. Four sidebar
+toggles went from 26 layouts / 104ms layout time to 8 / 32ms. Warm tail-edit
+rendering went from 392ms to 187ms, and reconciliation from 63ms to 26ms in the
+final run. These are illustrative local measurements, not latency guarantees or
+cold-start benchmarks; first/full renders still perform whole-document parsing.
+
+The final reader consumes the sanitized DOM directly, avoiding a redundant HTML
+parse. Nested section reconciliation preserves untouched paragraphs and formula
+nodes, not only top-level headings. Formula HTML and sanitized formula fragments
+have separate bounded caches (12 MiB of serialized keys/content each, capped at
+2,048 and 1,024 entries respectively; DOM heap overhead is additional). Author
+HTML is always sanitized; unpredictable per-render markers alone receive cached
+math. Direct CLI checks verify retained paragraph/math/details identity, closed
+details state and rejection of forged markers and unsafe HTML/link attributes.
+
+Long-note edit refresh is coalesced at 320ms and deferred during scrolling; source
+updates and save semantics are unchanged. Sidebar text width changes once per
+toggle, split dragging coalesces per animation frame, table resize observation
+ignores height-only changes, and hidden selection controls do not repeatedly
+invalidate styles on scroll. Position capture directly hits visible blocks before
+falling back to a scan. No offscreen estimated heights or text raster scaling used.
+
+41 unit tests pass. The 46-case browser run passed 45; its anchor-call-count check
+caught an intermediate visibility-check change, corrected and rerun in the full
+22-case performance/block-edit/hover suite, which passes. Other covered paths:
+math compatibility, XSS stripping, navigation/groups, tables, word-selection tools
+and reading progress. Light/dark/narrow grouped-tab screenshots were inspected;
+the active group border remains its group color and connects to the baseline.
+
+After the final narrow-window active-tab visibility fix, all 17 navigation/group
+and workbench browser cases pass. The final packaged v0.1.21 passes native export,
+navigation and editing workflows using isolated profiles and synthetic notes.
+The first native editing run timed out waiting for the hover edit button; an
+unchanged standalone rerun passes the full workflow. No physical mouse-hardware
+or arbitrary real-world long-document latency guarantee is claimed.
 
 ## v0.1.20 preview selection tools and read-to-edit location
 

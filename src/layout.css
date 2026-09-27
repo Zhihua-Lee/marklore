@@ -310,7 +310,7 @@ button {
 }
 .dock {
   transition:
-    width 180ms ease,
+    transform 160ms ease,
     background-color var(--motion) ease,
     display 180ms allow-discrete;
 }
@@ -321,6 +321,21 @@ button {
 }
 .side-panel {
   transition: display 180ms allow-discrete;
+}
+/* One text reflow per toggle; never animate the width of a long document. */
+#sidebar[hidden] {
+  transform: translateX(-14px);
+}
+#right-sidebar[hidden] {
+  transform: translateX(14px);
+}
+@starting-style {
+  #sidebar:not([hidden]) {
+    transform: translateX(-14px);
+  }
+  #right-sidebar:not([hidden]) {
+    transform: translateX(14px);
+  }
 }
 .app-menu {
   left: 7px;

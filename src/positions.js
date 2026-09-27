@@ -79,6 +79,7 @@ export function visibleAnchor(host) {
   if (host.scrollTop < 2) return { from: 0, y: 0, top: true };
   const rect = host.getBoundingClientRect(),
     y = rect.top + 32;
+  let visibleBlock = null;
   for (const x of [
     rect.left + 40,
     rect.left + rect.width * 0.3,
@@ -86,6 +87,19 @@ export function visibleAnchor(host) {
   ]) {
     const hit = atPoint(host, x, y);
     if (hit?.exact) return { ...hit, y: 32 };
+    const block = document.elementFromPoint(x, y)?.closest("[data-from]");
+    if (block && host.contains(block)) visibleBlock = block;
+  }
+  if (visibleBlock?.getClientRects().length) {
+    const box = visibleBlock.getBoundingClientRect();
+    return {
+      from: Number(visibleBlock.dataset.from),
+      y: 32,
+      fraction: Math.max(
+        0,
+        Math.min(1, (y - box.top) / Math.max(1, box.height)),
+      ),
+    };
   }
   let el = null,
     r = null;

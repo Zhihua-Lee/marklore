@@ -75,6 +75,7 @@ export function createSelectionTools({
   const form = bar.querySelector("form");
   function hide() {
     clearTimeout(timer);
+    if (bar.hidden && !snapshot) return;
     if (bar.querySelector('[aria-expanded="true"]')) closeColorPicker();
     bar.hidden = true;
     snapshot = null;

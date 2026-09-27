@@ -60,6 +60,7 @@ const api = window.folio;
 const tabs = [],
   roots = [];
 let active = null,
+  lastScrollAt = 0,
   selectionTools,
   view,
   switching = false,
@@ -250,12 +251,23 @@ function stateFor(doc) {
           updateStatus();
           scheduleSession();
           clearTimeout(renderingTimer);
-          renderingTimer = setTimeout(() => {
+          const refreshEditedPreview = () => {
+            if (
+              active?.text.length > 80000 &&
+              performance.now() - lastScrollAt < 140
+            ) {
+              renderingTimer = setTimeout(refreshEditedPreview, 150);
+              return;
+            }
             if (active?.mode === "source") {
               active.headings = parseHeadings(active.text);
               updateOutline(active.headings);
             } else render(true);
-          }, 160);
+          };
+          renderingTimer = setTimeout(
+            refreshEditedPreview,
+            active.text.length > 80000 ? 320 : 160,
+          );
         }
         if (update.selectionSet) updateStatus();
       }),
@@ -553,15 +565,17 @@ function render(preserve) {
   const doc = active,
     host = $("#reader");
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
+  let fragment = null;
   if (doc.htmlText !== doc.text) {
     linkPreview.hide();
     const result = renderMarkdown(doc.text, doc.fileId);
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = doc.text;
+    fragment = result.fragment;
   }
   const container = $("#content");
-  const changed = previewCache.update(container, doc.id, doc.html);
+  const changed = previewCache.update(container, doc.id, doc.html, fragment);
   doc.previewText = doc.text;
   if (changed) {
     for (const el of container.querySelectorAll(".note-section"))
@@ -1074,6 +1088,7 @@ for (const name of ["wheel", "pointerdown", "keydown"])
   });
 let scrollFrame = 0;
 function scrolled() {
+  lastScrollAt = performance.now();
   if (scrollFrame) return;
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0;
@@ -1494,24 +1509,36 @@ $("#tree-refresh").onclick = run(async () => {
   searchEpoch++;
   await renderTree();
 });
-let resizing = false;
+let resizing = false,
+  splitBounds,
+  splitFrame = 0,
+  pendingSplit;
+function updateSplit() {
+  splitFrame = 0;
+  if (pendingSplit === undefined || settings.split === pendingSplit) return;
+  settings.split = pendingSplit;
+  document.documentElement.style.setProperty("--split", settings.split + "%");
+  $("#split").setAttribute("aria-valuenow", String(settings.split));
+}
 $("#split").onpointerdown = (e) => {
   resizing = true;
+  splitBounds = $("#panes").getBoundingClientRect();
   capture();
   $("#split").setPointerCapture(e.pointerId);
 };
 $("#split").onpointermove = (e) => {
   if (!resizing) return;
-  const r = $("#panes").getBoundingClientRect();
-  settings.split = Math.max(
+  const r = splitBounds;
+  pendingSplit = Math.max(
     25,
     Math.min(75, Math.round(((e.clientX - r.left) / r.width) * 100)),
   );
-  document.documentElement.style.setProperty("--split", settings.split + "%");
-  $("#split").setAttribute("aria-valuenow", String(settings.split));
+  if (!splitFrame) splitFrame = requestAnimationFrame(updateSplit);
 };
-$("#split").onpointerup = () => {
+$("#split").onpointerup = $("#split").onpointercancel = () => {
   resizing = false;
+  cancelAnimationFrame(splitFrame);
+  updateSplit();
   if (active) restore(active);
   scheduleSession();
 };

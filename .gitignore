@@ -4,4 +4,6 @@ release/
 test-results/
 playwright-report/
 .local/
+.playwright-cli/
+output/playwright/
 *.log

@@ -228,7 +228,16 @@ export function createTabBar({
   }
   new ResizeObserver(() => {
     cancelAnimationFrame(resizeFrame);
-    resizeFrame = requestAnimationFrame(overflow);
+    resizeFrame = requestAnimationFrame(() => {
+      overflow();
+      if (drag) return;
+      const node = nodes.get(active()?.id);
+      (node?.hidden ? headers.get(active()?.groupId) : node)?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: "instant",
+      });
+    });
   }).observe(host);
   host.addEventListener("scroll", overflow, { passive: true });
   for (const [id, direction] of [

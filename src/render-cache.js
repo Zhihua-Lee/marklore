@@ -16,22 +16,64 @@ export function createPreviewCache({
     entries.delete(key);
   }
 
+  const shell = (node) =>
+    node.nodeType === 1 &&
+    (node.classList.contains("note-section") ||
+      node.classList.contains("section-body"));
+  function reuse(node, old) {
+    if (shell(node)) {
+      const match =
+        old &&
+        shell(old) &&
+        node.className === old.className.replace(/\s*collapsed\b/, "") &&
+        node.dataset.foldKey === old.dataset.foldKey &&
+        node.dataset.level === old.dataset.level;
+      if (match) {
+        if (
+          node.dataset.blockCount !== old.dataset.blockCount &&
+          node.dataset.blockCount !== undefined
+        )
+          old.dataset.blockCount = node.dataset.blockCount;
+        reconcile(old, [...node.childNodes], [...old.childNodes]);
+        return old;
+      }
+      // Seed leaf signatures before user state (folds, table widths, diagrams)
+      // changes the DOM. Unchanged descendants must never be serialized again.
+      for (const child of [...node.childNodes]) reuse(child, null);
+      return node;
+    }
+    const signature = node.nodeType === 1 ? node.outerHTML : node.textContent;
+    if (old && signatures.get(old) === signature) return old;
+    signatures.set(node, signature);
+    return node;
+  }
+  function reconcile(parent, candidates, previous) {
+    const nodes = candidates.map((node, i) => reuse(node, previous[i]));
+    const keep = new Set(nodes);
+    for (const node of [...parent.childNodes])
+      if (!keep.has(node)) node.remove();
+    let cursor = parent.firstChild;
+    for (const node of nodes) {
+      if (cursor === node) cursor = cursor.nextSibling;
+      else parent.insertBefore(node, cursor);
+    }
+    return nodes;
+  }
+
   return {
-    update(container, key, html) {
+    update(container, key, html, fragment = null) {
       if (active?.key === key && active.html === html) return false;
       let entry = entries.get(key);
       if (!entry || entry.html !== html) {
-        const template = container.ownerDocument.createElement("template");
-        template.innerHTML = html;
+        if (!fragment) {
+          const template = container.ownerDocument.createElement("template");
+          template.innerHTML = html;
+          fragment = template.content;
+        }
         const previous = active?.key === key ? active.nodes : [];
-        const nodes = [...template.content.childNodes].map((node, index) => {
-          const signature =
-              node.nodeType === 1 ? node.outerHTML : node.textContent,
-            old = previous[index];
-          if (old && signatures.get(old) === signature) return old;
-          signatures.set(node, signature);
-          return node;
-        });
+        const nodes = [...fragment.childNodes].map((node, index) =>
+          reuse(node, previous[index]),
+        );
         entry = { key, html, nodes, bytes: html.length * 2 };
       }
 
@@ -39,10 +81,11 @@ export function createPreviewCache({
         const keep = new Set(entry.nodes);
         for (const node of [...container.childNodes])
           if (!keep.has(node)) node.remove();
-        entry.nodes.forEach((node, index) => {
-          const current = container.childNodes[index];
-          if (current !== node) container.insertBefore(node, current || null);
-        });
+        let current = container.firstChild;
+        for (const node of entry.nodes) {
+          if (current === node) current = current.nextSibling;
+          else container.insertBefore(node, current);
+        }
       } else container.replaceChildren(...entry.nodes);
 
       remove(key);

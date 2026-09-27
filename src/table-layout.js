@@ -193,7 +193,8 @@ export function optimizeTable(table) {
 }
 
 export function watchTableLayout(host, scroller) {
-  let timer;
+  let timer,
+    measuredWidth = -1;
   const schedule = () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
@@ -216,7 +217,12 @@ export function watchTableLayout(host, scroller) {
       work();
     }, 80);
   };
-  new ResizeObserver(schedule).observe(host);
+  new ResizeObserver(([entry]) => {
+    const width = Math.round(entry.contentRect.width);
+    if (width === measuredWidth) return;
+    measuredWidth = width;
+    schedule();
+  }).observe(host);
   new MutationObserver(schedule).observe(document.documentElement, {
     attributes: true,
     attributeFilter: [
@@ -227,7 +233,10 @@ export function watchTableLayout(host, scroller) {
     ],
   });
   host.addEventListener("toggle", schedule, true);
-  host.addEventListener("click", schedule);
+  host.addEventListener("click", (event) => {
+    if (event.target.closest(".fold,.section-rail,.section-summary"))
+      schedule();
+  });
   document.fonts.ready.then(schedule);
   document.fonts.addEventListener("loadingdone", () => {
     for (const table of host.querySelectorAll("table")) cache.delete(table);

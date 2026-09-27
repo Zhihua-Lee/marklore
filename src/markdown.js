@@ -23,6 +23,36 @@ const escape = (value) =>
       ],
   );
 const mathCache = new Map();
+let mathCacheBytes = 0;
+const mathDOMCache = new Map();
+let mathDOMBytes = 0;
+function formulaMarkup(source, display, env) {
+  const html = math(source, display);
+  if (!env?.mathFragments) return html;
+  const key = env.editNonce + ":" + env.mathFragments.length;
+  env.mathFragments.push({ key, html });
+  return `<span data-folio-formula="${key}"></span>`;
+}
+function formulaFragment(html) {
+  let fragment = mathDOMCache.get(html);
+  if (fragment) mathDOMCache.delete(html);
+  else {
+    fragment = DOMPurify.sanitize(html, {
+      RETURN_DOM_FRAGMENT: true,
+      ADD_TAGS: ["annotation", "semantics"],
+      ADD_ATTR: ["encoding"],
+      ADD_URI_SAFE_ATTR: ["d"],
+    });
+    mathDOMBytes += html.length * 2;
+  }
+  mathDOMCache.set(html, fragment);
+  while (mathDOMBytes > 12 * 1024 * 1024 || mathDOMCache.size > 1024) {
+    const oldest = mathDOMCache.keys().next().value;
+    mathDOMBytes -= oldest.length * 2;
+    mathDOMCache.delete(oldest);
+  }
+  return fragment.cloneNode(true);
+}
 function escapedDisplayMath(source) {
   let result = "";
   for (let i = 0; i < source.length;) {
@@ -75,7 +105,12 @@ function escapedDisplayMath(source) {
 }
 function math(source, display) {
   const key = display + source;
-  if (mathCache.has(key)) return mathCache.get(key);
+  if (mathCache.has(key)) {
+    const cached = mathCache.get(key);
+    mathCache.delete(key);
+    mathCache.set(key, cached);
+    return cached;
+  }
   const normalized = source.replace(
     /\\(begin|end)\{(?:align\*?|equation\*?|gather\*?)\}/g,
     "\\$1{aligned}",
@@ -94,8 +129,15 @@ function math(source, display) {
   } catch (e) {
     html = `<span class="math-error" title="${escape(e.message)}">${escape(source)}</span>`;
   }
-  if (mathCache.size >= 256) mathCache.delete(mathCache.keys().next().value);
-  if (source.length < 20000) mathCache.set(key, html);
+  if (source.length < 20000) {
+    mathCache.set(key, html);
+    mathCacheBytes += (key.length + html.length) * 2;
+    while (mathCacheBytes > 12 * 1024 * 1024 || mathCache.size > 2048) {
+      const oldest = mathCache.keys().next().value;
+      mathCacheBytes -= (oldest.length + mathCache.get(oldest).length) * 2;
+      mathCache.delete(oldest);
+    }
+  }
   return html;
 }
 export function createParser() {
@@ -237,7 +279,7 @@ export function createParser() {
   md.renderer.rules.folio_math = (_tokens, index) =>
     `<span class="formula">${math(_tokens[index].content, false)}</span>`;
   md.renderer.rules.folio_math_block = (tokens, index, _options, env) =>
-    `<div class="math-block" ${attrs(tokens[index])}>${math(tokens[index].content.split(env.mathPipe).join("|"), true)}</div>\n`;
+    `<div class="math-block" ${attrs(tokens[index])}>${formulaMarkup(tokens[index].content.split(env.mathPipe).join("|"), true, env)}</div>\n`;
   md.core.ruler.after("inline", "folio_locations", (state) => {
     const offsets = lineOffsets(state.src);
     let headingIndex = 0;
@@ -369,7 +411,7 @@ export function createParser() {
   md.renderer.rules.folio_math = (tokens, i, _options, env) => {
     const t = tokens[i],
       range = t.meta ? `data-from="${t.meta.from}" data-to="${t.meta.to}"` : "";
-    return `<span class="formula" ${range}>${math(t.content.split(env.mathPipe).join("|"), t.markup === "$$")}</span>`;
+    return `<span class="formula" ${range}>${formulaMarkup(t.content.split(env.mathPipe).join("|"), t.markup === "$$", env)}</span>`;
   };
   return md;
 }
@@ -400,10 +442,11 @@ export function parseHeadings(source) {
   return env.headings || [];
 }
 export function renderMarkdown(source, fileId = null) {
-  const env = {};
+  const env = { mathFragments: [] };
   let raw = parser.render(source, env);
   raw = raw.split(env.mathPipe).join("|");
   const clean = DOMPurify.sanitize(raw, {
+    RETURN_DOM_FRAGMENT: true,
     ADD_TAGS: ["annotation", "semantics"],
     ADD_ATTR: ["encoding"],
     // SVG path data is geometry, not a URL (KaTeX stretchy arrows/accents).
@@ -433,7 +476,19 @@ export function renderMarkdown(source, fileId = null) {
       /^(?:(?:https?|mailto|tel):|[a-z]:[\\/]|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
   const template = document.createElement("template");
-  template.innerHTML = clean;
+  template.content.append(clean);
+  // Sanitize generated math once, then clone it. Author HTML still goes through
+  // the full sanitizer; only per-render unpredictable markers accept cached math.
+  const formulas = new Map(
+    env.mathFragments.map(({ key, html }) => [key, html]),
+  );
+  for (const marker of template.content.querySelectorAll(
+    "[data-folio-formula]",
+  )) {
+    const html = formulas.get(marker.getAttribute("data-folio-formula"));
+    if (html !== undefined) marker.replaceWith(formulaFragment(html));
+    else marker.removeAttribute("data-folio-formula");
+  }
   decorateTextColors(template.content);
   for (const table of template.content.querySelectorAll("table")) {
     const scroll = document.createElement("div");
@@ -546,5 +601,9 @@ export function renderMarkdown(source, fileId = null) {
     summary.setAttribute("aria-hidden", "true");
     section.firstElementChild.append(summary);
   }
-  return { html: template.innerHTML, headings: env.headings || [] };
+  return {
+    html: template.innerHTML,
+    headings: env.headings || [],
+    fragment: template.content,
+  };
 }

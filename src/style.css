@@ -987,16 +987,6 @@ dialog::backdrop {
   gap: 8px;
   margin-top: 25px;
 }
-:root[data-theme="dark"] .hljs {
-  color: var(--ink);
-  background: var(--panel);
-}
-:root[data-theme="dark"] .hljs-keyword {
-  color: #d6aee9;
-}
-:root[data-theme="dark"] .hljs-string {
-  color: #a6d6b9;
-}
 @media (max-width: 1000px) {
   .dock {
     width: 188px;

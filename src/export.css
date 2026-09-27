@@ -101,8 +101,9 @@ img {
 }
 pre {
   padding: 14px;
-  background: #f3f4f2;
-  border: 1px solid #d9ddda;
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border: 1px solid #333;
   border-radius: 5px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -207,21 +208,29 @@ summary {
 }
 .hljs-comment,
 .hljs-quote {
-  color: #65716a;
+  color: #8fae7e;
 }
 .hljs-keyword,
 .hljs-selector-tag,
 .hljs-literal {
-  color: #8a3d78;
+  color: #c586c0;
 }
-.hljs-string,
-.hljs-attr {
-  color: #257255;
+.hljs-string {
+  color: #ce9178;
 }
-.hljs-number,
+.hljs-number {
+  color: #b5cea8;
+}
+.hljs-attr,
+.hljs-variable {
+  color: #9cdcfe;
+}
 .hljs-title,
 .hljs-built_in {
-  color: #2863a0;
+  color: #dcdcaa;
+}
+.diagram-host {
+  color: #202625;
 }
 @media print {
   body {

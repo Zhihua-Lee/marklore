@@ -518,6 +518,32 @@ else {
         });
         return r.filePaths[0] ? files.directory(r.filePaths[0]) : null;
       });
+      api("pickImage", async (fileId) => {
+        const file = files.file(fileId);
+        const result = await dialog.showOpenDialog(win, {
+          title: "插入图片（复制到笔记旁的 assets 文件夹）",
+          defaultPath: path.dirname(file.path),
+          properties: ["openFile"],
+          filters: [
+            {
+              name: "图片",
+              extensions: [
+                "png",
+                "jpg",
+                "jpeg",
+                "gif",
+                "webp",
+                "bmp",
+                "avif",
+                "svg",
+              ],
+            },
+          ],
+        });
+        return result.canceled || !result.filePaths[0]
+          ? null
+          : files.importImage(fileId, result.filePaths[0]);
+      });
       api("list", (id) => files.list(id));
       api("currentFolder", (id) => files.currentFolder(id));
       api("search", (ids, query) => {

@@ -282,4 +282,22 @@ export class FileStore {
       throw Error("不支持的图片类型");
     return real;
   }
+  async importImage(id, source) {
+    const file = this.file(id);
+    await unchangedPath(file.path);
+    const real = await fs.realpath(source);
+    const extension = path.extname(real).toLowerCase();
+    if (!/^\.(png|jpe?g|gif|webp|bmp|avif|svg)$/.test(extension))
+      throw Error("请选择 PNG、JPEG、GIF、WebP、BMP、AVIF 或 SVG 图片");
+    const bytes = await this.readBytes(real);
+    const parent = path.dirname(file.path);
+    const folder = path.join(parent, "assets");
+    await fs.mkdir(folder, { recursive: true });
+    const resolved = await fs.realpath(folder);
+    if (!within(parent, resolved)) throw Error("图片目录位于笔记文件夹之外");
+    const name = `image-${randomUUID()}${extension}`;
+    // Exclusive creation never overwrites an existing attachment or source image.
+    await fs.writeFile(path.join(resolved, name), bytes, { flag: "wx" });
+    return { url: `assets/${name}`, label: path.basename(real, extension) };
+  }
 }

@@ -1,5 +1,27 @@
 # Verification — 2026-09-26
 
+## v0.1.15 editing tools and classic code colors
+
+33 unit tests pass. The complete 90-test browser suite passed for the new toolbar;
+after the relative-resource sanitizer correction, 30 focused parser/link/editor
+tests passed, followed by all 6 editing tests with the final day/night editor
+highlighting. The Vite dependency prebundler once exhausted memory during parallel
+packaging; final editing checks ran separately with `RAYON_NUM_THREADS=2`.
+
+Tests cover selected-text formatting, combined bold/italic, line/list conversions,
+atomic undo/redo, cancelable link/code/table dialogs, bounded table sizes, cell
+navigation, theme contrast, narrow toolbar layout and relative image destinations.
+The image path test caught an existing unescaped hyphen in the URI allowlist that
+discarded relative paths containing `/`; the standard escaped character class
+preserves these paths without allowing executable URL schemes.
+
+Native tests exercise the actual system-picker API (with a selected synthetic
+PNG), exclusive attachment copying, actual image decoding, cancel, undo/redo,
+save, standalone HTML/PDF export and save safety. Fixtures use isolated profiles
+and temporary files, never user notes. Light/dark, narrow and native screenshots
+were inspected. Image undo removes the Markdown reference, not its copied asset.
+This is source/preview editing with formatting actions, not a rich-text editor.
+
 ## v0.1.3 reading controls, fonts, copied math and export
 
 59 browser regressions passed, including 6 copied-formula cases and 5 compact-layout

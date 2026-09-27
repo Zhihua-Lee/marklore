@@ -388,7 +388,7 @@ export function renderMarkdown(source, fileId = null) {
     ],
     ALLOW_DATA_ATTR: true,
     ALLOWED_URI_REGEXP:
-      /^(?:(?:https?|mailto|tel):|[a-z]:[\\/]|[^a-z]|[a-z+.-]+(?:[^a-z+.-:]|$))/i,
+      /^(?:(?:https?|mailto|tel):|[a-z]:[\\/]|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   });
   const template = document.createElement("template");
   template.innerHTML = clean;
@@ -398,6 +398,7 @@ export function renderMarkdown(source, fileId = null) {
   }
   for (const img of template.content.querySelectorAll("img")) {
     const src = img.getAttribute("src") || "";
+    if (!src) continue;
     img.decoding = "async";
     if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) continue;
     if (fileId && !/^(?:https?:|javascript:|blob:)/i.test(src))

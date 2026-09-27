@@ -24,6 +24,26 @@ test("UTF-8 BOM and CRLF roundtrip", () => {
   assert.equal(info.text, "# 中文\n测试\n");
   assert.deepEqual(encode(info.text, info), b);
 });
+
+test("image insertion copies a selected image without overwriting source or note", async (t) => {
+  const { root, store } = await fixture(t);
+  const file = path.join(root, "note.md"),
+    source = path.join(root, "图 1.png");
+  await fs.writeFile(file, "# Unchanged");
+  await fs.writeFile(source, Buffer.from([137, 80, 78, 71]));
+  const doc = await store.open(file);
+  const a = await store.importImage(doc.id, source),
+    b = await store.importImage(doc.id, source);
+  assert.notEqual(a.url, b.url);
+  assert.equal(a.label, "图 1");
+  assert.deepEqual(
+    await fs.readFile(await store.asset(doc.id, a.url)),
+    await fs.readFile(source),
+  );
+  assert.equal(await fs.readFile(file, "utf8"), "# Unchanged");
+  await assert.rejects(store.importImage("fake", source), /未授权/);
+  await assert.rejects(store.importImage(doc.id, file), /图片/);
+});
 test("current folder derives only from an opened file handle", async (t) => {
   const { root, store } = await fixture(t);
   const folder = path.join(root, "notes");

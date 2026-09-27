@@ -28,6 +28,7 @@ import { createLinkPreview, splitLink } from "./link-preview.js";
 import { wireDesktopSettings } from "./desktop-settings.js";
 import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
+import { wireEditing, editingHighlight } from "./editing.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -69,6 +70,7 @@ let settings = {
   },
   currentAnchor = null;
 const previewCache = createPreviewCache();
+let editingKeys = [];
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="切换文件夹浏览" aria-label="切换文件夹浏览">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="Folio Notes 菜单" aria-label="应用菜单" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="向左浏览标签">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="打开的笔记"></div><button id="tabs-forward" class="icon tab-nav" aria-label="向右浏览标签">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="新笔记" title="新笔记 Ctrl+N">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="切换本文目录" aria-label="切换本文目录">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="左侧栏"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">笔记库</span><span><button id="tree-refresh" class="icon" aria-label="刷新文件树" title="刷新文件树">${icon("refresh")}</button><button id="folder" class="icon" aria-label="打开文件夹" title="打开文件夹">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="搜索笔记…" aria-label="筛选文件" title="搜索文件名，包含子文件夹"><div id="tree"><div class="empty-tree">尚未添加文件夹<br><button id="folder-empty">打开文件夹</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">本文目录</span></div><nav id="outline" aria-label="本文目录"></nav></section></aside>
@@ -155,6 +157,8 @@ function stateFor(doc) {
     doc: doc.text,
     extensions: [
       basicSetup,
+      editingHighlight,
+      editingKeys,
       markdown(),
       EditorView.lineWrapping,
       keymap.of([
@@ -213,6 +217,12 @@ function stateFor(doc) {
   });
 }
 view = new EditorView({ state: stateFor(docFrom()), parent: $("#editor") });
+editingKeys = wireEditing({
+  view,
+  getDocument: () => active,
+  report: toast,
+  api,
+});
 function editorAnchor() {
   if (view.scrollDOM.scrollTop < 2) return { from: 0, top: true };
   const r = view.contentDOM.getBoundingClientRect(),

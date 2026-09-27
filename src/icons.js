@@ -1,4 +1,19 @@
 const paths = {
+  undo: '<path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12"/>',
+  redo: '<path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12"/>',
+  listBullet: '<path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/>',
+  listOrdered:
+    '<path d="M10 6h11M10 12h11M10 18h11M3 3h1v6M3 9h3M3 13c4-2 4 1 1 3l-1 2h4"/>',
+  task: '<rect x="3" y="5" width="7" height="7" rx="1"/><path d="m4 8 2 2 5-6M14 8h7M3 18h18"/>',
+  quote:
+    '<path d="M10 6H4v7h6V6Zm0 7c0 4-2 6-5 6M20 6h-6v7h6V6Zm0 7c0 4-2 6-5 6"/>',
+  codeBlock:
+    '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m8 9-3 3 3 3m8-6 3 3-3 3m-3-7-2 10"/>',
+  link: '<path d="m10 14 4-4m-6 2-2 2a4 4 0 0 0 6 6l3-3m1-5 2-2a4 4 0 0 0-6-6L9 7"/>',
+  image:
+    '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5"/><path d="m3 17 5-5 4 4 4-6 5 7"/>',
+  table:
+    '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14h18M9 4v16M15 4v16"/>',
   copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/>',
   check: '<path d="m5 12 4 4L19 6"/>',
   export:

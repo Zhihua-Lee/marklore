@@ -1,486 +1,62 @@
-# Verification — 2026-09-27
-
-## v0.1.25 reading regressions after #1
-
-Outline jumps with real smooth scrolling (not reduced motion) previously landed
-short when jumping forwards: on a 38k-character note with tables the heading
-ended 119–1,042px below its target, and on a 96k-character formula-heavy note
-by up to ~50,000px; backward jumps were exact. Disabling mechanisms one at a
-time attributed this to `content-visibility` estimates and to progressive
-formula expansion along the scroll path. A navigation now pauses lazy formula
-and table work while it moves, verifies and corrects its landing, and keeps
-its target through late layout until anything else scrolls. Across 7 forward
-and backward jumps on plain, table and formula-heavy notes every heading
-landed at 32px (formerly the first jump after opening could also miss).
-Removing `content-visibility` showed no consistent open/scroll difference on a
-248k-character note in this harness (run-to-run variance exceeded any gap).
-
-Clicking table header text no longer sorts; only the sort button does, and a
-double-click on header text again enters edit mode at its source. A sorted
-table's cell double-click still locates that cell's source, and the sort and
-source maps survive an edit above the table. Ungrouped tabs use a neutral
-ink-derived surface (accent tint when active) in both themes. Folded long code
-fades out at the cut and prints in full.
-
-The sidebar animation case failed 3/10 after #1 and 0/10 before. The cause
-predates #1: reopening during the 180ms close transition produced no slide-in
-(20/20 in a probe, before and after #1). Settling the close first gives 0/20
-and 15/15 repeated test passes.
-
-All 48 unit tests and 131 browser cases (Edge) pass, including new smooth-scroll
-regressions for lazy long-note jumps and table header interaction; both fail
-on the #1 code. The packaged v0.1.25 passes all nine native suites: smoke,
-background, drop/copy, editing, export (PDF and standalone HTML), image access,
-menu, navigation and safety. Only synthetic notes and isolated profiles were
-used; physical mouse hardware was not exercised.
-
-## v0.1.24 derived-tab group closure and interruptible easing
-
-New tabs opened from a note's links, hover-preview links or the new-note command
-inherit the initiating group and are inserted after their opener. Opener identity
-and group are captured before asynchronous reads. Existing tabs retain their
-group and draft; independently opened files do not inherit. Unit coverage checks
-chained derivation, adjacency, a closed opener with a surviving group, and deletion
-of the group during a pending open.
-
-Playwright CLI exercised A → B → C, an already-open destination in another group,
-the preview Open button, a link inside a preview of an unopened note, new-note,
-an external open, and delayed file loading while switching to another group.
-All derived tabs remained in the initiating group, and the serialized session
-preserved that membership. Only synthetic notes and isolated profiles were used.
-
-Collapse/expand now uses a 280ms cubic ease-out. On reversal the current rendered
-width, opacity and margin become the next starting keyframe. At the sampled
-reversal, width was 23.277px both before and immediately after reversal (full
-width 92px). The note DOM remained identical. Arrow/discrete-wheel scrolling
-uses time-based exponential decay with a retargetable destination; sampled
-positions at roughly 45ms intervals were 0, 119.43, 167.14 and 204.86px before
-settling at 237.71px. These are local functional samples, not a frame-rate claim.
-Reduced motion created no group animations, and drag initiation cancels scrolling.
-
-All 43 unit tests and 22 browser regressions pass. The independent packaged
-v0.1.24 native-navigation suite passes, covering OS app-command routing, keyboard
-navigation, exact reading return, modal protection and group/session persistence.
-Physical mouse hardware was not exercised. Formatting and diff checks pass.
-
-## v0.1.23 continuous group contours and inline-math selection
-
-Each group now has one continuous SVG path, replacing separate borders and
-pseudo-element connectors. All group members have a tinted surface; active
-members use a stronger tint. Light/dark screenshots and isolated 100%, 125%,
-150% and 200% device-scale captures were inspected. Each group's path has one
-move command and no disconnected contour segments.
-
-CLI interaction checks observed intermediate widths during the 200ms group
-transition (92px to 25.5px while closing, 76.23px while reopening), with the
-document DOM retained. Rapid reversal settles to the latest state. Reduced
-motion runs without animations. Arrow scrolling has intermediate positions;
-touchpad-sized deltas remain direct. Automatic active-tab reveal is immediate,
-and pointer-down cancels pending smooth scrolling before drag calculations.
-
-Mixed text/inline-math selection uses exact source spans, with formulas treated
-atomically. Actual mouse selection across two formulas opens the toolbar;
-color application matches the expected complete source and both formulas render
-in the selected color. Selecting part of a formula and highlighting applies to
-the complete formula. Bold and undo preserve the exact original TeX. Highlighting
-a multiline inline formula retains one HTML wrapper rather than splitting its
-source at newlines. Code/link actions are disabled for math-containing selections;
-cross-block, display-math and unmappable rich selections still use source/block
-editing. No personal note was changed or copied into the repository.
-
-The original 41 unit tests pass; the added atomic multiline-color regression
-passes with the other seven markdown-edit tests. The 48-case browser run passed
-47 and exposed an active-tab smooth-scroll/drag race. After correction, the
-complete 17-case navigation/group/workbench rerun passes, including that drag
-case. Existing selection-tool, appearance, block/tab and editing cases passed
-in the first run. Packaged v0.1.23 native editing, navigation and export suites
-pass using isolated profiles and synthetic notes. Hardware mouse side buttons
-were not physically exercised.
-
-## v0.1.22 formula-heavy editing and coordinated tab surfaces
-
-Read-only local copies of two user-selected formula-heavy notes reproduced the
-selection failure. A whole-document `<`/`>` prefix guard mistook earlier math
-inequalities for HTML attributes: only 309 of 603 eligible text leaves passed in
-the first note (41,010 characters, 606 formulas, 36,751 elements). Restricting the
-attribute check to the current source block and actual tag-shaped prefixes makes
-603/603 pass, retaining the guard against editing HTML attributes.
-
-Real mouse drag selection in the latter half of both isolated notes opens the
-formatting toolbar; bold edits exactly the mapped source selection, mocked save
-matches the full expected text, and undo restores the entire original. Longer
-text leaves separately checked 438/438 and 424/424 mappings. Original notes were
-not written and their contents are not included in the repository.
-
-The preview compares sanitized lightweight source-mapped skeletons before
-expanding math. Unchanged leaves retain their formula DOM even when earlier edits
-shift their source offsets. Author-authored formula markers are stripped before
-internal markers are created. Export/link preview retain eager standalone HTML;
-cache budgeting includes expanded formula size, not just the small skeleton.
-Three alternating local warm comparisons on the first note measured eager render
-127–179ms vs deferred 41–47ms; reconciliation was 30–55ms vs 17–21ms. All 606
-formula nodes survived a prefix text edit and the final text source offset moved
-by the correct six characters. These measurements isolate the render/reconcile
-steps, not total input latency or cold loading. Forged markers and unsafe formula
-links remain rejected.
-
-Long-note scheduling now also recognizes formula count. Outline labels are reused
-when only offsets change. Hover color variables live on the rail/fold controls,
-not the whole section's thousands of formula descendants. Preview focus first
-hits a visible editing target instead of measuring every preceding block.
-
-Grouped tabs share a tinted fill and a one-pixel continuous outline; ordinary
-active tabs use a theme tint. Label-button hover does not add a conflicting fill.
-Light, dark and narrow screenshots were inspected.
-
-41 unit tests pass. The 119-case browser run passed 117 and exposed two obsolete
-implementation assertions (discarding shifted nodes and animating sidebar width).
-Those assertions now verify retained nodes with refreshed source positions and
-transform-only sidebar transitions; the complete 28-case block-edit/layout rerun
-passes. Packaged v0.1.22 native editing, export and navigation suites pass. The
-first visible native editing run had unexpectedly changed fixture text and failed
-selection; the harness now hides its isolated window to avoid competing for the
-desktop input focus, and the complete rerun passes. No original note was modified.
-
-## v0.1.21 long-document performance and group indicators
-
-Playwright CLI measurements used a synthetic 209,277-character document with
-450 sections and 450 distinct display formulas, at 1440 × 960. Four sidebar
-toggles went from 26 layouts / 104ms layout time to 8 / 32ms. Warm tail-edit
-rendering went from 392ms to 187ms, and reconciliation from 63ms to 26ms in the
-final run. These are illustrative local measurements, not latency guarantees or
-cold-start benchmarks; first/full renders still perform whole-document parsing.
-
-The final reader consumes the sanitized DOM directly, avoiding a redundant HTML
-parse. Nested section reconciliation preserves untouched paragraphs and formula
-nodes, not only top-level headings. Formula HTML and sanitized formula fragments
-have separate bounded caches (12 MiB of serialized keys/content each, capped at
-2,048 and 1,024 entries respectively; DOM heap overhead is additional). Author
-HTML is always sanitized; unpredictable per-render markers alone receive cached
-math. Direct CLI checks verify retained paragraph/math/details identity, closed
-details state and rejection of forged markers and unsafe HTML/link attributes.
-
-Long-note edit refresh is coalesced at 320ms and deferred during scrolling; source
-updates and save semantics are unchanged. Sidebar text width changes once per
-toggle, split dragging coalesces per animation frame, table resize observation
-ignores height-only changes, and hidden selection controls do not repeatedly
-invalidate styles on scroll. Position capture directly hits visible blocks before
-falling back to a scan. No offscreen estimated heights or text raster scaling used.
-
-41 unit tests pass. The 46-case browser run passed 45; its anchor-call-count check
-caught an intermediate visibility-check change, corrected and rerun in the full
-22-case performance/block-edit/hover suite, which passes. Other covered paths:
-math compatibility, XSS stripping, navigation/groups, tables, word-selection tools
-and reading progress. Light/dark/narrow grouped-tab screenshots were inspected;
-the active group border remains its group color and connects to the baseline.
-
-After the final narrow-window active-tab visibility fix, all 17 navigation/group
-and workbench browser cases pass. The final packaged v0.1.21 passes native export,
-navigation and editing workflows using isolated profiles and synthetic notes.
-The first native editing run timed out waiting for the hover edit button; an
-unchanged standalone rerun passes the full workflow. No physical mouse-hardware
-or arbitrary real-world long-document latency guarantee is claimed.
-
-## v0.1.20 preview selection tools and read-to-edit location
-
-41 unit tests pass. Browser runs pass 37 editing/block/workbench/selection cases,
-then 18 final selection/mapping/save-safety cases (overlapping suites, not summed).
-The packaged v0.1.20 native editing suite also passes with an isolated profile and
-synthetic note: real read double-click, matching preview highlight, floating bold,
-preview undo, unchanged disk until save, and existing image/attachment workflows.
-
-The floating toolbar reuses source-only formatting and the shared color picker;
-no HTML-to-Markdown conversion or second document model is introduced. Checks cover
-mouse drag, word selection, chained bold/italic, remembered highlight, anchored
-link input, Escape, read-mode exclusion, tab/mode dismissal and narrow dark layout.
-The narrow screenshot was inspected. Formatting never runs on a stale preview or
-an approximate range. Mixed-markup selections, formulas, code, links and author HTML
-without verbatim source mapping retain source/block editing instead.
-
-The long-document test double-clicks a bold word in section 37, checks both-pane
-location after read-to-edit reflow, then replaces the source selection and compares
-the complete saved document. It exposed Windows selecting a trailing space across
-the closing bold marker; double-click selection now stays within the clicked text
-leaf. A temporary CSS Highlight marks the precise preview range without changing
-its DOM or text metrics. Formulas retain block-level location, not glyph precision.
-
-Production build/package, formatting and diff checks pass. Test fixtures do not
-modify personal notes or terminate the user's running app.
-
-## v0.1.19 tab groups, reading navigation and disclosure feedback
-
-41 unit tests pass, including measured column allocation, bounded reading history, departure anchors, branch
-replacement, current-note filtering, closed-tab removal, edit remapping and group
-ordering. The attachment test was rerun after removing its confirmation and passes:
-supported files open directly, executable/script shortcuts stay blocked, while web
-links retain their existing confirmation.
-
-Browser runs passed 12 existing tab/parser cases, 41 navigation/block-editor/hover/
-compact-layout cases, and 32 final navigation/tab/workbench/performance/save-safety
-cases. A further details-card case passes in both themes. Initial group dragging
-inserted a header drop at the start; header drops now append, while member drops
-choose an insertion position. The final runs cover that behavior and cancellation.
-
-Checks include group creation, rename/color, membership, collapse and restored
-drafts; tab/group dragging, keyboard reorder, 480px layout; hidden-by-default
-history controls, persisted preferences, Alt navigation, mouse button events and
-duplicate OS/mouse suppression. Source anchors restore departure positions without
-closing/reopening notes. Hover-only previews and scrolling do not add history.
-Reading history is in-memory (200 entries), separate from editor undo and stored
-tab positions. Large external edits can only preserve approximate source positions.
-
-Native v0.1.19 tests pass for navigation, editing/attachments, save safety and
-standalone HTML/PDF export. The navigation test exercises BrowserWindow app-command
-delivery through the real preload, modal protection, position restoration, actual
-session-file group persistence and optional controls. It simulates the OS event;
-the user's physical mouse/driver is not exercised. Attachment tests reject any
-confirmation call and intercept OS opening so no external PDF application launches.
-All fixtures use isolated profiles and temporary notes; real notes remain untouched.
-
-Light/dark/narrow group layouts, collapsed heading feedback and details-card hover
-screenshots were inspected. Card border, summary and marker respond without layout
-shift or changes to author-specified red text; reduced-motion behavior is tested.
-Formatting, diff checks, production build and packaging pass. Existing tab logic
-was moved into a focused component rather than maintained as a second parallel
-implementation; history stores positions only, not additional document copies.
-
-Table-width follow-up: 14 editor/table browser cases, 21 table/hover/navigation/
-performance cases and all 3 final table cases pass. The imbalanced 12-row fixture
-at 680px changes from 3391px to 1548px tall at the same 16px type size; the repeated
-explanation column grows from 122px to 305px. Measurement/selection took 16–21ms
-for that fixture on this machine, not a universal performance bound. Live-reader
-and hover-preview integration, cached repeat layouts, resize, CJK/math minimums,
-overflow containment and native fallback for merged cells are checked. Layout uses
-bounded samples/candidate widths, not an unbounded exact optimizer. Multiple tables
-are processed in time-budgeted batches. Authored widths and complex image/nested
-tables retain native layout; a taller candidate is rejected. Export keeps its
-existing target-specific native column allocation, independently of reader sizing.
-
-## v0.1.18 compact color controls, table styles and hover feedback
-
-36 unit tests pass. Of 26 focused browser cases (editing, block editing and
-blocks/tabs), 25 passed initially; the table check incorrectly required a literal
-1 CSS-pixel border at a fractional reading zoom. After checking visible border
-presence instead, all 12 editing cases passed. An additional table-only run passed
-with light/dark hover screenshots. Formatting, diff checks and production build pass.
-
-Checks cover direct inline-math/divider buttons, left-click remembered colors,
-right-click anchored nonmodal palettes, keyboard opening/Escape, source/local
-editing, clearing and undo, color indicators, reload persistence and mode-switch
-dismissal. Tables offer soft/plain/grid styles and auto/full widths. Hover does
-not change table/chart geometry or text transforms; reduced-motion transitions
-are disabled. Narrow layouts remain contained. Palette, table and export screenshots
-were inspected. Styles use the existing theme tokens and no raster scaling.
-
-The packaged v0.1.18 EXE passes native editing, HTML/PDF export, image-access and
-save-safety tests. Native checks include left/right color actions and undo, plus
-actual standalone export cell borders, full width and selected grid style. Image
-picker/paste/drop, authorized decoding, source preservation and recovery behavior
-remain covered. All native fixtures use isolated profiles and temporary notes;
-the user's running app and real notes were not modified.
-
-## v0.1.17 text colors, grouped tools and local image diagnostics
-
-36 unit tests pass. A 34-case focused browser run covered editing, block editing,
-outline/typography and parsing/security; 33 passed and the narrow toolbar exceeded
-its height budget. After compacting group spacing without moving the fixed corner
-controls, all 9 editing cases passed again. Earlier checks also caught corner-button
-overlap; the editor retains its reserved left margin. Formatting and build pass.
-
-Coverage includes six preset/custom color controls, clearing and undo, preserving
-bold text and heading structure, multiline wrappers, rejecting injected CSS values,
-theme-adaptive presets, clean outline labels and no pencil/Alt+Enter editing in
-read mode. Color markup uses inline HTML and does not require an HTML-to-Markdown
-conversion. The narrowed dark layout was visually inspected.
-
-The reported image failure was reproduced against the actual note in a read-only,
-isolated-profile run: its image exists but is in a sibling cache folder outside the
-note directory. Consent enabled actual pixel decoding and survived a reload; the
-note's bytes were checked unchanged. No personal note or image is included in the
-test fixtures, source archive or repository. This test did not change the user's
-normal application profile or grant it permissions silently.
-
-The final packaged v0.1.17 EXE passes native image-access, editing, export and save
-safety tests. Image-access tests check denial, cancellation, consent, remembered
-image-only scope and absence of a read-mode pencil. Native export checks actual
-standalone highlighted/background and text colors alongside PDF, fonts and images.
-Existing picker, paste and drop insertion still decode successfully. Failed local
-loads now explain missing files / authorization / decode failure instead of only
-showing a broken-image icon. Remembered image access does not grant note access.
-
-## v0.1.16 block editing, image insertion and attachment links
-
-34 unit tests pass. Of the full 99 browser cases, 97 passed initially; a new
-image mock used `href` instead of the native API's `url`, and a development hot
-reload interrupted one quote-style check. After correcting the mock, all 18
-block-editing and formula/quote cases passed again. Formatting and build pass.
-
-Block-editing checks cover exact surrounding-source preservation, complete math /
-code / list / table ranges, forged range rejection, local and shared undo, cancel,
-mode/tab changes, session recovery, external-write conflict handling, keyboard
-entry, narrow/dark layout, bulk image undo and a delayed import racing with typing.
-The local editor changes only an authenticated Markdown source range. Raw HTML
-blocks remain source-editor-only; this is not whole-document rich-text conversion.
-
-The final packaged v0.1.16 EXE passes native editing, save-safety and export tests.
-Image checks use the real picker/preload path, a synthetic clipboard File payload,
-CDP file-backed drag/drop and decoded image dimensions. They do not touch the
-user's clipboard or notes. Attachment checks use a Chinese/spaced PDF link and
-intercept only the OS launch and confirmation, verifying routing without launching
-a user's PDF reader. Unit checks cover cancellation, unsafe extensions, directories,
-missing file associations and internal Markdown routing. Screenshots of the local
-editor and native image workflow were inspected.
-
-Images are copied beside a saved note, never moved; undo removes references but
-retains copied files. Attachment launches require confirmation and use a bounded
-type allowlist. Executables, scripts and shortcuts are not launched from notes.
-
-## v0.1.15 editing tools and classic code colors
-
-33 unit tests pass. The complete 90-test browser suite passed for the new toolbar;
-after the relative-resource sanitizer correction, 30 focused parser/link/editor
-tests passed, followed by all 6 editing tests with the final day/night editor
-highlighting. The Vite dependency prebundler once exhausted memory during parallel
-packaging; final editing checks ran separately with `RAYON_NUM_THREADS=2`.
-
-Tests cover selected-text formatting, combined bold/italic, line/list conversions,
-atomic undo/redo, cancelable link/code/table dialogs, bounded table sizes, cell
-navigation, theme contrast, narrow toolbar layout and relative image destinations.
-The image path test caught an existing unescaped hyphen in the URI allowlist that
-discarded relative paths containing `/`; the standard escaped character class
-preserves these paths without allowing executable URL schemes.
-
-Native tests exercise the actual system-picker API (with a selected synthetic
-PNG), exclusive attachment copying, actual image decoding, cancel, undo/redo,
-save, standalone HTML/PDF export and save safety. Fixtures use isolated profiles
-and temporary files, never user notes. Light/dark, narrow and native screenshots
-were inspected. Image undo removes the Markdown reference, not its copied asset.
-This is source/preview editing with formatting actions, not a rich-text editor.
-
-## v0.1.3 reading controls, fonts, copied math and export
-
-59 browser regressions passed, including 6 copied-formula cases and 5 compact-layout
-cases. The supplied overescaped Riesz expression produces the same KaTeX DOM as
-standard TeX; code fences, source offsets, literal text underscores, matrix row
-separators and unknown-command errors retain their behavior. Width changes preserve
-the semantic reading anchor. Side-panel switches follow saved panel placement;
-mode controls remain centered in the document area.
-
-Actual Chromium glyph inspection confirms bundled Literata for Latin, Microsoft
-YaHei UI for CJK and JetBrains Mono for code. The default paragraph is 16px/1.7,
-strong text is weight 600 and inline KaTeX is 1em. Fonts come from OFL upstream
-packages, not extracted viewer assets. Native packaged font/menu tests pass as well.
-All 19 unit tests pass, including standalone resource embedding, export cancellation,
-source protection and destination guards. Formatting checks pass.
-
-Native source-build export tests verify current unsaved text, expanded headings and
-details, embedded local SVG and fonts, Mermaid SVG, no Node access in standalone
-HTML, PDF signature and unchanged source notes. Poppler verifies a tagged two-page
-A4 PDF; both page renders were inspected for clipping, missing glyphs and content.
-Exports do not promise complete TeX support or download remote images. HTML includes
-resource-license notices and may preserve links from the source note.
-
-The final v0.1.3 packaged EXE passes the same native export checks, including
-protocol/request-handler cleanup on successful PDF generation and forced image
-decode failure. A packaged-only notice lookup failure was corrected by resolving
-the trusted license file beside the EXE. Hidden-window QA capture now uses an
-offscreen test-only preview; this fixed a screenshot timeout without changing the
-production window. Prior packaged files are retained separately.
-
-The initial full-suite run caught a test drag beginning on a close button after the
-layout changed; tests now derive the drag point from visible label geometry. A
-concurrent build also exposed Vite watching locked release binaries; release and
-test-output directories are now excluded from development watching. The full rerun
-passes. These are test/development fixes, not hidden production errors.
-
-## v0.1.2 typography, layout and interaction pass
-
-48 browser tests and 18 file-service tests passed. New coverage includes real
-Chromium font selection (CDP, not just declared CSS), KaTeX semantic bold/italic,
-CJK math size matching prose, read/edit font-size parity, persistent independently
-placed panels, overflowing/keyboard/drag tabs, stable tab DOM while typing, theme
-and layout reading progress, and source-outline updates without hidden-preview DOM
-redraw. Light/dark reading, compact menu and appearance dialog screenshots reviewed.
-
-On this Windows machine the installed Noto Sans SC variable font covers both Latin
-and Chinese. The balanced preset actually selects it for both; classic selects
-Arial / Microsoft YaHei, book selects Cambria / SimSun. KaTeX custom fonts load in
-the native application. No font files were copied from Windows into the package.
-
-Measured structural work: unchanged preview update causes zero child-list mutations;
-editing the last of 1,200 simple blocks causes two mutations while retaining the
-first 1,199; a near-top fallback anchor measures one block instead of eagerly
-measuring all 1,200. These are targeted work-count tests, not an end-to-end speedup
-percentage or a comparison with MDLook. Cache budget is serialized-HTML accounting,
-not a hard native-memory limit. First-open full parsing remains synchronous.
-
-The narrow editor undo/tab-return regression still emits CodeMirror's “Measure loop
-restarted more than 5 times” warning while passing its position/history assertions.
-It reproduced twice in isolation; the cause is not proven. It is not suppressed,
-and line wrapping is retained. Reduced-motion CSS disables the new brief UI-surface
-transitions; article text has no animated scale or transform.
-
-Native-menu tests passed on both the source build and the actual v0.1.2 packaged EXE.
-They preserve the standard title bar and registered native accelerators
-while keeping the menu strip hidden, including after Alt; Ctrl+N executes once.
-This version is packaged separately under `release/v0.1.2/win-unpacked`, leaving
-the prior release intact. An extraction-directory rename initially hit EPERM;
-packaging succeeded using the same installed Electron 44.4.5 distribution through
-electron-builder's supported `electronDist` option.
-
-## v0.1.1 product interface pass
-
-35 browser regression cases passed, including the new start page, last-tab close,
-exact untouched welcome migration, preserved edited welcome, and narrow dark layout.
-Native smoke passed again. Reading, start-page and dark narrow screenshots reviewed.
-User-facing development explanations were removed; application controls now use a
-consistent local SVG icon set. The legacy example exists only as a test fixture,
-not in the application bundle. Existing user files were not modified.
-
-The final v0.1.1 packaged mouse-hover rerun was interrupted by extra trusted pointer
-events: the pointer moved from the link center (325,359) to (732,283) while the link
-rectangle remained unchanged. The test timed out and is not reported as passed.
-The earlier v0.1.1 native source-build run passed; packaged pointer verification should
-be repeated when the desktop is not receiving other pointer input.
-
-## v0.1.0 baseline
-
-Environment: Windows 10 x64, Node.js 24.19.0, pnpm 11.19.0, Electron 44.4.5,
-installed Microsoft Edge for headless browser tests. Exact dependencies are locked.
-
-## Executed checks
-
-- 18 file-service tests: encoding, atomic saves/backups, stale versions, path authorization,
-  junction replacement, network-path rejection, lazy search and preview access.
-- 32 browser cases in total: 31-case full suite passed, followed by the expanded 8-case
-  hover suite (including the new detached-link regression). Covers rendering/security,
-  math/diagrams, source mapping, read/edit/source position, tabs, asynchronous saving,
-  conflicts, hover anchors, unsaved content, keyboard access and async response races.
-- Native Electron smoke: sandbox boundary, KaTeX fonts actually loaded, local SVG,
-  hover without opening a tab, internal navigation, watch refresh, version-checked save,
-  unsaved draft restart recovery. Also passed against the packaged EXE.
-- Native safety probe: Save As cannot overwrite a file open in another tab; oversized
-  sessions do not replace recovery data; cancelling quit leaves file watching active.
-- Read-only acceptance probes of two user-designated course notes: 66 and 155 formulas,
-  no KaTeX errors or leaked internal markers. These private files are not shipped.
-- Reading, editing and hover screenshots reviewed; formatter check passed.
-
-An early native mouse-hover run timed out. Failure instrumentation later captured
-successful target loading followed by the pointer leaving the link. The precise cause
-of that pointer movement was not established. Window focus/layout settling was added
-to the test (no synthetic hover); repeated native runs and the packaged run passed.
-Failure-only screenshots and bounded pointer diagnostics remain available in the test.
-
-The same native investigation caught blocked inlined KaTeX fonts. The build now emits
-fonts as same-origin files and tests assert their load under the unchanged strict CSP.
-
-## Deliberate limits
-
-This is a usable preview, not a formal security audit or proof of full Markdown/TeX
-compatibility. See README for large-document performance, block-level mapping fallbacks,
-session size limits, unbounded backup retention, the final external-save race window,
-unsupported network paths, unsigned distribution and missing system integration.
-
-Baseline checks did not change the original viewer installation, file association,
-user note content or old patch repository. Later versions are published separately
-to the private Folio Notes repository.
+# Verification
+
+Last updated 2026-09-27.
+
+This index lists what was checked for each documented release; the full record of
+each pass lives in [docs/verification/](docs/verification/). A recorded pass covers
+only that release as described: it does not mean later commits were verified
+automatically, nor that every personal note has been accepted by hand (see
+[docs/development.md](docs/development.md#测试)).
+
+## How to record a release
+
+Add `docs/verification/vX.Y.Z.md` with the release title as its H1, then add a row
+at the top of the table below. Keep each part short and state counts exactly.
+
+```markdown
+# vX.Y.Z short title
+
+## Changes
+
+What changed and what was reproduced or measured to confirm it.
+
+## Automated checks
+
+Unit and browser (Playwright/Edge) results, e.g. "All N unit tests and M browser
+cases pass"; name failures, their cause and any rerun.
+
+## Manual/native checks
+
+Native suites run (source build or packaged EXE), screenshots inspected, fixtures
+used (synthetic notes, isolated profiles).
+
+## Limits
+
+What was not exercised or is not claimed.
+```
+
+## Releases
+
+Counts appear only where the release record states them; "—" means no explicit
+count is given there (the checks may still be described in prose). Browser runs
+that were partial or overlapping are shown as passed/total and are not summed.
+
+| Version | Summary                                              | Unit              | Browser (UI)                | Native                                                          | Link                                    |
+| ------- | ---------------------------------------------------- | ----------------- | --------------------------- | --------------------------------------------------------------- | --------------------------------------- |
+| v0.1.25 | Reading regressions after #1                         | 48                | 131                         | 9 suites (packaged)                                             | [v0.1.25](docs/verification/v0.1.25.md) |
+| v0.1.24 | Derived-tab group closure, interruptible easing      | 43                | 22                          | 1 suite: navigation (packaged)                                  | [v0.1.24](docs/verification/v0.1.24.md) |
+| v0.1.23 | Continuous group contours, inline-math selection     | 41 (+1 added)     | 47/48, then 17/17 rerun     | 3 suites: editing, navigation, export (packaged)                | [v0.1.23](docs/verification/v0.1.23.md) |
+| v0.1.22 | Formula-heavy editing, coordinated tab surfaces      | 41                | 117/119, then 28/28 rerun   | 3 suites: editing, export, navigation (packaged)                | [v0.1.22](docs/verification/v0.1.22.md) |
+| v0.1.21 | Long-document performance, group indicators          | 41                | 45/46, then 22/22 and 17/17 | 3 suites: export, navigation, editing (packaged)                | [v0.1.21](docs/verification/v0.1.21.md) |
+| v0.1.20 | Preview selection tools, read-to-edit location       | 41                | 37, then 18 (overlapping)   | 1 suite: editing (packaged)                                     | [v0.1.20](docs/verification/v0.1.20.md) |
+| v0.1.19 | Tab groups, reading navigation, disclosure feedback  | 41                | 12, 41, 32 (separate runs)  | 4 suites: navigation, editing/attachments, save safety, export  | [v0.1.19](docs/verification/v0.1.19.md) |
+| v0.1.18 | Compact color controls, table styles, hover feedback | 36                | 25/26, then 12/12           | 4 suites: editing, export, image access, save safety (packaged) | [v0.1.18](docs/verification/v0.1.18.md) |
+| v0.1.17 | Text colors, grouped tools, local image diagnostics  | 36                | 33/34, then 9/9             | 4 suites: image access, editing, export, save safety (packaged) | [v0.1.17](docs/verification/v0.1.17.md) |
+| v0.1.16 | Block editing, image insertion, attachment links     | 34                | 97/99, then 18/18           | 3 suites: editing, save safety, export (packaged)               | [v0.1.16](docs/verification/v0.1.16.md) |
+| v0.1.15 | Editing tools, classic code colors                   | 33                | 90, then 30 and 6           | —                                                               | [v0.1.15](docs/verification/v0.1.15.md) |
+| v0.1.3  | Reading controls, fonts, copied math, export         | 19                | 59                          | —                                                               | [v0.1.3](docs/verification/v0.1.3.md)   |
+| v0.1.2  | Typography, layout, interaction                      | 18 (file-service) | 48                          | 1 suite: menu (source and packaged)                             | [v0.1.2](docs/verification/v0.1.2.md)   |
+| v0.1.1  | Product interface                                    | —                 | 35                          | smoke (source); packaged hover rerun not passed                 | [v0.1.1](docs/verification/v0.1.1.md)   |
+| v0.1.0  | Baseline                                             | 18 (file-service) | 32                          | smoke (source and packaged), safety probe                       | [v0.1.0](docs/verification/v0.1.0.md)   |
+
+Versions v0.1.4–v0.1.14 have no verification record.

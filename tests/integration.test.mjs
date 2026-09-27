@@ -70,7 +70,9 @@ test("registration is per-user, quoted, opt-in and never overwrites protected de
 });
 
 test("default status and preference load do not mutate startup or registry", async () => {
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "folio-integration-"));
+  const temp = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-integration-")),
+  );
   try {
     const { integration, calls, writes } = fixture(temp);
     await integration.load();

@@ -12,7 +12,9 @@ const project = path.resolve(
   "..",
 );
 test("standalone export embeds licensed fonts/images, preserves notes and guards destinations", async () => {
-  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "folio-export-unit-"));
+  const temp = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-export-unit-")),
+  );
   try {
     const dist = path.join(temp, "dist"),
       assets = path.join(dist, "assets");

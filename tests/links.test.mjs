@@ -6,7 +6,9 @@ import path from "node:path";
 import { FileStore } from "../desktop/files.mjs";
 import { createLinkOpener } from "../desktop/links.mjs";
 test("Markdown links stay internal; supported attachments open directly, never run scripts", async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "folio-links-"));
+  const root = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-links-")),
+  );
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   for (const name of [
     "source.md",

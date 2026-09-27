@@ -11,7 +11,9 @@ import {
   within,
 } from "../desktop/files.mjs";
 async function fixture(t) {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "folio-test-"));
+  const root = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-test-")),
+  );
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   return {
     root,

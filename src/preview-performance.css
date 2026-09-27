@@ -1,0 +1,19 @@
+/* Keep source text searchable while the expensive math layout is pending. */
+.formula > [data-folio-math] {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.math-block > [data-folio-math] {
+  display: block;
+  min-height: 3em;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* Native containment retains DOM/source mapping and browser find-in-page. */
+@media screen {
+  .prose[data-large-preview="true"] > :is(p, .math-block, .code-block),
+  .prose[data-large-preview="true"] .section-body > :is(p, .math-block, .code-block) {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 80px;
+  }
+}

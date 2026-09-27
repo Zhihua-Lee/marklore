@@ -1,3 +1,4 @@
+import { wireSortableTables } from "./table-sort.js";
 import { chooseColumnWidths } from "./table-widths.js";
 import { visibleAnchor, restoreAnchor } from "./positions.js";
 
@@ -29,7 +30,7 @@ export function optimizeTable(table) {
   if (
     !parent ||
     table.querySelector(
-      "table, img, pre, details, [colspan]:not([colspan='1']), [rowspan]:not([rowspan='1'])",
+      "table, img, pre, details, [data-folio-math], [colspan]:not([colspan='1']), [rowspan]:not([rowspan='1'])",
     )
   )
     return false;
@@ -77,9 +78,9 @@ export function optimizeTable(table) {
     if (all.length <= 16) return all;
     const selected = new Set([
       all[0],
-      ...[...all]
-        .sort((a, b) => b.textContent.length - a.textContent.length)
-        .slice(0, 7),
+      ...all.map((cell) => ({ cell, length: cell.textContent.length }))
+        .sort((a, b) => b.length - a.length)
+        .slice(0, 7).map(({ cell }) => cell),
     ]);
     for (let i = 0; i < 8; i++)
       selected.add(all[Math.round((i * (all.length - 1)) / 7)]);
@@ -193,6 +194,7 @@ export function optimizeTable(table) {
 }
 
 export function watchTableLayout(host, scroller) {
+  wireSortableTables(host);
   let timer,
     measuredWidth = -1;
   const schedule = () => {
@@ -202,17 +204,23 @@ export function watchTableLayout(host, scroller) {
       const pending = [
         ...host.querySelectorAll(".table-scroll > table:not(.table-measure)"),
       ];
+      let cursor = 0;
+      const viewport = scroller.getBoundingClientRect();
       function work() {
-        if (!pending.length || !host.getClientRects().length) return;
+        if (cursor >= pending.length || !host.getClientRects().length) return;
         const anchor = visibleAnchor(scroller),
           start = performance.now();
         let changed = false;
         do {
-          const table = pending.shift();
-          if (host.contains(table)) changed = optimizeTable(table) || changed;
-        } while (pending.length && performance.now() - start < 12);
+          const table = pending[cursor++];
+          if (host.contains(table)) {
+            const rect = table.getBoundingClientRect();
+            if (rect.bottom >= viewport.top - 600 && rect.top <= viewport.bottom + 600)
+              changed = optimizeTable(table) || changed;
+          }
+        } while (cursor < pending.length && performance.now() - start < 12);
         if (changed) restoreAnchor(scroller, anchor);
-        if (pending.length) timer = setTimeout(work, 0);
+        if (cursor < pending.length) timer = setTimeout(work, 0);
       }
       work();
     }, 80);
@@ -232,6 +240,8 @@ export function watchTableLayout(host, scroller) {
       "data-table-width",
     ],
   });
+  host.addEventListener("folio:math-rendered", schedule);
+  scroller.addEventListener("scroll", schedule, { passive: true });
   host.addEventListener("toggle", schedule, true);
   host.addEventListener("click", (event) => {
     if (event.target.closest(".fold,.section-rail,.section-summary"))

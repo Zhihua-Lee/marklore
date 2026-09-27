@@ -1,112 +1,121 @@
-// Keep a few recent previews alive so tab/mode changes do not parse HTML again,
-// restart image decoding, or throw away already-rendered formula/diagram DOM.
+// Keep recent previews alive, reconciling source skeletons rather than expanded
+// KaTeX/diagram DOM. Matching siblings by content also survives insertions/deletions.
 export function createPreviewCache({
   maxDocuments = 4,
   maxHtmlBytes = 4 * 1024 * 1024,
 } = {}) {
-  const entries = new Map(),
-    signatures = new WeakMap();
-  let active = null,
-    bytes = 0;
+  const entries = new Map(), signatures = new WeakMap();
+  let active = null, bytes = 0;
+  const keys = ["from", "to", "textFrom", "textTo", "editFrom", "editTo"];
+  const mappedSelector = "[data-from],[data-to],[data-text-from],[data-text-to],[data-edit-from],[data-edit-to]";
+  const mapped = (node) => node.nodeType === 1
+    ? [node, ...node.querySelectorAll(mappedSelector)] : [];
+  const shell = (node) => node.nodeType === 1 &&
+    (node.classList.contains("note-section") || node.classList.contains("section-body"));
+  const shellKey = (node) => JSON.stringify([
+    node.className.replace(/\s*collapsed\b/, ""), node.dataset.foldKey, node.dataset.level,
+  ]);
 
+  function describe(node) {
+    let value = signatures.get(node);
+    if (!value) {
+      const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
+      value = {
+        raw,
+        signature: node.nodeType === 1
+          ? raw.replace(/ data-(?:text-|edit-)?(?:from|to)="\d+"/g, "") : raw,
+        ranges: mapped(node).map((element) => keys.map((key) => element.dataset[key])),
+      };
+      signatures.set(node, value);
+    }
+    return value;
+  }
+  function identity(node) {
+    return shell(node) ? "shell:" + shellKey(node) : "leaf:" + describe(node).signature;
+  }
   function remove(key) {
     const entry = entries.get(key);
     if (!entry) return;
+    entry.hydrate?.deactivate?.();
     bytes -= entry.bytes;
     entries.delete(key);
   }
 
-  const shell = (node) =>
-    node.nodeType === 1 &&
-    (node.classList.contains("note-section") ||
-      node.classList.contains("section-body"));
+  // Use the original source-order snapshot, NOT current DOM order: table sorting
+  // moves rows without moving their source ranges. Keep every row's mapping intact.
+  function remap(old, before, after) {
+    const elements = mapped(old);
+    if (before.ranges.length !== after.ranges.length ||
+        elements.length !== after.ranges.length) return false;
+    const translations = keys.map(() => new Map());
+    for (let i = 0; i < before.ranges.length; i++) {
+      for (let k = 0; k < keys.length; k++) {
+        const previous = before.ranges[i][k], next = after.ranges[i][k];
+        if (translations[k].has(previous) && translations[k].get(previous) !== next)
+          return false;
+        translations[k].set(previous, next);
+      }
+    }
+    // Validate everything before mutating anything; external DOM edits may add ranges.
+    if (elements.some((element) => keys.some((key, k) =>
+      !translations[k].has(element.dataset[key])))) return false;
+    for (const element of elements) {
+      keys.forEach((key, k) => {
+        const next = translations[k].get(element.dataset[key]);
+        if (next === undefined) delete element.dataset[key];
+        else if (element.dataset[key] !== next) element.dataset[key] = next;
+      });
+    }
+    return true;
+  }
   function reuse(node, old, hydrate) {
     if (shell(node)) {
-      const match =
-        old &&
-        shell(old) &&
-        node.className === old.className.replace(/\s*collapsed\b/, "") &&
-        node.dataset.foldKey === old.dataset.foldKey &&
-        node.dataset.level === old.dataset.level;
-      if (match) {
-        if (
-          node.dataset.blockCount !== old.dataset.blockCount &&
-          node.dataset.blockCount !== undefined
-        )
+      if (old && shell(old) && shellKey(node) === shellKey(old)) {
+        if (node.dataset.blockCount !== undefined &&
+            node.dataset.blockCount !== old.dataset.blockCount)
           old.dataset.blockCount = node.dataset.blockCount;
-        reconcile(old, [...node.childNodes], [...old.childNodes], hydrate);
+        reconcile(old, children([...node.childNodes], [...old.childNodes], hydrate));
         return old;
       }
-      // Seed leaf signatures before user state (folds, table widths, diagrams)
-      // changes the DOM. Unchanged descendants must never be serialized again.
-      for (const child of [...node.childNodes]) reuse(child, null, hydrate);
+      children([...node.childNodes], [], hydrate);
       return node;
     }
-    const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
-    const signature =
-      node.nodeType === 1
-        ? raw.replace(/ data-(?:text-|edit-)?(?:from|to)="\d+"/g, "")
-        : raw;
-    const previousSignature = old && signatures.get(old);
-    if (previousSignature?.signature === signature) {
-      if (previousSignature.raw === raw) return old;
-      if (node.nodeType === 1) {
-        const selector = "[data-from],[data-text-from],[data-edit-from]";
-        const next = [node, ...node.querySelectorAll(selector)];
-        const previous = [old, ...old.querySelectorAll(selector)];
-        // Formula expansion adds no source-map attributes. Align only mapped
-        // elements, not the many KaTeX layout nodes between them.
-        if (next.length !== previous.length) {
-          signatures.set(node, { signature, raw });
-          hydrate?.(node);
-          return node;
-        }
-        for (let i = 0; i < next.length; i++)
-          for (const key of [
-            "from",
-            "to",
-            "textFrom",
-            "textTo",
-            "editFrom",
-            "editTo",
-          ])
-            if (next[i].dataset[key] !== previous[i].dataset[key]) {
-              if (next[i].dataset[key] === undefined)
-                delete previous[i].dataset[key];
-              else previous[i].dataset[key] = next[i].dataset[key];
-            }
-      }
-      signatures.set(old, { signature, raw });
+    const next = describe(node), previous = old && describe(old);
+    if (previous?.signature === next.signature &&
+        (previous.raw === next.raw || remap(old, previous, next))) {
+      signatures.set(old, next);
       return old;
     }
-    signatures.set(node, { signature, raw });
     hydrate?.(node);
     return node;
   }
-  function reconcile(parent, candidates, previous, hydrate) {
-    const nodes = candidates.map((node, i) =>
-      reuse(node, previous[i], hydrate),
-    );
+  function children(candidates, previous, hydrate) {
+    const buckets = new Map();
+    for (const node of previous) {
+      const key = identity(node);
+      if (!buckets.has(key)) buckets.set(key, { nodes: [], cursor: 0 });
+      buckets.get(key).nodes.push(node);
+    }
+    return candidates.map((node) => {
+      const bucket = buckets.get(identity(node));
+      const old = bucket?.nodes[bucket.cursor++];
+      return reuse(node, old, hydrate);
+    });
+  }
+  function reconcile(parent, nodes) {
     const keep = new Set(nodes);
-    for (const node of [...parent.childNodes])
-      if (!keep.has(node)) node.remove();
+    for (const node of [...parent.childNodes]) if (!keep.has(node)) node.remove();
     let cursor = parent.firstChild;
     for (const node of nodes) {
       if (cursor === node) cursor = cursor.nextSibling;
       else parent.insertBefore(node, cursor);
     }
-    return nodes;
   }
 
   return {
-    update(
-      container,
-      key,
-      html,
-      fragment = null,
-      { hydrate, bytes: cost } = {},
-    ) {
+    update(container, key, html, fragment = null, { hydrate, bytes: cost } = {}) {
       if (active?.key === key && active.html === html) return false;
+      active?.hydrate?.deactivate?.();
       let entry = entries.get(key);
       if (!entry || entry.html !== html) {
         if (!fragment) {
@@ -114,34 +123,20 @@ export function createPreviewCache({
           template.innerHTML = html;
           fragment = template.content;
         }
-        const previous = active?.key === key ? active.nodes : [];
-        const nodes = [...fragment.childNodes].map((node, index) =>
-          reuse(node, previous[index], hydrate),
-        );
-        entry = { key, html, nodes, bytes: cost ?? html.length * 2 };
+        const previous = active?.key === key ? active.nodes : entry?.nodes || [];
+        const nodes = children([...fragment.childNodes], previous, hydrate);
+        entry = { key, html, nodes, hydrate, bytes: cost ?? html.length * 2 };
       }
-
-      if (active?.key === key) {
-        const keep = new Set(entry.nodes);
-        for (const node of [...container.childNodes])
-          if (!keep.has(node)) node.remove();
-        let current = container.firstChild;
-        for (const node of entry.nodes) {
-          if (current === node) current = current.nextSibling;
-          else container.insertBefore(node, current);
-        }
-      } else container.replaceChildren(...entry.nodes);
-
+      if (active?.key === key) reconcile(container, entry.nodes);
+      else container.replaceChildren(...entry.nodes);
       remove(key);
       entries.set(key, entry);
       bytes += entry.bytes;
       active = entry;
-      // The visible preview must remain alive; the limits bound only the extra
-      // retained documents, even when a single visible note exceeds the budget.
-      while (
-        entries.size > 1 &&
-        (entries.size > maxDocuments || bytes > maxHtmlBytes)
-      )
+      container.dataset.largePreview = String(entry.bytes > 2 * 1024 * 1024 || html.length > 80000);
+      entry.hydrate?.activate?.(container);
+      // Keep the visible note, even when it exceeds the retention budget.
+      while (entries.size > 1 && (entries.size > maxDocuments || bytes > maxHtmlBytes))
         remove(entries.keys().next().value);
       return true;
     },
@@ -150,7 +145,7 @@ export function createPreviewCache({
       if (active?.key === key) active = null;
     },
     clear() {
-      entries.clear();
+      for (const key of entries.keys()) remove(key);
       active = null;
       bytes = 0;
     },

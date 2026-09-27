@@ -388,11 +388,20 @@ test("table picker builds rendered table, supports Tab navigation and undo", asy
   await page.keyboard.insertText("Value");
   await page.keyboard.press("Tab");
   await page.keyboard.insertText("Alpha");
-  await expect(page.locator("#content th").nth(1)).toHaveText("Value");
+  const header = page.locator("#content th").nth(1),
+    headerText = header.locator("[data-text-from]"),
+    headerSort = header.locator(".table-sort");
+  await expect(headerText).toHaveText("Value");
+  await expect(headerSort).toHaveAttribute("aria-label", "按Value排序");
+  await expect(headerSort).toBeEnabled();
+  await expect(header).toHaveAttribute("aria-sort", "none");
   await expect(page.locator("#content td").first()).toHaveText("Alpha");
   await page.keyboard.press("Shift+Tab");
   await page.keyboard.insertText("Result");
-  await expect(page.locator("#content th").nth(1)).toHaveText("Result");
+  await expect(headerText).toHaveText("Result");
+  await expect(headerSort).toHaveAttribute("aria-label", "按Result排序");
+  await expect(headerSort).toBeEnabled();
+  await expect(header).toHaveAttribute("aria-sort", "none");
 });
 test("code picker and math wrap selected source; dark code colors and toolbar remain legible", async ({
   page,

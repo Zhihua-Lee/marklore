@@ -1,4 +1,5 @@
 import { setSectionCollapsed } from "./sections.js";
+import { setCodeCollapsed } from "./code-blocks.js";
 
 export function textOffset(element, node, offset) {
   const range = document.createRange();
@@ -39,6 +40,11 @@ export function selectionSource(host) {
     end = range.endContainer.parentElement?.closest("[data-text-from]");
   if (!start || !end || !host.contains(start) || !host.contains(end))
     return null;
+  // A view-sorted table is not a contiguous source range across cells/rows.
+  // Single-cell text editing remains precise; cross-cell source edits are unsafe.
+  const sortedTable = start.closest('table[data-view-sorted="true"]') ||
+    end.closest('table[data-view-sorted="true"]');
+  if (sortedTable && start.closest("th,td") !== end.closest("th,td")) return null;
   return {
     from:
       Number(start.dataset.textFrom) +
@@ -159,6 +165,7 @@ export function findPosition(host, from) {
 export function unfold(element) {
   for (let el = element; el; el = el.parentElement) {
     if (el.tagName === "DETAILS") el.open = true;
+    if (el.classList.contains("code-block")) setCodeCollapsed(el, false);
     if (el.classList.contains("note-section")) {
       setSectionCollapsed(el, false);
     }

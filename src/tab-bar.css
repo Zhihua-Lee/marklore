@@ -103,3 +103,20 @@
 .history-controls .icon {
   width: 26px;
 }
+
+/* Ungrouped tabs have a visible blue-grey surface, independent of group colors. */
+#tabs .tab:not(.grouped) {
+  --ungrouped-color: #718bb8;
+  background: color-mix(in srgb, var(--ungrouped-color) 18%, var(--bg));
+  border-color: color-mix(in srgb, var(--ungrouped-color) 32%, var(--line));
+  color: var(--ink);
+}
+#tabs .tab:not(.grouped):hover,
+#tabs .tab:not(.grouped):focus-within {
+  background: color-mix(in srgb, var(--ungrouped-color) 27%, var(--bg));
+}
+#tabs .tab:not(.grouped).active {
+  background: color-mix(in srgb, var(--ungrouped-color) 38%, var(--bg));
+  border-color: color-mix(in srgb, var(--ungrouped-color) 65%, var(--line));
+  border-bottom-color: var(--accent);
+}

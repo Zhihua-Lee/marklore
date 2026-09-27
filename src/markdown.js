@@ -2,7 +2,9 @@ import MarkdownIt from "markdown-it";
 import footnote from "markdown-it-footnote";
 import tasks from "markdown-it-task-lists";
 import katex from "katex";
-import hljs from "highlight.js/lib/common";
+import { highlightCode } from "./highlighting.js";
+import { createFormulaHydrator } from "./formula-hydration.js";
+import { decorateSortableTables } from "./table-sort.js";
 import DOMPurify from "dompurify";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
@@ -27,10 +29,10 @@ let mathCacheBytes = 0;
 const mathDOMCache = new Map();
 let mathDOMBytes = 0;
 function formulaMarkup(source, display, env) {
-  const html = math(source, display);
-  if (!env?.mathFragments) return html;
+  if (!env?.mathFragments) return math(source, display);
+  const html = env.deferMath ? null : math(source, display);
   const key = env.editNonce + ":" + env.mathFragments.length;
-  env.mathFragments.push({ key, html, sourceKey: String(display) + source });
+  env.mathFragments.push({ key, html, source, display, sourceKey: String(display) + source });
   return `<span data-folio-formula="${key}"></span>`;
 }
 function formulaFragment(html) {
@@ -146,10 +148,7 @@ export function createParser() {
     linkify: true,
     typographer: false,
     breaks: false,
-    highlight: (code, lang) =>
-      lang && hljs.getLanguage(lang)
-        ? hljs.highlight(code, { language: lang, ignoreIllegals: true }).value
-        : "",
+    highlight: highlightCode,
   })
     .use(footnote)
     .use(tasks, { enabled: false });
@@ -320,10 +319,12 @@ export function createParser() {
         }
         if (token.type === "inline") {
           const range = `${from}:${to}`;
+          const inlineSource = state.src.slice(from, to);
           let cursor = inlineCursors.get(range) ?? from;
           for (const child of token.children || []) {
             if (child.type === "text" || child.type === "code_inline") {
-              const at = state.src.indexOf(child.content, cursor);
+              const relative = inlineSource.indexOf(child.content, cursor - from);
+              const at = relative < 0 ? -1 : from + relative;
               if (
                 child.content &&
                 at >= cursor &&
@@ -333,10 +334,10 @@ export function createParser() {
                 cursor = at + child.content.length;
               }
             } else if (child.type === "folio_math") {
-              const at = state.src.indexOf(
-                child.markup + child.content,
-                cursor,
+              const relative = inlineSource.indexOf(
+                child.markup + child.content, cursor - from,
               );
+              const at = relative < 0 ? -1 : from + relative;
               if (at >= cursor && at < to) {
                 child.meta = {
                   from: at,
@@ -446,7 +447,7 @@ export function renderMarkdown(
   fileId = null,
   { deferMath = false } = {},
 ) {
-  const env = { mathFragments: [] };
+  const env = { mathFragments: [], deferMath };
   let raw = parser.render(source, env);
   raw = raw.split(env.mathPipe).join("|");
   const clean = DOMPurify.sanitize(raw, {
@@ -497,9 +498,9 @@ export function renderMarkdown(
     marker.removeAttribute("data-folio-formula");
     if (!formula) continue;
     if (deferMath) {
-      deferred.set(formula.sourceKey, formula.html);
+      deferred.set(formula.sourceKey, formula);
       marker.setAttribute("data-folio-math", formula.sourceKey);
-      marker.textContent = formula.sourceKey.replace(/^(true|false)/, "");
+      marker.textContent = formula.source;
     } else marker.replaceWith(formulaFragment(formula.html));
   }
   decorateTextColors(template.content);
@@ -512,6 +513,7 @@ export function renderMarkdown(
     table.before(scroll);
     scroll.append(table);
   }
+  decorateSortableTables(template.content);
   for (const input of template.content.querySelectorAll("input")) {
     if (input.type !== "checkbox") input.remove();
     else input.disabled = true;
@@ -622,20 +624,16 @@ export function renderMarkdown(
     // Reconcile the small source-mapped skeleton before expanding formula DOM.
     // Unchanged leaves keep their existing math, selection and decoded images.
     hydrate: deferMath
-      ? (node) => {
-          for (const marker of node.querySelectorAll?.("[data-folio-math]") ||
-            []) {
-            const html = deferred.get(marker.getAttribute("data-folio-math"));
-            if (html !== undefined) marker.replaceWith(formulaFragment(html));
-          }
-        }
+      ? createFormulaHydrator(
+          deferred,
+          (formula) => formulaFragment(math(formula.source, formula.display)),
+          { progressive: source.length > 80000 || env.mathFragments.length > 200 },
+        )
       : null,
-    bytes:
-      (html.length +
-        (deferMath
-          ? env.mathFragments.reduce((n, f) => n + f.html.length, 0)
-          : 0)) *
-      2,
+    // Account conservatively for future expanded math, not just placeholder HTML.
+    bytes: html.length * 2 + (deferMath
+      ? env.mathFragments.reduce((n, f) => n + Math.max(8192, f.source.length * 256), 0)
+      : 0),
     formulaCount: env.mathFragments.length,
   };
 }

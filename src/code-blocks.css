@@ -1,3 +1,6 @@
+@import "./table-sort.css";
+@import "./preview-performance.css";
+
 .prose {
   --code-paper: #1e1e1e;
   --code-ink: #d4d4d4;
@@ -117,4 +120,54 @@
 }
 .code-block .hljs-strong {
   font-weight: 600;
+}
+
+.code-toolbar {
+  flex-wrap: wrap;
+}
+.code-toolbar > .code-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  overflow: visible;
+}
+.code-action {
+  min-height: 26px;
+  padding: 3px 6px;
+  font: inherit;
+  color: inherit;
+}
+.code-action:hover,
+.code-action[aria-pressed="true"] {
+  background: #ffffff14;
+  color: #fff;
+}
+.code-action:focus-visible {
+  outline-color: #9cdcfe;
+}
+.prose .code-block pre:not(.diagram-host) {
+  white-space: pre;
+  overflow: auto;
+}
+.prose .code-block.code-wrap pre:not(.diagram-host) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.prose .code-block pre > code {
+  white-space: inherit;
+  overflow-wrap: inherit;
+  word-break: inherit;
+}
+.prose .code-block.code-collapsed pre:not(.diagram-host) {
+  max-height: 18em;
+  overflow-y: hidden;
+}
+@media print {
+  .code-toolbar { display: none; }
+  .prose .code-block.code-collapsed pre:not(.diagram-host) {
+    max-height: none;
+    overflow: visible;
+  }
 }

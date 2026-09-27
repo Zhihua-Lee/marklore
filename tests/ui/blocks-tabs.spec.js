@@ -69,18 +69,37 @@ test("code blocks copy exact text and other block types retain semantics in both
 }) => {
   await boot(page);
   const first = page.locator("#content .code-block").first();
-  await expect(first.locator(".code-toolbar > span")).toHaveText("js");
-  await first.getByRole("button", { name: "复制代码", exact: true }).click();
-  await expect(first.getByRole("button")).toHaveText("已复制");
+  await expect(
+    first.locator(".code-toolbar > span:not(.code-actions)"),
+  ).toHaveText("js");
+  const firstCopy = first.locator(".code-copy");
+  await expect(firstCopy).toHaveAttribute("aria-label", "复制代码");
+  await expect(
+    first.getByRole("button", { name: "自动换行", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await firstCopy.click();
+  await expect(firstCopy).toHaveText("已复制");
+  await expect(firstCopy).toHaveAttribute("aria-label", "已复制代码");
   expect(await page.evaluate(() => window.mock.copied)).toEqual([
     'const greeting = "你好";\n\tconsole.log(greeting);\n',
   ]);
-  const second = page.locator("#content .code-block").nth(1);
+  await expect(firstCopy).toBeEnabled();
+  await expect(firstCopy).toHaveAttribute("aria-label", "复制代码");
+  const second = page.locator("#content .code-block").nth(1),
+    secondCopy = second.locator(".code-copy");
   await expect(second.locator("code")).toHaveText("<raw> & exact\n");
   await page.evaluate(() => (window.mock.copyError = true));
-  await second.getByRole("button").click();
+  await secondCopy.click();
   await expect(page.locator("#toast")).toContainText("复制失败");
-  await expect(second.getByRole("button")).toBeEnabled();
+  await expect(secondCopy).toBeEnabled();
+  await expect(secondCopy).toHaveAttribute("aria-label", "复制代码");
+  await page.evaluate(() => (window.mock.copyError = false));
+  await secondCopy.click();
+  await expect(secondCopy).toHaveText("已复制");
+  expect(await page.evaluate(() => window.mock.copied)).toEqual([
+    'const greeting = "你好";\n\tconsole.log(greeting);\n',
+    "<raw> & exact\n",
+  ]);
   await expect(page.locator("#content blockquote strong")).toHaveText(
     "emphasis",
   );

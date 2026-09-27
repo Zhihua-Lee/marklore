@@ -1,0 +1,25 @@
+.prose th.sortable-header {
+  cursor: pointer;
+}
+.prose th.sortable-header:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.table-sort {
+  display: inline-grid;
+  place-items: center;
+  min-height: 26px;
+  min-width: 26px;
+  margin-inline-start: 6px;
+  padding: 0 4px;
+  font: inherit;
+  color: var(--muted);
+  vertical-align: baseline;
+}
+th[aria-sort="ascending"] .table-sort,
+th[aria-sort="descending"] .table-sort {
+  color: var(--accent);
+  font-weight: 600;
+}
+@media print {
+  .table-sort { display: none; }
+}

@@ -64,7 +64,11 @@ try {
     .getByRole("link", { name: "Next", exact: true })
     .click();
   await expect(page.getByRole("tab", { selected: true })).toHaveText("Beta.md");
-  await expect(page.locator("#content table.reading-columns")).toHaveCount(1);
+  const table = page.locator("#content .table-scroll > table");
+  // Column measurement is deferred until the table approaches the viewport.
+  await table.scrollIntoViewIfNeeded();
+  await expect(table).toBeInViewport();
+  await expect(table).toHaveClass(/\breading-columns\b/);
   const url = page.url();
   const appCommand = (command) =>
     instance.evaluate(

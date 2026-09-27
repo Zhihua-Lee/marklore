@@ -1,5 +1,39 @@
 # Verification — 2026-09-27
 
+## v0.1.23 continuous group contours and inline-math selection
+
+Each group now has one continuous SVG path, replacing separate borders and
+pseudo-element connectors. All group members have a tinted surface; active
+members use a stronger tint. Light/dark screenshots and isolated 100%, 125%,
+150% and 200% device-scale captures were inspected. Each group's path has one
+move command and no disconnected contour segments.
+
+CLI interaction checks observed intermediate widths during the 200ms group
+transition (92px to 25.5px while closing, 76.23px while reopening), with the
+document DOM retained. Rapid reversal settles to the latest state. Reduced
+motion runs without animations. Arrow scrolling has intermediate positions;
+touchpad-sized deltas remain direct. Automatic active-tab reveal is immediate,
+and pointer-down cancels pending smooth scrolling before drag calculations.
+
+Mixed text/inline-math selection uses exact source spans, with formulas treated
+atomically. Actual mouse selection across two formulas opens the toolbar;
+color application matches the expected complete source and both formulas render
+in the selected color. Selecting part of a formula and highlighting applies to
+the complete formula. Bold and undo preserve the exact original TeX. Highlighting
+a multiline inline formula retains one HTML wrapper rather than splitting its
+source at newlines. Code/link actions are disabled for math-containing selections;
+cross-block, display-math and unmappable rich selections still use source/block
+editing. No personal note was changed or copied into the repository.
+
+The original 41 unit tests pass; the added atomic multiline-color regression
+passes with the other seven markdown-edit tests. The 48-case browser run passed
+47 and exposed an active-tab smooth-scroll/drag race. After correction, the
+complete 17-case navigation/group/workbench rerun passes, including that drag
+case. Existing selection-tool, appearance, block/tab and editing cases passed
+in the first run. Packaged v0.1.23 native editing, navigation and export suites
+pass using isolated profiles and synthetic notes. Hardware mouse side buttons
+were not physically exercised.
+
 ## v0.1.22 formula-heavy editing and coordinated tab surfaces
 
 Read-only local copies of two user-selected formula-heavy notes reproduced the

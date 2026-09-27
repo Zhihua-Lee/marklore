@@ -48,7 +48,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
       ? `<mark style="background-color: ${color}; color: ${highlightInk(color)}">`
       : `<span style="color: ${color}">`;
     // Keep block prefixes and blank lines outside inline HTML when selecting several lines.
-    if (body.includes("\n")) {
+    if (body.includes("\n") && !options.inlineRange) {
       const painted = body
         .split("\n")
         .map((line, index) => {

@@ -1,12 +1,32 @@
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { markdownEdit } from "./markdown-edits.js";
-import { selectionSource, findPosition } from "./positions.js";
+import { textOffset, findPosition } from "./positions.js";
 import { wireColorButton, closeColorPicker } from "./color-picker.js";
 import { icon } from "./icons.js";
 import "./selection-tools.css";
 
-// Only edit a verbatim, contiguous text range. A navigation approximation must
-// never become an editing range (math, HTML entities and partial markup differ).
+// Inline formulas are atomic source spans, never reverse-converted from glyphs.
+function boundary(node, offset, end) {
+  let element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  const formula = element?.closest(".formula[data-from][data-to]");
+  if (formula)
+    return { position: Number(formula.dataset[end ? "to" : "from"]), formula };
+  const leaf = element?.closest("[data-text-from]");
+  if (leaf)
+    return {
+      position: Number(leaf.dataset.textFrom) + textOffset(leaf, node, offset),
+    };
+  if (node.nodeType !== Node.ELEMENT_NODE) return null;
+  let child = node.childNodes[end ? offset - 1 : offset];
+  while (child) {
+    if (child.nodeType === Node.TEXT_NODE)
+      return boundary(child, end ? child.length : 0, end);
+    if (child.matches?.(".formula,[data-text-from]"))
+      return boundary(child, end ? child.childNodes.length : 0, end);
+    child = end ? child.lastChild : child.firstChild;
+  }
+  return null;
+}
 export function previewTextSelection(content, doc) {
   const selected = window.getSelection();
   if (
@@ -17,10 +37,16 @@ export function previewTextSelection(content, doc) {
     selected.isCollapsed
   )
     return null;
-  const range = selected.getRangeAt(0);
-  const start = range.startContainer.parentElement;
-  const end = range.endContainer.parentElement;
-  const blocked = "code,pre,.formula,.katex,a,button,summary,.block-editor";
+  const range = selected.getRangeAt(0).cloneRange();
+  const start =
+    range.startContainer.nodeType === 1
+      ? range.startContainer
+      : range.startContainer.parentElement;
+  const end =
+    range.endContainer.nodeType === 1
+      ? range.endContainer
+      : range.endContainer.parentElement;
+  const blocked = "code,pre,a,button,summary,.block-editor";
   const block = start?.closest("p,h1,h2,h3,h4,h5,h6,td,th,li");
   if (
     !block ||
@@ -30,14 +56,36 @@ export function previewTextSelection(content, doc) {
     end.closest(blocked)
   )
     return null;
-  const source = selectionSource(content);
-  if (
-    !source ||
-    source.to <= source.from ||
-    !selected.toString().trim() ||
-    doc.text.slice(source.from, source.to) !== range.toString()
-  )
+  const first = boundary(range.startContainer, range.startOffset, false);
+  const last = boundary(range.endContainer, range.endOffset, true);
+  const source = first && last && { from: first.position, to: last.position };
+  if (!source || source.to <= source.from || !selected.toString().trim())
     return null;
+  if (first.formula) range.setStartBefore(first.formula);
+  if (last.formula) range.setEndAfter(last.formula);
+  let cursor = source.from,
+    expected = "",
+    hasMath = false;
+  for (const formula of block.querySelectorAll(
+    ".formula[data-from][data-to]",
+  )) {
+    if (!range.intersectsNode(formula)) continue;
+    const from = Number(formula.dataset.from),
+      to = Number(formula.dataset.to);
+    if (to <= source.from || from >= source.to) continue;
+    const raw = doc.text.slice(from, to);
+    if (
+      from < cursor ||
+      to > source.to ||
+      !/^(?:\$[\s\S]+\$|\\\([\s\S]+\\\))$/.test(raw)
+    )
+      return null;
+    expected += doc.text.slice(cursor, from) + formula.textContent;
+    cursor = to;
+    hasMath = true;
+  }
+  expected += doc.text.slice(cursor, source.to);
+  if (expected !== range.toString()) return null;
   // Legacy source maps can be approximate around author HTML attributes.
   const blockFrom = Number(block.closest("[data-from]")?.dataset.from) || 0;
   const prefix = doc.text.slice(blockFrom, source.from);
@@ -47,7 +95,7 @@ export function previewTextSelection(content, doc) {
     /^<\/?[A-Za-z][\w:-]*(?:\s|$)/.test(prefix.slice(opening))
   )
     return null;
-  return { ...source, range: range.cloneRange(), doc, text: doc.text };
+  return { ...source, range, hasMath, doc, text: doc.text };
 }
 
 export function createSelectionTools({
@@ -132,6 +180,13 @@ export function createSelectionTools({
     if (blocked() || document.querySelector("dialog[open]")) return hide();
     snapshot = previewTextSelection(content, getDocument());
     if (!snapshot) return hide();
+    for (const action of ["inline", "link"]) {
+      const button = bar.querySelector(`[data-selection-action="${action}"]`);
+      button.disabled = snapshot.hasMath;
+      button.title = snapshot.hasMath
+        ? "含公式的选区请使用文字样式或颜色工具"
+        : button.getAttribute("aria-label");
+    }
     position();
   }
   function schedule() {
@@ -141,10 +196,17 @@ export function createSelectionTools({
   function reselect(from, to) {
     const first = findPosition(content, from),
       last = findPosition(content, to - 1);
-    if (!first?.range || !last?.range) return;
+    if (
+      (!first?.range && !first?.element.matches(".formula")) ||
+      (!last?.range && !last?.element.matches(".formula"))
+    )
+      return;
     const range = document.createRange();
-    range.setStart(first.range.startContainer, first.range.startOffset);
-    range.setEnd(last.range.endContainer, last.range.endOffset);
+    if (first.range)
+      range.setStart(first.range.startContainer, first.range.startOffset);
+    else range.setStartBefore(first.element);
+    if (last.range) range.setEnd(last.range.endContainer, last.range.endOffset);
+    else range.setEndAfter(last.element);
     const selected = window.getSelection();
     reader.focus({ preventScroll: true });
     selected.removeAllRanges();
@@ -157,7 +219,10 @@ export function createSelectionTools({
       return;
     }
     try {
-      const change = markdownEdit(s.text, s.from, s.to, action, options);
+      const change = markdownEdit(s.text, s.from, s.to, action, {
+        ...options,
+        inlineRange: true,
+      });
       hide();
       view.dispatch({
         ...change,
@@ -172,6 +237,7 @@ export function createSelectionTools({
     }
   }
   function execute(action) {
+    if (snapshot?.hasMath && ["inline", "link"].includes(action)) return;
     if (action === "link") {
       form.hidden = !form.hidden;
       form.reset();

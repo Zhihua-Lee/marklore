@@ -25,7 +25,134 @@ export function createTabBar({
     drag = null,
     dragged = false,
     frame,
-    resizeFrame;
+    resizeFrame,
+    motion = null,
+    scrollTarget = null,
+    scrollTimer;
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  const svgNS = "http://www.w3.org/2000/svg";
+  const curves = document.createElementNS(svgNS, "svg"),
+    paths = new Map();
+  curves.classList.add("tab-group-lines");
+  curves.setAttribute("aria-hidden", "true");
+  host.parentElement.append(curves);
+  function drawGroups() {
+    const viewport = host.getBoundingClientRect(),
+      parent = host.parentElement.getBoundingClientRect();
+    curves.style.left = viewport.left - parent.left + "px";
+    curves.style.top = viewport.top - parent.top + "px";
+    curves.style.width = viewport.width + "px";
+    curves.style.height = viewport.height + "px";
+    curves.setAttribute("viewBox", `0 0 ${viewport.width} ${viewport.height}`);
+    curves.style.visibility = dragged ? "hidden" : "visible";
+    const seen = new Set(),
+      ratio = devicePixelRatio || 1;
+    const snap = (n) => (Math.round(n * ratio - 0.5) + 0.5) / ratio;
+    for (const group of groups()) {
+      const header = headers.get(group.id);
+      if (!header?.isConnected) continue;
+      const members = tabs
+        .filter((t) => t.groupId === group.id)
+        .map((t) => nodes.get(t.id))
+        .filter((n) => n && !n.hidden);
+      const first = header.getBoundingClientRect(),
+        last = (members.at(-1) || header).getBoundingClientRect();
+      const y = snap(first.bottom - viewport.top - 0.5),
+        start = snap(first.left - viewport.left),
+        end = snap(last.right - viewport.left);
+      const current = members.find((n) => n.dataset.id === active()?.id);
+      const currentRect = current?.getBoundingClientRect();
+      const outlined = currentRect?.width > 20;
+      let d = `M ${start} ${y}`;
+      if (outlined) {
+        const r = currentRect,
+          left = snap(r.left - viewport.left),
+          right = snap(r.right - viewport.left),
+          top = snap(r.top - viewport.top + 0.5);
+        // One continuous path: no CSS border/pseudo-element seams at either foot.
+        d += ` H ${left - 3} Q ${left} ${y} ${left} ${y - 3} V ${top + 8} Q ${left} ${top} ${left + 8} ${top} H ${right - 8} Q ${right} ${top} ${right} ${top + 8} V ${y - 3} Q ${right} ${y} ${right + 3} ${y}`;
+      }
+      d += ` H ${Math.max(end, outlined ? snap(currentRect.right - viewport.left) + 3 : end)}`;
+      let path = paths.get(group.id);
+      if (!path) {
+        path = document.createElementNS(svgNS, "path");
+        paths.set(group.id, path);
+        curves.append(path);
+      }
+      path.setAttribute("d", d);
+      path.setAttribute("stroke", groupColors[group.color]);
+      seen.add(group.id);
+    }
+    for (const [id, path] of paths)
+      if (!seen.has(id)) {
+        path.remove();
+        paths.delete(id);
+      }
+  }
+  function settleMotion() {
+    if (!motion) return;
+    const old = motion;
+    motion = null;
+    cancelAnimationFrame(old.frame);
+    for (const animation of old.animations) animation.cancel();
+    update();
+  }
+  function toggleGroup(group) {
+    settleMotion();
+    const closing = !group.collapsed;
+    const members = tabs
+      .filter((t) => t.groupId === group.id)
+      .map((t) => nodes.get(t.id));
+    const widths = closing
+      ? members.map((n) => n.getBoundingClientRect().width)
+      : [];
+    group.collapsed = closing;
+    if (reducedMotion.matches) {
+      changedOrder();
+      return;
+    }
+    const run = { groupId: group.id, animations: [], frame: 0 };
+    motion = run;
+    update();
+    const finalWidths = closing
+      ? widths
+      : members.map((n) => n.getBoundingClientRect().width);
+    members.forEach((node, i) => {
+      const full = {
+        flexBasis: finalWidths[i] + "px",
+        minWidth: finalWidths[i] + "px",
+        maxWidth: finalWidths[i] + "px",
+        opacity: 1,
+        marginRight: "0px",
+      };
+      const small = {
+        flexBasis: "0px",
+        minWidth: "0px",
+        maxWidth: "0px",
+        opacity: 0,
+        marginRight: "-3px",
+      };
+      run.animations.push(
+        node.animate(closing ? [full, small] : [small, full], {
+          duration: 200,
+          easing: "cubic-bezier(.2,.7,.2,1)",
+          fill: "both",
+        }),
+      );
+    });
+    const paint = () => {
+      if (motion !== run) return;
+      overflow();
+      run.frame = requestAnimationFrame(paint);
+    };
+    paint();
+    Promise.all(run.animations.map((a) => a.finished))
+      .then(() => {
+        if (motion === run) settleMotion();
+      })
+      .catch(() => {});
+    changed();
+  }
   const changedOrder = () => {
     update();
     changed();
@@ -59,8 +186,7 @@ export function createTabBar({
           header.dataset.groupId = group.id;
           header.onclick = () => {
             if (dragged) return;
-            group.collapsed = !group.collapsed;
-            changedOrder();
+            toggleGroup(group);
           };
           header.oncontextmenu = (e) => {
             e.preventDefault();
@@ -69,8 +195,7 @@ export function createTabBar({
               [
                 group.collapsed ? "展开分组" : "折叠分组",
                 () => {
-                  group.collapsed = !group.collapsed;
-                  changedOrder();
+                  toggleGroup(group);
                 },
               ],
               [
@@ -118,7 +243,10 @@ export function createTabBar({
       }
       node.className =
         "tab" + (active() === doc ? " active" : "") + (group ? " grouped" : "");
-      node.hidden = !!group?.collapsed;
+      node.hidden = !!group?.collapsed && motion?.groupId !== group.id;
+      node.inert = !!group?.collapsed;
+      if (group?.collapsed) node.setAttribute("aria-hidden", "true");
+      else node.removeAttribute("aria-hidden");
       node.style.setProperty(
         "--group-color",
         group ? groupColors[group.color] : "transparent",
@@ -144,6 +272,7 @@ export function createTabBar({
       (node?.hidden ? headers.get(active()?.groupId) : node)?.scrollIntoView({
         block: "nearest",
         inline: "nearest",
+        behavior: "instant",
       });
     }
     overflow();
@@ -169,6 +298,7 @@ export function createTabBar({
           x.right > viewport.right,
       );
     }
+    drawGroups();
   }
   function assign(doc, groupId) {
     if (doc.groupId === groupId) return;
@@ -230,7 +360,7 @@ export function createTabBar({
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => {
       overflow();
-      if (drag) return;
+      if (drag || motion) return;
       const node = nodes.get(active()?.id);
       (node?.hidden ? headers.get(active()?.groupId) : node)?.scrollIntoView({
         block: "nearest",
@@ -240,17 +370,37 @@ export function createTabBar({
     });
   }).observe(host);
   host.addEventListener("scroll", overflow, { passive: true });
+  function browse(delta, smooth = true) {
+    clearTimeout(scrollTimer);
+    scrollTarget = Math.max(
+      0,
+      Math.min(
+        host.scrollWidth - host.clientWidth,
+        (scrollTarget ?? host.scrollLeft) + delta,
+      ),
+    );
+    host.scrollTo({
+      left: scrollTarget,
+      behavior: smooth && !reducedMotion.matches ? "smooth" : "instant",
+    });
+    scrollTimer = setTimeout(() => {
+      scrollTarget = null;
+    }, 250);
+  }
   for (const [id, direction] of [
     ["tabs-back", -1],
     ["tabs-forward", 1],
   ])
     document.querySelector("#" + id).onclick = () =>
-      host.scrollBy({ left: direction * host.clientWidth * 0.7 });
+      browse(direction * host.clientWidth * 0.7);
   host.addEventListener(
     "wheel",
     (e) => {
       if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-        host.scrollLeft += e.deltaY;
+        const delta =
+          e.deltaY *
+          (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? host.clientWidth : 1);
+        browse(delta, e.deltaMode !== 0 || Math.abs(e.deltaY) >= 40);
         e.preventDefault();
       }
     },
@@ -326,6 +476,9 @@ export function createTabBar({
     if (e.button !== 0 || e.target.closest(".tab-close")) return;
     const node = e.target.closest(".tab,.tab-group");
     if (!node) return;
+    settleMotion();
+    scrollTarget = null;
+    host.scrollTo({ left: host.scrollLeft, behavior: "instant" });
     drag = {
       node,
       x: e.clientX,
@@ -337,6 +490,7 @@ export function createTabBar({
   });
   function paint() {
     if (!drag || !dragged) return;
+    curves.style.visibility = "hidden";
     const box = host.getBoundingClientRect();
     if (drag.current < box.left + 24) host.scrollLeft -= 8;
     else if (drag.current > box.right - 24) host.scrollLeft += 8;
@@ -414,7 +568,10 @@ export function createTabBar({
         );
       changedOrder();
     }
-    setTimeout(() => (dragged = false), 0);
+    setTimeout(() => {
+      dragged = false;
+      overflow();
+    }, 0);
   }
   window.addEventListener("pointerup", () => finish(true));
   window.addEventListener("pointercancel", () => finish(false));

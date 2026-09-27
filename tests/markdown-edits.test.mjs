@@ -53,6 +53,30 @@ test("highlight and color preserve formatting, replace wrappers, clear safely an
     /颜色/,
   );
 });
+test("mapped inline colors keep multiline formulas atomic and clear losslessly", () => {
+  const source = "文字 $a+\nb$ 与 \\(\\alpha+\\beta\\) 结尾";
+  for (const action of ["color", "highlight"]) {
+    const result = edit(source, 0, source.length, action, {
+      color: "#f2d878",
+      inlineRange: true,
+    });
+    assert.equal((result.text.match(/<(?:span|mark) /g) || []).length, 1);
+    assert.ok(result.text.includes(source));
+    assert.equal(
+      edit(
+        result.text,
+        result.selection.anchor,
+        result.selection.head,
+        action,
+        {
+          color: null,
+          inlineRange: true,
+        },
+      ).text,
+      source,
+    );
+  }
+});
 test("inline formats preserve Chinese selection and toggle without nesting", () => {
   const first = edit("a中文z", 1, 3, "bold");
   assert.equal(first.text, "a**中文**z");

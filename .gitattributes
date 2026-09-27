@@ -6,3 +6,4 @@
 *.json text eol=lf
 *.yml text eol=lf
 *.html text eol=lf
+*.cjs text eol=lf

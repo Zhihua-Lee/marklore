@@ -31,6 +31,7 @@ import { wireFileDrop } from "./file-drop.js";
 import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
 import { createImageInsertion } from "./image-insertion.js";
+import { wireImageErrors } from "./image-errors.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -799,6 +800,7 @@ const linkPreview = createLinkPreview({
   },
 });
 wireCodeBlocks($("#content"), toast);
+wireImageErrors(api, toast);
 function sourceToPreview() {
   if (!active || active.mode === "read") return;
   render(false);

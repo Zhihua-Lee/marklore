@@ -9,6 +9,8 @@ for (const name of [
   "pickFiles",
   "pickFolder",
   "pickImage",
+  "imageInfo",
+  "allowImage",
   "currentFolder",
   "list",
   "search",

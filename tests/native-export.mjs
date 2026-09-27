@@ -13,7 +13,7 @@ const temp = await fs.mkdtemp(path.join(os.tmpdir(), "folio-native-export-"));
 const note = path.join(temp, "source.md"),
   htmlPath = path.join(temp, "export.html"),
   pdfPath = path.join(temp, "export.pdf");
-const source = `# Export fixture\n\nEnglish and 中文 paragraph with $e^{i\\pi}+1=0$.\n\n## Folded section\n\nFOLDED CONTENT INCLUDED\n\n<details><summary>Details title</summary><p>CLOSED DETAILS INCLUDED 中文</p></details>\n\n![Local illustration](image.svg)\n\n\`\`\`mermaid\nflowchart LR\nA[Draft] --> B[Export]\n\`\`\`\n\n<div style="break-before:page">SECOND PAGE END</div>\n`;
+const source = `# Export fixture\n\nEnglish and 中文 paragraph with $e^{i\\pi}+1=0$.\n\n<mark style="background-color: #f2d878; color: #000000">Highlighted</mark> <span style="color: #b23c36">Colored</span>\n\n## Folded section\n\nFOLDED CONTENT INCLUDED\n\n<details><summary>Details title</summary><p>CLOSED DETAILS INCLUDED 中文</p></details>\n\n![Local illustration](image.svg)\n\n\`\`\`mermaid\nflowchart LR\nA[Draft] --> B[Export]\n\`\`\`\n\n<div style="break-before:page">SECOND PAGE END</div>\n`;
 await fs.writeFile(note, source);
 await fs.writeFile(
   path.join(temp, "image.svg"),
@@ -196,6 +196,18 @@ try {
     true,
   );
   assert.equal(await standalone.evaluate(() => typeof require), "undefined");
+  assert.equal(
+    await standalone
+      .locator("mark")
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+    "rgb(242, 216, 120)",
+  );
+  assert.equal(
+    await standalone
+      .locator('span[style*="--folio-color"]')
+      .evaluate((el) => getComputedStyle(el).color),
+    "rgb(178, 60, 54)",
+  );
   const fonts = await standalone.evaluate(() => ({
     literature: document.fonts.check('16px "Literata Variable"', "Export"),
     mathematics: document.fonts.check("italic 16px KaTeX_Math", "e"),

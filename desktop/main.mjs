@@ -293,7 +293,10 @@ else {
             },
           });
         } catch {
-          return new Response(null, { status: 403 });
+          return new Response(null, {
+            status: 403,
+            headers: { "Cache-Control": "no-store" },
+          });
         }
       });
       win = new BrowserWindow({
@@ -645,6 +648,44 @@ else {
         return { ...target, text, version: saved.version };
       });
       api("reveal", (id) => shell.showItemInFolder(files.file(id).path));
+      api("imageInfo", async (id, href) => {
+        try {
+          return await files.imageInfo(id, href);
+        } catch (error) {
+          return {
+            error:
+              error.code === "ENOENT"
+                ? "找不到图片文件，请检查路径或同步状态。"
+                : error.message,
+          };
+        }
+      });
+      api("allowImage", async (id, href) => {
+        const info = await files.imageInfo(id, href);
+        if (info.authorized) return true;
+        const result = await dialog.showMessageBox(win, {
+          message: "允许笔记加载此本地图片？",
+          detail:
+            info.path +
+            "\n\n目录授权仅用于图片，不授予其他文件的读取权限。可选择仅在本次运行中加载此图片。",
+          buttons: ["取消", "仅本次加载", "记住此图片目录"],
+          defaultId: 0,
+          cancelId: 0,
+        });
+        if (![1, 2].includes(result.response)) return false;
+        if ((await files.imageInfo(id, href)).path !== info.path)
+          throw Error("图片路径已改变，请重试。");
+        if (result.response === 1) files.imageFiles.add(info.path);
+        else {
+          files.imageDirectories.add(path.dirname(info.path));
+          savedSession.imageDirectories = [...files.imageDirectories];
+          sessionWrite = sessionWrite
+            .catch(() => {})
+            .then(() => persist(savedSession));
+          await sessionWrite;
+        }
+        return true;
+      });
       api(
         "link",
         createLinkOpener({ files, dialog, shell, owner: () => win, openFile }),
@@ -665,7 +706,12 @@ else {
         const roots = (value.roots || [])
           .map((id) => files.directories.get(id))
           .filter(Boolean);
-        savedSession = { ...value, tabs, roots };
+        savedSession = {
+          ...value,
+          tabs,
+          roots,
+          imageDirectories: [...files.imageDirectories],
+        };
         sessionWrite = sessionWrite
           .catch(() => {})
           .then(() => persist(savedSession));
@@ -703,6 +749,23 @@ else {
           old = JSON.parse(await fs.readFile(sessionFile, "utf8"));
         } catch {
           /* First run / damaged session. */
+        }
+        savedSession = old;
+        for (const folder of (Array.isArray(old.imageDirectories)
+          ? old.imageDirectories
+          : []
+        ).slice(0, 100)) {
+          try {
+            if (
+              typeof folder === "string" &&
+              path.isAbsolute(folder) &&
+              (await fs.realpath(folder)) === folder &&
+              (await fs.stat(folder)).isDirectory()
+            )
+              files.imageDirectories.add(folder);
+          } catch {
+            /* Removed or changed image directories require fresh consent. */
+          }
         }
         const restored = [];
         for (const t of (old.tabs || []).slice(0, 100)) {

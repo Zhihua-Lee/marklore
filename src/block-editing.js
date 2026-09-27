@@ -13,6 +13,7 @@ import { editingHighlight } from "./editing.js";
 import { markdownEdit } from "./markdown-edits.js";
 import { atPoint, selectionSource } from "./positions.js";
 import { icon } from "./icons.js";
+import { openColorPicker } from "./color-picker.js";
 import "./block-editing.css";
 
 const labels = {
@@ -55,7 +56,7 @@ export function createBlockEditor({
       session ||
       !target?.isConnected ||
       !target.getClientRects().length ||
-      getDocument()?.mode === "source"
+      getDocument()?.mode !== "edit"
     ) {
       launch.hidden = true;
       return;
@@ -71,7 +72,7 @@ export function createBlockEditor({
     launch.style.top = Math.max(viewport.top + 40, r.top) + "px";
   }
   function selectTarget(element) {
-    if (session) return;
+    if (session || getDocument()?.mode !== "edit") return;
     const next = element?.closest("[data-edit-from]");
     if (!next || !content.contains(next)) return;
     if (target !== next) {
@@ -135,8 +136,7 @@ export function createBlockEditor({
 
   function begin() {
     const doc = getDocument();
-    if (session || !doc || !target?.isConnected || doc.mode === "source")
-      return;
+    if (session || !doc || !target?.isConnected || doc.mode !== "edit") return;
     if (doc.previewText !== doc.text) {
       report("预览正在更新，请稍后再试。");
       return;
@@ -172,6 +172,34 @@ export function createBlockEditor({
     picture.title = "插入图片";
     picture.innerHTML = icon("image");
     panel.querySelector(".block-edit-spacer").before(picture);
+    for (const [action, label, glyph] of [
+      ["highlight", "文字高亮", "highlight"],
+      ["color", "文字颜色", "textColor"],
+    ]) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.format = action;
+      button.setAttribute("aria-label", "就地" + label);
+      button.title = label;
+      button.innerHTML = icon(glyph);
+      panel.querySelector('[data-format="inline"]').before(button);
+    }
+    for (const [label, controls] of [
+      [
+        "文字样式",
+        [...panel.querySelectorAll('[data-format]:not([data-format="link"])')],
+      ],
+      ["插入内容", [panel.querySelector('[data-format="link"]'), picture]],
+      ["编辑历史", [...panel.querySelectorAll("[data-history]")]],
+    ]) {
+      const group = document.createElement("div");
+      group.className = "edit-tool-group";
+      group.setAttribute("role", "group");
+      group.setAttribute("aria-label", label);
+      group.append(...controls);
+      panel.querySelector(".block-edit-tools").append(group);
+    }
+    panel.querySelector(".block-edit-spacer").remove();
     target.before(panel);
     const wasHidden = target.hidden;
     target.hidden = true;
@@ -313,7 +341,21 @@ export function createBlockEditor({
     local.focus();
   }
   function format(action) {
-    if (action === "link") {
+    if (action === "highlight" || action === "color") {
+      const s = session,
+        state = s.editor.state;
+      openColorPicker(
+        action,
+        (options) => {
+          if (session !== s || state !== s.editor.state)
+            throw Error("编辑内容已改变，请重新选择文字。");
+          applyFormat(action, options);
+        },
+        () => {
+          if (session === s) s.editor.focus();
+        },
+      );
+    } else if (action === "link") {
       const form = session.panel.querySelector("form");
       form.hidden = false;
       form.elements.url.focus();

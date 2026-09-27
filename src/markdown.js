@@ -5,6 +5,7 @@ import katex from "katex";
 import hljs from "highlight.js/lib/common";
 import DOMPurify from "dompurify";
 import { decorateCodeBlocks } from "./code-blocks.js";
+import { decorateTextColors } from "./text-colors.js";
 
 export function lineOffsets(source) {
   const offsets = [0];
@@ -310,8 +311,19 @@ export function createParser() {
         const label = (state.tokens[i + 1]?.content || "")
           .split(state.env.mathPipe)
           .join("|");
+        const plain = (state.tokens[i + 1]?.children || [])
+          .filter((child) => child.type !== "html_inline")
+          .map(
+            (child) => child.content || (child.type === "softbreak" ? " " : ""),
+          )
+          .join("");
         let slug =
-          label
+          ((state.tokens[i + 1]?.children || []).some(
+            (child) => child.type === "html_inline",
+          )
+            ? plain
+            : label
+          )
             .toLowerCase()
             .replace(/[^\p{L}\p{N}\s_-]/gu, "")
             .trim()
@@ -365,7 +377,8 @@ function attrs(t) {
   return (t.attrs || []).map(([k, v]) => `${k}="${escape(v)}"`).join(" ");
 }
 const parser = createParser();
-const outlineParser = createParser().set({ html: false, linkify: false });
+const outlineParser = createParser().set({ html: true, linkify: false });
+outlineParser.renderer.rules.html_inline = () => "";
 outlineParser.renderer.rules.image = (tokens, i) => escape(tokens[i].content);
 export function renderHeadingLabel(label) {
   const env = {};
@@ -421,6 +434,7 @@ export function renderMarkdown(source, fileId = null) {
   });
   const template = document.createElement("template");
   template.innerHTML = clean;
+  decorateTextColors(template.content);
   for (const input of template.content.querySelectorAll("input")) {
     if (input.type !== "checkbox") input.remove();
     else input.disabled = true;

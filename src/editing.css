@@ -18,7 +18,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  gap: 6px 8px;
   padding: 7px 36px;
   border-bottom: 1px solid var(--line);
   background: var(--bg);
@@ -49,9 +49,92 @@
 }
 .edit-history {
   display: flex;
-  padding-right: 5px;
-  margin-right: 3px;
-  border-right: 1px solid var(--line);
+  gap: 2px;
+}
+.edit-tool-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1px;
+  max-width: 100%;
+}
+#panes[data-mode="edit"] .editing-tools {
+  padding-right: 12px;
+}
+.edit-tool-group + .edit-tool-group {
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+.text-color-picker {
+  width: min(280px, calc(100vw - 32px));
+  padding: 16px;
+}
+.text-color-picker header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.text-color-picker h2 {
+  font: 500 14px/1.5 var(--font-ui);
+  margin: 0;
+}
+.text-color-picker .color-swatches {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 5px;
+}
+.text-color-picker .color-swatches button {
+  padding: 4px;
+  min-width: 0;
+  min-height: 32px;
+  border: 1px solid var(--line);
+}
+.text-color-picker .color-swatches span {
+  display: block;
+  width: 100%;
+  height: 22px;
+  border-radius: 3px;
+  background: var(--swatch);
+}
+.text-color-picker .custom-color {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  margin: 16px 0 10px;
+}
+.text-color-picker input[type="color"] {
+  padding: 2px;
+  width: 44px;
+  height: 30px;
+  cursor: pointer;
+}
+.text-color-picker [data-clear] {
+  width: 100%;
+  text-align: center;
+  font-size: 12px;
+  color: var(--muted);
+}
+.text-color-picker [role="alert"] {
+  font-size: 12px;
+  color: var(--danger);
+}
+:root[data-theme="dark"] {
+  --folio-color-0: #ee9991;
+  --folio-color-1: #e7b182;
+  --folio-color-2: #8dccaa;
+  --folio-color-3: #8fc6ee;
+  --folio-color-4: #c5a7e8;
+  --folio-color-5: #b1bbb5;
+  --folio-highlight-0: #655628;
+  --folio-highlight-1: #694c35;
+  --folio-highlight-2: #355a40;
+  --folio-highlight-3: #345369;
+  --folio-highlight-4: #574267;
+  --folio-highlight-5: #69424f;
+  --folio-highlight-ink: #ffffff;
 }
 #edit-insert {
   width: min(420px, calc(100vw - 32px));

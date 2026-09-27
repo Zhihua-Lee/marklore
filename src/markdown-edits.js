@@ -1,3 +1,4 @@
+import { highlightInk } from "./text-colors.js";
 // Source-only transformations: one reversible editor transaction, no HTML roundtrip.
 export function markdownEdit(text, from, to, action, options = {}) {
   const selected = text.slice(from, to);
@@ -11,6 +12,70 @@ export function markdownEdit(text, from, to, action, options = {}) {
     changes: { from: start, to: end, insert },
     selection: { anchor: a, head: b },
   });
+  if (action === "highlight" || action === "color") {
+    const color = options.color?.toLowerCase() ?? null;
+    if (color !== null && !/^#[\da-f]{6}$/.test(color))
+      throw Error("请选择有效的颜色。");
+    const mark = action === "highlight",
+      tag = mark ? "mark" : "span";
+    const pattern = mark
+      ? '<mark(?: style="background-color: #[\\da-f]{6}; color: #[\\da-f]{6}")?>'
+      : '<span style="color: #[\\da-f]{6}">';
+    const close = `</${tag}>`,
+      whole = selected.match(
+        new RegExp(
+          `^(${pattern})((?:(?!<\\/?${tag}\\b)[\\s\\S])*)${close}$`,
+          "i",
+        ),
+      );
+    const before = text.slice(0, from).match(new RegExp(`${pattern}$`, "i"));
+    let start = from,
+      end = to,
+      body = selected;
+    if (whole) body = whole[2];
+    else if (before && text.slice(to).startsWith(close)) {
+      start -= before[0].length;
+      end += close.length;
+    }
+    body = body.replace(
+      new RegExp(`${pattern}((?:(?!<${tag}\\b)[\\s\\S])*?)${close}`, "gi"),
+      "$1",
+    );
+    if (color === null) {
+      return result(start, end, body);
+    }
+    const open = mark
+      ? `<mark style="background-color: ${color}; color: ${highlightInk(color)}">`
+      : `<span style="color: ${color}">`;
+    // Keep block prefixes and blank lines outside inline HTML when selecting several lines.
+    if (body.includes("\n")) {
+      const painted = body
+        .split("\n")
+        .map((line, index) => {
+          if (!line.trim()) return line;
+          const prefix =
+            index > 0 || start === 0 || text[start - 1] === "\n"
+              ? line.match(/^(?:\s*(?:#{1,6}\s+|>\s*|[-+*]\s+|\d+[.)]\s+))*/)[0]
+              : "";
+          return prefix + open + line.slice(prefix.length) + close;
+        })
+        .join("\n");
+      return result(start, end, painted);
+    }
+    body ||= "文字";
+    const prefix =
+      start === 0 || text[start - 1] === "\n"
+        ? body.match(/^(?:\s*(?:#{1,6}\s+|>\s*|[-+*]\s+|\d+[.)]\s+))*/)[0]
+        : "";
+    body = body.slice(prefix.length);
+    return result(
+      start,
+      end,
+      prefix + open + body + close,
+      start + prefix.length + open.length,
+      start + prefix.length + open.length + body.length,
+    );
+  }
   const wraps = {
     bold: "**",
     italic: "*",

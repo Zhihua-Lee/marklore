@@ -72,6 +72,7 @@ async function boot(page, text = note) {
   }, text);
   await page.goto("/");
   await expect(page.getByRole("tab").first()).toBeVisible();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
 }
 async function openBlock(page, selector) {
   await page.locator(selector).first().hover();
@@ -99,7 +100,7 @@ test("preview paragraph editing changes only the source block and preserves surr
   await openBlock(page, "#content p");
   await replace(page, "New 中文 paragraph");
   await expect(
-    page.getByRole("button", { name: "阅读", exact: true }),
+    page.getByRole("button", { name: "编辑", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect.poll(() => draft(page)).toContain("New 中文 paragraph");
   await expect(page.locator(".block-editor")).toBeVisible();
@@ -144,10 +145,11 @@ test("cancel restores exact original; local undo/redo and global undo survive mo
   expect(await page.evaluate(() => window.mock.saved[0])).toBe(note);
   await openBlock(page, "#content p");
   await replace(page, "KEPT");
-  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.getByRole("button", { name: "源码", exact: true }).click();
   await expect(page.locator(".block-editor")).toHaveCount(0);
   await expect(page.locator("#editor .cm-content")).toContainText("KEPT");
   await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
   await expect(page.locator("#content p").first()).toContainText("First");
 });
 test("formula and fenced code use local source without flattening notation", async ({

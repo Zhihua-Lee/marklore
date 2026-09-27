@@ -9,6 +9,50 @@ const edit = (text, from, to, action, options) => {
     ...result,
   };
 };
+test("highlight and color preserve formatting, replace wrappers, clear safely and reject CSS injection", () => {
+  const first = edit("中文 **bold**", 0, 11, "color", { color: "#b23c36" });
+  assert.equal(first.text, '<span style="color: #b23c36">中文 **bold**</span>');
+  const next = edit(
+    first.text,
+    first.selection.anchor,
+    first.selection.head,
+    "color",
+    { color: "#286ba0" },
+  );
+  assert.equal(next.text, '<span style="color: #286ba0">中文 **bold**</span>');
+  assert.equal(
+    edit(next.text, next.selection.anchor, next.selection.head, "color", {
+      color: null,
+    }).text,
+    "中文 **bold**",
+  );
+  assert.equal(
+    edit('<span title="keep">other</span>', 0, 31, "color", { color: null })
+      .text,
+    '<span title="keep">other</span>',
+  );
+  const mark = edit("中", 0, 1, "highlight", { color: "#f2d878" });
+  assert.match(
+    mark.text,
+    /^<mark style="background-color: #f2d878; color: #000000">中<\/mark>$/,
+  );
+  assert.equal(
+    edit(mark.text, 0, mark.text.length, "highlight", { color: null }).text,
+    "中",
+  );
+  assert.match(
+    edit("", 0, 0, "highlight", { color: "#000000" }).text,
+    /color: #ffffff/,
+  );
+  assert.match(
+    edit("# Head\n\n- one", 0, 13, "highlight", { color: "#f2d878" }).text,
+    /^# <mark.*Head<\/mark>\n\n- <mark.*one<\/mark>$/,
+  );
+  assert.throws(
+    () => edit("test", 0, 4, "color", { color: "red;position:fixed" }),
+    /颜色/,
+  );
+});
 test("inline formats preserve Chinese selection and toggle without nesting", () => {
   const first = edit("a中文z", 1, 3, "bold");
   assert.equal(first.text, "a**中文**z");
@@ -20,6 +64,24 @@ test("inline formats preserve Chinese selection and toggle without nesting", () 
   assert.equal(edit("**hello**", 2, 7, "italic").text, "***hello***");
   assert.equal(edit("***hello***", 3, 8, "italic").text, "**hello**");
   assert.equal(edit("**hello**", 0, 9, "italic").text, "***hello***");
+});
+test("multi-line colors change and clear without losing block structure or leaving tags", () => {
+  const source = "## Heading\n\n- first\n- second";
+  const marked = edit(source, 0, source.length, "highlight", {
+    color: "#f2d878",
+  }).text;
+  assert.equal(
+    edit(marked, 0, marked.length, "highlight", { color: null }).text,
+    source,
+  );
+  const recolored = edit(marked, 0, marked.length, "highlight", {
+    color: "#efc4d1",
+  }).text;
+  assert.equal((recolored.match(/<mark /g) || []).length, 3);
+  assert.equal(
+    edit(recolored, 0, recolored.length, "highlight", { color: null }).text,
+    source,
+  );
 });
 test("line formats convert lists, preserve indentation and exclude next line", () => {
   assert.equal(

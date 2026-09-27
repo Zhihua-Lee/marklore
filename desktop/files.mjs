@@ -46,6 +46,8 @@ export function encode(text, info) {
 export class FileStore {
   files = new Map();
   directories = new Map();
+  imageDirectories = new Set();
+  imageFiles = new Set();
   locks = new Set();
   constructor({ backups } = {}) {
     this.backups = backups;
@@ -272,14 +274,31 @@ export class FileStore {
       return { id: existingId, path: real, name: path.basename(real) };
     return this.open(real);
   }
-  async asset(id, href) {
+  async imageInfo(id, href) {
+    if (typeof href !== "string" || href.length > 8192)
+      throw Error("无效图片路径");
     const file = this.file(id),
       real = await fs.realpath(this.resolve(id, href));
-    const roots = [path.dirname(file.path), ...this.directories.values()];
-    if (!roots.some((root) => within(root, real)))
-      throw Error("图片位于授权文件夹之外");
+    await unchangedPath(file.path);
     if (!/\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(real))
       throw Error("不支持的图片类型");
+    const stat = await fs.stat(real);
+    if (!stat.isFile() || stat.size > 64 * 1024 * 1024)
+      throw Error("图片不是普通文件或超过 64 MB");
+    const roots = [
+      path.dirname(file.path),
+      ...this.directories.values(),
+      ...this.imageDirectories,
+    ];
+    return {
+      path: real,
+      authorized:
+        this.imageFiles.has(real) || roots.some((root) => within(root, real)),
+    };
+  }
+  async asset(id, href) {
+    const { path: real, authorized } = await this.imageInfo(id, href);
+    if (!authorized) throw Error("图片位于授权文件夹之外");
     return real;
   }
   async importImage(id, source) {

@@ -44,6 +44,102 @@ async function selectAll(page) {
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+a");
 }
+test("grouped color/highlight tools render, clear, undo and adapt to dark mode", async ({
+  page,
+}) => {
+  await boot(page, "Hello **中文**");
+  await selectAll(page);
+  await page.getByRole("button", { name: "文字高亮", exact: true }).click();
+  await page.getByRole("button", { name: "黄色", exact: true }).click();
+  await expect(page.locator("#content mark strong")).toHaveText("中文");
+  await expect(page.locator("#content mark")).toHaveCSS(
+    "background-color",
+    "rgb(242, 216, 120)",
+  );
+  await page.getByRole("button", { name: "文字颜色", exact: true }).click();
+  await page.getByRole("button", { name: "蓝色", exact: true }).click();
+  await expect(page.locator('#content span[style*="--folio-color"]')).toHaveCSS(
+    "color",
+    "rgb(40, 107, 160)",
+  );
+  await page.getByRole("button", { name: "文字颜色", exact: true }).click();
+  await page.getByRole("button", { name: "恢复默认颜色", exact: true }).click();
+  await expect(
+    page.locator('#content span[style*="--folio-color"]'),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await page.evaluate(() => (document.documentElement.dataset.theme = "dark"));
+  await expect(page.locator('#content span[style*="--folio-color"]')).toHaveCSS(
+    "color",
+    "rgb(143, 198, 238)",
+  );
+  await expect(page.locator("#content mark")).toHaveCSS(
+    "background-color",
+    "rgb(101, 86, 40)",
+  );
+  await expect(page.locator(".editing-tools > .edit-tool-group")).toHaveCount(
+    4,
+  );
+  await page.setViewportSize({ width: 600, height: 800 });
+  expect(
+    await page
+      .locator(".editing-tools")
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+  ).toBe(true);
+  await page.screenshot({ path: ".local/editing-colors-v017.png" });
+});
+
+test("read mode has no local editing entry; edit mode offers grouped local color tools", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
+  await page.locator("#content p").hover();
+  await expect(page.locator("#block-edit-launch")).toBeHidden();
+  await expect(page.locator(".block-edit-hover")).toHaveCount(0);
+  await page.locator("#reader").focus();
+  await page.keyboard.press("Alt+Enter");
+  await expect(page.locator(".block-editor")).toHaveCount(0);
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
+  await page.locator("#content p").hover();
+  await page.getByRole("button", { name: "就地编辑此块", exact: true }).click();
+  await page.locator(".block-editor .cm-content").click();
+  await page.keyboard.press("Control+a");
+  await page.getByRole("button", { name: "就地文字高亮", exact: true }).click();
+  await page.getByRole("button", { name: "粉色", exact: true }).click();
+  await expect(page.locator(".block-editor .cm-content")).toContainText(
+    "<mark",
+  );
+  await page.getByRole("button", { name: "就地文字颜色", exact: true }).click();
+  await page.getByRole("button", { name: "绿色", exact: true }).click();
+  await page.getByRole("button", { name: "完成", exact: true }).click();
+  await expect(page.locator("#content mark")).toHaveText("Hello 中文");
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
+  await page.locator("#content p").hover();
+  await expect(page.locator("#block-edit-launch")).toBeHidden();
+});
+test("color preserves heading structure, clean outline labels and literal code", async ({
+  page,
+}) => {
+  await boot(page, "## Hello 中文");
+  await selectAll(page);
+  await page.getByRole("button", { name: "文字颜色", exact: true }).click();
+  await page.getByRole("button", { name: "红色", exact: true }).click();
+  await expect(page.locator("#content h2")).toContainText("Hello 中文");
+  await expect(page.locator("#content h2")).toHaveAttribute("id", "hello-中文");
+  const label = await page.evaluate(async () => {
+    const { renderHeadingLabel } = await import("/src/markdown.js");
+    const el = document.createElement("div");
+    el.innerHTML = renderHeadingLabel(
+      '<span style="color:red">Hello</span> `<span>` <img src=x onerror=alert(1)>',
+    );
+    return {
+      text: el.textContent,
+      active: el.querySelectorAll("img,[onerror]").length,
+    };
+  });
+  expect(label).toEqual({ text: "Hello <span> ", active: 0 });
+});
 test("format toolbar preserves selection, renders immediately and undo/redo is atomic", async ({
   page,
 }) => {

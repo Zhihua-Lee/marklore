@@ -1,4 +1,6 @@
 const paths = {
+  highlight: '<path d="m14 3 7 7-8 8-7-7 8-8ZM6 11l-3 6 4 4 6-3M3 21h7"/>',
+  textColor: '<path d="m6 17 6-14 6 14M8 12h8M4 21h16"/>',
   pencil: '<path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z"/>',
   undo: '<path d="M9 5 4 10l5 5M4 10h10a6 6 0 0 1 0 12"/>',
   redo: '<path d="m15 5 5 5-5 5m5-5H10a6 6 0 0 0 0 12"/>',

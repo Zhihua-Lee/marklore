@@ -1,3 +1,25 @@
+.image-problem {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: 400 13px/1.6 var(--font-ui);
+  color: var(--ink);
+}
+.image-problem > span {
+  width: 100%;
+}
+.image-problem small {
+  color: var(--muted);
+  flex: 1;
+  min-width: 150px;
+}
+.image-problem button {
+  color: var(--accent);
+}
 :root {
   color-scheme: light;
   --bg: #f6f5f1;

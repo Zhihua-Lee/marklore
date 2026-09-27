@@ -180,17 +180,18 @@ test("unexpected Save As collision never gives two drafts the same native handle
   await expect(page.getByRole("tab", { selected: true })).toHaveText(
     "● Note-1.md",
   );
+  // The boot-time session already lists both handles; wait for the debounced
+  // flush that carries the drafts instead of reading whichever came first.
   await expect
     .poll(() =>
-      page.evaluate(() => window.mock.session?.tabs.map((d) => d.fileId)),
+      page.evaluate(() =>
+        window.mock.session?.tabs.map((d) => [d.fileId, d.draft]),
+      ),
     )
-    .toEqual(["file-0", "file-1"]);
-  expect(
-    await page.evaluate(() => window.mock.session.tabs.map((d) => d.draft)),
-  ).toEqual([
-    expect.stringContaining("FIRST-DRAFT"),
-    expect.stringContaining("SECOND-DRAFT"),
-  ]);
+    .toEqual([
+      ["file-0", expect.stringContaining("FIRST-DRAFT")],
+      ["file-1", expect.stringContaining("SECOND-DRAFT")],
+    ]);
 });
 
 test("100-tab cap rejects new tabs but still activates already-open files", async ({

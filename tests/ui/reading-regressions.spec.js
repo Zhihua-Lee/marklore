@@ -86,6 +86,24 @@ test("smooth outline jumps land on their heading forwards and backwards in a laz
   }
 });
 
+// Does a smooth scroll on this host take more than one frame? (Measured on a
+// scratch scroller so the reader's position is untouched.)
+function smoothScrollAnimates(page) {
+  return page.evaluate(async () => {
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) return false;
+    const box = document.createElement("div");
+    box.style.cssText =
+      "position:fixed;left:0;top:0;width:50px;height:50px;overflow:auto;opacity:0";
+    box.innerHTML = '<div style="height:5000px"></div>';
+    document.body.append(box);
+    box.scrollTo({ top: 4000, behavior: "smooth" });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const partial = box.scrollTop;
+    box.remove();
+    return partial < 4000;
+  });
+}
+
 test("long outline jumps never show half-rendered content while they move", async ({
   page,
 }) => {
@@ -114,12 +132,11 @@ test("long outline jumps never show half-rendered content while they move", asyn
       }
       return samples;
     }, n);
-    const reduced = await page.evaluate(
-      () => matchMedia("(prefers-reduced-motion: reduce)").matches,
-    );
     const moving = frames.filter((f, i) => i && f.top !== frames[i - 1].top);
-    // Reduced motion jumps instantly by design; otherwise the last stretch animates.
-    if (!reduced)
+    // Reduced motion jumps instantly by design, and some hosts (e.g. CI runners
+    // with system animations off) render smooth scrolls instantly; the glide is
+    // only asserted where the browser actually animates.
+    if (await smoothScrollAnimates(page))
       expect(moving.length, `Section ${n} did not glide`).toBeGreaterThan(3);
     expect(
       frames.filter((f) => f.pending).length,

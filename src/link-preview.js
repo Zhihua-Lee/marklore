@@ -1,7 +1,9 @@
 import { renderMarkdown } from "./markdown.js";
 import { renderDiagrams } from "./diagrams.js";
-import { restoreAnchor, unfold } from "./positions.js";
+import { restoreAnchor, visibleAnchor, unfold } from "./positions.js";
 import { setSectionCollapsed } from "./sections.js";
+import { wireCodeBlocks } from "./code-blocks.js";
+import { icon } from "./icons.js";
 import "./link-preview.css";
 
 export function splitLink(href) {
@@ -25,20 +27,46 @@ function eligible(href) {
 }
 
 // Independent transient surface: never changes the active tab, editor or progress.
-export function createLinkPreview({ host, load, navigate, report }) {
+export function createLinkPreview({
+  host,
+  load,
+  navigate,
+  report,
+  getZoom = () => 100,
+  saveZoom = () => {},
+}) {
   const card = document.createElement("section");
   card.id = "link-preview";
   card.role = "dialog";
   card.setAttribute("aria-label", "链接预览");
   card.tabIndex = -1;
   card.hidden = true;
-  card.innerHTML = `<header class="preview-heading"><div><strong class="preview-title"></strong><div class="preview-path"></div></div><button class="preview-open">打开 ↗</button><button class="preview-close" aria-label="关闭链接预览">×</button></header><div class="preview-status" role="status"></div><div class="preview-scroll" tabindex="0" aria-label="链接预览正文"><article class="prose"></article></div><footer class="preview-help">悬浮阅读 · F2 进入预览 · Esc 关闭</footer>`;
+  card.innerHTML = `<header class="preview-heading"><div><strong class="preview-title"></strong><div class="preview-path"></div></div><button class="preview-open">打开 ↗</button><button class="preview-close icon" aria-label="关闭链接预览">${icon("close")}</button></header><div class="preview-status" role="status"></div><div class="preview-scroll" tabindex="0" aria-label="链接预览正文"><article class="prose"></article></div><footer class="preview-help"><span>F2 进入 · Esc 关闭</span><div class="preview-zoom" role="group" aria-label="预览字号"><button data-zoom="-10" aria-label="缩小预览字号">A−</button><button data-zoom="0" aria-label="重置预览字号">100%</button><button data-zoom="10" aria-label="放大预览字号">A+</button></div></footer>`;
   document.body.append(card);
   const title = card.querySelector(".preview-title"),
     path = card.querySelector(".preview-path"),
     status = card.querySelector(".preview-status"),
     scroller = card.querySelector(".preview-scroll"),
     article = card.querySelector("article");
+  wireCodeBlocks(article, report);
+  function applyZoom() {
+    const zoom = Math.max(50, Math.min(200, Number(getZoom()) || 100));
+    card.style.setProperty("--note-size", (16 * zoom) / 100 + "px");
+    card.querySelector('[data-zoom="0"]').textContent = zoom + "%";
+    card.querySelector('[data-zoom="-10"]').disabled = zoom <= 50;
+    card.querySelector('[data-zoom="10"]').disabled = zoom >= 200;
+  }
+  for (const button of card.querySelectorAll("[data-zoom]"))
+    button.onclick = () => {
+      const anchor = visibleAnchor(scroller),
+        delta = Number(button.dataset.zoom);
+      positioned = true;
+      saveZoom(
+        delta === 0 ? 100 : Math.max(50, Math.min(200, getZoom() + delta)),
+      );
+      applyZoom();
+      requestAnimationFrame(() => restoreAnchor(scroller, anchor));
+    };
   let origin = null,
     timer,
     leaveTimer,
@@ -105,6 +133,7 @@ export function createLinkPreview({ host, load, navigate, report }) {
     article.replaceChildren();
     scroller.scrollTop = 0;
     card.hidden = false;
+    applyZoom();
     link.setAttribute("aria-controls", card.id);
     link.setAttribute("aria-expanded", "true");
     place();

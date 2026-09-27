@@ -26,16 +26,19 @@ import { createPreviewCache } from "./render-cache.js";
 import { renderDiagrams } from "./diagrams.js";
 import { createLinkPreview, splitLink } from "./link-preview.js";
 import { wireDesktopSettings } from "./desktop-settings.js";
+import { wireCodeBlocks } from "./code-blocks.js";
+import { wireFileDrop } from "./file-drop.js";
+import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
 import "@fontsource-variable/jetbrains-mono";
 import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 import "@fontsource-variable/inter";
 import "katex/dist/katex.min.css";
-import "highlight.js/styles/github.css";
 import "./style.css";
 import "./diagrams.css";
 import "./layout.css";
+import "./code-blocks.css";
 
 const $ = (s) => document.querySelector(s);
 const api = window.folio;
@@ -51,6 +54,7 @@ let active = null,
   restoring = false;
 let settings = {
     zoom: 100,
+    previewZoom: 100,
     theme: "light",
     sidebar: true,
     split: 50,
@@ -69,7 +73,7 @@ $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="切换文件夹浏览" aria-label="切换文件夹浏览">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="Folio Notes 菜单" aria-label="应用菜单" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="向左浏览标签">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="打开的笔记"></div><button id="tabs-forward" class="icon tab-nav" aria-label="向右浏览标签">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="新笔记" title="新笔记 Ctrl+N">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="切换本文目录" aria-label="切换本文目录">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="左侧栏"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">笔记库</span><span><button id="tree-refresh" class="icon" aria-label="刷新文件树" title="刷新文件树">${icon("refresh")}</button><button id="folder" class="icon" aria-label="打开文件夹" title="打开文件夹">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="搜索笔记…" aria-label="筛选文件" title="搜索文件名，包含子文件夹"><div id="tree"><div class="empty-tree">尚未添加文件夹<br><button id="folder-empty">打开文件夹</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">本文目录</span></div><nav id="outline" aria-label="本文目录"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="文件操作"><button id="open" class="icon" aria-label="打开文件" title="打开文件 Ctrl+O">${icon("open")}</button><button id="save" class="icon" aria-label="保存" title="保存 Ctrl+S">${icon("save")}</button></div><div class="modes" role="group" aria-label="查看模式"><button data-mode="read">阅读</button><button data-mode="edit">编辑</button><button data-mode="source">源码</button></div><div class="toolbar-group reading-tools" role="group" aria-label="阅读设置"><button id="width-toggle" class="icon" aria-label="切换阅读宽度" title="切换阅读宽度" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="外观与布局" aria-label="外观与布局">Aa</button></div></div>
-<section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${icon("eye")}<h1 id="home-title">Folio Notes</h1></div><p>打开一篇笔记，或选择一个文件夹。</p><div class="start-actions"><button id="start-open">${icon("open")}<span>打开文件</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>打开文件夹</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>新建笔记</span><kbd>Ctrl N</kbd></button></div></div></section>
+<section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Folio Notes</h1></div><p>打开一篇笔记，或选择一个文件夹。</p><div class="start-actions"><button id="start-open">${icon("open")}<span>打开文件</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>打开文件夹</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>新建笔记</span><kbd>Ctrl N</kbd></button></div></div></section>
 <div id="conflict" role="alert" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="调整编辑预览比例" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="笔记预览"><article id="content" class="prose"></article></div></div>
 <span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="右侧栏"></aside></div>
 <div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div>
@@ -391,6 +395,11 @@ function updateTabs() {
       .querySelector(".tab-close")
       .setAttribute("aria-label", "关闭 " + doc.name);
   }
+  tabs.forEach((doc, index) => {
+    const node = tabElements.get(doc.id);
+    if (host.children[index] !== node)
+      host.insertBefore(node, host.children[index] || null);
+  });
   if (visibleTabId !== active?.id) {
     visibleTabId = active?.id;
     $(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -702,6 +711,11 @@ async function navigateLink(href, source = active) {
 const linkPreview = createLinkPreview({
   host: $("#content"),
   report: toast,
+  getZoom: () => settings.previewZoom,
+  saveZoom: (value) => {
+    settings.previewZoom = value;
+    scheduleSession();
+  },
   navigate: navigateLink,
   load: async (href) => {
     const source = active,
@@ -726,6 +740,7 @@ const linkPreview = createLinkPreview({
     return { ...latest, fileId: file.id };
   },
 });
+wireCodeBlocks($("#content"), toast);
 function sourceToPreview() {
   if (!active || active.mode === "read") return;
   render(false);
@@ -999,8 +1014,25 @@ function updateTabOverflow() {
   $("#tabs-back").disabled = host.scrollLeft < 1;
   $("#tabs-forward").disabled =
     host.scrollLeft >= host.scrollWidth - host.clientWidth - 1;
+  const viewport = host.getBoundingClientRect();
+  for (const tab of host.children) {
+    const label = tab.querySelector(".tab-label").getBoundingClientRect();
+    const close = tab.querySelector(".tab-close").getBoundingClientRect();
+    tab.classList.toggle(
+      "edge-clipped",
+      Math.min(label.right, viewport.right) -
+        Math.max(label.left, viewport.left) <
+        28 ||
+        close.left < viewport.left ||
+        close.right > viewport.right,
+    );
+  }
 }
-new ResizeObserver(updateTabOverflow).observe($("#tabs"));
+let tabOverflowFrame;
+new ResizeObserver(() => {
+  cancelAnimationFrame(tabOverflowFrame);
+  tabOverflowFrame = requestAnimationFrame(updateTabOverflow);
+}).observe($("#tabs"));
 $("#tabs").addEventListener("scroll", updateTabOverflow, { passive: true });
 for (const [id, direction] of [
   ["tabs-back", -1],
@@ -1011,6 +1043,22 @@ for (const [id, direction] of [
 $("#tabs").addEventListener("keydown", (event) => {
   if (!event.target.matches(".tab-label")) return;
   const index = tabs.indexOf(active);
+  if (
+    event.ctrlKey &&
+    event.shiftKey &&
+    ["ArrowLeft", "ArrowRight"].includes(event.key)
+  ) {
+    event.preventDefault();
+    moveTab(
+      active.id,
+      Math.max(
+        0,
+        Math.min(tabs.length - 1, index + (event.key === "ArrowLeft" ? -1 : 1)),
+      ),
+    );
+    tabElements.get(active.id)?.querySelector(".tab-label").focus();
+    return;
+  }
   const next = {
     ArrowLeft: tabs[(index - 1 + tabs.length) % tabs.length],
     ArrowRight: tabs[(index + 1) % tabs.length],
@@ -1022,32 +1070,89 @@ $("#tabs").addEventListener("keydown", (event) => {
   activateTab(next);
   tabElements.get(next.id)?.querySelector(".tab-label").focus();
 });
+function moveTab(id, destination) {
+  const index = tabs.findIndex((tab) => tab.id === id);
+  if (index < 0 || index === destination) return;
+  const [doc] = tabs.splice(index, 1);
+  tabs.splice(destination, 0, doc);
+  updateTabs();
+  scheduleSession();
+}
 let drag = null,
-  dragged = false;
+  dragged = false,
+  dragFrame;
 $("#tabs").addEventListener("pointerdown", (e) => {
   if (e.button !== 0 || e.target.closest(".tab-close")) return;
-  drag = { x: e.clientX, left: $("#tabs").scrollLeft, id: e.pointerId };
+  const node = e.target.closest(".tab");
+  if (!node) return;
+  drag = {
+    x: e.clientX,
+    current: e.clientX,
+    node,
+    id: e.pointerId,
+    left: $("#tabs").scrollLeft,
+  };
   dragged = false;
 });
+function paintTabDrag() {
+  if (!drag || !dragged) return;
+  const host = $("#tabs"),
+    viewport = host.getBoundingClientRect();
+  const edge =
+    drag.current < viewport.left + 24
+      ? -8
+      : drag.current > viewport.right - 24
+        ? 8
+        : 0;
+  if (edge) host.scrollLeft += edge;
+  drag.node.style.transform = `translateX(${drag.current - drag.x + host.scrollLeft - drag.left}px)`;
+  const others = [...host.children].filter((node) => node !== drag.node);
+  drag.to = others.findIndex((node) => {
+    const box = node.getBoundingClientRect();
+    return drag.current < box.left + box.width / 2;
+  });
+  if (drag.to < 0) drag.to = others.length;
+  for (const node of host.children)
+    node.classList.remove("drop-before", "drop-after");
+  if (others[drag.to]) others[drag.to].classList.add("drop-before");
+  else others.at(-1)?.classList.add("drop-after");
+  dragFrame = requestAnimationFrame(paintTabDrag);
+}
 window.addEventListener("pointermove", (e) => {
   if (!drag) return;
   const delta = e.clientX - drag.x;
-  if (Math.abs(delta) > 5) dragged = true;
-  if (dragged) {
+  drag.current = e.clientX;
+  if (!dragged && Math.abs(delta) > 5) {
+    dragged = true;
+    $("#tabs").setPointerCapture(e.pointerId);
     $("#tabs").classList.add("dragging");
-    $("#tabs").scrollLeft = drag.left - delta;
-    e.preventDefault();
+    drag.node.classList.add("reordering");
+    paintTabDrag();
   }
+  if (dragged) e.preventDefault();
 });
-window.addEventListener("pointerup", () => {
+function finishTabDrag(commit) {
+  if (!drag) return;
+  cancelAnimationFrame(dragFrame);
+  const previous = drag;
+  previous.node.style.transform = "";
+  for (const node of $("#tabs").children)
+    node.classList.remove("reordering", "drop-before", "drop-after");
   drag = null;
   $("#tabs").classList.remove("dragging");
+  if (commit && dragged) moveTab(previous.node.dataset.id, previous.to);
   setTimeout(() => (dragged = false), 0);
+}
+window.addEventListener("pointerup", () => finishTabDrag(true));
+window.addEventListener("pointercancel", () => finishTabDrag(false));
+window.addEventListener("blur", () => finishTabDrag(false));
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") finishTabDrag(false);
 });
-window.addEventListener("pointercancel", () => {
-  drag = null;
-  dragged = false;
-  $("#tabs").classList.remove("dragging");
+wireFileDrop({
+  api,
+  opened: (docs) => docs.forEach((doc) => add(doc)),
+  report: toast,
 });
 $("#tabs").addEventListener(
   "wheel",
@@ -1380,6 +1485,10 @@ if (api) {
       settings.typeface = "literata";
     settings.typographyVersion = 1;
     settings.zoom = Math.max(50, Math.min(200, Number(settings.zoom) || 100));
+    settings.previewZoom = Math.max(
+      50,
+      Math.min(200, Number(settings.previewZoom) || 100),
+    );
     settings.typeface = ["literata", "balanced", "classic", "book"].includes(
       settings.typeface,
     )

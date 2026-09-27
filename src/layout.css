@@ -85,8 +85,8 @@
   display: flex;
   flex: none;
   gap: 2px;
-  position: absolute;
-  top: 6px;
+  position: fixed;
+  top: 55px;
   z-index: 6;
   background: var(--reading-paper);
   border-radius: 5px;
@@ -479,9 +479,6 @@ select:focus-visible {
   .topbar {
     gap: 2px;
   }
-  .tab {
-    width: 160px;
-  }
 }
 @media (max-width: 760px) {
   #sidebar {
@@ -523,8 +520,40 @@ select:focus-visible {
     gap: 0;
   }
   .topbar .tab {
-    min-width: 80px;
+    min-width: 76px;
   }
+}
+#sidebar > .side-panel:nth-child(1 of :not([hidden])) .sidebar-top {
+  padding-left: 30px;
+}
+#right-sidebar > .side-panel:nth-child(1 of :not([hidden])) .sidebar-top {
+  padding-right: 36px;
+}
+body:has(#panel-controls-left > button + button)
+  #sidebar
+  > .side-panel:nth-child(1 of :not([hidden]))
+  .sidebar-top {
+  padding-left: 62px;
+}
+body:has(#panel-controls-right > button + button)
+  #right-sidebar
+  > .side-panel:nth-child(1 of :not([hidden]))
+  .sidebar-top {
+  padding-right: 68px;
+}
+body.file-drop::after {
+  content: "松开以打开 Markdown 文件";
+  position: fixed;
+  inset: 53px 10px 10px;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  border: 2px dashed var(--accent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  color: var(--accent);
+  font: 400 16px var(--font-ui);
 }
 @starting-style {
   #sidebar:not([hidden]),

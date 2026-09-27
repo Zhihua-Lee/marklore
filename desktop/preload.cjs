@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require("electron");
+const { contextBridge, ipcRenderer, webUtils } = require("electron");
 const invoke =
   (name) =>
   (...args) =>
@@ -23,6 +23,7 @@ for (const name of [
   "desktopStatus",
   "desktopAction",
   "exportNote",
+  "copyText",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {
@@ -31,5 +32,12 @@ api.on = (name, callback) => {
   const handler = (_event, payload) => callback(payload);
   ipcRenderer.on("folio:" + name, handler);
   return () => ipcRenderer.removeListener("folio:" + name, handler);
+};
+api.openDroppedFiles = (files) => {
+  if (!Array.isArray(files) || files.length > 100)
+    throw Error("每次最多拖入 100 个文件");
+  const paths = files.map((file) => webUtils.getPathForFile(file));
+  if (paths.some((path) => !path)) throw Error("请拖入磁盘上的真实文件");
+  return ipcRenderer.invoke("folio:openDropped", paths);
 };
 contextBridge.exposeInMainWorld("folio", api);

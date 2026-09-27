@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" class="folio-logo" aria-hidden="true">
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#285e50"/>
+  <path d="M15 15h11c4 0 6 2 6 6v29c-2-3-5-4-9-4h-8z" fill="#f5f1e5"/>
+  <path d="M35 21c0-4 2-6 6-6h3l7 7v24h-7c-4 0-7 1-9 4z" fill="#f5f1e5"/>
+  <path d="M44 15v7h7z" fill="#a8c4b3"/>
+  <path d="M21 26h5m-5 7h5m15-4h4m-4 7h4" fill="none" stroke="#285e50" stroke-opacity=".55" stroke-width="2" stroke-linecap="round"/>
+</svg>

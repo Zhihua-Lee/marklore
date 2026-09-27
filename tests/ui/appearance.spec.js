@@ -380,7 +380,7 @@ test("long overflowing tabs keep every close glyph inside the compact bar", asyn
   }
 });
 
-test("arrow controls and dragging browse the strip while keyboard arrows select tabs", async ({
+test("arrow controls browse, dragging reorders and keyboard arrows select tabs", async ({
   page,
 }) => {
   await boot(page, { count: 20 });
@@ -406,12 +406,14 @@ test("arrow controls and dragging browse the strip while keyboard arrows select 
     }
     throw Error("No visible tab label for drag gesture");
   });
-  const beforeDrag = await scroll();
+  const beforeDrag = await page.getByRole("tab").allTextContents();
   await page.mouse.move(dragStart.x, dragStart.y);
   await page.mouse.down();
   await page.mouse.move(dragStart.x + 200, dragStart.y, { steps: 8 });
   await page.mouse.up();
-  await expect.poll(scroll).toBeLessThan(beforeDrag);
+  await expect
+    .poll(() => page.getByRole("tab").allTextContents())
+    .not.toEqual(beforeDrag);
   await expect(page.getByRole("tab", { selected: true })).toHaveText(selected);
   await page.getByRole("tab", { selected: true }).focus();
   await page.keyboard.press("Home");

@@ -50,6 +50,8 @@ export async function exportNote(format, { doc }) {
     await completeDiagrams(host);
     for (const button of host.querySelectorAll("button, .section-summary"))
       button.remove();
+    for (const block of host.querySelectorAll(".code-block"))
+      block.replaceWith(block.querySelector("pre"));
     for (const details of host.querySelectorAll("details")) details.open = true;
     for (const element of host.querySelectorAll("*")) {
       element.classList.remove("collapsed", "located");

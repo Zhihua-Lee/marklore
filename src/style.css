@@ -136,10 +136,10 @@ button.primary {
 }
 .tab {
   display: flex;
-  flex: none;
-  height: 32px;
+  flex: 0 1 180px;
+  height: 30px;
   width: 180px;
-  min-width: 0;
+  min-width: 92px;
   border: 1px solid transparent;
   border-radius: 5px;
   color: var(--muted);
@@ -147,19 +147,14 @@ button.primary {
 }
 .tab.active {
   background: var(--paper);
-  border-color: var(--line);
+  border-color: transparent;
   color: var(--ink);
 }
 .tab.active:before {
-  content: "";
-  position: absolute;
-  height: 2px;
-  background: var(--accent);
-  left: 12px;
-  right: 12px;
-  top: 0;
+  content: none;
 }
 .tab-label {
+  min-height: 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -170,15 +165,34 @@ button.primary {
   padding: 4px 6px 4px 12px;
 }
 .tab-close {
-  flex: 0 0 26px;
+  flex: 0 0 24px;
   align-self: center;
-  min-height: 26px;
-  height: 26px;
+  min-height: 24px;
+  height: 24px;
   margin-right: 3px;
   display: grid;
   place-items: center;
-  width: 26px;
+  width: 24px;
   padding: 0;
+}
+.tab-close .ui-icon {
+  width: 13px;
+  height: 13px;
+}
+.tab:not(.active):not(:hover):not(:focus-within) .tab-close {
+  opacity: 0;
+}
+.tab.edge-clipped .tab-close {
+  visibility: hidden;
+}
+.tab.reordering {
+  opacity: 0.55;
+}
+.tab.drop-before {
+  box-shadow: -2px 0 var(--accent);
+}
+.tab.drop-after {
+  box-shadow: 2px 0 var(--accent);
 }
 .workspace {
   display: flex;
@@ -323,7 +337,7 @@ main[data-empty="true"] > #panes {
   align-items: center;
   gap: 12px;
 }
-.start-brand > .ui-icon {
+.start-brand > .folio-logo {
   color: var(--accent);
   width: 30px;
   height: 30px;
@@ -545,6 +559,19 @@ main[data-empty="true"] > #panes {
 .prose li > p {
   margin-block: 0.4em;
 }
+.prose .task-list-item {
+  list-style: none;
+}
+.prose input.task-list-item-checkbox {
+  display: inline-block;
+  width: 0.95em;
+  height: 0.95em;
+  min-width: 0;
+  padding: 0;
+  margin: 0 0.5em 0 0;
+  vertical-align: -0.08em;
+  accent-color: var(--accent);
+}
 .prose li > ul,
 .prose li > ol {
   margin-block: 0.3em 0;
@@ -635,6 +662,13 @@ main[data-empty="true"] > #panes {
 .prose summary {
   cursor: pointer;
   font-weight: 600;
+}
+.prose summary::marker {
+  content: "▸  ";
+  color: var(--muted);
+}
+.prose details[open] > summary::marker {
+  content: "▾  ";
 }
 .prose .katex {
   font-size: 1.21em;

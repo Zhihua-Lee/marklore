@@ -65,10 +65,24 @@
   text-underline-offset: 5px;
 }
 #link-preview .preview-help {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   flex: none;
   padding: 5px 14px;
   height: auto;
   border-top: 1px solid var(--line);
   color: var(--muted);
   font-size: 11px;
+}
+.preview-zoom {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.preview-zoom button {
+  font: 400 11px/1 var(--font-ui);
+  min-height: 26px;
+  padding: 4px 6px;
 }

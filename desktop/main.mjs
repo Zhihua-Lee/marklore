@@ -9,6 +9,7 @@ import {
   session,
   Tray,
   nativeImage,
+  clipboard,
 } from "electron";
 import fs from "node:fs/promises";
 import { watch } from "node:fs";
@@ -113,21 +114,9 @@ function updateTray() {
   );
 }
 function createTray() {
-  // A small native bitmap stays crisp on both light and dark taskbars.
-  const pixels = Buffer.alloc(32 * 32 * 4);
-  for (let y = 0; y < 32; y++)
-    for (let x = 0; x < 32; x++) {
-      if ((x - 15.5) ** 2 + (y - 15.5) ** 2 > 15 ** 2) continue;
-      const ink =
-        (x >= 9 && x <= 12 && y >= 7 && y <= 25) ||
-        (x >= 9 && x <= 23 && y >= 7 && y <= 10) ||
-        (x >= 9 && x <= 20 && y >= 14 && y <= 17);
-      const i = (y * 32 + x) * 4;
-      pixels.set(ink ? [240, 244, 245, 255] : [93, 109, 36, 255], i);
-    }
   try {
     tray = new Tray(
-      nativeImage.createFromBitmap(pixels, { width: 32, height: 32 }),
+      nativeImage.createFromPath(path.join(here, "icons/tray.png")),
     );
     tray.setToolTip("Folio Notes");
     tray.on("click", showWindow);
@@ -242,6 +231,8 @@ else {
     .whenReady()
     .then(async () => {
       await integration.load();
+      if (process.platform === "win32")
+        app.setAppUserModelId("io.folionotes.desktop");
       session.defaultSession.setPermissionRequestHandler(
         (_wc, _permission, done) => done(false),
       );
@@ -313,6 +304,7 @@ else {
         autoHideMenuBar: false,
         backgroundColor: "#f6f5f1",
         title: "Folio Notes",
+        icon: path.join(here, "icons/folio.png"),
         webPreferences: {
           preload: path.join(here, "preload.cjs"),
           nodeIntegration: false,
@@ -422,6 +414,36 @@ else {
       // Keep native accelerators, but not the menu strip (including on Alt).
       // Auto-hide would let Alt reveal the strip again, so it stays disabled.
       if (process.platform !== "darwin") win.setMenuBarVisibility(false);
+      api("openDropped", async (paths) => {
+        if (
+          !Array.isArray(paths) ||
+          paths.length > 100 ||
+          paths.some((p) => typeof p !== "string" || !path.isAbsolute(p))
+        )
+          throw Error("无效拖入文件");
+        const documents = [],
+          errors = [];
+        for (const file of new Set(paths)) {
+          if (!markdownPath(file)) {
+            errors.push(path.basename(file) + "：不支持的文件类型");
+            continue;
+          }
+          try {
+            documents.push(await openFile(file));
+          } catch (error) {
+            errors.push(path.basename(file) + "：" + error.message);
+          }
+        }
+        return { documents, errors };
+      });
+      api("copyText", (text) => {
+        if (
+          typeof text !== "string" ||
+          Buffer.byteLength(text, "utf8") > 32 * 1024 * 1024
+        )
+          throw Error("复制内容过大或格式无效");
+        clipboard.writeText(text);
+      });
       api("desktopStatus", () =>
         integration
           .status()

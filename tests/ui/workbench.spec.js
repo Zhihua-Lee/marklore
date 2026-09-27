@@ -280,7 +280,7 @@ test("read progress survives text scale, split resize and collapsed sections", a
     "false",
   );
 });
-test("mouse drag scrolls overflowing tab bar without changing selected tab", async ({
+test("mouse drag reorders overflowing tabs without changing selected tab", async ({
   page,
 }) => {
   await boot(page);
@@ -306,14 +306,14 @@ test("mouse drag scrolls overflowing tab bar without changing selected tab", asy
       }
       throw Error("No visible tab label for drag gesture");
     }),
-    before = await page.locator("#tabs").evaluate((el) => el.scrollLeft);
+    before = await page.getByRole("tab").allTextContents();
   const active = await page.getByRole("tab", { selected: true }).textContent();
   await page.mouse.move(start.x, start.y);
   await page.mouse.down();
   await page.mouse.move(start.x + 250, start.y, { steps: 8 });
   await page.mouse.up();
-  expect(
-    await page.locator("#tabs").evaluate((el) => el.scrollLeft),
-  ).toBeLessThan(before);
+  await expect
+    .poll(() => page.getByRole("tab").allTextContents())
+    .not.toEqual(before);
   await expect(page.getByRole("tab", { selected: true })).toHaveText(active);
 });

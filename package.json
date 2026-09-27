@@ -1,6 +1,6 @@
 {
   "name": "folio-notes",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
@@ -18,6 +18,8 @@
     "test:native-menu": "node tests/native-menu.mjs",
     "test:native-export": "node tests/native-export.mjs",
     "test:native-background": "node tests/native-background.mjs",
+    "test:native-drop-copy": "node tests/native-drop-copy.mjs",
+    "icons": "node tools/build-icons.mjs",
     "format": "prettier --write src desktop tests tools *.mjs *.json *.md",
     "dist": "pnpm build && electron-builder --win dir --publish never",
     "licenses": "node tools/licenses.mjs"
@@ -69,7 +71,9 @@
       "target": [
         "dir"
       ],
-      "signAndEditExecutable": false
+      "icon": "desktop/icons/folio.ico",
+      "signAndEditExecutable": true,
+      "signExecutable": false
     }
   }
 }

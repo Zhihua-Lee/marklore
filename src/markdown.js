@@ -4,6 +4,7 @@ import tasks from "markdown-it-task-lists";
 import katex from "katex";
 import hljs from "highlight.js/lib/common";
 import DOMPurify from "dompurify";
+import { decorateCodeBlocks } from "./code-blocks.js";
 
 export function lineOffsets(source) {
   const offsets = [0];
@@ -410,6 +411,7 @@ export function renderMarkdown(source, fileId = null) {
     a.removeAttribute("target");
     a.setAttribute("rel", "noreferrer");
   }
+  decorateCodeBlocks(template.content);
   // HTML is sanitized before heading controls are created. Source mapping stays on headings/blocks.
   const fragment = template.content,
     stack = [];

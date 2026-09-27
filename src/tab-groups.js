@@ -7,6 +7,19 @@ export const groupColors = {
   gray: "#888d8b",
 };
 
+// Only newly created tabs inherit placement; callers deduplicate before this.
+export function insertDerivedTab(tabs, groups, doc, opener) {
+  const group = groups.find((g) => g.id === opener?.groupId);
+  doc.groupId = group?.id || null;
+  const parent = tabs.findIndex((t) => t.id === opener?.id);
+  const index = group
+    ? parent >= 0 && tabs[parent].groupId === group.id
+      ? parent + 1
+      : tabs.findLastIndex((t) => t.groupId === group.id) + 1
+    : -1;
+  tabs.splice(index > 0 ? index : tabs.length, 0, doc);
+}
+
 export function normalizeGroups(tabs, groups) {
   const seen = new Set();
   groups.splice(

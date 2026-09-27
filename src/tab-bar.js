@@ -28,7 +28,7 @@ export function createTabBar({
     resizeFrame,
     motion = null,
     scrollTarget = null,
-    scrollTimer;
+    browseFrame = 0;
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   const svgNS = "http://www.w3.org/2000/svg";
   const curves = document.createElementNS(svgNS, "svg"),
@@ -89,23 +89,41 @@ export function createTabBar({
         paths.delete(id);
       }
   }
-  function settleMotion() {
+  function settleMotion(refresh = true) {
     if (!motion) return;
     const old = motion;
     motion = null;
     cancelAnimationFrame(old.frame);
     for (const animation of old.animations) animation.cancel();
-    update();
+    if (refresh) update();
   }
   function toggleGroup(group) {
-    settleMotion();
+    if (motion && motion.groupId !== group.id) settleMotion();
     const closing = !group.collapsed;
     const members = tabs
       .filter((t) => t.groupId === group.id)
       .map((t) => nodes.get(t.id));
-    const widths = closing
-      ? members.map((n) => n.getBoundingClientRect().width)
-      : [];
+    const small = {
+      flexBasis: "0px",
+      minWidth: "0px",
+      maxWidth: "0px",
+      opacity: 0,
+      marginRight: "-3px",
+    };
+    const current = members.map((node) => {
+      if (node.hidden) return small;
+      const width = node.getBoundingClientRect().width + "px";
+      const style = getComputedStyle(node);
+      return {
+        flexBasis: width,
+        minWidth: width,
+        maxWidth: width,
+        opacity: style.opacity,
+        marginRight: style.marginRight,
+      };
+    });
+    // Sample rendered geometry before cancelling: reversal has no endpoint jump.
+    settleMotion(false);
     group.collapsed = closing;
     if (reducedMotion.matches) {
       changedOrder();
@@ -114,9 +132,7 @@ export function createTabBar({
     const run = { groupId: group.id, animations: [], frame: 0 };
     motion = run;
     update();
-    const finalWidths = closing
-      ? widths
-      : members.map((n) => n.getBoundingClientRect().width);
+    const finalWidths = members.map((n) => n.getBoundingClientRect().width);
     members.forEach((node, i) => {
       const full = {
         flexBasis: finalWidths[i] + "px",
@@ -125,17 +141,10 @@ export function createTabBar({
         opacity: 1,
         marginRight: "0px",
       };
-      const small = {
-        flexBasis: "0px",
-        minWidth: "0px",
-        maxWidth: "0px",
-        opacity: 0,
-        marginRight: "-3px",
-      };
       run.animations.push(
-        node.animate(closing ? [full, small] : [small, full], {
-          duration: 200,
-          easing: "cubic-bezier(.2,.7,.2,1)",
+        node.animate([current[i], closing ? small : full], {
+          duration: 280,
+          easing: "cubic-bezier(.22,1,.36,1)",
           fill: "both",
         }),
       );
@@ -159,7 +168,10 @@ export function createTabBar({
   };
   function reveal(doc) {
     const group = groups().find((g) => g.id === doc?.groupId);
-    if (group) group.collapsed = false;
+    if (group) {
+      if (motion?.groupId === group.id) settleMotion(false);
+      group.collapsed = false;
+    }
   }
   function update() {
     normalizeGroups(tabs, groups());
@@ -267,6 +279,7 @@ export function createTabBar({
         host.insertBefore(node, host.children[i] || null);
     });
     if (visibleId !== active()?.id) {
+      stopBrowse();
       visibleId = active()?.id;
       const node = nodes.get(visibleId);
       (node?.hidden ? headers.get(active()?.groupId) : node)?.scrollIntoView({
@@ -370,8 +383,12 @@ export function createTabBar({
     });
   }).observe(host);
   host.addEventListener("scroll", overflow, { passive: true });
+  function stopBrowse() {
+    cancelAnimationFrame(browseFrame);
+    browseFrame = 0;
+    scrollTarget = null;
+  }
   function browse(delta, smooth = true) {
-    clearTimeout(scrollTimer);
     scrollTarget = Math.max(
       0,
       Math.min(
@@ -379,13 +396,31 @@ export function createTabBar({
         (scrollTarget ?? host.scrollLeft) + delta,
       ),
     );
-    host.scrollTo({
-      left: scrollTarget,
-      behavior: smooth && !reducedMotion.matches ? "smooth" : "instant",
-    });
-    scrollTimer = setTimeout(() => {
-      scrollTarget = null;
-    }, 250);
+    if (!smooth || reducedMotion.matches) {
+      host.scrollLeft = scrollTarget;
+      stopBrowse();
+      return;
+    }
+    if (browseFrame) return;
+    let last = performance.now();
+    const glide = (now) => {
+      const target = Math.min(
+        scrollTarget,
+        Math.max(0, host.scrollWidth - host.clientWidth),
+      );
+      const remaining = target - host.scrollLeft;
+      if (Math.abs(remaining) < 1 || reducedMotion.matches) {
+        host.scrollLeft = target;
+        stopBrowse();
+        return;
+      }
+      // Time-based exponential ease-out; repeated input retargets without restarting.
+      const step = remaining * (1 - Math.exp(-Math.min(64, now - last) / 65));
+      host.scrollLeft += Math.sign(step) * Math.max(1, Math.abs(step));
+      last = now;
+      browseFrame = requestAnimationFrame(glide);
+    };
+    browseFrame = requestAnimationFrame(glide);
   }
   for (const [id, direction] of [
     ["tabs-back", -1],
@@ -402,7 +437,7 @@ export function createTabBar({
           (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? host.clientWidth : 1);
         browse(delta, e.deltaMode !== 0 || Math.abs(e.deltaY) >= 40);
         e.preventDefault();
-      }
+      } else stopBrowse();
     },
     { passive: false },
   );
@@ -476,8 +511,8 @@ export function createTabBar({
     if (e.button !== 0 || e.target.closest(".tab-close")) return;
     const node = e.target.closest(".tab,.tab-group");
     if (!node) return;
-    settleMotion();
-    scrollTarget = null;
+    if (motion?.groupId !== node.dataset.groupId) settleMotion();
+    stopBrowse();
     host.scrollTo({ left: host.scrollLeft, behavior: "instant" });
     drag = {
       node,
@@ -532,6 +567,7 @@ export function createTabBar({
     if (!drag) return;
     drag.current = e.clientX;
     if (!dragged && Math.abs(drag.current - drag.x) > 5) {
+      settleMotion();
       dragged = true;
       host.setPointerCapture(e.pointerId);
       host.classList.add("dragging");

@@ -5,8 +5,35 @@ import {
   normalizeGroups,
   moveGroupedTab,
   moveGroup,
+  insertDerivedTab,
 } from "../src/tab-groups.js";
 const at = (id, from = 0) => ({ id, anchor: { from, y: 32 } });
+
+test("derived tabs inherit only a live opener group and stay adjacent", () => {
+  const groups = [{ id: "research" }, { id: "other" }];
+  const tabs = [
+    { id: "a", groupId: "research" },
+    { id: "b", groupId: "research" },
+    { id: "c", groupId: "other" },
+  ];
+  const opener = { ...tabs[0] };
+  insertDerivedTab(tabs, groups, { id: "child" }, opener);
+  insertDerivedTab(tabs, groups, { id: "grandchild" }, tabs[1]);
+  assert.deepEqual(
+    tabs.map((t) => t.id),
+    ["a", "child", "grandchild", "b", "c"],
+  );
+  assert.equal(tabs[2].groupId, "research");
+  tabs.shift(); // A slow open may complete after its parent closes.
+  insertDerivedTab(tabs, groups, { id: "late" }, opener);
+  assert.equal(tabs.at(-2).id, "late");
+  assert.equal(tabs.at(-2).groupId, "research");
+  groups.shift(); // Removed groups must not be resurrected by a pending open.
+  insertDerivedTab(tabs, groups, { id: "orphan" }, opener);
+  insertDerivedTab(tabs, groups, { id: "external" });
+  assert.equal(tabs.at(-2).groupId, null);
+  assert.equal(tabs.at(-1).groupId, null);
+});
 
 test("reading history captures departure position, forwards and branches without document copies", () => {
   const h = createNavigationHistory();

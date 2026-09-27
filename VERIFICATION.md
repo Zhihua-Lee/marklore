@@ -1,5 +1,34 @@
 # Verification — 2026-09-27
 
+## v0.1.24 derived-tab group closure and interruptible easing
+
+New tabs opened from a note's links, hover-preview links or the new-note command
+inherit the initiating group and are inserted after their opener. Opener identity
+and group are captured before asynchronous reads. Existing tabs retain their
+group and draft; independently opened files do not inherit. Unit coverage checks
+chained derivation, adjacency, a closed opener with a surviving group, and deletion
+of the group during a pending open.
+
+Playwright CLI exercised A → B → C, an already-open destination in another group,
+the preview Open button, a link inside a preview of an unopened note, new-note,
+an external open, and delayed file loading while switching to another group.
+All derived tabs remained in the initiating group, and the serialized session
+preserved that membership. Only synthetic notes and isolated profiles were used.
+
+Collapse/expand now uses a 280ms cubic ease-out. On reversal the current rendered
+width, opacity and margin become the next starting keyframe. At the sampled
+reversal, width was 23.277px both before and immediately after reversal (full
+width 92px). The note DOM remained identical. Arrow/discrete-wheel scrolling
+uses time-based exponential decay with a retargetable destination; sampled
+positions at roughly 45ms intervals were 0, 119.43, 167.14 and 204.86px before
+settling at 237.71px. These are local functional samples, not a frame-rate claim.
+Reduced motion created no group animations, and drag initiation cancels scrolling.
+
+All 43 unit tests and 22 browser regressions pass. The independent packaged
+v0.1.24 native-navigation suite passes, covering OS app-command routing, keyboard
+navigation, exact reading return, modal protection and group/session persistence.
+Physical mouse hardware was not exercised. Formatting and diff checks pass.
+
 ## v0.1.23 continuous group contours and inline-math selection
 
 Each group now has one continuous SVG path, replacing separate borders and

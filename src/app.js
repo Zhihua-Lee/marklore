@@ -1,5 +1,6 @@
 import { createNavigationHistory } from "./navigation-history.js";
 import { createTabBar } from "./tab-bar.js";
+import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
@@ -196,7 +197,7 @@ function docFrom(file = {}) {
     checking: false,
   };
 }
-function add(file, { activate = true } = {}) {
+function add(file, { activate = true, opener = null } = {}) {
   const existing =
     file?.id && tabs.find((t) => t.fileId === file.id || t.path === file.path);
   if (existing) {
@@ -208,7 +209,7 @@ function add(file, { activate = true } = {}) {
     return null;
   }
   const doc = docFrom(file);
-  tabs.push(doc);
+  insertDerivedTab(tabs, settings.tabGroups, doc, opener);
   if (activate) activateTab(doc);
   return doc;
 }
@@ -900,6 +901,9 @@ function navigationMotion() {
 async function navigateLink(href, source = active) {
   const origin = navigationSnapshot();
   source ||= active;
+  // Capture the initiating context before asynchronous file access or tab switches.
+  const parent = source?.opener || source;
+  const opener = { id: parent?.id, groupId: parent?.groupId };
   const { target, anchor } = splitLink(href);
   if (/^https?:\/\//i.test(href)) {
     if (api && source.fileId) await api.link(source.fileId, href);
@@ -911,7 +915,7 @@ async function navigateLink(href, source = active) {
     if (!source.fileId) return toast("请先保存当前笔记");
     const file = await api.link(source.fileId, target);
     if (!file) return;
-    if (!add(file)) return;
+    if (!add(file, { opener })) return;
   } else if (source !== active) {
     const existing = tabs.find(
       (t) =>
@@ -919,13 +923,16 @@ async function navigateLink(href, source = active) {
     );
     if (existing) activateTab(existing);
     else if (
-      !add({
-        id: source.fileId,
-        path: source.path,
-        name: source.name,
-        text: source.text,
-        version: source.version,
-      })
+      !add(
+        {
+          id: source.fileId,
+          path: source.path,
+          name: source.name,
+          text: source.text,
+          version: source.version,
+        },
+        { opener },
+      )
     )
       return;
   }
@@ -972,6 +979,7 @@ const linkPreview = createLinkPreview({
   load: async (href) => {
     const source = active,
       { target } = splitLink(href);
+    const opener = { id: source?.id, groupId: source?.groupId };
     if (!target) return { ...source, draft: dirty(source) };
     if (!api?.preview) throw Error("请在桌面版中预览本地文件");
     if (!source?.fileId) throw Error("请先保存当前笔记以确定相对路径");
@@ -980,16 +988,16 @@ const linkPreview = createLinkPreview({
       (t) => t.fileId === file.id || t.path === file.path,
     );
     if (existing) {
-      if (dirty(existing)) return { ...existing, draft: true };
+      if (dirty(existing)) return { ...existing, draft: true, opener };
       // Clean tabs may be stale while inactive: preview reads the latest disk bytes.
       const latest = await api.read(file.id);
-      return { ...file, ...latest, fileId: file.id };
+      return { ...file, ...latest, fileId: file.id, opener };
     }
     const latest =
       typeof file.text === "string"
         ? file
         : { ...file, ...(await api.read(file.id)) };
-    return { ...latest, fileId: file.id };
+    return { ...latest, fileId: file.id, opener };
   },
 });
 wireCodeBlocks($("#content"), toast);
@@ -1397,7 +1405,7 @@ const commands = {
   open: openFiles,
   folder: openFolder,
   new: () => {
-    if (!add({ name: "未命名.md" })) return;
+    if (!add({ name: "未命名.md" }, { opener: active })) return;
     setMode("edit");
     requestAnimationFrame(() => view.focus());
   },

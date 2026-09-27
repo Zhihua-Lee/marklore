@@ -251,6 +251,18 @@ export function watchTableLayout(host, scroller) {
     ],
   });
   host.addEventListener("folio:math-rendered", schedule);
+  // Size tables at a jump's destination before it scrolls (see positions.js).
+  host.addEventListener(
+    "folio:prepare-layout",
+    ({ detail: { top, bottom } }) => {
+      for (const table of host.querySelectorAll(
+        ".table-scroll > table:not(.table-measure)",
+      )) {
+        const rect = table.getBoundingClientRect();
+        if (rect.bottom >= top && rect.top <= bottom) optimizeTable(table);
+      }
+    },
+  );
   scroller.addEventListener("scroll", schedule, { passive: true });
   host.addEventListener("toggle", schedule, true);
   host.addEventListener("click", (event) => {

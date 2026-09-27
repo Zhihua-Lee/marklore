@@ -414,6 +414,10 @@ test("code picker and math wrap selected source; dark code colors and toolbar re
   await dialog.getByLabel("语言").fill("javascript");
   await dialog.getByRole("button", { name: "插入", exact: true }).click();
   await expect(page.locator("#content .code-block")).toHaveCount(1);
+  // highlight.js loads on first use; the block re-renders with colors once it has.
+  await expect(page.locator("#content .code-block .hljs-string")).toHaveCount(
+    1,
+  );
   for (const theme of ["light", "dark"]) {
     await page.evaluate(
       (theme) => (document.documentElement.dataset.theme = theme),

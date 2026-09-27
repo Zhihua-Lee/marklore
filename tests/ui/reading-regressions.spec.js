@@ -86,6 +86,50 @@ test("smooth outline jumps land on their heading forwards and backwards in a laz
   }
 });
 
+test("long outline jumps never show half-rendered content while they move", async ({
+  page,
+}) => {
+  await boot(page, longNote);
+  // The destination renders before the jump moves; a long jump cuts to just
+  // short of it and glides the rest, so no frame shows raw formula source.
+  for (const n of [30, 6]) {
+    const frames = await page.evaluate(async (n) => {
+      const reader = document.querySelector("#reader"),
+        view = reader.getBoundingClientRect();
+      const pending = () =>
+        [...document.querySelectorAll("#content [data-folio-math]")].filter(
+          (marker) => {
+            const box = marker.getBoundingClientRect();
+            return box.bottom > view.top && box.top < view.bottom;
+          },
+        ).length;
+      [...document.querySelectorAll("#outline button")]
+        .find((b) => b.title === `Section ${n}`)
+        .click();
+      const samples = [];
+      const start = performance.now();
+      while (performance.now() - start < 1500) {
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        samples.push({ top: reader.scrollTop, pending: pending() });
+      }
+      return samples;
+    }, n);
+    const reduced = await page.evaluate(
+      () => matchMedia("(prefers-reduced-motion: reduce)").matches,
+    );
+    const moving = frames.filter((f, i) => i && f.top !== frames[i - 1].top);
+    // Reduced motion jumps instantly by design; otherwise the last stretch animates.
+    if (!reduced)
+      expect(moving.length, `Section ${n} did not glide`).toBeGreaterThan(3);
+    expect(
+      frames.filter((f) => f.pending).length,
+      `Section ${n} showed unrendered formulas`,
+    ).toBe(0);
+    await expect.poll(() => headingOffset(page, n)).toBeGreaterThanOrEqual(28);
+    await expect.poll(() => headingOffset(page, n)).toBeLessThanOrEqual(36);
+  }
+});
+
 test("table headers: text double-click locates source, only the button sorts", async ({
   page,
 }) => {

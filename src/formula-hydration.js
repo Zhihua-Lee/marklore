@@ -75,12 +75,30 @@ export function createFormulaHydrator(
     for (const marker of markers(host)) if (expand(marker)) count++;
     if (count) changed(anchor);
   }
+  // A jump's destination renders before it scrolls (positions.js), so formulas
+  // never pop in on arrival. Only markers inside the requested range expand.
+  function prepare(event) {
+    if (!host || !rendererReady()) return;
+    const { top, bottom } = event.detail;
+    const inRange = markers(host).filter((marker) => {
+      const rect = marker.getBoundingClientRect();
+      return rect.bottom >= top && rect.top <= bottom;
+    });
+    let count = 0;
+    for (const marker of inRange) {
+      ready.delete(marker);
+      observer?.unobserve(marker);
+      if (expand(marker)) count++;
+    }
+    if (count) changed(null);
+  }
   function deactivate() {
     clearTimeout(timer);
     timer = null;
     observer?.disconnect();
     observer = null;
     ready.clear();
+    host?.removeEventListener("folio:prepare-content", prepare);
     ownerWindow?.removeEventListener("beforeprint", flush);
     ownerWindow = null;
     host = null;
@@ -126,6 +144,7 @@ export function createFormulaHydrator(
       { root: scroller, rootMargin: "600px 0px" },
     );
     for (const marker of pending) observer.observe(marker);
+    container.addEventListener("folio:prepare-content", prepare);
     ownerWindow.addEventListener("beforeprint", flush);
   }
   return Object.assign(hydrate, { activate, deactivate, flush });

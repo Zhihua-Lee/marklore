@@ -173,11 +173,14 @@ export function unfold(element) {
     }
   }
 }
-function anchorTop(host, anchor, expand) {
-  if (!anchor || anchor.top) return 0;
+function anchorHit(host, anchor) {
   const target =
     anchor.targetId && host.querySelector("#" + CSS.escape(anchor.targetId));
-  const hit = target ? { element: target } : findPosition(host, anchor.from);
+  return target ? { element: target } : findPosition(host, anchor.from);
+}
+function anchorTop(host, anchor, expand) {
+  if (!anchor || anchor.top) return 0;
+  const hit = anchorHit(host, anchor);
   if (!hit) return null;
   if (expand) unfold(hit.element);
   const rect =
@@ -200,6 +203,29 @@ const navigations = new WeakMap();
 export function navigationMoving(host) {
   return navigations.get(host)?.moving === true;
 }
+// Before a jump moves, lazy formulas (content) and then table widths (layout)
+// around the destination render synchronously, so nothing visibly renders on
+// arrival and the target is measured against its final layout. Listeners get a
+// viewport-coordinate range: one screen above to two screens below the target.
+function prepareDestination(host, anchor) {
+  if (!anchor || anchor.top) return;
+  const element = anchorHit(host, anchor)?.element;
+  if (!element?.getClientRects().length) return;
+  for (const phase of ["content", "layout"]) {
+    const top = element.getBoundingClientRect().top,
+      height = host.clientHeight;
+    element.dispatchEvent(
+      new CustomEvent("folio:prepare-" + phase, {
+        bubbles: true,
+        detail: { top: top - height, bottom: top + 2 * height },
+      }),
+    );
+  }
+}
+// Long smooth jumps cut to just short of the destination and glide the rest:
+// the passage in between is never shown half-rendered.
+const GLIDE_SCREENS = 0.6,
+  CUT_SCREENS = 1.5;
 function place(host, navigation, top) {
   host.scrollTo({ behavior: "instant", top });
   navigation.expected = host.scrollTop;
@@ -217,7 +243,10 @@ export function navigateToAnchor(
   { expand = false, behavior = "instant" } = {},
 ) {
   navigations.get(host)?.stop();
-  const top = anchorTop(host, anchor, expand);
+  // Unfold first (it changes layout), prepare the destination, then measure.
+  if (anchorTop(host, anchor, expand) === null) return;
+  prepareDestination(host, anchor);
+  const top = anchorTop(host, anchor, false);
   if (top === null) return;
   const view = host.ownerDocument.defaultView;
   const smooth = behavior === "smooth";
@@ -247,6 +276,17 @@ export function navigateToAnchor(
     clearTimeout(quiet);
     quiet = setTimeout(() => navigation.stop(), 500);
   };
+  // The instant cut of a long jump ends with its own scrollend while the glide is
+  // already running; land only once the position has actually stopped changing.
+  const onEnd = () => {
+    if (!navigation.moving) return settle();
+    const at = host.scrollTop;
+    view.requestAnimationFrame(() =>
+      view.requestAnimationFrame(() => {
+        if (host.scrollTop === at) settle();
+      }),
+    );
+  };
   const cancel = () => navigation.stop();
   const onScroll = () => {
     if (!navigation.moving && moved()) navigation.stop();
@@ -255,14 +295,14 @@ export function navigateToAnchor(
   navigation.stop = () => {
     clearTimeout(quiet);
     clearTimeout(navigation.timeout);
-    host.removeEventListener("scrollend", settle);
+    host.removeEventListener("scrollend", onEnd);
     host.removeEventListener("scroll", onScroll);
     for (const name of inputs)
       host.ownerDocument.removeEventListener(name, cancel, true);
     if (navigations.get(host) === navigation) navigations.delete(host);
   };
   navigations.set(host, navigation);
-  host.addEventListener("scrollend", settle);
+  host.addEventListener("scrollend", onEnd);
   host.addEventListener("scroll", onScroll, { passive: true });
   // A user gesture takes over; never fight manual scrolling.
   for (const name of inputs)
@@ -271,6 +311,12 @@ export function navigateToAnchor(
       passive: true,
     });
   navigation.timeout = setTimeout(() => navigation.stop(), 6000);
+  const distance = top - host.scrollTop;
+  if (smooth && Math.abs(distance) > host.clientHeight * CUT_SCREENS)
+    host.scrollTo({
+      behavior: "instant",
+      top: top - Math.sign(distance) * host.clientHeight * GLIDE_SCREENS,
+    });
   const before = host.scrollTop;
   if (smooth) host.scrollTo({ behavior, top });
   else place(host, navigation, top);

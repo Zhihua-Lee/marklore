@@ -1,0 +1,64 @@
+.tab-group {
+  flex: none;
+  max-width: 140px;
+  height: 28px;
+  min-height: 28px;
+  padding: 3px 8px;
+  margin-inline: 4px 1px;
+  border-radius: 4px;
+  border-bottom: 2px solid var(--group-color);
+  font-size: var(--tab-size, 11px);
+  font-weight: 400;
+  color: var(--ink);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tab-group:hover,
+.tab-group.contains-active {
+  background: color-mix(in srgb, var(--group-color) 13%, transparent);
+}
+.tab.grouped {
+  border-bottom: 2px solid var(--group-color);
+}
+.tab-group.drop-into {
+  outline: 2px solid var(--group-color);
+  outline-offset: -2px;
+}
+.tab-group.drop-before {
+  box-shadow: -2px 0 var(--accent);
+}
+.tab-group.drop-after {
+  box-shadow: 2px 0 var(--accent);
+}
+.tab-group.reordering {
+  opacity: 0.55;
+}
+.group-dialog {
+  width: min(320px, calc(100vw - 32px));
+}
+.group-dialog label {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.group-dialog input,
+.group-dialog select {
+  width: 100%;
+}
+#context {
+  max-height: min(500px, calc(100vh - 16px));
+  overflow-y: auto;
+}
+#context button {
+  overflow-wrap: anywhere;
+}
+.history-controls {
+  display: flex;
+  flex: none;
+  gap: 0;
+}
+.history-controls .icon {
+  width: 26px;
+}

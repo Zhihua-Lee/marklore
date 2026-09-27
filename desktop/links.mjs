@@ -32,15 +32,8 @@ export function createLinkOpener({ files, dialog, shell, owner, openFile }) {
         )
       )
         throw Error("此文件类型暂不直接启动，请在文件夹中打开。");
-      const result = await dialog.showMessageBox(owner(), {
-        message: "使用系统默认应用打开附件？",
-        detail: target,
-        buttons: ["取消", "打开"],
-        defaultId: 0,
-        cancelId: 0,
-      });
-      if (result.response !== 1) return null;
-      // Re-resolve after the user confirmation; do not launch a changed symlink.
+      // An explicit attachment click opens its registered app. Recheck the real
+      // target immediately before launch; executable and network guards remain.
       if ((await files.linkTarget(id, href)).path !== target)
         throw Error("链接目标已改变，请重新点击");
       const error = await shell.openPath(target);

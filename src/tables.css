@@ -38,6 +38,19 @@
   vertical-align: top;
   overflow-wrap: anywhere;
 }
+.table-scroll > table.reading-columns,
+.prose .table-scroll > table.reading-columns {
+  table-layout: fixed;
+  width: 100%;
+  min-width: var(--table-min-width);
+}
+.table-scroll:has(> table.reading-columns) {
+  width: 100%;
+}
+.table-scroll > table.reading-columns :is(th, td) {
+  overflow-wrap: normal;
+  word-break: normal;
+}
 .table-scroll th,
 .prose .table-scroll th {
   background: color-mix(in srgb, var(--table-accent) 5%, var(--table-paper));

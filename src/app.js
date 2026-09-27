@@ -1,3 +1,6 @@
+import { createNavigationHistory } from "./navigation-history.js";
+import { createTabBar } from "./tab-bar.js";
+import { watchTableLayout } from "./table-layout.js";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
@@ -75,12 +78,19 @@ let settings = {
     wide: false,
     tableStyle: "soft",
     tableWidth: "auto",
+    tabGroups: [],
+    navigationScope: "all",
+    showHistoryButtons: false,
     outline: true,
     librarySide: "left",
     outlineSide: "right",
   },
   currentAnchor = null;
 const previewCache = createPreviewCache();
+const readingHistory = createNavigationHistory();
+let replayingHistory = false,
+  pendingLocation = null,
+  locationVersion = 0;
 configureColorTools(
   () => settings,
   (patch) => {
@@ -117,6 +127,26 @@ tabStrip.append($("#tabs-back"), $("#tabs"), $("#tabs-forward"), $("#new"));
 for (const side of ["left", "right"])
   $("main").prepend($("#panel-controls-" + side));
 $(".reading-tools").insertBefore($("#theme"), $("#weight"));
+
+const historyControls = document.createElement("div");
+historyControls.className = "history-controls";
+historyControls.setAttribute("role", "group");
+historyControls.setAttribute("aria-label", "阅读历史");
+historyControls.innerHTML = `<button id="history-back" class="icon" aria-label="后退" title="后退 · Alt+←">${icon("chevronLeft")}</button><button id="history-forward" class="icon" aria-label="前进" title="前进 · Alt+→">${icon("chevronRight")}</button>`;
+$(".topbar").insertBefore(historyControls, $(".document-tools"));
+const tabBar = createTabBar({
+  tabs,
+  groups: () => settings.tabGroups,
+  active: () => active,
+  activate: activateTab,
+  close: closeTab,
+  dirty,
+  changed: scheduleSession,
+  report: (error) => toast(error.message || String(error)),
+  context: (event, actions, doc) =>
+    actions ? showContext(event, actions) : contextMenu(event, doc),
+});
+const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
 
 function toast(message) {
   $("#toast").textContent = message;
@@ -206,6 +236,7 @@ function stateFor(doc) {
       EditorView.updateListener.of((update) => {
         if (!active || switching) return;
         if (update.docChanged) {
+          readingHistory.map(active.id, update.changes);
           blockEditor?.sourceChanged();
           active.text = update.state.doc.toString();
           active.state = update.state;
@@ -328,14 +359,137 @@ function restore(
     updateStatus();
   });
 }
-function activateTab(doc) {
-  if (active === doc) return;
+function navigationSnapshot() {
+  if (!active) return null;
+  if (pendingLocation?.id === active.id)
+    return { id: active.id, anchor: { ...pendingLocation.anchor } };
+  capture();
+  return { id: active.id, anchor: { ...active.anchor } };
+}
+function restoreSoon(doc, anchor, options = {}) {
+  const version = ++locationVersion;
+  doc.anchor = { ...anchor };
+  pendingLocation = { id: doc.id, anchor: { ...anchor } };
+  requestAnimationFrame(() => {
+    if (active !== doc || version !== locationVersion) return;
+    pendingLocation = null;
+    restore(doc, anchor, options);
+  });
+}
+function updateHistoryButtons() {
+  historyControls.hidden = !settings.showHistoryButtons;
+  for (const [id, direction] of [
+    ["history-back", -1],
+    ["history-forward", 1],
+  ])
+    $("#" + id).disabled =
+      !active ||
+      !readingHistory.can(
+        direction,
+        active.id,
+        settings.navigationScope === "current",
+      );
+}
+function travelHistory(direction) {
+  if (!active || $("dialog[open]")) return;
+  closeColorPicker();
+  blockEditor?.finish();
+  const destination = readingHistory.go(
+    direction,
+    navigationSnapshot(),
+    settings.navigationScope === "current",
+  );
+  if (!destination) return;
+  const doc = tabs.find((t) => t.id === destination.id);
+  if (!doc) return;
+  replayingHistory = true;
+  try {
+    tabBar.reveal(doc);
+    activateTab(doc);
+    updateTabs();
+    restoreSoon(
+      doc,
+      {
+        ...destination.anchor,
+        from: Math.min(destination.anchor.from || 0, doc.text.length),
+      },
+      { expand: true },
+    );
+  } finally {
+    replayingHistory = false;
+  }
+  updateHistoryButtons();
+  scheduleSession();
+}
+$("#history-back").onclick = () => travelHistory(-1);
+$("#history-forward").onclick = () => travelHistory(1);
+let lastNavigationInput = null;
+function hardwareNavigation(direction, source) {
+  const now = performance.now();
+  // Some drivers deliver both an OS browser command and a mouse button event.
+  if (
+    lastNavigationInput?.direction === direction &&
+    lastNavigationInput.source !== source &&
+    now - lastNavigationInput.time < 150
+  )
+    return;
+  lastNavigationInput = { direction, source, time: now };
+  travelHistory(direction);
+}
+for (const name of ["mousedown", "mouseup", "auxclick"])
+  document.addEventListener(
+    name,
+    (event) => {
+      if (![3, 4].includes(event.button)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (name === "mouseup")
+        hardwareNavigation(event.button === 3 ? -1 : 1, "mouse");
+    },
+    true,
+  );
+document.addEventListener(
+  "keydown",
+  (event) => {
+    const direction =
+      event.key === "BrowserBack" || (event.altKey && event.key === "ArrowLeft")
+        ? -1
+        : event.key === "BrowserForward" ||
+            (event.altKey && event.key === "ArrowRight")
+          ? 1
+          : 0;
+    if (
+      !direction ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      $("dialog[open]")
+    )
+      return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key.startsWith("Browser")) hardwareNavigation(direction, "key");
+    else travelHistory(direction);
+  },
+  true,
+);
+
+function activateTab(doc, { revealGroup = true } = {}) {
+  if (active === doc) {
+    if (revealGroup) {
+      tabBar.reveal(doc);
+      updateTabs();
+      scheduleSession();
+    }
+    return;
+  }
   closeColorPicker();
   blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
-  capture();
+  const origin = navigationSnapshot();
   active = doc;
+  if (revealGroup) tabBar.reveal(doc);
   $("main").dataset.empty = "false";
   $("#home").hidden = true;
   switching = true;
@@ -346,7 +500,10 @@ function activateTab(doc) {
   updateTabs();
   updateModes();
   showConflict();
-  requestAnimationFrame(() => restore(doc));
+  restoreSoon(doc, doc.anchor);
+  if (!replayingHistory)
+    readingHistory.visit({ id: doc.id, anchor: doc.anchor }, origin);
+  updateHistoryButtons();
   scheduleSession();
   run(() => checkDisk(doc))();
   if (settings.sidebar) run(followCurrentFolder)();
@@ -403,6 +560,7 @@ function render(preserve) {
     if (currentAnchor?.id === active?.id)
       restoreAnchor(host, currentAnchor.anchor);
   });
+  scheduleTableLayout();
 }
 let outlineSignature = "";
 function updateOutline(headings) {
@@ -420,60 +578,8 @@ function updateOutline(headings) {
     }),
   );
 }
-let visibleTabId = null;
-const tabElements = new Map();
 function updateTabs() {
-  const host = $("#tabs");
-  for (const [id, node] of tabElements) {
-    if (!tabs.some((doc) => doc.id === id)) {
-      node.remove();
-      tabElements.delete(id);
-    }
-  }
-  for (const doc of tabs) {
-    let wrap = tabElements.get(doc.id);
-    if (!wrap) {
-      wrap = document.createElement("div");
-      wrap.dataset.id = doc.id;
-      const b = document.createElement("button");
-      b.className = "tab-label";
-      b.setAttribute("role", "tab");
-      b.onclick = () => {
-        if (!dragged) activateTab(doc);
-      };
-      const close = document.createElement("button");
-      close.className = "tab-close";
-      close.innerHTML = icon("close");
-      close.onclick = run(() => closeTab(doc));
-      wrap.append(b, close);
-      wrap.oncontextmenu = (e) => {
-        e.preventDefault();
-        contextMenu(e, doc);
-      };
-      tabElements.set(doc.id, wrap);
-      host.append(wrap);
-    }
-    wrap.className = "tab" + (active === doc ? " active" : "");
-    const b = wrap.querySelector(".tab-label");
-    b.setAttribute("aria-selected", String(active === doc));
-    b.tabIndex = active === doc ? 0 : -1;
-    b.title = doc.path || doc.name;
-    const label = (dirty(doc) ? "● " : "") + doc.name;
-    if (b.textContent !== label) b.textContent = label;
-    wrap
-      .querySelector(".tab-close")
-      .setAttribute("aria-label", "关闭 " + doc.name);
-  }
-  tabs.forEach((doc, index) => {
-    const node = tabElements.get(doc.id);
-    if (host.children[index] !== node)
-      host.insertBefore(node, host.children[index] || null);
-  });
-  if (visibleTabId !== active?.id) {
-    visibleTabId = active?.id;
-    $(".tab.active")?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }
-  updateTabOverflow();
+  tabBar.update();
 }
 function updateModes() {
   for (const b of document.querySelectorAll("[data-mode]"))
@@ -507,6 +613,9 @@ function showHome() {
   linkPreview.hide();
   active = null;
   currentAnchor = null;
+  pendingLocation = null;
+  locationVersion++;
+  updateHistoryButtons();
   switching = true;
   view.setState(stateFor(docFrom()));
   switching = false;
@@ -556,6 +665,8 @@ async function closeTab(doc) {
       active = null;
     }
     tabs.splice(index, 1);
+    readingHistory.remove(doc.id);
+    updateHistoryButtons();
     previewCache.release(doc.id);
     if (!active) {
       const next = tabs[Math.min(index, tabs.length - 1)];
@@ -720,16 +831,18 @@ function showConflict() {
   };
   bar.append(load, copy, keep);
 }
-function jump(from) {
+function jump(from, { record = true } = {}) {
   if (!active) return;
   blockEditor?.finish();
+  const origin = navigationSnapshot();
   const anchor = { from, y: 32 };
-  active.anchor = anchor;
-  restore(active, anchor, {
+  restoreSoon(active, anchor, {
     expand: true,
     select: true,
     behavior: navigationMotion(),
   });
+  if (record) readingHistory.visit({ id: active.id, anchor }, origin);
+  updateHistoryButtons();
   scheduleSession();
 }
 function navigationMotion() {
@@ -738,6 +851,7 @@ function navigationMotion() {
     : "smooth";
 }
 async function navigateLink(href, source = active) {
+  const origin = navigationSnapshot();
   source ||= active;
   const { target, anchor } = splitLink(href);
   if (/^https?:\/\//i.test(href)) {
@@ -773,14 +887,29 @@ async function navigateLink(href, source = active) {
   if (line) {
     const n = Math.max(1, Math.min(Number(line[1]), view.state.doc.lines)),
       l = view.state.doc.line(n);
-    jump(Math.min(l.to, l.from + Math.max(0, Number(line[2] || 1) - 1)));
+    jump(Math.min(l.to, l.from + Math.max(0, Number(line[2] || 1) - 1)), {
+      record: active.id === origin?.id,
+    });
+    if (active.id !== origin?.id)
+      readingHistory.update({ id: active.id, anchor: active.anchor });
+    updateHistoryButtons();
     return;
   }
   const el = $("#content").querySelector("#" + CSS.escape(anchor));
   if (el) {
     unfold(el);
-    el.scrollIntoView({ block: "start", behavior: navigationMotion() });
-    capture();
+    const from = Number(
+      el.dataset.from ?? el.closest("[data-from]")?.dataset.from ?? 0,
+    );
+    const destination = { from, y: 32, targetId: anchor };
+    restoreSoon(active, destination, {
+      expand: true,
+      behavior: navigationMotion(),
+    });
+    if (active.id !== origin?.id)
+      readingHistory.update({ id: active.id, anchor: destination });
+    else readingHistory.visit({ id: active.id, anchor: destination }, origin);
+    updateHistoryButtons();
     scheduleSession();
   } else toast("没有找到锚点：" + anchor);
 }
@@ -856,7 +985,7 @@ $("#content").addEventListener("dblclick", (event) => {
 $("#content").addEventListener(
   "click",
   run(async (event) => {
-    const fold = event.target.closest(".fold, .section-rail");
+    const fold = event.target.closest(".fold, .section-rail, .section-summary");
     if (fold) {
       if (blockEditor?.active) {
         blockEditor.finish();
@@ -1062,174 +1191,38 @@ $("#file-filter").oninput = (e) => {
   );
 };
 function contextMenu(e, doc) {
-  const menu = $("#context");
-  menu.replaceChildren();
-  for (const [name, fn, disabled] of [
+  showContext(e, [
     ["在文件夹中显示", () => api.reveal(doc.fileId), !doc.fileId],
     ["刷新文件", () => checkDisk(doc, true), !doc.fileId],
+    ...tabBar.actions(doc),
     ["关闭标签", () => closeTab(doc), false],
-  ]) {
+  ]);
+}
+function showContext(e, actions) {
+  const menu = $("#context");
+  menu.replaceChildren();
+  for (const [name, fn, disabled] of actions) {
     const b = document.createElement("button");
     b.textContent = name;
     b.setAttribute("role", "menuitem");
-    b.disabled = disabled;
+    b.disabled = !!disabled;
     b.onclick = run(() => {
       menu.hidden = true;
       return fn();
     });
     menu.append(b);
   }
-  menu.style.left = Math.min(e.clientX, innerWidth - 210) + "px";
-  menu.style.top = Math.min(e.clientY, innerHeight - 160) + "px";
   menu.hidden = false;
+  menu.style.left =
+    Math.max(8, Math.min(e.clientX, innerWidth - menu.offsetWidth - 8)) + "px";
+  menu.style.top =
+    Math.max(8, Math.min(e.clientY, innerHeight - menu.offsetHeight - 8)) +
+    "px";
   menu.querySelector("button:not(:disabled)")?.focus();
 }
 document.addEventListener("pointerdown", (e) => {
   if (!e.target.closest("#context")) $("#context").hidden = true;
   if (!e.target.closest("#app-menu, #app-menu-toggle")) closeAppMenu();
-});
-function updateTabOverflow() {
-  const host = $("#tabs");
-  $(".topbar").dataset.overflow = String(
-    host.scrollWidth > host.clientWidth + 1,
-  );
-  $("#tabs-back").disabled = host.scrollLeft < 1;
-  $("#tabs-forward").disabled =
-    host.scrollLeft >= host.scrollWidth - host.clientWidth - 1;
-  const viewport = host.getBoundingClientRect();
-  for (const tab of host.children) {
-    const label = tab.querySelector(".tab-label").getBoundingClientRect();
-    const close = tab.querySelector(".tab-close").getBoundingClientRect();
-    tab.classList.toggle(
-      "edge-clipped",
-      Math.min(label.right, viewport.right) -
-        Math.max(label.left, viewport.left) <
-        28 ||
-        close.left < viewport.left ||
-        close.right > viewport.right,
-    );
-  }
-}
-let tabOverflowFrame;
-new ResizeObserver(() => {
-  cancelAnimationFrame(tabOverflowFrame);
-  tabOverflowFrame = requestAnimationFrame(updateTabOverflow);
-}).observe($("#tabs"));
-$("#tabs").addEventListener("scroll", updateTabOverflow, { passive: true });
-for (const [id, direction] of [
-  ["tabs-back", -1],
-  ["tabs-forward", 1],
-])
-  $("#" + id).onclick = () =>
-    $("#tabs").scrollBy({ left: direction * $("#tabs").clientWidth * 0.7 });
-$("#tabs").addEventListener("keydown", (event) => {
-  if (!event.target.matches(".tab-label")) return;
-  const index = tabs.indexOf(active);
-  if (
-    event.ctrlKey &&
-    event.shiftKey &&
-    ["ArrowLeft", "ArrowRight"].includes(event.key)
-  ) {
-    event.preventDefault();
-    moveTab(
-      active.id,
-      Math.max(
-        0,
-        Math.min(tabs.length - 1, index + (event.key === "ArrowLeft" ? -1 : 1)),
-      ),
-    );
-    tabElements.get(active.id)?.querySelector(".tab-label").focus();
-    return;
-  }
-  const next = {
-    ArrowLeft: tabs[(index - 1 + tabs.length) % tabs.length],
-    ArrowRight: tabs[(index + 1) % tabs.length],
-    Home: tabs[0],
-    End: tabs.at(-1),
-  }[event.key];
-  if (!next) return;
-  event.preventDefault();
-  activateTab(next);
-  tabElements.get(next.id)?.querySelector(".tab-label").focus();
-});
-function moveTab(id, destination) {
-  const index = tabs.findIndex((tab) => tab.id === id);
-  if (index < 0 || index === destination) return;
-  const [doc] = tabs.splice(index, 1);
-  tabs.splice(destination, 0, doc);
-  updateTabs();
-  scheduleSession();
-}
-let drag = null,
-  dragged = false,
-  dragFrame;
-$("#tabs").addEventListener("pointerdown", (e) => {
-  if (e.button !== 0 || e.target.closest(".tab-close")) return;
-  const node = e.target.closest(".tab");
-  if (!node) return;
-  drag = {
-    x: e.clientX,
-    current: e.clientX,
-    node,
-    id: e.pointerId,
-    left: $("#tabs").scrollLeft,
-  };
-  dragged = false;
-});
-function paintTabDrag() {
-  if (!drag || !dragged) return;
-  const host = $("#tabs"),
-    viewport = host.getBoundingClientRect();
-  const edge =
-    drag.current < viewport.left + 24
-      ? -8
-      : drag.current > viewport.right - 24
-        ? 8
-        : 0;
-  if (edge) host.scrollLeft += edge;
-  drag.node.style.transform = `translateX(${drag.current - drag.x + host.scrollLeft - drag.left}px)`;
-  const others = [...host.children].filter((node) => node !== drag.node);
-  drag.to = others.findIndex((node) => {
-    const box = node.getBoundingClientRect();
-    return drag.current < box.left + box.width / 2;
-  });
-  if (drag.to < 0) drag.to = others.length;
-  for (const node of host.children)
-    node.classList.remove("drop-before", "drop-after");
-  if (others[drag.to]) others[drag.to].classList.add("drop-before");
-  else others.at(-1)?.classList.add("drop-after");
-  dragFrame = requestAnimationFrame(paintTabDrag);
-}
-window.addEventListener("pointermove", (e) => {
-  if (!drag) return;
-  const delta = e.clientX - drag.x;
-  drag.current = e.clientX;
-  if (!dragged && Math.abs(delta) > 5) {
-    dragged = true;
-    $("#tabs").setPointerCapture(e.pointerId);
-    $("#tabs").classList.add("dragging");
-    drag.node.classList.add("reordering");
-    paintTabDrag();
-  }
-  if (dragged) e.preventDefault();
-});
-function finishTabDrag(commit) {
-  if (!drag) return;
-  cancelAnimationFrame(dragFrame);
-  const previous = drag;
-  previous.node.style.transform = "";
-  for (const node of $("#tabs").children)
-    node.classList.remove("reordering", "drop-before", "drop-after");
-  drag = null;
-  $("#tabs").classList.remove("dragging");
-  if (commit && dragged) moveTab(previous.node.dataset.id, previous.to);
-  setTimeout(() => (dragged = false), 0);
-}
-window.addEventListener("pointerup", () => finishTabDrag(true));
-window.addEventListener("pointercancel", () => finishTabDrag(false));
-window.addEventListener("blur", () => finishTabDrag(false));
-window.addEventListener("keydown", (event) => {
-  if (event.key === "Escape") finishTabDrag(false);
 });
 wireFileDrop({
   insertImages: (files, event) => imageInsertion.insert(files, event),
@@ -1237,16 +1230,6 @@ wireFileDrop({
   opened: (docs) => docs.forEach((doc) => add(doc)),
   report: toast,
 });
-$("#tabs").addEventListener(
-  "wheel",
-  (e) => {
-    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-      $("#tabs").scrollLeft += e.deltaY;
-      e.preventDefault();
-    }
-  },
-  { passive: false },
-);
 function zoom(delta) {
   capture();
   settings.zoom = Math.max(
@@ -1273,6 +1256,7 @@ function applySettings() {
   $("#width-toggle").title = settings.wide ? "切换为窄版" : "切换为宽版";
   applyAppearance(settings);
   refreshColorButtons();
+  updateHistoryButtons();
   if (themeChanged) renderDiagrams($("#content"), settings.theme, () => {});
 }
 function changeSettings(patch) {
@@ -1321,6 +1305,7 @@ async function flushSession() {
       name: t.name,
       content: t.fileId ? undefined : t.text,
       mode: t.mode,
+      groupId: t.groupId || null,
       pane: t.pane,
       anchor: t.anchor,
       folds: t.folds,
@@ -1330,6 +1315,8 @@ async function flushSession() {
   });
 }
 const commands = {
+  back: () => hardwareNavigation(-1, "native"),
+  forward: () => hardwareNavigation(1, "native"),
   open: openFiles,
   folder: openFolder,
   new: () => {
@@ -1579,6 +1566,12 @@ if (api) {
       ? settings.typeface
       : "literata";
     settings.wide = settings.wide === true;
+    settings.tabGroups = Array.isArray(settings.tabGroups)
+      ? settings.tabGroups
+      : [];
+    settings.navigationScope =
+      settings.navigationScope === "current" ? "current" : "all";
+    settings.showHistoryButtons = settings.showHistoryButtons === true;
     settings.tableStyle = ["soft", "plain", "grid"].includes(
       settings.tableStyle,
     )
@@ -1614,6 +1607,7 @@ if (api) {
           ? entry.mode
           : "read",
         pane: entry.pane || "preview",
+        groupId: typeof entry.groupId === "string" ? entry.groupId : null,
         anchor: entry.anchor || doc.anchor,
         folds: entry.folds || [],
         details: entry.details || [],
@@ -1636,6 +1630,7 @@ if (api) {
       activateTab(
         tabs.find((t) => t.path === boot.active || t.id === boot.active) ||
           tabs.at(-1),
+        { revealGroup: false },
       );
     else showHome();
   })();

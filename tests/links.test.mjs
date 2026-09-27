@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { FileStore } from "../desktop/files.mjs";
 import { createLinkOpener } from "../desktop/links.mjs";
-test("Markdown links stay internal; other files require consent, never run scripts", async (t) => {
+test("Markdown links stay internal; supported attachments open directly, never run scripts", async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "folio-links-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   for (const name of [
@@ -50,12 +50,10 @@ test("Markdown links stay internal; other files require consent, never run scrip
   await open(doc.id, "other.md");
   assert.equal(internal.length, 1);
   assert.equal(questions.length, 0);
-  assert.equal(await open(doc.id, "报告%20one.pdf"), null);
-  assert.equal(opened.length, 0);
-  response = 1;
   for (const href of ["报告%20one.pdf", "plot.png", "data.xlsx"])
     await open(doc.id, href);
   assert.equal(opened.length, 3);
+  assert.equal(questions.length, 0);
   assert.equal(internal.length, 1);
   assert.equal(opened[0], path.join(root, "报告 one.pdf"));
   for (const name of ["run.exe", "run.ps1", "site.url"])
@@ -64,4 +62,10 @@ test("Markdown links stay internal; other files require consent, never run scrip
   await assert.rejects(open(doc.id, "plot.png"), /无法打开/);
   await assert.rejects(open(doc.id, "."), /普通文件/);
   await assert.rejects(open(doc.id, "javascript:alert(1)"), /协议/);
+  await open(doc.id, "https://example.com");
+  assert.equal(questions.length, 1);
+  assert.equal(opened.includes("https://example.com/"), false);
+  response = 1;
+  await open(doc.id, "https://example.com");
+  assert.equal(opened.at(-1), "https://example.com/");
 });

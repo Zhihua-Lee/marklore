@@ -144,7 +144,9 @@ try {
   await fs.writeFile(pdf, "%PDF-1.4\nsynthetic");
   await instance.evaluate(({ dialog, shell }) => {
     globalThis.__openedAttachments = [];
-    dialog.showMessageBox = async () => ({ response: 1 });
+    dialog.showMessageBox = async () => {
+      throw Error("Attachment click must not ask for confirmation");
+    };
     shell.openPath = async (target) => {
       globalThis.__openedAttachments.push(target);
       return "";

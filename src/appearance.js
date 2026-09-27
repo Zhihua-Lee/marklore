@@ -17,6 +17,11 @@ export const appearanceMarkup = `
     <label for="table-style">表格风格<select id="table-style"><option value="soft">柔和卡片</option><option value="plain">简洁横线</option><option value="grid">经典网格</option></select></label>
     <label for="table-width">表格宽度<select id="table-width"><option value="auto">自适应内容</option><option value="full">铺满正文</option></select></label>
   </fieldset>
+  <fieldset><legend>阅读导航</legend>
+    <label for="navigation-scope">导航范围<select id="navigation-scope"><option value="all">全部笔记</option><option value="current">仅当前笔记</option></select></label>
+    <label for="history-buttons">前进 / 后退按钮<select id="history-buttons"><option value="hidden">隐藏</option><option value="visible">显示</option></select></label>
+    <p class="setting-hint">鼠标侧键或 Alt+← / → 返回阅读位置；隐藏按钮不影响快捷键。</p>
+  </fieldset>
   <fieldset><legend>侧栏位置</legend>
     <label for="navigation-size">文件夹与目录字号<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select></label>
     <label for="tab-size">标签页字号<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select></label>
@@ -73,6 +78,10 @@ export function applyAppearance(settings) {
   $("#typeface").value = settings.typeface;
   $("#table-style").value = settings.tableStyle;
   $("#table-width").value = settings.tableWidth;
+  $("#navigation-scope").value = settings.navigationScope;
+  $("#history-buttons").value = settings.showHistoryButtons
+    ? "visible"
+    : "hidden";
   $("#text-weight").value = String(settings.weight);
   $("#navigation-size").value = String(settings.navigationSize);
   $("#tab-size").value = String(settings.tabSize);
@@ -100,6 +109,10 @@ export function wireAppearance(change) {
     change({ tableStyle: event.target.value });
   $("#table-width").onchange = (event) =>
     change({ tableWidth: event.target.value });
+  $("#navigation-scope").onchange = (event) =>
+    change({ navigationScope: event.target.value });
+  $("#history-buttons").onchange = (event) =>
+    change({ showHistoryButtons: event.target.value === "visible" });
   $("#text-weight").onchange = (event) =>
     change({
       weight:

@@ -692,6 +692,26 @@ main[data-empty="true"] > #panes {
 .prose details[open] > summary::marker {
   content: "▾  ";
 }
+.prose details:not([open]):is(:hover, :focus-within),
+.prose details:has(> summary:is(:hover, :focus-visible)) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  box-shadow: 0 2px 9px #0000000a;
+}
+.prose details:not([open]):is(:hover, :focus-within) {
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg));
+}
+.prose details:not([open]):is(:hover, :focus-within) > summary::marker,
+.prose details > summary:is(:hover, :focus-visible)::marker {
+  color: var(--accent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .prose details {
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease,
+      box-shadow 120ms ease;
+  }
+}
 .prose .katex {
   font-size: 1.21em;
 }
@@ -856,6 +876,37 @@ main[data-empty="true"] > #panes {
 }
 .note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) > .section-summary {
   display: inline-block;
+  cursor: pointer;
+}
+.note-section.collapsed > :is(h1, h2, h3, h4, h5, h6) {
+  border-radius: 5px;
+}
+.note-section.collapsed:is(:hover, :focus-within) {
+  --section-marker: var(--accent);
+  --section-guide: color-mix(in srgb, var(--accent) 75%, transparent);
+}
+.note-section.collapsed:is(:hover, :focus-within)
+  > :is(h1, h2, h3, h4, h5, h6) {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  box-shadow:
+    5px 0 color-mix(in srgb, var(--accent) 6%, transparent),
+    -5px 0 color-mix(in srgb, var(--accent) 6%, transparent);
+}
+.note-section.collapsed:is(:hover, :focus-within)
+  > :is(h1, h2, h3, h4, h5, h6)
+  > .section-summary {
+  color: var(--accent);
+}
+.prose details > summary:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .note-section.collapsed > :is(h1, h2, h3, h4, h5, h6),
+  .prose details > summary {
+    transition:
+      background-color 120ms ease,
+      box-shadow 120ms ease;
+  }
 }
 #reader {
   background: var(--reading-paper);

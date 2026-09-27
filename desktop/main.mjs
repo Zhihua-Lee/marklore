@@ -325,6 +325,10 @@ else {
         }
       });
       win.webContents.on("will-navigate", (event) => event.preventDefault());
+      win.on("app-command", (_event, command) => {
+        if (command === "browser-backward") send("command", "back");
+        if (command === "browser-forward") send("command", "forward");
+      });
       win.on("close", (event) => {
         if (allowClose || !ready) return;
         event.preventDefault();

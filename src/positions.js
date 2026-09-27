@@ -132,7 +132,9 @@ export function restoreAnchor(
     host.scrollTop = 0;
     return;
   }
-  const hit = findPosition(host, anchor.from);
+  const target =
+    anchor.targetId && host.querySelector("#" + CSS.escape(anchor.targetId));
+  const hit = target ? { element: target } : findPosition(host, anchor.from);
   if (!hit) return;
   if (expand) unfold(hit.element);
   const rect =

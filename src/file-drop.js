@@ -1,4 +1,5 @@
-export function wireFileDrop({ api, opened, report }) {
+import { isImageFile } from "./image-insertion.js";
+export function wireFileDrop({ api, opened, report, insertImages }) {
   const isFiles = (event) =>
     [...(event.dataTransfer?.types || [])].includes("Files");
   let depth = 0;
@@ -42,6 +43,13 @@ export function wireFileDrop({ api, opened, report }) {
       event.stopPropagation();
       const files = [...event.dataTransfer.files];
       if (!files.length) return;
+      const images = files.filter(isImageFile);
+      if (images.length) {
+        if (images.length !== files.length)
+          report("请将笔记文件和图片分开拖入，以免插入到错误的笔记。");
+        else await insertImages(images, event);
+        return;
+      }
       if (!api?.openDroppedFiles) {
         report("请在桌面版中拖入本地 Markdown 文件");
         return;

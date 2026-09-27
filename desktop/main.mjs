@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { FileStore, within, markdownPath } from "./files.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
+import { createLinkOpener } from "./links.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -544,6 +545,50 @@ else {
           ? null
           : files.importImage(fileId, result.filePaths[0]);
       });
+      api("insertImages", async (fileId, items) => {
+        files.file(fileId);
+        if (!Array.isArray(items) || !items.length || items.length > 20)
+          throw Error("每次可插入 1–20 张图片");
+        const images = [],
+          errors = [];
+        let total = 0;
+        for (const item of items) {
+          try {
+            if (typeof item?.path === "string" && path.isAbsolute(item.path)) {
+              const stat = await fs.stat(item.path);
+              total += stat.size;
+              if (total > 64 * 1024 * 1024) throw Error("图片合计超过 64 MB");
+              images.push(await files.importImage(fileId, item.path));
+            } else {
+              if (
+                !(item?.bytes instanceof Uint8Array) ||
+                !item.bytes.length ||
+                item.bytes.length > 32 * 1024 * 1024
+              )
+                throw Error("剪贴板图片无效或超过 32 MB");
+              total += item.bytes.length;
+              if (total > 64 * 1024 * 1024) throw Error("图片合计超过 64 MB");
+              const image = nativeImage.createFromBuffer(
+                Buffer.from(item.bytes),
+              );
+              const size = image.getSize();
+              if (image.isEmpty() || size.width * size.height > 40_000_000)
+                throw Error("无法读取剪贴板图片，或图片尺寸过大");
+              images.push(
+                await files.importImageBytes(
+                  fileId,
+                  image.toPNG(),
+                  ".png",
+                  "粘贴图片",
+                ),
+              );
+            }
+          } catch (error) {
+            errors.push(error.message);
+          }
+        }
+        return { images, errors };
+      });
       api("list", (id) => files.list(id));
       api("currentFolder", (id) => files.currentFolder(id));
       api("search", (ids, query) => {
@@ -600,33 +645,10 @@ else {
         return { ...target, text, version: saved.version };
       });
       api("reveal", (id) => shell.showItemInFolder(files.file(id).path));
-      api("link", async (id, href) => {
-        if (typeof href !== "string") throw Error("无效链接");
-        if (/^https?:\/\//i.test(href)) {
-          const u = new URL(href);
-          const r = await dialog.showMessageBox(win, {
-            message: "在系统浏览器打开外部链接？",
-            detail: u.href,
-            buttons: ["取消", "打开"],
-            defaultId: 0,
-            cancelId: 0,
-          });
-          if (r.response === 1) await shell.openExternal(u.href);
-          return null;
-        }
-        const { path: p, authorized } = await files.linkTarget(id, href);
-        if (!authorized) {
-          const r = await dialog.showMessageBox(win, {
-            message: "打开当前笔记文件夹之外的文件？",
-            detail: p,
-            buttons: ["取消", "打开"],
-            defaultId: 0,
-            cancelId: 0,
-          });
-          if (r.response !== 1) return null;
-        }
-        return openFile(p);
-      });
+      api(
+        "link",
+        createLinkOpener({ files, dialog, shell, owner: () => win, openFile }),
+      );
       api("session", (value) => {
         if (!value || !Array.isArray(value.tabs))
           throw Error("Invalid session");

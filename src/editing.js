@@ -48,7 +48,7 @@ const buttons = [
   ["image", "插入图片", icon("image")],
   ["table", "插入表格", icon("table")],
 ];
-export function wireEditing({ view, getDocument, report, api }) {
+export function wireEditing({ view, getDocument, insertImage }) {
   const host = document.createElement("div");
   host.className = "editing-tools";
   host.setAttribute("role", "group");
@@ -132,36 +132,9 @@ export function wireEditing({ view, getDocument, report, api }) {
     };
     dialog.showModal();
   }
-  let pickingImage = false;
-  async function image() {
-    const doc = getDocument(),
-      state = view.state;
-    if (!doc?.fileId) throw Error("请先保存笔记，再插入本地图片。");
-    if (!api?.pickImage) throw Error("请在桌面版中选择本地图片。");
-    if (pickingImage) return;
-    pickingImage = true;
-    host.querySelector('[data-edit="image"]').disabled = true;
-    try {
-      const result = await api.pickImage(doc.fileId);
-      if (!result) return;
-      if (
-        doc !== getDocument() ||
-        state !== view.state ||
-        doc.mode === "read"
-      ) {
-        report(`图片已保存为 ${result.url}；笔记已切换或修改，请重新插入。`);
-        return;
-      }
-      apply("image", result, doc);
-    } finally {
-      pickingImage = false;
-      host.querySelector('[data-edit="image"]').disabled = false;
-    }
-  }
   function execute(action) {
     if (["link", "table", "code"].includes(action)) insertForm(action);
-    else if (action === "image")
-      image().catch((error) => report(error.message));
+    else if (action === "image") insertImage();
     else apply(action);
     return true;
   }

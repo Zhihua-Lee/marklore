@@ -1,0 +1,108 @@
+#block-edit-launch {
+  position: fixed;
+  z-index: 25;
+  width: 28px;
+  min-height: 28px;
+  padding: 4px;
+  color: var(--accent);
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+#block-edit-launch .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+.block-edit-hover {
+  outline: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  outline-offset: 5px;
+}
+.block-editor {
+  border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line));
+  border-radius: 6px;
+  margin: 1em 0;
+  background: var(--reading-paper);
+  overflow: hidden;
+  color: var(--reading-ink);
+}
+.block-edit-tools,
+.block-edit-actions,
+.block-edit-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 8px;
+  font: 400 11px/1.5 var(--font-ui);
+  background: var(--bg);
+}
+.block-edit-tools {
+  border-bottom: 1px solid var(--line);
+}
+.block-edit-tools button {
+  padding: 4px;
+  width: 28px;
+  min-height: 28px;
+}
+.block-edit-tools .ui-icon {
+  width: 15px;
+  height: 15px;
+  vertical-align: middle;
+}
+.block-edit-label {
+  margin-right: 6px;
+  color: var(--muted);
+}
+.block-edit-spacer {
+  flex: 1;
+}
+.block-edit-actions {
+  border-top: 1px solid var(--line);
+}
+.block-edit-actions > span {
+  flex: 1;
+  color: var(--muted);
+}
+.block-edit-actions [data-done] {
+  color: var(--accent);
+  background: var(--hover);
+}
+.block-edit-link label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 120px;
+}
+.block-edit-link [role="alert"] {
+  width: 100%;
+  color: var(--danger);
+}
+.block-editor .cm-editor {
+  height: auto;
+  min-height: 60px;
+  font-size: 0.9em;
+}
+.block-editor[data-kind="paragraph_open"] .cm-editor {
+  font-size: 1em;
+}
+.block-editor[data-kind="paragraph_open"] .cm-scroller {
+  font-family: var(--font-note) !important;
+}
+.block-editor .cm-content {
+  padding: 12px !important;
+  min-height: 60px;
+}
+.block-editor .cm-scroller {
+  max-height: 55vh;
+}
+.block-editor .cm-line {
+  padding: 0;
+}
+.block-editor .cm-content::selection {
+  background: var(--hover);
+}
+@media (prefers-reduced-motion: no-preference) {
+  #block-edit-launch {
+    transition: background 120ms;
+  }
+}

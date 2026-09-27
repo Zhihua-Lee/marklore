@@ -542,7 +542,7 @@ body:has(#panel-controls-right > button + button)
   padding-right: 68px;
 }
 body.file-drop::after {
-  content: "松开以打开 Markdown 文件";
+  content: "松开以打开笔记或插入图片";
   position: fixed;
   inset: 53px 10px 10px;
   z-index: 100;

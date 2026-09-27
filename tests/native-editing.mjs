@@ -76,11 +76,79 @@ try {
     page.getByRole("button", { name: "插入图片", exact: true }),
   ).toBeEnabled();
   assert.equal((await fs.readdir(path.join(folder, "assets"))).length, 1);
+  // Paste an actual PNG payload through the renderer File/preload boundary,
+  // without touching the user's system clipboard.
+  await page.locator("#content p").first().hover();
+  await page.getByRole("button", { name: "就地编辑此块", exact: true }).click();
+  await page.locator(".block-editor .cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.evaluate(
+    (base64) => {
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const transfer = new DataTransfer();
+      transfer.items.add(
+        new File([bytes], "clipboard.png", { type: "image/png" }),
+      );
+      document.querySelector(".block-editor .cm-content").dispatchEvent(
+        new ClipboardEvent("paste", {
+          clipboardData: transfer,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    },
+    (await fs.readFile(image)).toString("base64"),
+  );
+  await expect(page.locator(".block-editor .cm-content")).toContainText(
+    "粘贴图片",
+  );
+  await page.keyboard.press("Control+Enter");
+  await expect(page.locator("#content img")).toHaveCount(2);
+  const cdp = await page.context().newCDPSession(page);
+  const box = await page.locator("#reader").boundingBox();
+  for (const type of ["dragEnter", "dragOver", "drop"])
+    await cdp.send("Input.dispatchDragEvent", {
+      type,
+      x: box.x + 70,
+      y: box.y + 70,
+      data: { items: [], files: [image], dragOperationsMask: 1 },
+    });
+  await expect(page.locator("#content img")).toHaveCount(3);
+  await expect
+    .poll(() =>
+      page
+        .locator("#content img")
+        .evaluateAll((imgs) => imgs.every((img) => img.naturalWidth === 256)),
+    )
+    .toBe(true);
+  await cdp.detach();
+  const pdf = path.join(folder, "报告 one.pdf");
+  await fs.writeFile(pdf, "%PDF-1.4\nsynthetic");
+  await instance.evaluate(({ dialog, shell }) => {
+    globalThis.__openedAttachments = [];
+    dialog.showMessageBox = async () => ({ response: 1 });
+    shell.openPath = async (target) => {
+      globalThis.__openedAttachments.push(target);
+      return "";
+    };
+  });
+  await page.locator("#editor .cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.insertText("\n\n[PDF](<报告 one.pdf>)");
+  await page
+    .locator("#content")
+    .getByRole("link", { name: "PDF", exact: true })
+    .click();
+  assert.deepEqual(
+    await instance.evaluate(() => globalThis.__openedAttachments),
+    [pdf],
+  );
+  await expect(page.getByRole("tab")).toHaveCount(1);
   await page.screenshot({
-    path: path.join(root, ".local/native-editor-v015.png"),
+    path: path.join(root, ".local/native-editor-v016.png"),
   });
   console.log(
-    "Native toolbar, shortcut, image picker/cancel, scoped attachment preview, atomic undo/redo and save passed.",
+    "Native toolbar, block editing, picker/paste/file-drop images, decoded attachments, external PDF default-app routing, atomic undo/redo and save passed.",
   );
 } catch (error) {
   console.error(error);

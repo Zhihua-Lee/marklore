@@ -41,4 +41,25 @@ api.openDroppedFiles = (files) => {
   if (paths.some((path) => !path)) throw Error("请拖入磁盘上的真实文件");
   return ipcRenderer.invoke("folio:openDropped", paths);
 };
+api.insertImages = async (id, files) => {
+  if (!Array.isArray(files) || files.length < 1 || files.length > 20)
+    throw Error("每次可插入 1–20 张图片");
+  const items = [];
+  let total = 0;
+  for (const file of files) {
+    if (
+      !(file instanceof File) ||
+      file.size > 32 * 1024 * 1024 ||
+      (total += file.size) > 64 * 1024 * 1024
+    )
+      throw Error("单张图片上限 32 MB，每次合计上限 64 MB");
+    const path = webUtils.getPathForFile(file);
+    items.push(
+      path
+        ? { path }
+        : { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) },
+    );
+  }
+  return ipcRenderer.invoke("folio:insertImages", id, items);
+};
 contextBridge.exposeInMainWorld("folio", api);

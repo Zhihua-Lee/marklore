@@ -29,6 +29,8 @@ import { wireDesktopSettings } from "./desktop-settings.js";
 import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
 import { wireEditing, editingHighlight } from "./editing.js";
+import { createBlockEditor } from "./block-editing.js";
+import { createImageInsertion } from "./image-insertion.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -71,6 +73,7 @@ let settings = {
   currentAnchor = null;
 const previewCache = createPreviewCache();
 let editingKeys = [];
+let blockEditor, imageInsertion;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="切换文件夹浏览" aria-label="切换文件夹浏览">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="Folio Notes 菜单" aria-label="应用菜单" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="向左浏览标签">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="打开的笔记"></div><button id="tabs-forward" class="icon tab-nav" aria-label="向右浏览标签">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="新笔记" title="新笔记 Ctrl+N">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="切换本文目录" aria-label="切换本文目录">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="左侧栏"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">笔记库</span><span><button id="tree-refresh" class="icon" aria-label="刷新文件树" title="刷新文件树">${icon("refresh")}</button><button id="folder" class="icon" aria-label="打开文件夹" title="打开文件夹">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="搜索笔记…" aria-label="筛选文件" title="搜索文件名，包含子文件夹"><div id="tree"><div class="empty-tree">尚未添加文件夹<br><button id="folder-empty">打开文件夹</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">本文目录</span></div><nav id="outline" aria-label="本文目录"></nav></section></aside>
@@ -109,7 +112,14 @@ function run(fn) {
   return (...args) =>
     Promise.resolve()
       .then(() => fn(...args))
-      .catch((e) => toast(e.message || String(e)));
+      .catch((e) =>
+        toast(
+          (e.message || String(e)).replace(
+            /^Error invoking remote method '[^']+': (?:Error: )?/,
+            "",
+          ),
+        ),
+      );
 }
 function dirty(doc) {
   return doc.text !== doc.base;
@@ -180,6 +190,7 @@ function stateFor(doc) {
       EditorView.updateListener.of((update) => {
         if (!active || switching) return;
         if (update.docChanged) {
+          blockEditor?.sourceChanged();
           active.text = update.state.doc.toString();
           active.state = update.state;
           active.epoch++;
@@ -220,8 +231,32 @@ view = new EditorView({ state: stateFor(docFrom()), parent: $("#editor") });
 editingKeys = wireEditing({
   view,
   getDocument: () => active,
+  insertImage: () => imageInsertion.pick(),
+});
+blockEditor = createBlockEditor({
+  content: $("#content"),
+  reader: $("#reader"),
+  sourceView: view,
+  getDocument: () => active,
   report: toast,
+  insertImage: () => imageInsertion.pick(),
+  onFinish: (anchor) => {
+    clearTimeout(renderingTimer);
+    render(false);
+    restoreAnchor($("#reader"), anchor, { expand: true });
+    if (active) {
+      active.anchor = anchor;
+      active.pane = "preview";
+    }
+    scheduleSession();
+  },
+});
+imageInsertion = createImageInsertion({
+  view,
+  getDocument: () => active,
+  getBlockEditor: () => blockEditor,
   api,
+  report: toast,
 });
 function editorAnchor() {
   if (view.scrollDOM.scrollTop < 2) return { from: 0, top: true };
@@ -240,10 +275,11 @@ function capture() {
   if (!active) return;
   active.state = view.state;
   active.anchor =
-    active.mode === "source" ||
+    blockEditor?.anchor() ||
+    (active.mode === "source" ||
     (active.mode === "edit" && active.pane === "editor")
       ? editorAnchor()
-      : visibleAnchor($("#reader"));
+      : visibleAnchor($("#reader")));
   active.folds = [
     ...$("#content").querySelectorAll(".note-section.collapsed"),
   ].map((el) => el.dataset.foldKey);
@@ -278,6 +314,7 @@ function restore(
 }
 function activateTab(doc) {
   if (active === doc) return;
+  blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
   capture();
@@ -299,6 +336,7 @@ function activateTab(doc) {
 }
 function setMode(mode) {
   if (!active || active.mode === mode) return;
+  blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
   capture();
@@ -316,6 +354,8 @@ function setMode(mode) {
 }
 function render(preserve) {
   if (!active) return;
+  if (blockEditor?.active) return;
+  blockEditor?.resetHover();
   const doc = active,
     host = $("#reader");
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
@@ -328,6 +368,7 @@ function render(preserve) {
   }
   const container = $("#content");
   const changed = previewCache.update(container, doc.id, doc.html);
+  doc.previewText = doc.text;
   if (changed) {
     for (const el of container.querySelectorAll(".note-section"))
       if (doc.folds.includes(el.dataset.foldKey)) {
@@ -443,6 +484,7 @@ function setText(selector, text) {
   if (node.textContent !== text) node.textContent = text;
 }
 function showHome() {
+  blockEditor?.finish();
   clearTimeout(renderingTimer);
   linkPreview.hide();
   active = null;
@@ -462,6 +504,7 @@ function showHome() {
 }
 async function closeTab(doc) {
   if (!doc || doc.closing) return;
+  if (doc === active) blockEditor?.finish();
   if (doc.saving) {
     toast("正在保存，请保存完成后再关闭。");
     return;
@@ -589,7 +632,10 @@ async function checkDisk(doc = active, manual = false) {
       if (doc === active) showConflict();
       return;
     }
-    if (doc === active) capture();
+    if (doc === active) {
+      blockEditor?.finish();
+      capture();
+    }
     doc.text = result.text;
     doc.base = result.text;
     doc.version = result.version;
@@ -627,6 +673,7 @@ function showConflict() {
     // Destructive resolution uses an explicit confirmation, not a one-click discard.
     if (!window.confirm("放弃当前未保存修改，加载磁盘版本？建议先另存副本。"))
       return;
+    blockEditor?.finish();
     capture();
     doc.text = doc.conflict.text;
     doc.base = doc.text;
@@ -657,6 +704,7 @@ function showConflict() {
 }
 function jump(from) {
   if (!active) return;
+  blockEditor?.finish();
   const anchor = { from, y: 32 };
   active.anchor = anchor;
   restore(active, anchor, {
@@ -764,6 +812,7 @@ function sourceToPreview() {
   active.pane = "editor";
 }
 $("#content").addEventListener("dblclick", (event) => {
+  if (blockEditor?.active || event.target.closest(".block-editor")) return;
   if (event.target.closest("button,a,summary")) return;
   const hit = atPoint($("#content"), event.clientX, event.clientY);
   if (!hit) return;
@@ -790,6 +839,10 @@ $("#content").addEventListener(
   run(async (event) => {
     const fold = event.target.closest(".fold, .section-rail");
     if (fold) {
+      if (blockEditor?.active) {
+        blockEditor.finish();
+        return;
+      }
       const section = fold.closest(".note-section"),
         collapsed = !section.classList.contains("collapsed");
       setSectionCollapsed(section, collapsed);
@@ -1160,6 +1213,7 @@ window.addEventListener("keydown", (event) => {
   if (event.key === "Escape") finishTabDrag(false);
 });
 wireFileDrop({
+  insertImages: (files, event) => imageInsertion.insert(files, event),
   api,
   opened: (docs) => docs.forEach((doc) => add(doc)),
   report: toast,

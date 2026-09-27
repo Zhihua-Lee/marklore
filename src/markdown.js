@@ -243,6 +243,8 @@ export function createParser() {
     const slugs = new Map();
     const inlineCursors = new Map();
     state.env.headings = [];
+    state.env.editNonce = crypto.randomUUID();
+    state.env.editBlocks = [];
     let enclosingMap = null;
     for (let i = 0; i < state.tokens.length; i++) {
       const token = state.tokens[i];
@@ -254,6 +256,25 @@ export function createParser() {
           to = offsets[token.map[1]] ?? state.src.length;
         token.attrSet("data-from", String(from));
         token.attrSet("data-to", String(to));
+        if (
+          token.level === 0 &&
+          [
+            "paragraph_open",
+            "heading_open",
+            "bullet_list_open",
+            "ordered_list_open",
+            "blockquote_open",
+            "table_open",
+            "fence",
+            "code_block",
+            "folio_math_block",
+            "hr",
+          ].includes(token.type)
+        ) {
+          const key = state.env.editNonce + ":" + state.env.editBlocks.length;
+          token.attrSet("data-folio-edit", key);
+          state.env.editBlocks.push({ key, from, to, kind: token.type });
+        }
         if (token.type === "inline") {
           const range = `${from}:${to}`;
           let cursor = inlineCursors.get(range) ?? from;
@@ -309,6 +330,14 @@ export function createParser() {
       }
     }
   });
+  for (const name of ["fence", "code_block"]) {
+    const original = md.renderer.rules[name];
+    md.renderer.rules[name] = (tokens, i, options, env, renderer) =>
+      original(tokens, i, options, env, renderer).replace(
+        /^<pre/,
+        `<pre ${attrs(tokens[i])}`,
+      );
+  }
   md.renderer.rules.text = (tokens, i) => {
     const t = tokens[i],
       content = escape(t.content);
@@ -413,6 +442,28 @@ export function renderMarkdown(source, fileId = null) {
     a.setAttribute("rel", "noreferrer");
   }
   decorateCodeBlocks(template.content);
+  // Only parser-authenticated markers become editing targets. Raw note HTML
+  // cannot forge a source range or inject an editor control.
+  for (const element of template.content.querySelectorAll(
+    "[data-edit-from],[data-edit-to],[data-edit-kind]",
+  )) {
+    for (const name of ["data-edit-from", "data-edit-to", "data-edit-kind"])
+      element.removeAttribute(name);
+  }
+  const editable = new Map(
+    (env.editBlocks || []).map((block) => [block.key, block]),
+  );
+  for (const element of template.content.querySelectorAll(
+    "[data-folio-edit]",
+  )) {
+    const block = editable.get(element.getAttribute("data-folio-edit"));
+    element.removeAttribute("data-folio-edit");
+    if (!block) continue;
+    const target = element.closest(".code-block") || element;
+    target.dataset.editFrom = String(block.from);
+    target.dataset.editTo = String(block.to);
+    target.dataset.editKind = block.kind;
+  }
   // HTML is sanitized before heading controls are created. Source mapping stays on headings/blocks.
   const fragment = template.content,
     stack = [];

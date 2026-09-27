@@ -94,6 +94,14 @@ export function markdownEdit(text, from, to, action, options = {}) {
     return block(`$$\n${body}\n$$`, 3, body.length);
   }
   if (action === "rule") return block("---", 3, 0);
+  if (action === "images") {
+    const body = options.images
+      .map((image) =>
+        markdownEdit("", 0, 0, "image", image).changes.insert.trimEnd(),
+      )
+      .join("\n\n");
+    return block(body, body.length, 0);
+  }
   if (action === "table") {
     const columns = Number(options.columns),
       rows = Number(options.rows);

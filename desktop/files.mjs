@@ -290,6 +290,23 @@ export class FileStore {
     if (!/^\.(png|jpe?g|gif|webp|bmp|avif|svg)$/.test(extension))
       throw Error("请选择 PNG、JPEG、GIF、WebP、BMP、AVIF 或 SVG 图片");
     const bytes = await this.readBytes(real);
+    return this.importImageBytes(
+      id,
+      bytes,
+      extension,
+      path.basename(real, extension),
+    );
+  }
+  async importImageBytes(id, bytes, extension, label = "图片") {
+    const file = this.file(id);
+    await unchangedPath(file.path);
+    if (
+      !Buffer.isBuffer(bytes) ||
+      !bytes.length ||
+      bytes.length > MAX_BYTES ||
+      !/^\.(png|jpe?g|gif|webp|bmp|avif|svg)$/.test(extension)
+    )
+      throw Error("图片类型不支持或超过 32 MB");
     const parent = path.dirname(file.path);
     const folder = path.join(parent, "assets");
     await fs.mkdir(folder, { recursive: true });
@@ -298,6 +315,6 @@ export class FileStore {
     const name = `image-${randomUUID()}${extension}`;
     // Exclusive creation never overwrites an existing attachment or source image.
     await fs.writeFile(path.join(resolved, name), bytes, { flag: "wx" });
-    return { url: `assets/${name}`, label: path.basename(real, extension) };
+    return { url: `assets/${name}`, label };
   }
 }

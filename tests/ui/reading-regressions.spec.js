@@ -53,9 +53,12 @@ async function headingOffset(page, n) {
     const button = [...document.querySelectorAll("#outline button")].find(
       (b) => b.title === `Section ${n}`,
     );
-    const heading = document.querySelector(
-      `#content [data-from="${button.dataset.from}"]`,
-    );
+    // The outline or the heading can be mid-rebuild; report "not yet" so the
+    // surrounding expect.poll retries instead of throwing.
+    const heading =
+      button &&
+      document.querySelector(`#content [data-from="${button.dataset.from}"]`);
+    if (!heading) return Number.NaN;
     return Math.round(
       heading.getBoundingClientRect().top - reader.getBoundingClientRect().top,
     );
@@ -78,11 +81,11 @@ test("smooth outline jumps land on their heading forwards and backwards in a laz
     await expect.poll(() => headingOffset(page, n)).toBeLessThanOrEqual(36);
     // Late formula batches and table widths after landing keep the heading in place.
     await page.waitForTimeout(700);
-    const settled = await headingOffset(page, n);
-    expect(
-      Math.abs(settled - 32),
-      `Section ${n} drifted to ${settled}`,
-    ).toBeLessThanOrEqual(4);
+    await expect
+      .poll(async () => Math.abs((await headingOffset(page, n)) - 32), {
+        message: `Section ${n} drifted after landing`,
+      })
+      .toBeLessThanOrEqual(4);
   }
 });
 

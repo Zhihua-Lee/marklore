@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const svg = await fs.readFile(path.join(root, "src/folio.svg"), "utf8");
+// Full mark (book, mug, steam) from 32 px up; the book alone below that and
+// for the tray, where the mug would blur into noise.
+const full = await fs.readFile(path.join(root, "src/folio.svg"), "utf8");
+const small = await fs.readFile(path.join(root, "src/folio-small.svg"), "utf8");
 const out = path.join(root, "desktop/icons");
 await fs.mkdir(out, { recursive: true });
 const browser = await chromium.launch({ channel: "msedge", headless: true });
@@ -15,8 +18,8 @@ try {
     viewport: { width: 512, height: 512 },
     deviceScaleFactor: 1,
   });
-  for (const size of sizes) {
-    const data = await page.evaluate(
+  const draw = (svg, size) =>
+    page.evaluate(
       async ({ svg, size }) => {
         const image = new Image();
         image.src =
@@ -34,6 +37,14 @@ try {
       },
       { svg, size },
     );
+  // The tray shows 16 px (32 px on high-DPI), so it always uses the book alone.
+  const tray = await draw(small, 32);
+  await fs.writeFile(
+    path.join(out, "tray.png"),
+    Buffer.from(tray.png, "base64"),
+  );
+  for (const size of sizes) {
+    const data = await draw(size <= 24 ? small : full, size);
     const png = Buffer.from(data.png, "base64");
     // DIB entries keep small Windows shell icons compatible with classic icon
     // extractors; only the 256px entry uses PNG compression.
@@ -62,7 +73,7 @@ try {
         }
       images.push(dib);
     }
-    if (size === 32) await fs.writeFile(path.join(out, "tray.png"), png);
+
     if (size === 256) await fs.writeFile(path.join(out, "folio.png"), png);
   }
   const header = Buffer.alloc(6 + sizes.length * 16);
@@ -83,7 +94,7 @@ try {
     Buffer.concat([header, ...images]),
   );
   console.log(
-    "Built original Folio page mark: PNG + 8-resolution Windows ICO.",
+    "Built Folio mark: PNG, tray and 8-resolution Windows ICO (book-only below 32 px).",
   );
 } finally {
   await browser.close();

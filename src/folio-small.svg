@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" aria-hidden="true">
+  <!-- 16-24 px and tray: the M-shaped open book alone stays crisp. -->
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="#285e50"/>
+  <path d="M9 12.5C15 12 24 15.5 32 29C40 15.5 49 12 55 12.5V46.5C47 44.8 38 46.5 32 51C26 46.5 17 44.8 9 46.5Z" fill="#f5f1e5"/>
+</svg>

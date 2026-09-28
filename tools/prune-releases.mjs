@@ -8,6 +8,9 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 
+// Under Electron-as-Node, fs treats app.asar as a directory; measure it as a file.
+process.noAsar = true;
+
 const args = process.argv.slice(2);
 function option(name, fallback) {
   const index = args.indexOf(name);
@@ -88,10 +91,18 @@ if (apply && prune.length) {
   if (process.platform !== "win32")
     throw Error("--apply uses the Windows Recycle Bin");
   // Recycle rather than delete: paths travel through an environment variable, not the command line.
+  // Recycling a whole unpacked build sometimes reports "folder in use" although
+  // no file is locked; recycling its files, then its folders deepest first, works.
   const script = `Add-Type -AssemblyName Microsoft.VisualBasic
+$fs = [Microsoft.VisualBasic.FileIO.FileSystem]
 foreach ($p in ($env:FOLIO_PRUNE | ConvertFrom-Json)) {
-  if (Test-Path -LiteralPath $p -PathType Container) { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin') }
-  else { [Microsoft.VisualBasic.FileIO.FileSystem]::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin') }
+  if (-not (Test-Path -LiteralPath $p -PathType Container)) { $fs::DeleteFile($p, 'OnlyErrorDialogs', 'SendToRecycleBin'); continue }
+  try { $fs::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin') }
+  catch {
+    Get-ChildItem -LiteralPath $p -Recurse -File -Force | ForEach-Object { $fs::DeleteFile($_.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin') }
+    Get-ChildItem -LiteralPath $p -Recurse -Directory -Force | Sort-Object { $_.FullName.Length } -Descending | ForEach-Object { $fs::DeleteDirectory($_.FullName, 'OnlyErrorDialogs', 'SendToRecycleBin') }
+    $fs::DeleteDirectory($p, 'OnlyErrorDialogs', 'SendToRecycleBin')
+  }
 }`;
   const result = spawnSync(
     "powershell.exe",

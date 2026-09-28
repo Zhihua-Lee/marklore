@@ -30,8 +30,8 @@
     "icons": "node tools/build-icons.mjs",
     "format": "prettier --write src desktop tests tools docs *.mjs *.json *.md",
     "format:check": "prettier --check src desktop tests tools docs *.mjs *.json *.md",
-    "dist": "pnpm licenses && pnpm build && electron-builder --win dir --publish never",
-    "licenses": "node tools/licenses.mjs",
+    "dist": "pnpm run notices && pnpm build && electron-builder --win dir --publish never",
+    "notices": "node tools/licenses.mjs",
     "prune-releases": "node tools/prune-releases.mjs"
   },
   "dependencies": {

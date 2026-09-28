@@ -87,11 +87,11 @@ pnpm dev
 ## Windows 打包
 
 ```powershell
-pnpm licenses
+pnpm run notices
 pnpm dist
 ```
 
-`pnpm licenses` 生成第三方依赖声明；`pnpm dist` 构建前端并生成 Windows 目录包，输出为 `release/win-unpacked/`。当前构建不做代码签名，也不自动发布到 GitHub Releases。
+`pnpm run notices` 生成第三方依赖声明；`pnpm dist` 构建前端并生成 Windows 目录包，输出为 `release/win-unpacked/`。当前构建不做代码签名，也不自动发布到 GitHub Releases。
 
 分发时保留整个目录，以及 Electron／Chromium 随附的许可文件。不要只复制 `Folio Notes.exe`。
 

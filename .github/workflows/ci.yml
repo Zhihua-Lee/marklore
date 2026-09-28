@@ -32,7 +32,7 @@ jobs:
       - run: pnpm test
       - name: Third-party notices are current
         run: |
-          pnpm licenses
+          pnpm run notices
           git diff --exit-code THIRD-PARTY-NOTICES.txt
       - run: pnpm build
       - run: pnpm test:ui

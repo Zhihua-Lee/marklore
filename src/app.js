@@ -54,6 +54,8 @@ import {
   closeColorPicker,
 } from "./color-picker.js";
 import "./tables.css";
+import "./find-bar.css";
+import { createFindBar } from "./find-bar.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -100,7 +102,7 @@ $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="切换文件夹浏览" aria-label="切换文件夹浏览">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="Folio Notes 菜单" aria-label="应用菜单" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="向左浏览标签">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="打开的笔记"></div><button id="tabs-forward" class="icon tab-nav" aria-label="向右浏览标签">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="新笔记" title="新笔记 Ctrl+N">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="切换本文目录" aria-label="切换本文目录">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="左侧栏"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">笔记库</span><span><button id="tree-refresh" class="icon" aria-label="刷新文件树" title="刷新文件树">${icon("refresh")}</button><button id="folder" class="icon" aria-label="打开文件夹" title="打开文件夹">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="搜索笔记…" aria-label="筛选文件" title="搜索文件名，包含子文件夹"><div id="tree"><div class="empty-tree">尚未添加文件夹<br><button id="folder-empty">打开文件夹</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">本文目录</span></div><nav id="outline" aria-label="本文目录"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="文件操作"><button id="open" class="icon" aria-label="打开文件" title="打开文件 Ctrl+O">${icon("open")}</button><button id="save" class="icon" aria-label="保存" title="保存 Ctrl+S">${icon("save")}</button></div><div class="modes" role="group" aria-label="查看模式"><button data-mode="read">阅读</button><button data-mode="edit">编辑</button><button data-mode="source">源码</button></div><div class="toolbar-group reading-tools" role="group" aria-label="阅读设置"><button id="width-toggle" class="icon" aria-label="切换阅读宽度" title="切换阅读宽度" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="外观与布局" aria-label="外观与布局">Aa</button></div></div>
-<section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Folio Notes</h1></div><p>打开一篇笔记，或选择一个文件夹。</p><div class="start-actions"><button id="start-open">${icon("open")}<span>打开文件</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>打开文件夹</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>新建笔记</span><kbd>Ctrl N</kbd></button></div></div></section>
+<section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Folio Notes</h1></div><p>打开一篇笔记，或选择一个文件夹。</p><div class="start-actions"><button id="start-open">${icon("open")}<span>打开文件</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>打开文件夹</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>新建笔记</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">最近打开</h2><button id="recent-clear" type="button">清除记录</button></div><ul id="recent-list"></ul></section></div></section>
 <div id="conflict" role="alert" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="调整编辑预览比例" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="笔记预览"><article id="content" class="prose"></article></div></div>
 <span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="右侧栏"></aside></div>
 <div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div>
@@ -143,6 +145,11 @@ const tabBar = createTabBar({
     actions ? showContext(event, actions) : contextMenu(event, doc),
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
+const findBar = createFindBar({
+  panes: $("#panes"),
+  content: $("#content"),
+  reader: $("#reader"),
+});
 
 function toast(message) {
   $("#toast").textContent = message;
@@ -564,7 +571,10 @@ function render(preserve) {
   let fragment = null;
   if (doc.htmlText !== doc.text) {
     linkPreview.hide();
-    const result = renderMarkdown(doc.text, doc.fileId, { deferMath: true });
+    const result = renderMarkdown(doc.text, doc.fileId, {
+      deferMath: true,
+      interactiveTasks: true,
+    });
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = doc.text;
@@ -674,9 +684,41 @@ function showHome() {
   $("#conflict").hidden = true;
   $("main").dataset.empty = "true";
   $("#home").hidden = false;
+  if (findBar.isOpen) findBar.close();
   updateTabs();
   updateModes();
+  run(showRecent)();
 }
+// The start page lists recently opened notes (the jump list mirrors them).
+async function showRecent() {
+  const section = $(".start-recent");
+  if (!api?.recentFiles) return;
+  const items = (await api.recentFiles()).slice(0, 8);
+  $("#recent-list").replaceChildren(
+    ...items.map((item) => {
+      const entry = document.createElement("li"),
+        button = document.createElement("button"),
+        name = document.createElement("span"),
+        folder = document.createElement("span");
+      button.type = "button";
+      button.className = "recent-item";
+      button.title = item.path;
+      name.className = "recent-name";
+      name.textContent = item.name;
+      folder.className = "recent-folder";
+      folder.textContent = item.folder;
+      button.append(name, folder);
+      button.onclick = run(async () => add(await api.openRecent(item.path)));
+      entry.append(button);
+      return entry;
+    }),
+  );
+  section.hidden = !items.length;
+}
+$("#recent-clear").onclick = run(async () => {
+  await api.clearRecent();
+  await showRecent();
+});
 async function closeTab(doc) {
   if (!doc || doc.closing) return;
   if (doc === active) blockEditor?.finish();
@@ -897,9 +939,35 @@ function sourceToPreview() {
   highlightLocation(from, to);
   active.pane = "editor";
 }
+// Task boxes in the preview edit the source ("[ ]" <-> "[x]") exactly as typing
+// would, so the change marks the note dirty, saves normally and can be undone.
+const TASK_MARKER = /^([ \t>]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX])\]/;
+$("#content").addEventListener("change", (event) => {
+  const box = event.target.closest?.("input.task-list-item-checkbox");
+  if (!box || !active) return;
+  const from = Number(
+    box.closest("li.task-list-item[data-from]")?.dataset.from,
+  );
+  const doc = view.state.doc;
+  const match =
+    !blockEditor?.active &&
+    Number.isInteger(from) &&
+    from <= doc.length &&
+    doc.sliceString(from, doc.lineAt(from).to).match(TASK_MARKER);
+  if (!match) {
+    box.checked = !box.checked;
+    toast("无法定位该任务的源码，未修改");
+    return;
+  }
+  const at = from + match[1].length + 1;
+  view.dispatch({
+    changes: { from: at, to: at + 1, insert: box.checked ? "x" : " " },
+    userEvent: "input.task",
+  });
+});
 $("#content").addEventListener("dblclick", (event) => {
   if (blockEditor?.active || event.target.closest(".block-editor")) return;
-  if (event.target.closest("button,a,summary")) return;
+  if (event.target.closest("button,a,summary,input")) return;
   const hit = atPoint($("#content"), event.clientX, event.clientY);
   if (!hit) return;
   constrainWordSelection($("#content"), hit);
@@ -1226,17 +1294,32 @@ wireSplitPane({
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") dismissMenus();
   if ($("dialog[open]")) return;
+  if (e.key === "F3" && findBar.isOpen) {
+    e.preventDefault();
+    if (e.shiftKey) findBar.previous();
+    else findBar.next();
+    return;
+  }
   if (!(e.ctrlKey || e.metaKey)) return;
-  const key = e.key.toLowerCase(),
-    cmd = {
-      o: e.shiftKey ? "folder" : "open",
-      s: e.shiftKey ? "saveAs" : "save",
-      n: "new",
-      r: "refresh",
-      1: "read",
-      2: "edit",
-      3: "source",
-    }[key];
+  const key = e.key.toLowerCase();
+  // Ctrl+F in the editor opens CodeMirror's search (it handles the key first);
+  // anywhere else it searches the rendered note.
+  if (key === "f" && !e.shiftKey && !e.altKey) {
+    if (e.defaultPrevented || e.target.closest?.("#editor")) return;
+    if (!active || active.mode === "source") return;
+    e.preventDefault();
+    findBar.open();
+    return;
+  }
+  const cmd = {
+    o: e.shiftKey ? "folder" : "open",
+    s: e.shiftKey ? "saveAs" : "save",
+    n: "new",
+    r: "refresh",
+    1: "read",
+    2: "edit",
+    3: "source",
+  }[key];
   if (cmd) {
     e.preventDefault();
     run(commands[cmd])();

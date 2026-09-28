@@ -189,9 +189,28 @@ try {
     await restored.locator(".cm-content").innerText(),
     /UNSAVED RECOVERY/,
   );
+  // Notes opened from the command line and via a link are remembered across the
+  // restart, newest first (restoring tabs does not reorder them); only listed
+  // paths reopen.
+  const recent = (
+    await restored.evaluate(() => window.folio.recentFiles())
+  ).map((item) => item.path.toLowerCase());
+  assert.deepEqual(recent, [
+    (await fs.realpath(other)).toLowerCase(),
+    (await fs.realpath(file)).toLowerCase(),
+  ]);
+  const refused = await restored.evaluate(
+    (p) =>
+      window.folio.openRecent(p).then(
+        () => "opened",
+        (error) => error.message,
+      ),
+    path.join(temp, "picture.svg"),
+  );
+  assert.match(refused, /不在最近打开列表中/);
   assert.equal(errors.length, 0, errors.join("\n"));
   console.log(
-    "Native smoke passed: isolated renderer, math, local SVG, scoped hover preview, internal link, fs watcher, safe save, draft restart recovery.",
+    "Native smoke passed: isolated renderer, math, local SVG, scoped hover preview, internal link, fs watcher, safe save, draft restart recovery, recent files.",
   );
 } finally {
   if (instance)

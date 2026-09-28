@@ -19,6 +19,7 @@ import { FileStore, within, markdownPath } from "./files.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
 import { createLinkOpener } from "./links.mjs";
+import { createRecentFiles } from "./recent.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -47,6 +48,36 @@ const integration = createIntegration({
   app,
   shell,
   profile: app.getPath("userData"),
+});
+const recent = createRecentFiles({
+  file: path.join(app.getPath("userData"), "recent.json"),
+  // Tests and isolated profiles (FOLIO_DATA_DIR) never touch the user's real
+  // taskbar jump list; neither does an unpackaged development run.
+  jumpList:
+    process.platform === "win32" && app.isPackaged && !profile
+      ? (paths) => {
+          if (!app.isReady()) return;
+          app.setJumpList(
+            paths.length
+              ? [
+                  {
+                    type: "custom",
+                    name: "最近打开",
+                    items: paths.map((p) => ({
+                      type: "task",
+                      title: path.basename(p),
+                      description: p,
+                      program: process.execPath,
+                      args: `"${p}"`,
+                      iconPath: process.execPath,
+                      iconIndex: 0,
+                    })),
+                  },
+                ]
+              : null,
+          );
+        }
+      : null,
 });
 let tray,
   desktopWrite = Promise.resolve(),
@@ -214,9 +245,12 @@ function retainWatchers(fileIds) {
     }
   }
 }
-async function openFile(p) {
+// Explicit opens are remembered as recent; restoring last session's tabs is not.
+async function openFile(p, { remember = true } = {}) {
   const doc = await files.open(p);
   watchFile(doc.id);
+  if (remember)
+    recent.add(doc.path).catch((e) => console.warn("Recent list:", e.message));
   return doc;
 }
 async function acceptArgs(args) {
@@ -294,6 +328,7 @@ else {
     .whenReady()
     .then(async () => {
       await integration.load();
+      recent.refreshJumpList().catch(() => {});
       if (process.platform === "win32")
         app.setAppUserModelId("io.folionotes.desktop");
       session.defaultSession.setPermissionRequestHandler(
@@ -716,6 +751,14 @@ else {
         if (saved.conflict) throw Error("目标文件在保存前发生变化");
         return { ...target, text, version: saved.version };
       });
+      api("recentFiles", () => recent.list());
+      // Reopen only what this process itself recorded; no arbitrary paths.
+      api("openRecent", async (p) => {
+        if (typeof p !== "string" || !(await recent.has(p)))
+          throw Error("该文件不在最近打开列表中");
+        return openFile(p);
+      });
+      api("clearRecent", () => recent.clear());
       api("reveal", (id) => shell.showItemInFolder(files.file(id).path));
       api("imageInfo", async (id, href) => {
         try {
@@ -876,7 +919,9 @@ else {
           try {
             restored.push({
               ...t,
-              document: t.path ? await openFile(t.path) : null,
+              document: t.path
+                ? await openFile(t.path, { remember: false })
+                : null,
             });
           } catch {
             if (typeof t.draft === "string")

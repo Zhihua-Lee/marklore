@@ -75,6 +75,10 @@
       "!node_modules/**"
     ],
     "asar": true,
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
     "extraFiles": [
       "README.md",
       "LICENSE",

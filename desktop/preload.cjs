@@ -27,6 +27,9 @@ for (const name of [
   "desktopAction",
   "exportNote",
   "copyText",
+  "recentFiles",
+  "openRecent",
+  "clearRecent",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {

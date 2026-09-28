@@ -32,6 +32,9 @@ export const FOLIO_API = [
   "on",
   "openDroppedFiles",
   "insertImages",
+  "recentFiles",
+  "openRecent",
+  "clearRecent",
 ];
 
 function harness(api) {

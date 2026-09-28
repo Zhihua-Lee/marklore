@@ -468,7 +468,7 @@ export function parseHeadings(source) {
 export function renderMarkdown(
   source,
   fileId = null,
-  { deferMath = false } = {},
+  { deferMath = false, interactiveTasks = false } = {},
 ) {
   const env = { mathFragments: [], deferMath };
   let raw = parser.render(source, env);
@@ -539,7 +539,16 @@ export function renderMarkdown(
   decorateSortableTables(template.content);
   for (const input of template.content.querySelectorAll("input")) {
     if (input.type !== "checkbox") input.remove();
-    else input.disabled = true;
+    // Only the live preview's task boxes toggle their source (app.js); authored
+    // HTML checkboxes, exports and hover previews stay inert.
+    else if (
+      interactiveTasks &&
+      input.classList.contains("task-list-item-checkbox") &&
+      input.closest("li.task-list-item[data-from]")
+    ) {
+      input.disabled = false;
+      input.setAttribute("aria-label", "切换任务完成状态");
+    } else input.disabled = true;
   }
   for (const img of template.content.querySelectorAll("img")) {
     const src = img.getAttribute("src") || "";

@@ -376,6 +376,60 @@ main[data-empty="true"] > #panes {
   color: var(--muted);
   margin: 14px 0 28px;
 }
+.start-recent {
+  margin-top: 26px;
+}
+.start-recent[hidden] {
+  display: none;
+}
+.start-recent-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.start-recent h2 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+#recent-clear {
+  min-height: 24px;
+  padding: 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+#recent-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.recent-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  min-height: 44px;
+  padding: 6px 12px;
+  text-align: left;
+}
+.recent-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink);
+}
+.recent-folder {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--muted);
+}
 .start-actions {
   display: flex;
   flex-direction: column;
@@ -583,6 +637,9 @@ main[data-empty="true"] > #panes {
 }
 .prose .task-list-item {
   list-style: none;
+}
+.prose input.task-list-item-checkbox:not(:disabled) {
+  cursor: pointer;
 }
 .prose input.task-list-item-checkbox {
   display: inline-block;

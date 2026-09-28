@@ -1,0 +1,60 @@
+/* Floats over the preview's top-right corner; takes no layout space. */
+#panes {
+  position: relative;
+}
+#find-bar {
+  position: absolute;
+  top: 10px;
+  right: 22px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 4px 16px #0002;
+  font: 400 12px/1.4 var(--font-ui);
+}
+#find-bar[hidden] {
+  display: none;
+}
+#find-bar input {
+  width: 200px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+#find-bar .find-count {
+  min-width: 52px;
+  padding: 0 6px;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+#find-bar button {
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 14px;
+}
+::highlight(folio-find) {
+  background-color: color-mix(in srgb, #e5b93a 38%, transparent);
+  color: var(--reading-ink);
+}
+::highlight(folio-find-current) {
+  background-color: color-mix(in srgb, #e58a1f 70%, transparent);
+  color: var(--reading-ink);
+}
+@media print {
+  #find-bar {
+    display: none;
+  }
+}

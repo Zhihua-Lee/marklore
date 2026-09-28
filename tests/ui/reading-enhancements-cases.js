@@ -335,7 +335,8 @@ export const cases = {
         span.textContent = source;
         return span;
       },
-      { progressive: true },
+      // Viewport scheduling in isolation; idle backfill has its own case below.
+      { progressive: true, backfill: false },
     );
     try {
       cache.update(host, "math", html, null, { hydrate });
@@ -413,6 +414,61 @@ export const cases = {
         "a hydration task exceeded its formula count budget",
       );
       return { batches, largest };
+    } finally {
+      hydrate.deactivate();
+      box.remove();
+    }
+  },
+  async "idle backfill renders off-screen formulas in small slices and yields to scrolling"() {
+    const { box, host } = fixture();
+    let count = 0,
+      previous = 0,
+      largest = 0;
+    const formulas = new Map(
+      Array.from({ length: 300 }, (_, i) => [String(i), String(i)]),
+    );
+    host.innerHTML = [...formulas.keys()]
+      .map(
+        (key) =>
+          `<div class="math-block" style="height:60px"><span data-folio-math="${key}">x</span></div>`,
+      )
+      .join("");
+    host.addEventListener("folio:math-rendered", () => {
+      largest = Math.max(largest, count - previous);
+      previous = count;
+    });
+    const hydrate = createFormulaHydrator(
+      formulas,
+      () => {
+        count++;
+        // Stand-in for KaTeX cost so each slice holds only a few formulas.
+        const until = performance.now() + 0.3;
+        while (performance.now() < until);
+        return document.createTextNode("x");
+      },
+      { progressive: true, budgetMs: 2 },
+    );
+    try {
+      hydrate.activate(host);
+      // Keep scrolling: backfill must wait instead of competing with it.
+      const scrolling = performance.now() + 400;
+      let during = null;
+      while (performance.now() < scrolling) {
+        box.scrollTop += 1;
+        await sleep(40);
+        during ??= count;
+      }
+      const whileScrolling = count - during;
+      await until(() => count === 300);
+      check(
+        largest < 60,
+        `a backfill slice rendered ${largest} formulas at once`,
+      );
+      check(
+        whileScrolling < 60,
+        `backfill rendered ${whileScrolling} formulas during active scrolling`,
+      );
+      return { largest, whileScrolling };
     } finally {
       hydrate.deactivate();
       box.remove();

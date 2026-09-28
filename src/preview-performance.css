@@ -9,5 +9,17 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+/* While a jump glides past formulas that idle backfill has not reached yet
+   (only right after opening), show a quiet placeholder instead of raw TeX.
+   The text stays in the DOM, so layout and find-in-page are unchanged. */
+[data-navigating] [data-folio-math] {
+  color: transparent;
+  background: color-mix(
+    in srgb,
+    var(--reading-ink, currentColor) 7%,
+    transparent
+  );
+  border-radius: 4px;
+}
 /* No content-visibility here: its estimated off-screen heights made outline and
    link jumps land short, and measured no clear gain on 250k-character notes. */

@@ -203,29 +203,44 @@ const navigations = new WeakMap();
 export function navigationMoving(host) {
   return navigations.get(host)?.moving === true;
 }
-// Before a jump moves, lazy formulas (content) and then table widths (layout)
-// around the destination render synchronously, so nothing visibly renders on
-// arrival and the target is measured against its final layout. Listeners get a
-// viewport-coordinate range: one screen above to two screens below the target.
+// Before a jump moves, lazy formulas (content) on its path and table widths
+// (layout) at its destination render synchronously, so the smooth scroll passes
+// finished content and the target is measured against its final layout. Idle
+// backfill normally has done this already (a few ms). Right after opening, the
+// formula work is capped, nearest the destination first, so the click stays
+// responsive; path tables keep native widths (never raw source) until idle.
+// Listeners get viewport-coordinate ranges plus the destination's position.
+const PREPARE_CONTENT_MS = 120;
 function prepareDestination(host, anchor) {
   if (!anchor || anchor.top) return;
   const element = anchorHit(host, anchor)?.element;
   if (!element?.getClientRects().length) return;
+  // Growth above the current screen (upward jumps) must not move what is shown.
+  const keep = visibleAnchor(host);
   for (const phase of ["content", "layout"]) {
-    const top = element.getBoundingClientRect().top,
+    const view = host.getBoundingClientRect(),
+      top = element.getBoundingClientRect().top,
       height = host.clientHeight;
+    const around = { top: top - height, bottom: top + 2 * height };
     element.dispatchEvent(
       new CustomEvent("folio:prepare-" + phase, {
         bubbles: true,
-        detail: { top: top - height, bottom: top + 2 * height },
+        detail:
+          phase === "content"
+            ? {
+                top: Math.min(view.top, around.top),
+                bottom: Math.max(view.bottom, around.bottom),
+                target: top,
+                budgetMs: PREPARE_CONTENT_MS,
+              }
+            : around,
       }),
     );
   }
+  const held = anchorTop(host, keep, false);
+  if (held !== null && !keep.top)
+    host.scrollTo({ behavior: "instant", top: held });
 }
-// Long smooth jumps cut to just short of the destination and glide the rest:
-// the passage in between is never shown half-rendered.
-const GLIDE_SCREENS = 0.6,
-  CUT_SCREENS = 1.5;
 function place(host, navigation, top) {
   host.scrollTo({ behavior: "instant", top });
   navigation.expected = host.scrollTop;
@@ -260,6 +275,7 @@ export function navigateToAnchor(
     // Anything else that scrolled after landing (code, scrollbar, anchoring) wins.
     if (!navigation.moving && moved()) return navigation.stop();
     navigation.moving = false;
+    delete host.dataset.navigating;
     const next = anchorTop(host, anchor, false);
     if (next === null) return navigation.stop();
     const goal = Math.max(
@@ -276,8 +292,8 @@ export function navigateToAnchor(
     clearTimeout(quiet);
     quiet = setTimeout(() => navigation.stop(), 500);
   };
-  // The instant cut of a long jump ends with its own scrollend while the glide is
-  // already running; land only once the position has actually stopped changing.
+  // A scrollend can arrive while the glide is still running (e.g. after the
+  // destination hold above); land only once the position has stopped changing.
   const onEnd = () => {
     if (!navigation.moving) return settle();
     const at = host.scrollTop;
@@ -295,6 +311,7 @@ export function navigateToAnchor(
   navigation.stop = () => {
     clearTimeout(quiet);
     clearTimeout(navigation.timeout);
+    if (navigations.get(host) === navigation) delete host.dataset.navigating;
     host.removeEventListener("scrollend", onEnd);
     host.removeEventListener("scroll", onScroll);
     for (const name of inputs)
@@ -302,6 +319,8 @@ export function navigateToAnchor(
     if (navigations.get(host) === navigation) navigations.delete(host);
   };
   navigations.set(host, navigation);
+  // Placeholder styling for not-yet-rendered formulas while gliding (CSS).
+  if (smooth) host.dataset.navigating = "";
   host.addEventListener("scrollend", onEnd);
   host.addEventListener("scroll", onScroll, { passive: true });
   // A user gesture takes over; never fight manual scrolling.
@@ -311,12 +330,6 @@ export function navigateToAnchor(
       passive: true,
     });
   navigation.timeout = setTimeout(() => navigation.stop(), 6000);
-  const distance = top - host.scrollTop;
-  if (smooth && Math.abs(distance) > host.clientHeight * CUT_SCREENS)
-    host.scrollTo({
-      behavior: "instant",
-      top: top - Math.sign(distance) * host.clientHeight * GLIDE_SCREENS,
-    });
   const before = host.scrollTop;
   if (smooth) host.scrollTo({ behavior, top });
   else place(host, navigation, top);

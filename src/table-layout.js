@@ -198,10 +198,47 @@ export function optimizeTable(table) {
 export function watchTableLayout(host, scroller) {
   wireSortableTables(host);
   let timer,
+    idle = null,
+    lastScroll = 0,
     measuredWidth = -1;
+  // Tables beyond the viewport are sized in idle time, so jumps glide through
+  // finished layout. Yields to jumps and active scrolling; keeps the reading line.
+  const backfill = (deadline) => {
+    idle = null;
+    if (!host.getClientRects().length) return;
+    if (
+      navigationMoving(scroller) ||
+      performance.now() - lastScroll < 250 ||
+      timer !== null
+    )
+      return scheduleBackfill();
+    const anchor = visibleAnchor(scroller),
+      start = performance.now(),
+      budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8));
+    let changed = false,
+      done = true;
+    for (const table of host.querySelectorAll(
+      ".table-scroll > table:not(.table-measure)",
+    )) {
+      if (performance.now() - start >= budget) {
+        done = false;
+        break;
+      }
+      changed = optimizeTable(table) || changed;
+    }
+    if (changed) restoreAnchor(scroller, anchor);
+    if (!done) scheduleBackfill();
+  };
+  const scheduleBackfill = () => {
+    if (idle !== null) return;
+    idle = window.requestIdleCallback
+      ? requestIdleCallback(backfill, { timeout: 3000 })
+      : setTimeout(() => backfill(null), 100);
+  };
   const schedule = () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
+      timer = null;
       if (!host.getClientRects().length) return;
       // Measure tables where a jump lands, not the ones it flies past.
       if (navigationMoving(scroller)) {
@@ -231,6 +268,10 @@ export function watchTableLayout(host, scroller) {
         } while (cursor < pending.length && performance.now() - start < 12);
         if (changed) restoreAnchor(scroller, anchor);
         if (cursor < pending.length) timer = setTimeout(work, 0);
+        else {
+          timer = null;
+          scheduleBackfill();
+        }
       }
       work();
     }, 80);
@@ -263,7 +304,14 @@ export function watchTableLayout(host, scroller) {
       }
     },
   );
-  scroller.addEventListener("scroll", schedule, { passive: true });
+  scroller.addEventListener(
+    "scroll",
+    () => {
+      lastScroll = performance.now();
+      schedule();
+    },
+    { passive: true },
+  );
   host.addEventListener("toggle", schedule, true);
   host.addEventListener("click", (event) => {
     if (event.target.closest(".fold,.section-rail,.section-summary"))

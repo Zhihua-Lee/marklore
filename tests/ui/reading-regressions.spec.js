@@ -104,44 +104,84 @@ function smoothScrollAnimates(page) {
   });
 }
 
-test("long outline jumps never show half-rendered content while they move", async ({
+// Click an outline entry and sample every frame for 1.5 s: scroll position,
+// visible unrendered formulas, and whether any of them show raw TeX.
+function sampleJump(page, n) {
+  return page.evaluate(async (n) => {
+    const reader = document.querySelector("#reader"),
+      view = reader.getBoundingClientRect(),
+      from = reader.scrollTop;
+    const pending = () =>
+      [...document.querySelectorAll("#content [data-folio-math]")].filter(
+        (marker) => {
+          const box = marker.getBoundingClientRect();
+          return box.bottom > view.top && box.top < view.bottom;
+        },
+      );
+    [...document.querySelectorAll("#outline button")]
+      .find((b) => b.title === `Section ${n}`)
+      .click();
+    const samples = [];
+    const start = performance.now();
+    while (performance.now() - start < 1500) {
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+      const visible = pending();
+      samples.push({
+        top: reader.scrollTop,
+        pending: visible.length,
+        rawTeX: visible.filter(
+          (marker) => getComputedStyle(marker).color !== "rgba(0, 0, 0, 0)",
+        ).length,
+      });
+    }
+    return { from, samples };
+  }, n);
+}
+
+test("long outline jumps glide continuously without showing half-rendered content", async ({
   page,
 }) => {
   await boot(page, longNote);
-  // The destination renders before the jump moves; a long jump cuts to just
-  // short of it and glides the rest, so no frame shows raw formula source.
-  for (const n of [30, 6]) {
-    const frames = await page.evaluate(async (n) => {
-      const reader = document.querySelector("#reader"),
-        view = reader.getBoundingClientRect();
-      const pending = () =>
-        [...document.querySelectorAll("#content [data-folio-math]")].filter(
-          (marker) => {
-            const box = marker.getBoundingClientRect();
-            return box.bottom > view.top && box.top < view.bottom;
-          },
-        ).length;
-      [...document.querySelectorAll("#outline button")]
-        .find((b) => b.title === `Section ${n}`)
-        .click();
-      const samples = [];
-      const start = performance.now();
-      while (performance.now() - start < 1500) {
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        samples.push({ top: reader.scrollTop, pending: pending() });
-      }
-      return samples;
-    }, n);
-    const moving = frames.filter((f, i) => i && f.top !== frames[i - 1].top);
-    // Reduced motion jumps instantly by design, and some hosts (e.g. CI runners
-    // with system animations off) render smooth scrolls instantly; the glide is
-    // only asserted where the browser actually animates.
-    if (await smoothScrollAnimates(page))
-      expect(moving.length, `Section ${n} did not glide`).toBeGreaterThan(3);
+  const animates = await smoothScrollAnimates(page);
+  // Right after opening, idle backfill has not reached the path yet: whatever
+  // formula is still pending mid-glide must look like a placeholder, not raw TeX.
+  const early = await sampleJump(page, 30);
+  if (animates)
     expect(
-      frames.filter((f) => f.pending).length,
+      early.samples.filter((f) => f.rawTeX).length,
+      "raw TeX visible while gliding right after opening",
+    ).toBe(0);
+  await expect.poll(() => headingOffset(page, 30)).toBeGreaterThanOrEqual(28);
+  await expect.poll(() => headingOffset(page, 30)).toBeLessThanOrEqual(36);
+  // Once idle backfill has finished, the whole path is rendered.
+  await expect
+    .poll(() => page.locator("#content [data-folio-math]").count(), {
+      timeout: 15000,
+    })
+    .toBe(0);
+  for (const n of [6, 34]) {
+    const { from, samples } = await sampleJump(page, n);
+    expect(
+      samples.filter((f) => f.pending).length,
       `Section ${n} showed unrendered formulas`,
     ).toBe(0);
+    // Reduced motion jumps instantly by design, and some hosts (e.g. CI runners
+    // with system animations off) render smooth scrolls instantly; continuity
+    // is only asserted where the browser actually animates.
+    if (animates) {
+      const tops = [from, ...samples.map((f) => f.top)];
+      const steps = tops
+        .slice(1)
+        .map((top, i) => Math.abs(top - tops[i]))
+        .filter((step) => step > 0.5);
+      const distance = Math.abs(tops.at(-1) - from);
+      expect(steps.length, `Section ${n} did not glide`).toBeGreaterThan(5);
+      // No cut: no single frame covers a large share of the jump.
+      expect(
+        Math.max(...steps) / distance,
+        `Section ${n} jumped instead of scrolling`,
+      ).toBeLessThan(0.3);
+    }
     await expect.poll(() => headingOffset(page, n)).toBeGreaterThanOrEqual(28);
     await expect.poll(() => headingOffset(page, n)).toBeLessThanOrEqual(36);
   }

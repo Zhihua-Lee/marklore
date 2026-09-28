@@ -16,6 +16,7 @@ export function createFormulaHydrator(
   {
     progressive = false,
     budgetMs = 8,
+    backfill: fillIdle = true,
     ready: rendererReady = () => true,
     load = null,
   } = {},
@@ -24,8 +25,12 @@ export function createFormulaHydrator(
     scroller = null,
     observer = null,
     timer = null,
-    ownerWindow = null;
+    ownerWindow = null,
+    idle = null,
+    queue = null,
+    lastScroll = 0;
   const ready = new Set();
+  const onScroll = () => (lastScroll = performance.now());
 
   function expand(marker) {
     // Never replace a marker before the math renderer has loaded; activate()
@@ -64,6 +69,48 @@ export function createFormulaHydrator(
     if (count) changed(anchor);
     if (ready.size) timer = setTimeout(work, 0);
   }
+  // After the viewport, render the rest of the note in idle time so outline and
+  // link jumps glide through finished content instead of placeholders. Slices
+  // yield to viewport work, jumps and active scrolling, and keep the reading
+  // position when formulas above it grow.
+  function scheduleBackfill() {
+    if (!fillIdle || idle !== null || !ownerWindow) return;
+    idle = ownerWindow.requestIdleCallback
+      ? ownerWindow.requestIdleCallback(backfill, { timeout: 2000 })
+      : ownerWindow.setTimeout(() => backfill(null), 50);
+  }
+  function cancelBackfill() {
+    if (idle === null) return;
+    if (ownerWindow?.cancelIdleCallback) ownerWindow.cancelIdleCallback(idle);
+    else ownerWindow?.clearTimeout(idle);
+    idle = null;
+  }
+  function backfill(deadline) {
+    idle = null;
+    if (!host?.isConnected || !host.getClientRects().length) return;
+    const busy =
+      ready.size ||
+      timer !== null ||
+      (scroller && navigationMoving(scroller)) ||
+      performance.now() - lastScroll < 250;
+    if (busy) return scheduleBackfill();
+    queue ??= markers(host);
+    const anchor = scroller ? visibleAnchor(scroller) : null;
+    const start = performance.now(),
+      budget = Math.min(
+        budgetMs,
+        deadline ? deadline.timeRemaining() : budgetMs,
+      );
+    let count = 0;
+    while (queue.length && performance.now() - start < Math.max(2, budget)) {
+      const marker = queue.shift();
+      if (!marker.isConnected) continue;
+      observer?.unobserve(marker);
+      if (expand(marker)) count++;
+    }
+    if (count) changed(anchor);
+    if (queue.length) scheduleBackfill();
+  }
   function flush() {
     if (!host) return;
     clearTimeout(timer);
@@ -79,13 +126,23 @@ export function createFormulaHydrator(
   // never pop in on arrival. Only markers inside the requested range expand.
   function prepare(event) {
     if (!host || !rendererReady()) return;
-    const { top, bottom } = event.detail;
-    const inRange = markers(host).filter((marker) => {
-      const rect = marker.getBoundingClientRect();
-      return rect.bottom >= top && rect.top <= bottom;
-    });
+    const {
+      top,
+      bottom,
+      target = top,
+      budgetMs: limit = Infinity,
+    } = event.detail;
+    // Nearest the destination first, so a capped pass covers what lands on screen.
+    const inRange = markers(host)
+      .map((marker) => ({ marker, rect: marker.getBoundingClientRect() }))
+      .filter(({ rect }) => rect.bottom >= top && rect.top <= bottom)
+      .sort(
+        (a, b) => Math.abs(a.rect.top - target) - Math.abs(b.rect.top - target),
+      );
+    const start = performance.now();
     let count = 0;
-    for (const marker of inRange) {
+    for (const { marker } of inRange) {
+      if (performance.now() - start >= limit) break;
       ready.delete(marker);
       observer?.unobserve(marker);
       if (expand(marker)) count++;
@@ -98,6 +155,9 @@ export function createFormulaHydrator(
     observer?.disconnect();
     observer = null;
     ready.clear();
+    cancelBackfill();
+    queue = null;
+    scroller?.removeEventListener("scroll", onScroll);
     host?.removeEventListener("folio:prepare-content", prepare);
     ownerWindow?.removeEventListener("beforeprint", flush);
     ownerWindow = null;
@@ -145,7 +205,9 @@ export function createFormulaHydrator(
     );
     for (const marker of pending) observer.observe(marker);
     container.addEventListener("folio:prepare-content", prepare);
+    scroller?.addEventListener("scroll", onScroll, { passive: true });
     ownerWindow.addEventListener("beforeprint", flush);
+    scheduleBackfill();
   }
   return Object.assign(hydrate, { activate, deactivate, flush });
 }

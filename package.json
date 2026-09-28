@@ -1,6 +1,6 @@
 {
   "name": "folio-notes",
-  "version": "0.1.27",
+  "version": "0.1.28",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",

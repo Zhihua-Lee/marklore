@@ -10,6 +10,11 @@ import { createMenus } from "./menus.js";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
+import {
+  openSearchPanel,
+  setSearchQuery,
+  SearchQuery,
+} from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import {
   renderMarkdown,
@@ -149,6 +154,20 @@ const findBar = createFindBar({
   panes: $("#panes"),
   content: $("#content"),
   reader: $("#reader"),
+  // Regex, case, whole-word and replace live in the editor's search panel.
+  openInSource: (query) => {
+    if (!active) return;
+    if (active.mode === "read") setMode("edit");
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        openSearchPanel(view);
+        if (query)
+          view.dispatch({
+            effects: setSearchQuery.of(new SearchQuery({ search: query })),
+          });
+      }),
+    );
+  },
 });
 
 function toast(message) {

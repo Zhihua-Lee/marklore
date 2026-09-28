@@ -45,6 +45,13 @@
   font: inherit;
   font-size: 14px;
 }
+#find-bar .find-source {
+  font-size: 12px;
+  color: var(--muted);
+}
+#find-bar .find-source:hover {
+  color: var(--ink);
+}
 ::highlight(folio-find) {
   background-color: color-mix(in srgb, #e5b93a 38%, transparent);
   color: var(--reading-ink);

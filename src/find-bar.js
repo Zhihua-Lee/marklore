@@ -9,7 +9,9 @@ const BLOCK =
   "p, li, h1, h2, h3, h4, h5, h6, td, th, pre, blockquote, dt, dd, figcaption, summary, .math-block";
 const MAX_MATCHES = 5000;
 
-export function createFindBar({ panes, content, reader }) {
+// openInSource(query): hand the query to the editor's search (regex, case,
+// whole word, replace) instead of growing a second, riskier search here.
+export function createFindBar({ panes, content, reader, openInSource }) {
   const bar = document.createElement("div");
   bar.id = "find-bar";
   bar.setAttribute("role", "search");
@@ -20,6 +22,7 @@ export function createFindBar({ panes, content, reader }) {
     '<span class="find-count" aria-live="polite"></span>' +
     '<button type="button" data-find="prev" aria-label="上一个" title="上一个（Shift+Enter）">↑</button>' +
     '<button type="button" data-find="next" aria-label="下一个" title="下一个（Enter）">↓</button>' +
+    '<button type="button" data-find="source" class="find-source" aria-label="在源码中查找" title="在源码中查找（正则、区分大小写、替换）">源码</button>' +
     '<button type="button" data-find="close" aria-label="关闭查找" title="关闭（Esc）">×</button>';
   panes.append(bar);
   const input = bar.querySelector("input"),
@@ -155,7 +158,11 @@ export function createFindBar({ panes, content, reader }) {
   bar.addEventListener("click", (event) => {
     const action = event.target.closest("[data-find]")?.dataset.find;
     if (action === "close") close();
-    else if (action) go(action === "prev" ? -1 : 1);
+    else if (action === "source") {
+      const query = input.value;
+      close();
+      openInSource?.(query);
+    } else if (action) go(action === "prev" ? -1 : 1);
   });
   // Edits, tab switches and lazy formulas change the note; keep results current.
   new MutationObserver(() => {

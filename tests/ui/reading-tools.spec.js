@@ -119,6 +119,24 @@ test("find in the rendered note counts, cycles, unfolds and closes", async ({
   await expect(bar.locator(".find-count")).toHaveText("无结果");
 });
 
+test("find hands its query to the editor's search for regex and replace", async ({
+  page,
+}) => {
+  await boot(page);
+  await expect(page.locator("#content h1")).toHaveText(/Tools/);
+  await page.locator("#reader").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Control+f");
+  await page.keyboard.type("needle");
+  await page.getByRole("button", { name: "在源码中查找" }).click();
+  await expect(page.locator("#find-bar")).toBeHidden();
+  await expect(page.locator("#panes")).toHaveAttribute("data-mode", "edit");
+  const panel = page.locator(".cm-search");
+  await expect(panel).toBeVisible();
+  // Same @codemirror/search instance as basicSetup: the query really applies.
+  await expect(panel.locator("input[name=search]")).toHaveValue("needle");
+  await expect(panel.locator("input[name=re]")).toBeVisible();
+});
+
 test("Ctrl+F in the editor keeps CodeMirror's own search", async ({ page }) => {
   await boot(page);
   await page.getByRole("button", { name: "编辑", exact: true }).click();

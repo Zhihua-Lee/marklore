@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                              | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ---------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.1.32 | New app mark: M book, D mug handle                   | 59                | 148 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.32](docs/verification/v0.1.32.md) |
 | v0.1.31 | Hover previews survive layout corrections            | 59                | 148 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.31](docs/verification/v0.1.31.md) |
 | v0.1.30 | Find hands off to the editor's search                | 59                | 147 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.30](docs/verification/v0.1.30.md) |
 | v0.1.29 | Find, clickable tasks, recent files                  | 59                | 146 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.29](docs/verification/v0.1.29.md) |

@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                              | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ---------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.1.29 | Find, clickable tasks, recent files                  | 59                | 146 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.29](docs/verification/v0.1.29.md) |
 | v0.1.28 | Continuous jump glide with idle backfill             | 56                | 142 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.28](docs/verification/v0.1.28.md) |
 | v0.1.27 | Jumps render their destination first                 | 56                | 141 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.27](docs/verification/v0.1.27.md) |
 | v0.1.26 | Robustness, lazy math/code, CI                       | 56                | 139 (131 + 8 reduced-motion)   | 9 suites (packaged)                                             | [v0.1.26](docs/verification/v0.1.26.md) |

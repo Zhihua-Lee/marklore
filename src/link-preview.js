@@ -99,9 +99,11 @@ export function createLinkPreview({
       origin = null;
     }
   }
+  let placedAt = null;
   function place() {
     if (!origin) return;
     const r = origin.getBoundingClientRect();
+    placedAt = { top: r.top, left: r.left };
     const height = Math.min(440, innerHeight - 24);
     const below = innerHeight - r.bottom - 20;
     const above = r.top - 20;
@@ -269,9 +271,21 @@ export function createLinkPreview({
       positioned = true;
     });
   host.addEventListener("click", () => hide());
-  host.parentElement.addEventListener("scroll", () => hide(), {
-    passive: true,
-  });
+  // Close when the reader scrolls the link away, not when layout-preserving
+  // corrections (late fonts, lazy formulas and tables, diagrams) keep it put.
+  host.parentElement.addEventListener(
+    "scroll",
+    () => {
+      if (card.hidden || !origin?.isConnected || !placedAt) return hide();
+      const r = origin.getBoundingClientRect();
+      if (
+        Math.abs(r.top - placedAt.top) > 4 ||
+        Math.abs(r.left - placedAt.left) > 4
+      )
+        hide();
+    },
+    { passive: true },
+  );
   document.addEventListener("pointerdown", (e) => {
     if (!card.contains(e.target) && !origin?.contains(e.target)) hide();
   });

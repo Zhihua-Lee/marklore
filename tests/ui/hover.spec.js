@@ -111,6 +111,40 @@ test("hover renders target math at heading without tab/progress mutation", async
   await expect(card).toBeHidden();
 });
 
+test("layout corrections keep an open preview; scrolling the link away closes it", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.getByRole("link", { name: "Heading", exact: true }).hover();
+  const card = page.locator("#link-preview");
+  await expect(card).toBeVisible();
+  // Content grows above the link and the reader compensates (as late fonts,
+  // lazy formulas or table widths do): the link stays put, so must the card.
+  await page.evaluate(() => {
+    const content = document.querySelector("#content"),
+      reader = document.querySelector("#reader"),
+      link = [...content.querySelectorAll("a")].find(
+        (a) => a.textContent === "Heading",
+      );
+    const tail = document.createElement("div");
+    tail.style.height = "3000px";
+    content.append(tail);
+    const before = link.getBoundingClientRect().top;
+    const grow = document.createElement("div");
+    grow.style.height = "300px";
+    content.prepend(grow);
+    // Compensate by exactly how far the link moved, like restoreAnchor does.
+    reader.scrollTop += link.getBoundingClientRect().top - before;
+  });
+  await page.waitForTimeout(100);
+  await expect(card).toBeVisible();
+  // A real scroll moves the link; the card closes.
+  await page.evaluate(() => {
+    document.querySelector("#reader").scrollTop += 200;
+  });
+  await expect(card).toBeHidden();
+});
+
 test("hover prioritizes open unsaved content", async ({ page }) => {
   await boot(page, { opened: true });
   await page.getByRole("link", { name: "Heading", exact: true }).hover();

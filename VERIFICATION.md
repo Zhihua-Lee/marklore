@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                               | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ----------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.1.36 | Tabs clickable again; optional smooth scrolling       | 60                | 157 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.36](docs/verification/v0.1.36.md) |
 | v0.1.34 | Steadier link previews and formula backfill           | 59                | 154 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.34](docs/verification/v0.1.34.md) |
 | v0.1.33 | Window controls, copy as Markdown, smoother scrolling | 59                | 153 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.33](docs/verification/v0.1.33.md) |
 | v0.1.32 | New app mark: M book, D mug handle                    | 59                | 148 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.32](docs/verification/v0.1.32.md) |

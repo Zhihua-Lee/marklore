@@ -16,6 +16,7 @@ export function defaultSettings() {
     tabGroups: [],
     navigationScope: "all",
     showHistoryButtons: false,
+    touchpadScroll: "system",
     outline: true,
     librarySide: "left",
     outlineSide: "right",
@@ -47,6 +48,8 @@ export function normalizeSettings(saved = {}) {
   settings.navigationScope =
     settings.navigationScope === "current" ? "current" : "all";
   settings.showHistoryButtons = settings.showHistoryButtons === true;
+  settings.touchpadScroll =
+    settings.touchpadScroll === "smooth" ? "smooth" : "system";
   settings.tableStyle = ["soft", "plain", "grid"].includes(settings.tableStyle)
     ? settings.tableStyle
     : "soft";

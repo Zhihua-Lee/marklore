@@ -62,6 +62,7 @@ import "./tables.css";
 import "./find-bar.css";
 import { createFindBar } from "./find-bar.js";
 import { wireSourceCopy } from "./copy-source.js";
+import { createSmoothScroll } from "./smooth-scroll.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -196,6 +197,7 @@ const tabBar = createTabBar({
     actions ? showContext(event, actions) : contextMenu(event, doc),
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
+const touchpadScroll = createSmoothScroll($("#reader"));
 wireSourceCopy({
   host: $("#content"),
   source: () => active?.previewText,
@@ -1255,6 +1257,7 @@ function applySettings() {
   $("#split").setAttribute("aria-valuenow", String(settings.split));
   $("#zoom-reset").textContent = settings.zoom + "%";
   document.documentElement.dataset.wide = String(settings.wide);
+  touchpadScroll.set(settings.touchpadScroll === "smooth");
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? "切换为窄版" : "切换为宽版";
   applyAppearance(settings);

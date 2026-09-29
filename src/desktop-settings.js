@@ -8,9 +8,11 @@ export const desktopSettingsMarkup = `
   <div class="desktop-actions"><button id="register-markdown">注册／更新 Markdown 支持</button><button id="manage-defaults">选择默认应用…</button></div>
   <p class="setting-hint">支持 .md 和 .markdown。默认应用由 Windows 确认；移动或升级便携版后，请重新注册并更新开机启动路径。</p>
   <p id="desktop-executable" class="setting-hint"></p>
+  <label for="portable-mode">便携模式（数据保存在程序旁的 data 文件夹）<input id="portable-mode" type="checkbox"></label>
+  <p id="portable-status" class="setting-hint"></p>
 </fieldset>`;
 
-export function wireDesktopSettings({ api, close, report }) {
+export function wireDesktopSettings({ api, close, report, flush }) {
   if (!api?.desktopStatus) return () => {};
   const q = (s) => document.querySelector(s),
     section = q("#desktop-settings");
@@ -48,6 +50,16 @@ export function wireDesktopSettings({ api, close, report }) {
       ? "系统集成仅在 Windows 打包版可用。"
       : `${status.registered ? (status.registeredHere ? "已注册当前程序。" : "注册指向其他版本，请更新。") : "尚未注册 Markdown 支持。"} ${associations}${status.startupOtherVersion ? " 开机启动指向其他版本，请更新启动路径。" : status.startup && !status.startupEnabled ? " 开机启动被系统禁用，可在启动管理中检查。" : ""}`;
     q("#desktop-executable").textContent = "当前程序：" + status.executable;
+    const portable = status.portable || {};
+    if (!busy) q("#portable-mode").checked = Boolean(portable.on);
+    q("#portable-mode").disabled = busy || !portable.available;
+    q("#portable-status").textContent = !portable.available
+      ? "便携模式仅在打包版可用。"
+      : status.restarting
+        ? "正在重启 Folio Notes…"
+        : portable.on
+          ? `数据保存在 ${portable.folder}。停用时数据复制回用户目录，data 文件夹改名保留，不会删除。`
+          : "开启后把标签、草稿、最近文件与后台设置复制到程序旁的 data 文件夹并自动重启，适合放在 U 盘中随身使用。";
   }
   async function refresh() {
     if (busy) return;
@@ -68,6 +80,8 @@ export function wireDesktopSettings({ api, close, report }) {
     busy = true;
     paint();
     try {
+      // Switching data folders restarts Folio: save tabs and drafts first.
+      if (action.type === "portable") await flush?.();
       status = await api.desktopAction(action);
     } catch (error) {
       report(error.message);
@@ -81,6 +95,8 @@ export function wireDesktopSettings({ api, close, report }) {
   q("#start-at-login").onchange = (event) =>
     change({ type: "startup", value: event.target.checked });
   q("#update-startup").onclick = () => change({ type: "startup", value: true });
+  q("#portable-mode").onchange = (event) =>
+    change({ type: "portable", value: event.target.checked });
   for (const [id, type] of [
     ["register-markdown", "register"],
     ["manage-defaults", "defaults"],

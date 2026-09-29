@@ -1433,6 +1433,7 @@ for (const b of document.querySelectorAll("button[data-mode]"))
 wireAppearance(changeSettings);
 const openDesktopSettings = wireDesktopSettings({
   api,
+  flush: () => flushSession(),
   close: (intent) => commands.close(intent),
   report: toast,
 });

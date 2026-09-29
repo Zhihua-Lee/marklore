@@ -20,6 +20,13 @@ import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
+import {
+  portableDir,
+  isPortable,
+  enablePortable,
+  disablePortable,
+  retireDisabled,
+} from "./portable.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -40,7 +47,23 @@ protocol.registerSchemesAsPrivileged([
   },
 ]);
 const profile = process.env.FOLIO_DATA_DIR;
+// The user-profile folder: data lives here unless the copy is portable.
+// FOLIO_PROFILE_DIR stands in for it in tests (unlike FOLIO_DATA_DIR, it
+// keeps portable detection), so they never touch the real profile.
+const stand = process.env.FOLIO_PROFILE_DIR;
+const profileData =
+  stand && path.isAbsolute(stand) ? stand : app.getPath("userData");
+if (!profile && app.isPackaged) retireDisabled(process.execPath);
+const portable = !profile && app.isPackaged && isPortable(process.execPath);
 if (profile && path.isAbsolute(profile)) app.setPath("userData", profile);
+else if (!portable) app.setPath("userData", profileData);
+else {
+  app.setPath("userData", portableDir(process.execPath));
+  // Chromium caches stay in the profile (see portable.mjs).
+  app.setPath("sessionData", profileData);
+}
+// Set while moving the data between modes, just before restarting.
+let switchingData = false;
 const files = new FileStore({
   backups: path.join(app.getPath("userData"), "backups"),
 });
@@ -297,6 +320,8 @@ async function readSession() {
   }
 }
 async function persist(value) {
+  // A late write would recreate the folder the data just moved out of.
+  if (switchingData) return;
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text) > 64 * 1024 * 1024) throw Error("恢复数据过大");
   await fs.mkdir(path.dirname(sessionFile), { recursive: true });
@@ -594,11 +619,16 @@ else {
         else if (action === "close") win.close();
         else throw Error("无效窗口操作");
       });
-      api("desktopStatus", () =>
-        integration
-          .status()
-          .then((status) => ({ ...status, trayAvailable: Boolean(tray) })),
-      );
+      const desktopState = async () => ({
+        ...(await integration.status()),
+        trayAvailable: Boolean(tray),
+        portable: {
+          available: app.isPackaged && !profile,
+          on: portable,
+          folder: portableDir(process.execPath),
+        },
+      });
+      api("desktopStatus", desktopState);
       api("desktopAction", (action) =>
         desktopAction(async () => {
           if (!action || typeof action !== "object")
@@ -621,14 +651,41 @@ else {
             case "startupSettings":
               await integration.startupSettings();
               break;
+            case "portable": {
+              if (!app.isPackaged || profile)
+                throw Error("便携模式仅在打包版可用");
+              if (Boolean(action.value) === portable) break;
+              // The renderer flushed tabs and drafts first; let it land.
+              await sessionWrite.catch(() => {});
+              switchingData = true;
+              try {
+                if (action.value)
+                  await enablePortable({
+                    executable: process.execPath,
+                    current: app.getPath("userData"),
+                  });
+                else
+                  await disablePortable({
+                    executable: process.execPath,
+                    fallback: profileData,
+                  });
+              } catch (error) {
+                switchingData = false;
+                throw error;
+              }
+              // Restart into the other folder; everything is already saved.
+              setTimeout(() => {
+                if (!process.env.FOLIO_NO_RELAUNCH) app.relaunch();
+                allowClose = true;
+                app.exit(0);
+              }, 150);
+              return { ...(await desktopState()), restarting: true };
+            }
             default:
               throw Error("无效系统操作");
           }
           updateTray();
-          return {
-            ...(await integration.status()),
-            trayAvailable: Boolean(tray),
-          };
+          return desktopState();
         }),
       );
       api(

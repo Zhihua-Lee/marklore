@@ -576,14 +576,18 @@ body.file-drop::after {
     width: 0;
   }
 }
-/* Desktop window chrome: no system title bar; empty toolbar space moves the
-   window (double-click maximises). Window controls form their own compact
-   group at the right end, set apart by a rule, flush with the window edge. */
-.topbar {
+/* Desktop window chrome: no system title bar. The empty space after the
+   tabs moves the window (double-click maximises); nothing else drags.
+   Chromium ignores no-drag on elements inside a scroll container, so tabs in
+   the scrolling tab strip cannot be holes in a draggable toolbar: in v0.1.33
+   to v0.1.36 Windows took every tab click as a title-bar drag. Window
+   controls form their own compact group at the right end, set apart by a
+   rule, flush with the window edge. */
+.topbar .drag-space {
+  flex: 1 1 0;
+  align-self: stretch;
+  min-width: 16px;
   -webkit-app-region: drag;
-}
-.topbar :is(button, input, #tabs, .panel-controls) {
-  -webkit-app-region: no-drag;
 }
 .topbar:has(> .window-controls:not([hidden])) {
   padding-right: 0;

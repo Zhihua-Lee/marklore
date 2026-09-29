@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const project = path.resolve(
@@ -199,8 +200,65 @@ try {
     parseInt(zoomBefore) + 10,
     "Ctrl+wheel zooms the note one step",
   );
+  // Without a system title bar Windows decides per point whether a press drags
+  // the window (WM_NCHITTEST: 1 client, 2 caption). Page-level test input
+  // bypasses this, which let tabs be taken as the title bar in v0.1.33-36.
+  const hit = await instance.evaluate(({ BrowserWindow, screen }) => {
+    const win = BrowserWindow.getAllWindows()[0];
+    win.show();
+    return {
+      hwnd: win.getNativeWindowHandle().readBigUInt64LE(0).toString(),
+      content: win.getContentBounds(),
+      scale: screen.getDisplayMatching(win.getContentBounds()).scaleFactor,
+    };
+  });
+  await page.waitForTimeout(300);
+  const probes = await page.evaluate(() => {
+    const centre = (el, fx = 0.5) => {
+      const r = el.getBoundingClientRect();
+      return { x: r.left + r.width * fx, y: r.top + r.height / 2 };
+    };
+    return {
+      tab: centre(document.querySelector("#tabs [role='tab']"), 0.3),
+      close: centre(document.querySelector("#tabs button[aria-label^='关闭']")),
+      button: centre(document.querySelector("#new")),
+      drag: centre(document.querySelector(".topbar .drag-space")),
+    };
+  });
+  const nc = execFileSync(
+    "powershell",
+    [
+      "-NoProfile",
+      "-Command",
+      [
+        'Add-Type @"',
+        "using System; using System.Runtime.InteropServices;",
+        'public class NC { [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr h, uint m, IntPtr w, IntPtr l); [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }',
+        '"@',
+        "[NC]::SetProcessDPIAware() | Out-Null",
+        `$h = [IntPtr]::new([Int64]${hit.hwnd})`,
+        ...Object.entries(probes).map(([name, p]) => {
+          const x = Math.round((hit.content.x + p.x) * hit.scale),
+            y = Math.round((hit.content.y + p.y) * hit.scale);
+          return `"${name}=" + [NC]::SendMessage($h, 0x84, [IntPtr]::Zero, [IntPtr]::new(([Int64]${y} -shl 16) -bor ${x}))`;
+        }),
+      ].join("\n"),
+    ],
+    { encoding: "utf8" },
+  );
+  const nchit = Object.fromEntries(
+    nc
+      .trim()
+      .split(/\s+/)
+      .map((line) => line.split("=")),
+  );
+  assert.deepEqual(
+    nchit,
+    { tab: "1", close: "1", button: "1", drag: "2" },
+    "Tabs and buttons take clicks; only the empty space drags the window",
+  );
   console.log(
-    "Native menu passed: hidden after Alt; accelerators and edit roles retained; Ctrl+N executes once; own window controls; Ctrl+wheel zoom via Electron.",
+    "Native menu passed: hidden after Alt; accelerators and edit roles retained; Ctrl+N executes once; own window controls; Ctrl+wheel zoom via Electron; tabs are client area (WM_NCHITTEST).",
   );
 } finally {
   if (instance) {

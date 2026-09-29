@@ -128,7 +128,16 @@ $("#app-menu").setAttribute("aria-label", "导出");
 const tabStrip = document.createElement("div");
 tabStrip.className = "tab-strip";
 $(".topbar").insertBefore(tabStrip, $("#tabs-back"));
-tabStrip.append($("#tabs-back"), $("#tabs"), $("#tabs-forward"), $("#new"));
+const dragSpace = document.createElement("div");
+dragSpace.className = "drag-space";
+dragSpace.setAttribute("aria-hidden", "true");
+tabStrip.append(
+  $("#tabs-back"),
+  $("#tabs"),
+  $("#tabs-forward"),
+  $("#new"),
+  dragSpace,
+);
 for (const side of ["left", "right"])
   $("main").prepend($("#panel-controls-" + side));
 $(".reading-tools").insertBefore($("#theme"), $("#weight"));

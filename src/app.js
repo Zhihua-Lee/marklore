@@ -197,7 +197,7 @@ const tabBar = createTabBar({
     actions ? showContext(event, actions) : contextMenu(event, doc),
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
-const touchpadScroll = createSmoothScroll($("#reader"));
+const smoothScroll = createSmoothScroll($("#reader"));
 wireSourceCopy({
   host: $("#content"),
   source: () => active?.previewText,
@@ -1257,7 +1257,7 @@ function applySettings() {
   $("#split").setAttribute("aria-valuenow", String(settings.split));
   $("#zoom-reset").textContent = settings.zoom + "%";
   document.documentElement.dataset.wide = String(settings.wide);
-  touchpadScroll.set(settings.touchpadScroll === "smooth");
+  smoothScroll.set(settings.smoothScroll);
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? "切换为窄版" : "切换为宽版";
   applyAppearance(settings);

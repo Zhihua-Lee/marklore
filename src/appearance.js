@@ -20,7 +20,7 @@ export const appearanceMarkup = `
   <fieldset><legend>阅读导航</legend>
     <label for="navigation-scope">导航范围<select id="navigation-scope"><option value="all">全部笔记</option><option value="current">仅当前笔记</option></select></label>
     <label for="history-buttons">前进 / 后退按钮<select id="history-buttons"><option value="hidden">隐藏</option><option value="visible">显示</option></select></label>
-    <label for="touchpad-scroll" title="平滑：由 Folio 按屏幕刷新逐帧移动触控板滚动，速度更均匀，跟手稍慢约 2 帧">触控板滚动<select id="touchpad-scroll"><option value="system">系统</option><option value="smooth">平滑（实验）</option></select></label>
+    <label for="smooth-scroll" title="由 Folio 按屏幕刷新逐帧移动页面，速度更均匀，跟手稍慢 1–3 帧">平滑滚动<select id="smooth-scroll"><option value="off">关闭</option><option value="touchpad">仅触控板</option><option value="all">触控板、滚轮与滚动条</option></select></label>
     <p class="setting-hint">鼠标侧键或 Alt+← / → 返回阅读位置；隐藏按钮不影响快捷键。</p>
   </fieldset>
   <fieldset><legend>侧栏位置</legend>
@@ -90,7 +90,7 @@ export function applyAppearance(settings) {
   $("#history-buttons").value = settings.showHistoryButtons
     ? "visible"
     : "hidden";
-  $("#touchpad-scroll").value = settings.touchpadScroll;
+  $("#smooth-scroll").value = settings.smoothScroll;
   $("#text-weight").value = String(settings.weight);
   $("#navigation-size").value = String(settings.navigationSize);
   $("#tab-size").value = String(settings.tabSize);
@@ -122,8 +122,8 @@ export function wireAppearance(change) {
     change({ navigationScope: event.target.value });
   $("#history-buttons").onchange = (event) =>
     change({ showHistoryButtons: event.target.value === "visible" });
-  $("#touchpad-scroll").onchange = (event) =>
-    change({ touchpadScroll: event.target.value });
+  $("#smooth-scroll").onchange = (event) =>
+    change({ smoothScroll: event.target.value });
   $("#text-weight").onchange = (event) =>
     change({
       weight:

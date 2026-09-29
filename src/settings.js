@@ -16,7 +16,7 @@ export function defaultSettings() {
     tabGroups: [],
     navigationScope: "all",
     showHistoryButtons: false,
-    touchpadScroll: "system",
+    smoothScroll: "off",
     outline: true,
     librarySide: "left",
     outlineSide: "right",
@@ -48,8 +48,17 @@ export function normalizeSettings(saved = {}) {
   settings.navigationScope =
     settings.navigationScope === "current" ? "current" : "all";
   settings.showHistoryButtons = settings.showHistoryButtons === true;
-  settings.touchpadScroll =
-    settings.touchpadScroll === "smooth" ? "smooth" : "system";
+  // Unreleased 0.1.35 builds stored touchpadScroll: "smooth".
+  // The app merges stored values over defaults, so "off" here may be a default.
+  if (
+    settings.touchpadScroll === "smooth" &&
+    !["touchpad", "all"].includes(settings.smoothScroll)
+  )
+    settings.smoothScroll = "touchpad";
+  delete settings.touchpadScroll;
+  settings.smoothScroll = ["touchpad", "all"].includes(settings.smoothScroll)
+    ? settings.smoothScroll
+    : "off";
   settings.tableStyle = ["soft", "plain", "grid"].includes(settings.tableStyle)
     ? settings.tableStyle
     : "soft";

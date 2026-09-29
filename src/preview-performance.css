@@ -43,3 +43,30 @@
 .scroll-shield.raised::before {
   visibility: visible;
 }
+/* Page-drawn scrollbar for "平滑滚动 → 触控板、滚轮与滚动条" (smooth-scroll.js):
+   the native one is hidden, its 8 px gutter kept as padding. Same look. */
+#reader.own-scrollbar {
+  scrollbar-width: none;
+  padding-right: 8px;
+}
+.reader-scrollbar {
+  position: absolute;
+  z-index: 5;
+  width: 8px;
+}
+.reader-scrollbar-thumb {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--reading-ink) 20%, transparent);
+  background-clip: padding-box;
+  will-change: transform;
+}
+.reader-scrollbar-thumb:hover,
+.reader-scrollbar.dragging .reader-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--reading-ink) 35%, transparent);
+}

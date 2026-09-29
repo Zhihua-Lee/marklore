@@ -41,6 +41,12 @@ const paths = {
   save: '<path d="M18 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-3Z"/><path d="M7 3v6h9V3M7 21v-7h10v7M13 5v2"/>',
   refresh:
     '<path d="M20 9a8.3 8.3 0 0 0-14-3L3 9m0-5v5h5M4 15a8.3 8.3 0 0 0 14 3l3-3m0 5v-5h-5"/>',
+  fullScreen: '<path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/>',
+  exitFullScreen: '<path d="M9 4v5H4m11-5v5h5m0 6h-5v5m-6 0v-5H4"/>',
+  minimize: '<path d="M6.5 12h11"/>',
+  maximize: '<rect x="6.5" y="6.5" width="11" height="11" rx="1"/>',
+  restore:
+    '<rect x="6.5" y="8.5" width="9" height="9" rx="1"/><path d="M9 6.5h7.5a1 1 0 0 1 1 1V15"/>',
   theme:
     '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none"/>',
 };

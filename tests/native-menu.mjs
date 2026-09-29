@@ -45,9 +45,10 @@ try {
     return { minimum, widths };
   });
   assert.deepEqual(resizeEvidence.minimum, [480, 360]);
-  // Windows non-client borders / DPI rounding can add up to two logical pixels.
+  // Windows non-client borders / DPI rounding (the resize frame kept without a
+  // system title bar) can add up to three logical pixels at 350% scaling.
   resizeEvidence.widths.forEach((actual, i) => {
-    assert.ok(Math.abs(actual - [680, 640, 512, 480][i]) <= 2);
+    assert.ok(Math.abs(actual - [680, 640, 512, 480][i]) <= 3);
   });
   console.log("Native compact-window sizes:", JSON.stringify(resizeEvidence));
   await page.evaluate(() => document.fonts.ready);
@@ -174,8 +175,32 @@ try {
   await page.waitForTimeout(100);
   assert.equal(await page.getByRole("tab").count(), initialTabs + 1);
   assert.equal((await menuState()).visible, false);
+  // No system title bar: the page's own window controls, and Ctrl+wheel zoom
+  // routed through Electron (the page has no blocking wheel listener).
+  const controls = page.locator(".window-controls");
+  await controls.waitFor();
+  assert.deepEqual(
+    await controls
+      .locator("button")
+      .evaluateAll((buttons) => buttons.map((b) => b.dataset.window)),
+    ["fullScreen", "minimize", "maximize", "close"],
+  );
+  const zoomLabel = () => page.locator("#zoom-reset").textContent();
+  const zoomBefore = await zoomLabel();
+  await instance.evaluate(({ BrowserWindow }) =>
+    BrowserWindow.getAllWindows()[0].webContents.emit("zoom-changed", {}, "in"),
+  );
+  await page.waitForFunction(
+    (before) => document.querySelector("#zoom-reset").textContent !== before,
+    zoomBefore,
+  );
+  assert.equal(
+    parseInt(await zoomLabel()),
+    parseInt(zoomBefore) + 10,
+    "Ctrl+wheel zooms the note one step",
+  );
   console.log(
-    "Native menu passed: hidden after Alt; accelerators and edit roles retained; Ctrl+N executes once.",
+    "Native menu passed: hidden after Alt; accelerators and edit roles retained; Ctrl+N executes once; own window controls; Ctrl+wheel zoom via Electron.",
   );
 } finally {
   if (instance) {

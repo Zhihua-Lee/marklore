@@ -371,6 +371,7 @@ export function createParser() {
             }
           }
           inlineCursors.set(range, cursor);
+          markInlineSpans(state.src, token.children || [], from, to);
         }
       }
       if (token.type === "heading_open") {
@@ -419,8 +420,10 @@ export function createParser() {
   md.renderer.rules.text = (tokens, i) => {
     const t = tokens[i],
       content = escape(t.content);
-    return t.meta
-      ? `<span data-text-from="${t.meta.from}" data-text-to="${t.meta.to}">${content}</span>`
+    // Task lists strip "[ ] " from the item's first text after it was located.
+    const from = t.meta && t.meta.to - t.content.length;
+    return t.meta && from >= t.meta.from
+      ? `<span data-text-from="${from}" data-text-to="${t.meta.to}">${content}</span>`
       : content;
   };
   const codeInline = md.renderer.rules.code_inline;
@@ -438,6 +441,118 @@ export function createParser() {
     return `<span class="formula" ${range}>${formulaMarkup(t.content.split(env.mathPipe).join("|"), t.markup === "$$", env)}</span>`;
   };
   return md;
+}
+// Source spans of inline markup (emphasis, links, images, inline code), so a
+// copy from the preview can keep whole constructs and drop cut-off markers.
+// data-src-from/to cover the markers; data-src-inner-* the content between
+// them. Found by a forward scan anchored on the already located text leaves;
+// any mismatch (escapes, entities) stops the scan and leaves the rest unmarked.
+const pairedMarkup = new Set(["strong", "em", "s", "mark", "ins"]);
+function markInlineSpans(src, children, from, to) {
+  let cursor = from;
+  const open = [];
+  const find = (text, limit = to) => {
+    const at = src.indexOf(text, cursor);
+    return at >= cursor && at + text.length <= limit ? at : -1;
+  };
+  const span = (token, outer, inner) => {
+    token.attrSet("data-src-from", String(outer[0]));
+    token.attrSet("data-src-to", String(outer[1]));
+    token.attrSet("data-src-inner-from", String(inner[0]));
+    token.attrSet("data-src-inner-to", String(inner[1]));
+  };
+  for (const child of children) {
+    const kind = child.type.replace(/_(open|close)$/, "");
+    if (child.meta) {
+      if (child.meta.from < cursor) return;
+      if (child.type === "code_inline") {
+        const start = src.lastIndexOf(child.markup, child.meta.from),
+          end = src.indexOf(child.markup, child.meta.to);
+        if (start < cursor || end < 0 || end + child.markup.length > to) return;
+        span(
+          child,
+          [start, end + child.markup.length],
+          [child.meta.from, child.meta.to],
+        );
+        cursor = end + child.markup.length;
+      } else cursor = child.meta.to;
+    } else if (child.type === "text" || child.type === "code_inline") {
+      if (child.content) return;
+    } else if (child.type === "html_inline") {
+      const at = find(child.content);
+      if (at < 0) return;
+      cursor = at + child.content.length;
+    } else if (child.type === "image") {
+      const at = find("!["),
+        close = at < 0 ? -1 : closingBracket(src, at + 1, to),
+        end = close < 0 ? -1 : linkEnd(src, close, to);
+      if (end < 0) return;
+      span(child, [at, end], [at + 2, close]);
+      cursor = end;
+    } else if (pairedMarkup.has(kind) || kind === "link") {
+      const autolink = child.markup === "autolink",
+        linkify = child.markup === "linkify";
+      if (child.nesting === 1) {
+        const marker =
+          kind === "link"
+            ? autolink
+              ? "<"
+              : linkify
+                ? ""
+                : "["
+            : child.markup;
+        const at = marker ? find(marker) : cursor;
+        if (at < 0) return;
+        cursor = at + marker.length;
+        open.push({ child, at, inner: cursor });
+      } else {
+        const entry = open.pop();
+        if (!entry || entry.child.type !== kind + "_open") return;
+        let inner = cursor,
+          end;
+        if (kind !== "link") {
+          inner = find(child.markup);
+          end = inner < 0 ? -1 : inner + child.markup.length;
+        } else if (autolink) {
+          inner = find(">");
+          end = inner < 0 ? -1 : inner + 1;
+        } else if (linkify) end = inner;
+        else {
+          inner = find("]");
+          end = inner < 0 ? -1 : linkEnd(src, inner, to);
+        }
+        if (end < 0) return;
+        span(entry.child, [entry.at, end], [entry.inner, inner]);
+        cursor = end;
+      }
+    }
+  }
+}
+// Index of the "]" closing the label that opens at `open` ("[").
+function closingBracket(src, open, limit) {
+  for (let i = open + 1, depth = 1; i < limit; i++) {
+    if (src[i] === "\\") i++;
+    else if (src[i] === "[") depth++;
+    else if (src[i] === "]" && !--depth) return i;
+  }
+  return -1;
+}
+// End of a link after its label's "]": "(dest title)", "[ref]" or nothing.
+function linkEnd(src, close, limit) {
+  if (src[close + 1] === "[") {
+    const end = src.indexOf("]", close + 2);
+    return end < 0 || end >= limit ? -1 : end + 1;
+  }
+  if (src[close + 1] !== "(") return close + 1;
+  for (let i = close + 2, depth = 1, angle = false; i < limit; i++) {
+    if (src[i] === "\\") i++;
+    else if (src[i] === "<") angle = true;
+    else if (src[i] === ">") angle = false;
+    else if (angle) continue;
+    else if (src[i] === "(") depth++;
+    else if (src[i] === ")" && !--depth) return i + 1;
+  }
+  return -1;
 }
 function attrs(t) {
   return (t.attrs || []).map(([k, v]) => `${k}="${escape(v)}"`).join(" ");

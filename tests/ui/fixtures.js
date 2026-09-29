@@ -35,6 +35,8 @@ export const FOLIO_API = [
   "recentFiles",
   "openRecent",
   "clearRecent",
+  "windowState",
+  "windowAction",
 ];
 
 function harness(api) {

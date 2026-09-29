@@ -118,23 +118,25 @@ pnpm prune-releases --apply    # 移到回收站
 
 ## 源码结构
 
-| 路径                                                                                       | 职责                                                |
-| ------------------------------------------------------------------------------------------ | --------------------------------------------------- |
-| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs) | 窗口、隔离接口、文件监听与会话恢复。                |
-| [`desktop/files.mjs`](../desktop/files.mjs)                                                | 文件授权、编码、版本校验、备份与目录操作。          |
-| [`desktop/integration.mjs`](../desktop/integration.mjs)                                    | Windows 系统集成。                                  |
-| [`src/app.js`](../src/app.js)                                                              | 文档状态、编辑器和交互协调。                        |
-| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)         | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。 |
-| [`src/render-cache.js`](../src/render-cache.js)                                            | 有界的近期预览 DOM 复用。                           |
-| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)         | 标签交互、排序与分组。                              |
-| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)   | 源码格式工具与块级就地编辑。                        |
-| [`src/link-preview.js`](../src/link-preview.js)                                            | 链接悬浮预览与异步状态管理。                        |
-| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)         | 内容快照、离线资源嵌入和 PDF／HTML 导出。           |
-| [`tests/`](../tests/)                                                                      | 单元、浏览器与原生回归用例。                        |
+| 路径                                                                                       | 职责                                                          |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs) | 窗口、隔离接口、文件监听与会话恢复。                          |
+| [`desktop/files.mjs`](../desktop/files.mjs)                                                | 文件授权、编码、版本校验、备份与目录操作。                    |
+| [`desktop/integration.mjs`](../desktop/integration.mjs)                                    | Windows 系统集成。                                            |
+| [`src/app.js`](../src/app.js)                                                              | 文档状态、编辑器和交互协调。                                  |
+| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)         | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。           |
+| [`src/render-cache.js`](../src/render-cache.js)                                            | 有界的近期预览 DOM 复用。                                     |
+| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)         | 标签交互、排序与分组。                                        |
+| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)   | 源码格式工具与块级就地编辑。                                  |
+| [`src/copy-source.js`](../src/copy-source.js)                                              | 从阅读区复制对应的 Markdown 源码。                            |
+| [`src/link-preview.js`](../src/link-preview.js)                                            | 链接悬浮预览与异步状态管理。                                  |
+| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)         | 内容快照、离线资源嵌入和 PDF／HTML 导出。                     |
+| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                      | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。 |
+| [`tests/`](../tests/)                                                                      | 单元、浏览器与原生回归用例。                                  |
 
 渲染进程没有直接的 Node／文件系统访问权限，本地文件操作经过主进程的授权接口。新增渲染能力应保持 HTML 清理、图表限制和本地资源授权边界，不通过放开远程加载来解决展示问题。
 
-长文相关改动需同时检查首次打开、编辑、切换模式／标签和阅读位置恢复。现有缓存减少重复工作，但首次解析仍有成本，不能仅凭小样本声称任意长文流畅。
+长文相关改动需同时检查首次打开、编辑、切换模式／标签和阅读位置恢复。滚动路径上不要加非被动的 `wheel` 监听，也不要在滚动时逐次测量阅读锚点：渲染后的公式会让每次命中测试花费约 10 ms，直接造成滚轮卡顿（参见 `src/app.js` 中的滚动遮罩与 `src/table-layout.js` 的延迟锚点）。现有缓存减少重复工作，但首次解析仍有成本，不能仅凭小样本声称任意长文流畅。
 
 ## 文档维护
 

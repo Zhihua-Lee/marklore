@@ -30,10 +30,12 @@ for (const name of [
   "recentFiles",
   "openRecent",
   "clearRecent",
+  "windowState",
+  "windowAction",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {
-  if (!["open", "disk", "command", "desktop-settings"].includes(name))
+  if (!["open", "disk", "command", "desktop-settings", "window"].includes(name))
     throw Error("Invalid event");
   const handler = (_event, payload) => callback(payload);
   ipcRenderer.on("folio:" + name, handler);

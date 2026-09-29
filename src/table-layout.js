@@ -23,7 +23,8 @@ function applyWidths(table, widths) {
   table.style.setProperty("--table-min-width", Math.ceil(sum) + "px");
 }
 
-export function optimizeTable(table) {
+// `beforeChange` runs once, just before the table is first modified.
+export function optimizeTable(table, beforeChange) {
   if (!table.isConnected || !table.getClientRects().length) return false;
   const wrapper = table.closest(".table-scroll"),
     parent = wrapper?.parentElement;
@@ -69,6 +70,7 @@ export function optimizeTable(table) {
   ].join("|");
   if (cache.get(table) === signature) return false;
   cache.set(table, signature);
+  beforeChange?.();
   const hadWidths = table.classList.contains("reading-columns");
   clearWidths(table);
   // Sample at most 16 cells per column: first/header, longest and evenly spaced
@@ -212,7 +214,10 @@ export function watchTableLayout(host, scroller) {
       timer !== null
     )
       return scheduleBackfill();
-    const anchor = visibleAnchor(scroller),
+    // The reading line is measured only when a table actually changes: the
+    // measurement hit-tests the page, and most passes find nothing to do.
+    let anchor = null;
+    const keep = () => (anchor ??= visibleAnchor(scroller)),
       start = performance.now(),
       budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8));
     let changed = false,
@@ -224,9 +229,9 @@ export function watchTableLayout(host, scroller) {
         done = false;
         break;
       }
-      changed = optimizeTable(table) || changed;
+      changed = optimizeTable(table, keep) || changed;
     }
-    if (changed) restoreAnchor(scroller, anchor);
+    if (changed && anchor) restoreAnchor(scroller, anchor);
     if (!done) scheduleBackfill();
   };
   const scheduleBackfill = () => {
@@ -252,7 +257,8 @@ export function watchTableLayout(host, scroller) {
       const viewport = scroller.getBoundingClientRect();
       function work() {
         if (cursor >= pending.length || !host.getClientRects().length) return;
-        const anchor = visibleAnchor(scroller),
+        let anchor = null;
+        const keep = () => (anchor ??= visibleAnchor(scroller)),
           start = performance.now();
         let changed = false;
         do {
@@ -263,10 +269,10 @@ export function watchTableLayout(host, scroller) {
               rect.bottom >= viewport.top - 600 &&
               rect.top <= viewport.bottom + 600
             )
-              changed = optimizeTable(table) || changed;
+              changed = optimizeTable(table, keep) || changed;
           }
         } while (cursor < pending.length && performance.now() - start < 12);
-        if (changed) restoreAnchor(scroller, anchor);
+        if (changed && anchor) restoreAnchor(scroller, anchor);
         if (cursor < pending.length) timer = setTimeout(work, 0);
         else {
           timer = null;

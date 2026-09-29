@@ -23,3 +23,23 @@
 }
 /* No content-visibility here: its estimated off-screen heights made outline and
    link jumps land short, and measured no clear gain on 250k-character notes. */
+/* See app.js: raised only while the reader scrolls. A zero-height sticky row
+   keeps it over the visible part without taking space in the note. */
+.scroll-shield {
+  /* Never the scroll anchor: it stays put while the note grows around it. */
+  overflow-anchor: none;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  height: 0;
+}
+.scroll-shield::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 100vh;
+  visibility: hidden;
+}
+.scroll-shield.raised::before {
+  visibility: visible;
+}

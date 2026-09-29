@@ -576,3 +576,50 @@ body.file-drop::after {
     width: 0;
   }
 }
+/* Desktop window chrome: no system title bar; empty toolbar space moves the
+   window (double-click maximises). Window controls form their own compact
+   group at the right end, set apart by a rule, flush with the window edge. */
+.topbar {
+  -webkit-app-region: drag;
+}
+.topbar :is(button, input, #tabs, .panel-controls) {
+  -webkit-app-region: no-drag;
+}
+.topbar:has(> .window-controls:not([hidden])) {
+  padding-right: 0;
+}
+.window-controls {
+  display: flex;
+  flex: none;
+  align-self: stretch;
+  margin-left: 6px;
+  padding-left: 4px;
+  border-left: 1px solid var(--line);
+}
+.window-controls .window-button {
+  width: 34px;
+  height: 100%;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 0;
+  color: var(--muted);
+}
+.window-controls .window-button .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+.window-controls .window-button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.window-controls [data-window="close"]:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+/* Full screen: only the way back out. */
+:root[data-full-screen="true"]
+  .window-controls
+  :is([data-window="minimize"], [data-window="maximize"]) {
+  display: none;
+}

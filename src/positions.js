@@ -11,7 +11,21 @@ export function textOffset(element, node, offset) {
     return 0;
   }
 }
+// app.js raises a transparent shield over the reader while it scrolls (hover
+// hit tests are expensive); reading positions hit-test the note underneath.
+function underShield(measure) {
+  const shield = document.querySelector(".scroll-shield.raised");
+  shield?.classList.remove("raised");
+  try {
+    return measure();
+  } finally {
+    shield?.classList.add("raised");
+  }
+}
 export function atPoint(host, x, y) {
+  return underShield(() => pointSource(host, x, y));
+}
+function pointSource(host, x, y) {
   const caret = document.caretPositionFromPoint?.(x, y);
   const range = !caret && document.caretRangeFromPoint?.(x, y);
   const node = caret?.offsetNode || range?.startContainer,
@@ -84,6 +98,9 @@ export function constrainWordSelection(host, hit) {
   window.getSelection().addRange(range);
 }
 export function visibleAnchor(host) {
+  return underShield(() => readingAnchor(host));
+}
+function readingAnchor(host) {
   if (host.scrollTop < 2) return { from: 0, y: 0, top: true };
   const rect = host.getBoundingClientRect(),
     y = rect.top + 32;

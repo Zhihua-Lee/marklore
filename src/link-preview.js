@@ -267,9 +267,13 @@ export function createLinkPreview({
   });
   scroller.addEventListener("load", align, true);
   for (const event of ["wheel", "pointerdown", "keydown"])
-    scroller.addEventListener(event, () => {
-      positioned = true;
-    });
+    scroller.addEventListener(
+      event,
+      () => {
+        positioned = true;
+      },
+      { passive: true },
+    );
   host.addEventListener("click", () => hide());
   // Close when the reader scrolls the link away, not when layout-preserving
   // corrections (late fonts, lazy formulas and tables, diagrams) keep it put.

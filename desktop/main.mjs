@@ -178,6 +178,15 @@ const draftCache = new Map();
 const send = (name, data) => {
   if (win && !win.isDestroyed()) win.webContents.send("folio:" + name, data);
 };
+// The toolbar runs to the window edge instead of under a system title bar;
+// the page draws its own compact window controls (see app.js). The frame
+// keeps resizing, snapping by drag and double-click maximise.
+const ownWindowControls = process.platform === "win32";
+const windowState = () => ({
+  fullScreen: win.isFullScreen(),
+  maximized: win.isMaximized(),
+  own: ownWindowControls,
+});
 const allowedImage = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -409,6 +418,7 @@ else {
         backgroundColor: dark ? "#202523" : "#f6f5f1",
         title: "Folio Notes",
         icon: path.join(here, "icons/folio.png"),
+        ...(ownWindowControls && { titleBarStyle: "hidden" }),
         webPreferences: {
           preload: path.join(here, "preload.cjs"),
           nodeIntegration: false,
@@ -425,6 +435,27 @@ else {
         }
       });
       win.webContents.on("will-navigate", (event) => event.preventDefault());
+      // Full screen and maximise also change by F11, double-click and snapping,
+      // and not every path emits its own event: report any change on resize.
+      let shownState = "";
+      const reportWindowState = () => {
+        const state = windowState(),
+          key = JSON.stringify(state);
+        if (key !== shownState) send("window", state);
+        shownState = key;
+      };
+      for (const event of [
+        "resize",
+        "enter-full-screen",
+        "leave-full-screen",
+        "maximize",
+        "unmaximize",
+      ])
+        win.on(event, reportWindowState);
+      // Ctrl+wheel: handled here so the page needs no blocking wheel listener.
+      win.webContents.on("zoom-changed", (_event, direction) =>
+        send("command", direction === "in" ? "zoomIn" : "zoomOut"),
+      );
       win.on("app-command", (_event, command) => {
         if (command === "browser-backward") send("command", "back");
         if (command === "browser-forward") send("command", "forward");
@@ -551,6 +582,17 @@ else {
         )
           throw Error("复制内容过大或格式无效");
         clipboard.writeText(text);
+      });
+      api("windowState", windowState);
+      api("windowAction", (action) => {
+        if (action === "minimize") win.minimize();
+        else if (action === "maximize")
+          win.isMaximized() ? win.unmaximize() : win.maximize();
+        else if (action === "fullScreen")
+          win.setFullScreen(!win.isFullScreen());
+        // Same path as the system close: unsaved notes are asked about first.
+        else if (action === "close") win.close();
+        else throw Error("无效窗口操作");
       });
       api("desktopStatus", () =>
         integration

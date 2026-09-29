@@ -61,6 +61,7 @@ import {
 import "./tables.css";
 import "./find-bar.css";
 import { createFindBar } from "./find-bar.js";
+import { wireSourceCopy } from "./copy-source.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -137,6 +138,51 @@ historyControls.setAttribute("role", "group");
 historyControls.setAttribute("aria-label", "阅读历史");
 historyControls.innerHTML = `<button id="history-back" class="icon" aria-label="后退" title="后退 · Alt+←">${icon("chevronLeft")}</button><button id="history-forward" class="icon" aria-label="前进" title="前进 · Alt+→">${icon("chevronRight")}</button>`;
 $(".topbar").insertBefore(historyControls, $(".document-tools"));
+// Desktop (Windows): compact window controls drawn by the page, set apart at
+// the toolbar's right end. main.mjs removes the system title bar.
+const windowControls = document.createElement("div");
+windowControls.className = "window-controls";
+windowControls.setAttribute("role", "group");
+windowControls.setAttribute("aria-label", "窗口");
+windowControls.hidden = true;
+windowControls.innerHTML = ["fullScreen", "minimize", "maximize", "close"]
+  .map(
+    (action) =>
+      `<button class="window-button" data-window="${action}"></button>`,
+  )
+  .join("");
+windowControls.addEventListener("click", (event) => {
+  const action = event.target.closest("[data-window]")?.dataset.window;
+  if (action) api.windowAction(action).catch(() => {});
+});
+$(".topbar").append(windowControls);
+function showWindowState({ fullScreen, maximized, own } = {}) {
+  if (own !== undefined) windowControls.hidden = !own;
+  const labels = {
+    fullScreen: fullScreen ? ["退出全屏", "F11"] : ["全屏", "F11"],
+    minimize: ["最小化"],
+    maximize: maximized ? ["还原"] : ["最大化"],
+    close: ["关闭"],
+  };
+  const icons = {
+    fullScreen: fullScreen ? "exitFullScreen" : "fullScreen",
+    minimize: "minimize",
+    maximize: maximized ? "restore" : "maximize",
+    close: "close",
+  };
+  for (const button of windowControls.children) {
+    const action = button.dataset.window,
+      [label, key] = labels[action];
+    button.innerHTML = icon(icons[action]);
+    button.title = key ? label + " " + key : label;
+    button.setAttribute("aria-label", label);
+  }
+  windowControls
+    .querySelector("[data-window=fullScreen]")
+    .setAttribute("aria-pressed", String(Boolean(fullScreen)));
+  document.documentElement.dataset.fullScreen = String(Boolean(fullScreen));
+}
+showWindowState();
 const tabBar = createTabBar({
   tabs,
   groups: () => settings.tabGroups,
@@ -150,6 +196,11 @@ const tabBar = createTabBar({
     actions ? showContext(event, actions) : contextMenu(event, doc),
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
+wireSourceCopy({
+  host: $("#content"),
+  source: () => active?.previewText,
+  skip: () => !active || blockEditor?.active,
+});
 const findBar = createFindBar({
   panes: $("#panes"),
   content: $("#content"),
@@ -1058,10 +1109,14 @@ $("#reader").addEventListener(
   true,
 );
 for (const name of ["wheel", "pointerdown", "keydown"])
-  $("#reader").addEventListener(name, () => {
-    if (active) active.pane = "preview";
-    currentAnchor = null;
-  });
+  $("#reader").addEventListener(
+    name,
+    () => {
+      if (active) active.pane = "preview";
+      currentAnchor = null;
+    },
+    { passive: true },
+  );
 let scrollFrame = 0;
 function scrolled() {
   lastScrollAt = performance.now();
@@ -1074,6 +1129,73 @@ function scrolled() {
 }
 $("#reader").addEventListener("scroll", scrolled, { passive: true });
 view.scrollDOM.addEventListener("scroll", scrolled, { passive: true });
+// Chromium re-hit-tests the page after every scroll step to update hover. With
+// rendered formulas (KaTeX positions thousands of spans) each test took ~12 ms
+// and made wheel scrolling stutter. While the reader scrolls, a transparent
+// layer on top answers those tests immediately. Not during a drag: selecting
+// past the edge auto-scrolls and needs the text underneath.
+const scrollShield = document.createElement("div");
+scrollShield.className = "scroll-shield";
+scrollShield.setAttribute("aria-hidden", "true");
+$("#reader").prepend(scrollShield);
+let pointerHeld = false,
+  shieldTimer = 0;
+const lowerShield = () => {
+  clearTimeout(shieldTimer);
+  scrollShield.classList.remove("raised");
+};
+document.addEventListener(
+  "pointerdown",
+  () => {
+    pointerHeld = true;
+    lowerShield();
+  },
+  { capture: true, passive: true },
+);
+for (const name of ["pointerup", "pointercancel"])
+  document.addEventListener(name, () => (pointerHeld = false), {
+    capture: true,
+    passive: true,
+  });
+// A real pointer move (hover, aiming a click) lowers it at once.
+document.addEventListener("pointermove", lowerShield, {
+  capture: true,
+  passive: true,
+});
+// Raised by the reader's own wheel and scrolling keys only; jumps, restores
+// and history returns scroll programmatically and never raise it. It stays
+// up while that scroll (and its smooth animation) continues.
+const scrollKeys = new Set([
+  "PageDown",
+  "PageUp",
+  "ArrowDown",
+  "ArrowUp",
+  "Home",
+  "End",
+  " ",
+]);
+const raiseShield = () => {
+  if (pointerHeld) return;
+  scrollShield.classList.add("raised");
+  clearTimeout(shieldTimer);
+  shieldTimer = setTimeout(lowerShield, 150);
+};
+$("#reader").addEventListener("wheel", raiseShield, { passive: true });
+$("#reader").addEventListener(
+  "keydown",
+  (event) => {
+    if (scrollKeys.has(event.key) && !event.target.closest("input, textarea"))
+      raiseShield();
+  },
+  { passive: true },
+);
+$("#reader").addEventListener(
+  "scroll",
+  () => {
+    if (scrollShield.classList.contains("raised")) raiseShield();
+  },
+  { passive: true },
+);
 
 async function openFiles() {
   if (!api) return toast("请运行桌面版以访问本地文件");
@@ -1235,6 +1357,8 @@ const commands = {
   read: () => setMode("read"),
   edit: () => setMode("edit"),
   source: () => setMode("source"),
+  zoomIn: () => zoom(10),
+  zoomOut: () => zoom(-10),
   hide: () => commands.close("hide"),
   quit: () => commands.close("quit"),
   desktopSettings: () => openDesktopSettings(),
@@ -1350,16 +1474,21 @@ document.addEventListener("keydown", (e) => {
     zoom(key === "0" ? 0 : key === "-" ? -10 : 10);
   }
 });
-document.addEventListener(
-  "wheel",
-  (e) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      zoom(e.deltaY < 0 ? 10 : -10);
-    }
-  },
-  { passive: false },
-);
+// A non-passive wheel listener makes every wheel notch wait for the page's
+// main thread (hit-testing a long, formula-heavy note), so scrolling stutters.
+// The desktop app gets Ctrl+wheel from Electron instead ("zoom-changed" →
+// zoomIn/zoomOut commands); only the browser demo listens here.
+if (!api)
+  document.addEventListener(
+    "wheel",
+    (e) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        zoom(e.deltaY < 0 ? 10 : -10);
+      }
+    },
+    { passive: false },
+  );
 window.addEventListener("focus", () => run(() => checkDisk())());
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) run(() => checkDisk())();
@@ -1395,6 +1524,8 @@ if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
+  api.on("window", showWindowState);
+  api.windowState?.().then(showWindowState, () => {});
   run(async () => {
     const boot = await api.ready();
     // Changes made while booting (e.g. zoom) stay underneath the stored values.

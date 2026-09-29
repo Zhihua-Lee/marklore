@@ -1,6 +1,11 @@
 import { wireSortableTables } from "./table-sort.js";
 import { chooseColumnWidths } from "./table-widths.js";
-import { visibleAnchor, restoreAnchor, navigationMoving } from "./positions.js";
+import {
+  visibleAnchor,
+  restoreAnchor,
+  navigationMoving,
+  isCorrection,
+} from "./positions.js";
 
 const cache = new WeakMap();
 function clearWidths(table) {
@@ -313,7 +318,7 @@ export function watchTableLayout(host, scroller) {
   scroller.addEventListener(
     "scroll",
     () => {
-      lastScroll = performance.now();
+      if (!isCorrection(scroller)) lastScroll = performance.now();
       schedule();
     },
     { passive: true },

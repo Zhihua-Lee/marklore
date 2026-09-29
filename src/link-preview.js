@@ -303,5 +303,10 @@ export function createLinkPreview({
     }
   });
   window.addEventListener("resize", () => hide());
-  return { hide };
+  // After the note re-renders: keep the preview while its link is still on the
+  // page (unchanged blocks are kept), close it once the link was replaced.
+  function release() {
+    if (origin && !origin.isConnected) hide();
+  }
+  return { hide, release };
 }

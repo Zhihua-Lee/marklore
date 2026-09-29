@@ -640,7 +640,6 @@ function render(preserve) {
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
   let fragment = null;
   if (doc.htmlText !== doc.text) {
-    linkPreview.hide();
     const result = renderMarkdown(doc.text, doc.fileId, {
       deferMath: true,
       interactiveTasks: true,
@@ -659,6 +658,8 @@ function render(preserve) {
     bytes: doc.renderBytes,
   });
   doc.previewText = doc.text;
+  // E.g. highlight.js arriving re-renders code blocks under an open preview.
+  linkPreview.release();
   if (changed) {
     for (const el of container.querySelectorAll(".note-section"))
       if (doc.folds.includes(el.dataset.foldKey)) {

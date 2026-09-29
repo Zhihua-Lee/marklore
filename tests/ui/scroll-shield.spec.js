@@ -46,24 +46,54 @@ test("wheel scrolling raises the hover shield; jumps and a moving pointer do not
     .click();
   await expect(shield).not.toHaveClass(/raised/);
 
+  // A real wheel raises it. It lowers 150 ms after scrolling stops, which a
+  // loaded machine can pass before polling, so record the raise itself.
+  await page.evaluate(() => {
+    window.raised = null;
+    new MutationObserver(() => {
+      const shield = document.querySelector("#reader > .scroll-shield");
+      if (shield.classList.contains("raised") && !window.raised) {
+        const r = document.querySelector("#reader").getBoundingClientRect();
+        window.raised = document.elementFromPoint(
+          r.left + r.width / 2,
+          r.top + r.height / 2,
+        )?.className;
+      }
+    }).observe(document.querySelector("#reader > .scroll-shield"), {
+      attributes: true,
+    });
+  });
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 300);
-  await expect(shield).toHaveClass(/raised/);
-  // What is under the pointer while it is raised is the shield itself.
-  expect(
-    await page.evaluate(
-      ({ x, y }) => document.elementFromPoint(x, y)?.className,
-      { x: box.x + box.width / 2, y: box.y + box.height / 2 },
-    ),
-  ).toBe("scroll-shield raised");
+  // While raised, what is under the pointer is the shield itself.
+  await expect
+    .poll(() => page.evaluate(() => window.raised))
+    .toBe("scroll-shield raised");
   // Settles shortly after the scroll ends.
   await expect(shield).not.toHaveClass(/raised/, { timeout: 2000 });
 
-  // Moving the pointer (to hover or click) lowers it immediately.
-  await page.mouse.wheel(0, 300);
-  await expect(shield).toHaveClass(/raised/);
-  await page.mouse.move(box.x + box.width / 2 + 20, box.y + box.height / 2);
-  await expect(shield).not.toHaveClass(/raised/);
+  // Scrolling keys raise it; moving the pointer (to hover or click) lowers it
+  // at once. Checked synchronously in the page, independent of timing.
+  expect(
+    await page.evaluate(() => {
+      const reader = document.querySelector("#reader"),
+        shield = reader.querySelector(".scroll-shield");
+      reader.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "PageDown", bubbles: true }),
+      );
+      const byKey = shield.classList.contains("raised");
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true }),
+      );
+      const afterMove = shield.classList.contains("raised");
+      reader.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+      const byWheel = shield.classList.contains("raised");
+      document.dispatchEvent(
+        new PointerEvent("pointermove", { bubbles: true }),
+      );
+      return [byKey, afterMove, byWheel, shield.classList.contains("raised")];
+    }),
+  ).toEqual([true, false, true, false]);
   // It takes no space and is not a scroll anchor.
   expect(
     await shield.evaluate((el) => [

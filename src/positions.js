@@ -358,6 +358,15 @@ export function navigateToAnchor(
     view.requestAnimationFrame(() => view.requestAnimationFrame(settle));
 }
 
+// Where the last instant reading-position correction left each scroller.
+// Idle backfills pause while the reader scrolls; their own corrections (a
+// formula above the reading line grew) must not count as scrolling, or a
+// backfill deep in a long note waits 250 ms after every batch.
+const corrections = new WeakMap();
+export function isCorrection(host) {
+  const at = corrections.get(host);
+  return at !== undefined && Math.abs(host.scrollTop - at) < 1;
+}
 export function restoreAnchor(
   host,
   anchor,
@@ -370,5 +379,7 @@ export function restoreAnchor(
     return;
   }
   const top = anchorTop(host, anchor, expand);
-  if (top !== null) host.scrollTo({ behavior, top });
+  if (top === null) return;
+  host.scrollTo({ behavior, top });
+  if (behavior === "instant") corrections.set(host, host.scrollTop);
 }

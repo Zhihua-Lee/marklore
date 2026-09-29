@@ -1,4 +1,9 @@
-import { visibleAnchor, restoreAnchor, navigationMoving } from "./positions.js";
+import {
+  visibleAnchor,
+  restoreAnchor,
+  navigationMoving,
+  isCorrection,
+} from "./positions.js";
 
 const selector = "[data-folio-math]";
 function markers(node) {
@@ -30,7 +35,9 @@ export function createFormulaHydrator(
     queue = null,
     lastScroll = 0;
   const ready = new Set();
-  const onScroll = () => (lastScroll = performance.now());
+  const onScroll = () => {
+    if (!isCorrection(scroller)) lastScroll = performance.now();
+  };
 
   function expand(marker) {
     // Never replace a marker before the math renderer has loaded; activate()

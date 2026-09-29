@@ -166,6 +166,30 @@ test("hover-preview zoom is independent, preserves the main page and remembers i
     .toBe(110);
 });
 
+// On a slow machine highlight.js can arrive just after a preview opened; the
+// re-render it triggers keeps unchanged blocks, so the preview must stay.
+test("an open hover preview survives the late highlighter re-render", async ({
+  page,
+}) => {
+  let release;
+  const held = new Promise((resolve) => (release = resolve));
+  await page.route(/highlight(\.js|__js)_lib_common/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await boot(page);
+  const card = page.locator("#link-preview");
+  await page.getByRole("link", { name: "Preview", exact: true }).hover();
+  await expect(card).toBeVisible();
+  await expect(page.locator("#content pre .hljs-string")).toHaveCount(0);
+  release();
+  await expect(page.locator("#content pre .hljs-string").first()).toBeVisible();
+  await page.waitForTimeout(300);
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "关闭链接预览" }).click();
+  await expect(card).toBeHidden();
+});
+
 test("tabs shrink, reorder by drag, persist order and keep edge-close glyphs out of view", async ({
   page,
 }) => {

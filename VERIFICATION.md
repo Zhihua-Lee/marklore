@@ -1,6 +1,6 @@
 # Verification
 
-Last updated 2026-09-29.
+Last updated 2026-09-30.
 
 This index lists what was checked for each documented release; the full record of
 each pass lives in [docs/verification/](docs/verification/). A recorded pass covers
@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                              | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | -------------------------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.1.42 | Live edit preview, editor find bar, reliable tab highlight           | 67                | 168 (default + reduced-motion) | 11 suites (packaged)                                            | [v0.1.42](docs/verification/v0.1.42.md) |
 | v0.1.41 | English interface, portable mode, new Settings, clearer selected tab | 67                | 164 (default + reduced-motion) | 11 suites (packaged)                                            | [v0.1.41](docs/verification/v0.1.41.md) |
 | v0.1.36 | Tabs clickable again; optional smooth scrolling                      | 60                | 157 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.36](docs/verification/v0.1.36.md) |
 | v0.1.34 | Steadier link previews and formula backfill                          | 59                | 154 (default + reduced-motion) | 9 suites (packaged)                                             | [v0.1.34](docs/verification/v0.1.34.md) |

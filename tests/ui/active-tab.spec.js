@@ -73,4 +73,31 @@ for (const theme of ["light", "dark"])
     expect(loose.transition).toMatch(/^0s(, 0s)*$/);
     // The one it left is no longer the bright card.
     expect((await look("B.md")).background).not.toBe(grouped.expected);
+    // Keyboard focus and hover on the selected tab keep it bright (the
+    // hover/focus shade of other tabs once outranked it).
+    await page.mouse.move(600, 400);
+    await page.getByRole("tab", { name: "C.md" }).focus();
+    expect((await look("C.md")).background).toBe(loose.expected);
+    await page.getByRole("tab", { name: "C.md" }).hover();
+    expect((await look("C.md")).background).toBe(loose.expected);
+
+    // The highlight moves on press, before the click renders the note.
+    const a = page.getByRole("tab", { name: "A.md" });
+    await a.hover();
+    await page.mouse.down();
+    await expect(tab("A.md")).toHaveClass(/active/);
+    await expect(tab("C.md")).not.toHaveClass(/active/);
+    await expect(a).toHaveAttribute("aria-selected", "false");
+    await page.mouse.up();
+    await expect(a).toHaveAttribute("aria-selected", "true");
+    await expect(tab("A.md")).toHaveClass(/active/);
+
+    // Dragged away instead of clicked: the highlight goes back.
+    await page.getByRole("tab", { name: "C.md" }).hover();
+    await page.mouse.down();
+    await expect(tab("C.md")).toHaveClass(/active/);
+    await page.mouse.move(600, 400, { steps: 1 });
+    await page.mouse.up();
+    await expect(tab("A.md")).toHaveClass(/active/);
+    await expect(tab("C.md")).not.toHaveClass(/active/);
   });

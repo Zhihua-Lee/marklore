@@ -533,6 +533,15 @@ export function createTabBar({
       left: host.scrollLeft,
     };
     dragged = false;
+    // Show the selection on press: the click that activates the tab renders
+    // the note first, so a large note would hold the highlight back. A drag,
+    // or a release off the tab, puts it back (update() in finish).
+    if (node.classList.contains("tab") && !node.classList.contains("active")) {
+      for (const n of host.querySelectorAll(".tab.active"))
+        n.classList.remove("active");
+      node.classList.add("active");
+      drag.pressed = true;
+    }
   });
   function paint() {
     if (!drag || !dragged) return;
@@ -580,6 +589,7 @@ export function createTabBar({
     if (!dragged && Math.abs(drag.current - drag.x) > 5) {
       settleMotion();
       dragged = true;
+      if (drag.pressed) update();
       host.setPointerCapture(e.pointerId);
       host.classList.add("dragging");
       drag.node.classList.add("reordering");
@@ -617,7 +627,9 @@ export function createTabBar({
     }
     setTimeout(() => {
       dragged = false;
-      overflow();
+      // After the click (if any) has activated the pressed tab.
+      if (previous.pressed) update();
+      else overflow();
     }, 0);
   }
   window.addEventListener("pointerup", () => finish(true));

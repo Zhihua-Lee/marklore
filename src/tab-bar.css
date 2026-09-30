@@ -111,8 +111,8 @@
   border-radius: 6px;
   color: var(--muted);
 }
-#tabs .tab:not(.grouped):hover,
-#tabs .tab:not(.grouped):focus-within {
+#tabs .tab:not(.grouped, .active):hover,
+#tabs .tab:not(.grouped, .active):focus-within {
   background: color-mix(in srgb, var(--ink) 9%, var(--panel));
   color: var(--ink);
 }

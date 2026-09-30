@@ -124,3 +124,26 @@
   border-bottom-color: color-mix(in srgb, var(--accent) 75%, transparent);
   color: var(--ink);
 }
+
+/* The selected tab is told apart by shape, not hue (a green group read like
+   the green active state): it takes the page's own paper, a hairline edge and
+   a 2 px bar at the bottom, in the accent or in its group's colour. The bar is
+   a background layer: box-shadow is taken by drag indicators, and a thicker
+   border would shift the label. */
+#tabs .tab.active,
+#tabs .tab.active:hover {
+  --tab-bar: var(--accent);
+  background:
+    linear-gradient(var(--tab-bar), var(--tab-bar)) bottom / 100% 2px no-repeat,
+    var(--reading-paper, var(--bg));
+  border-color: var(--line);
+  border-bottom-color: transparent;
+  color: var(--ink);
+}
+#tabs .tab.grouped.active,
+#tabs .tab.grouped.active:hover {
+  --tab-bar: var(--group-color);
+}
+#tabs .tab.active .tab-label {
+  font-weight: 600;
+}

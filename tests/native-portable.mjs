@@ -67,10 +67,12 @@ async function toggle({ app, page }) {
     app.process().once("exit", resolve);
     setTimeout(
       () => reject(Error("Folio did not exit after the switch")),
-      20000,
+      30000,
     );
   });
   await page.locator("#weight").click();
+  await page.locator('.settings-nav [data-section="desktop-settings"]').click();
+  await page.locator("#portable-mode").waitFor({ state: "visible" });
   await page.locator("#portable-mode").click();
   await exited.catch(async (error) => {
     const toast = await page

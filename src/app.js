@@ -13,6 +13,7 @@ import { createMenus } from "./menus.js";
 import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
+import { editorSearch } from "./editor-search.js";
 import {
   openSearchPanel,
   setSearchQuery,
@@ -88,6 +89,7 @@ let active = null,
   view,
   switching = false,
   renderingTimer,
+  editsPendingSince = null,
   sessionTimer,
   maxSessionTimer,
   toastTimer,
@@ -300,6 +302,7 @@ function stateFor(doc) {
     doc: doc.text,
     extensions: [
       basicSetup,
+      editorSearch,
       editingHighlight,
       editingKeys,
       markdown(),
@@ -343,13 +346,33 @@ function stateFor(doc) {
               return;
             }
             if (active?.mode === "source") {
+              editsPendingSince = null;
               active.headings = parseHeadings(active.text);
               updateOutline(active.headings);
-            } else render(true);
+            } else {
+              const doc = active,
+                start = performance.now();
+              render(true);
+              doc.renderCost = performance.now() - start;
+            }
           };
+          // Wait for a short pause in typing, but never longer than a budget
+          // from the first unrendered edit: a plain debounce kept the preview
+          // still for as long as typing went on. The budget grows with the
+          // note's own render cost, so rendering takes at most about a
+          // quarter of the time while typing.
+          const now = performance.now(),
+            cost = active.renderCost ?? 0;
+          editsPendingSince ??= now;
           renderingTimer = setTimeout(
             refreshEditedPreview,
-            active.text.length > 80000 || active.formulaCount > 200 ? 320 : 160,
+            Math.max(
+              0,
+              Math.min(
+                cost > 100 ? 160 : 40,
+                editsPendingSince + Math.max(80, cost * 3) - now,
+              ),
+            ),
           );
         }
         if (update.selectionSet) updateStatus();
@@ -646,6 +669,7 @@ function setMode(mode, { anchor: destination } = {}) {
   scheduleSession();
 }
 function render(preserve) {
+  editsPendingSince = null;
   if (!active) return;
   if (blockEditor?.active) return;
   blockEditor?.resetHover();

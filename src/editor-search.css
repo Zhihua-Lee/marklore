@@ -1,0 +1,140 @@
+/* The editor's find bar floats over the editor's top-right corner like find
+   in the rendered note (find-bar.css); its panel strip takes no height. */
+#editor .cm-panels.cm-panels-top {
+  height: 0;
+  overflow: visible;
+  border: 0;
+  background: none;
+}
+#editor .folio-search {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 5;
+  display: grid;
+  gap: 4px;
+  max-width: calc(100% - 24px);
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 4px 16px #0002;
+  font: 400 12px/1.4 var(--font-ui);
+}
+/* CodeMirror's own theme spaces every control in .cm-search. */
+#editor .folio-search :is(input, button, label) {
+  margin: 0;
+}
+#editor .folio-search-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+#editor .folio-search-row[hidden] {
+  display: none;
+}
+#editor .folio-search input[type="text"] {
+  flex: 1 1 200px;
+  width: 200px;
+  min-width: 90px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+/* The replace field lines up under the find field, past the expand button. */
+#editor .folio-search-replace {
+  padding-left: 26px;
+}
+#editor .folio-search-replace input[type="text"] {
+  flex-grow: 0;
+}
+#editor .folio-search button {
+  flex: none;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 14px;
+}
+#editor .folio-search-replace button {
+  font-size: 12px;
+}
+#editor .folio-search .ui-icon {
+  width: 13px;
+  height: 13px;
+}
+#editor .folio-search .folio-search-expand {
+  width: 24px;
+  min-width: 24px;
+  padding: 0;
+  color: var(--muted);
+}
+#editor .folio-search-expand .ui-icon {
+  transition: transform 120ms ease-out;
+}
+#editor .folio-search-expand[aria-expanded="true"] .ui-icon {
+  transform: rotate(90deg);
+}
+#editor .folio-search-count {
+  flex: none;
+  min-width: 52px;
+  padding: 0 6px;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#editor .folio-search-none input[name="search"] {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+}
+/* Option toggles: the checkbox covers its label and stays focusable. */
+#editor .folio-search-toggle {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  height: 28px;
+  border-radius: 5px;
+  color: var(--muted);
+  font: 500 12px/1 var(--font-code);
+  cursor: pointer;
+}
+#editor .folio-search-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+#editor .folio-search-toggle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+#editor .folio-search-toggle:has(input:checked) {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+#editor .folio-search-toggle:has(input:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* Matches use the reader's find colours. */
+#editor .cm-searchMatch {
+  background-color: color-mix(in srgb, #e5b93a 38%, transparent);
+  outline: none;
+}
+#editor .cm-searchMatch-selected,
+#editor .cm-searchMatch.cm-searchMatch-selected {
+  background-color: color-mix(in srgb, #e58a1f 70%, transparent);
+}

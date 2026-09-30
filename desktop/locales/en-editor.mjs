@@ -151,4 +151,17 @@ export default {
   "按{label}排序": "Sort by {label}",
   "点击切换：升序 → 降序 → 原始顺序":
     "Click to cycle: ascending → descending → original order",
+  // Editor find and replace
+  显示替换: "Show replace",
+  隐藏替换: "Hide replace",
+  替换: "Replace",
+  查找: "Find",
+  区分大小写: "Match case",
+  全字匹配: "Match whole word",
+  正则表达式: "Regular expression",
+  替换为: "Replace with",
+  "替换当前（Enter）": "Replace (Enter)",
+  全部替换: "Replace all",
+  "全部替换（Ctrl+Alt+Enter）": "Replace all (Ctrl+Alt+Enter)",
+  正则有误: "Invalid regex",
 };

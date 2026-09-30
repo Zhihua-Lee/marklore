@@ -14,7 +14,7 @@ English · [简体中文](README.zh-CN.md)
 
 Read, edit and organize local notes in one workspace. Tabs and colored groups keep material together. The outline, link previews and back/forward history take you through long documents. KaTeX formulas, syntax-highlighted code and Mermaid diagrams cover technical writing. Notes are `.md` files on your disk: there is no database to import into and nothing is uploaded.
 
-The interface is available in English and Chinese. It follows the system language, and you can switch it in `Aa → Language`.
+The interface is available in English and Chinese. It follows the system language, and you can switch it in `Settings → Theme & language → Language`.
 
 ## Install
 
@@ -28,9 +28,9 @@ Folio Notes is portable and needs no administrator rights.
 3. **Extract the whole archive** to any folder, for example `D:\Apps\Folio Notes`. Keep the DLLs, `resources` and `locales` next to the EXE; do not copy the EXE alone.
 4. Run `Folio Notes.exe`. The build is not code-signed, so on first launch Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
 
-**Portable mode:** turn on `Aa → Background & system → Portable mode` to keep your tabs, drafts, recent files and settings in a `data` folder next to the program. The whole folder, for example on a USB stick, then carries its state with it.
+**Portable mode:** turn on `Settings → Background & system → Portable mode` to keep your tabs, drafts, recent files and settings in a `data` folder next to the program. The whole folder, for example on a USB stick, then carries its state with it.
 
-**Update:** extract the new version to a new folder and start it from there. Settings, recovery drafts and recent files live in your user profile (or in `data` in portable mode), not in the program folder. Delete the old folder once the new one works. If you enabled start at login or Markdown file registration, register again from the new version in `Aa → Background & system`.
+**Update:** extract the new version to a new folder and start it from there. Settings, recovery drafts and recent files live in your user profile (or in `data` in portable mode), not in the program folder. Delete the old folder once the new one works. If you enabled start at login or Markdown file registration, register again from the new version in `Settings → Background & system`.
 
 **Uninstall:** delete the program folder. To also remove settings and recovery data, delete `%APPDATA%\folio-notes`. It contains drafts in plain text, so do not share it.
 
@@ -70,7 +70,7 @@ Formulas, tables and code render as you type in Edit mode. You can also edit a s
 | Math and technical writing  | KaTeX formulas, Mermaid diagrams, syntax highlighting, sortable tables, clickable task lists and footnotes.                                                     |
 | Multi-document workspace    | Draggable tabs, colored groups, a folder library with a file-name filter that includes subfolders; recent files on the start page and in the taskbar jump list. |
 | Reading appearance          | Light and dark themes, bundled fonts, text size and weight, adjustable sidebars and table styles; a toolbar that is also the title bar, and full screen.        |
-| Smooth scrolling (optional) | `Aa → Reading navigation → Smooth scrolling` moves the page once per display frame, so touchpad, wheel and scrollbar scrolling keep an even pace.               |
+| Smooth scrolling (optional) | `Settings → Navigation & scrolling → Smooth scrolling` moves the page once per display frame, so touchpad, wheel and scrollbar scrolling keep an even pace.     |
 | Local saving and export     | Explicit saves, disk version checks, backups and draft recovery; export to PDF or a standalone offline HTML file.                                               |
 
 ![Edit mode in the dark theme: Markdown source on the left, rendered preview on the right](docs/images/en/edit-dark.png)
@@ -93,7 +93,7 @@ Use **Open file** to open Markdown files, or **Open folder** to add a folder to 
 | Text size                   | `Ctrl+wheel` / `Ctrl++` / `Ctrl+-`            |
 | Full screen                 | `F11`                                         |
 
-All three modes share one draft, and switching modes or tabs keeps your reading position. `Aa` holds fonts, theme, language, sidebars, tables and background settings. The full [user guide](docs/user-guide.md) is in Chinese for now.
+All three modes share one draft, and switching modes or tabs keeps your reading position. The Settings button (the sliders icon) in the toolbar opens fonts, theme, language, sidebars, tables and background settings, in sections. The full [user guide](docs/user-guide.md) is in Chinese for now.
 
 ## Data and privacy
 

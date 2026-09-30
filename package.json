@@ -82,6 +82,7 @@
     ],
     "extraFiles": [
       "README.md",
+      "README.zh-CN.md",
       "LICENSE",
       "THIRD-PARTY-NOTICES.txt"
     ],

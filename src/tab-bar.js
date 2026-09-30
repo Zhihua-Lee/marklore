@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import {
   groupColors,
@@ -203,15 +204,15 @@ export function createTabBar({
           header.oncontextmenu = (e) => {
             e.preventDefault();
             context(e, [
-              ["编辑分组…", () => editGroup(null, group)],
+              [t("编辑分组…"), () => editGroup(null, group)],
               [
-                group.collapsed ? "展开分组" : "折叠分组",
+                group.collapsed ? t("展开分组") : t("折叠分组"),
                 () => {
                   toggleGroup(group);
                 },
               ],
               [
-                "取消分组（保留标签）",
+                t("取消分组（保留标签）"),
                 () => {
                   for (const t of tabs)
                     if (t.groupId === group.id) t.groupId = null;
@@ -225,8 +226,15 @@ export function createTabBar({
         const members = tabs.filter((t) => t.groupId === group.id),
           current = members.includes(active());
         header.textContent = `${group.collapsed ? "▸" : "▾"} ${group.name} ${members.length}${members.some(dirty) ? " ●" : ""}`;
-        header.title = `${group.name} · ${members.length} 篇${current ? " · 当前：" + active().name : ""}`;
-        header.setAttribute("aria-label", "分组 " + group.name);
+        header.title =
+          t("{name} · {count} 篇", {
+            name: group.name,
+            count: members.length,
+          }) + (current ? t(" · 当前：{name}", { name: active().name }) : "");
+        header.setAttribute(
+          "aria-label",
+          t("分组 {name}", { name: group.name }),
+        );
         header.setAttribute("aria-expanded", String(!group.collapsed));
         header.classList.toggle("contains-active", current);
         header.style.setProperty("--group-color", groupColors[group.color]);
@@ -271,7 +279,7 @@ export function createTabBar({
       label.setAttribute("aria-selected", String(active() === doc));
       node
         .querySelector(".tab-close")
-        .setAttribute("aria-label", "关闭 " + doc.name);
+        .setAttribute("aria-label", t("关闭 {name}", { name: doc.name }));
       order.push(node);
     }
     order.forEach((node, i) => {
@@ -325,18 +333,21 @@ export function createTabBar({
   }
   function actions(doc) {
     return [
-      ["新建分组…", () => editGroup(doc)],
+      [t("新建分组…"), () => editGroup(doc)],
       ...groups()
         .filter((g) => g.id !== doc.groupId)
-        .map((g) => ["移入分组 · " + g.name, () => assign(doc, g.id)]),
-      ...(doc.groupId ? [["移出分组", () => assign(doc, null)]] : []),
+        .map((g) => [
+          t("移入分组 · {name}", { name: g.name }),
+          () => assign(doc, g.id),
+        ]),
+      ...(doc.groupId ? [[t("移出分组"), () => assign(doc, null)]] : []),
     ];
   }
   function editGroup(doc, group) {
     const dialog = document.createElement("dialog");
     dialog.className = "group-dialog";
-    dialog.setAttribute("aria-label", group ? "编辑分组" : "新建分组");
-    dialog.innerHTML = `<form><h2>${group ? "编辑分组" : "新建分组"}</h2><label>名称<input name="name" aria-label="分组名称" maxlength="40" required></label><label>颜色<select name="color" aria-label="分组颜色"><option value="green">松绿</option><option value="blue">雾蓝</option><option value="amber">琥珀</option><option value="rose">玫瑰</option><option value="violet">紫灰</option><option value="gray">中性灰</option></select></label><div class="dialog-actions"><button type="button" data-cancel>取消</button><button type="submit" class="primary">确定</button></div></form>`;
+    dialog.setAttribute("aria-label", group ? t("编辑分组") : t("新建分组"));
+    dialog.innerHTML = `<form><h2>${group ? t("编辑分组") : t("新建分组")}</h2><label>${t("名称")}<input name="name" aria-label="${t("分组名称")}" maxlength="40" required></label><label>${t("颜色")}<select name="color" aria-label="${t("分组颜色")}"><option value="green">${t("松绿")}</option><option value="blue">${t("雾蓝")}</option><option value="amber">${t("琥珀")}</option><option value="rose">${t("玫瑰")}</option><option value="violet">${t("紫灰")}</option><option value="gray">${t("中性灰")}</option></select></label><div class="dialog-actions"><button type="button" data-cancel>${t("取消")}</button><button type="submit" class="primary">${t("确定")}</button></div></form>`;
     document.body.append(dialog);
     const form = dialog.querySelector("form");
     form.elements.name.value = group?.name || "";

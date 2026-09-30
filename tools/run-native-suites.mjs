@@ -9,8 +9,10 @@ const suites = (await fs.readdir("tests"))
 const failed = [];
 for (const suite of suites) {
   console.log(`\n▶ ${suite}`);
+  // Suites assert Chinese interface text whatever the machine's language.
   const result = spawnSync(process.execPath, [`tests/${suite}`], {
     stdio: "inherit",
+    env: { ...process.env, FOLIO_LANG: process.env.FOLIO_LANG || "zh" },
   });
   if (result.status !== 0) failed.push(suite);
 }

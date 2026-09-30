@@ -27,6 +27,7 @@ import {
   disablePortable,
   retireDisabled,
 } from "./portable.mjs";
+import { t, setLanguage, getLanguage, resolveLanguage } from "./i18n.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -85,7 +86,7 @@ const recent = createRecentFiles({
               ? [
                   {
                     type: "custom",
-                    name: "最近打开",
+                    name: t("最近打开"),
                     items: paths.map((p) => ({
                       type: "task",
                       title: path.basename(p),
@@ -119,19 +120,35 @@ function reportDesktopError(error) {
   showWindow();
   dialog.showMessageBox(win, {
     type: "error",
-    message: "系统设置未完成",
+    message: t("系统设置未完成"),
     detail: error.message,
   });
 }
+// Interface language: the stored choice (Aa → 界面语言) or the system
+// locale; FOLIO_LANG pins it (tests). Menus, tray and jump list follow it.
+let rebuildLocalized = () => {};
+function applyLanguage(choice) {
+  const next = resolveLanguage(
+    process.env.FOLIO_LANG || choice,
+    app.getLocale(),
+  );
+  if (next === getLanguage()) return;
+  setLanguage(next);
+  rebuildLocalized();
+}
+// The preload reads the language synchronously, before the page builds.
+ipcMain.on("folio:language", (event) => {
+  event.returnValue = getLanguage();
+});
 function updateTray() {
   if (!tray) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "打开 Folio Notes", click: showWindow },
-      { label: "隐藏到托盘", click: () => send("command", "hide") },
+      { label: t("打开 Folio Notes"), click: showWindow },
+      { label: t("隐藏到托盘"), click: () => send("command", "hide") },
       { type: "separator" },
       {
-        label: "关闭窗口后留在后台",
+        label: t("关闭窗口后留在后台"),
         type: "checkbox",
         checked: integration.closeToTray,
         click: (item) =>
@@ -142,7 +159,7 @@ function updateTray() {
           }).catch(reportDesktopError),
       },
       {
-        label: "开机启动",
+        label: t("开机启动"),
         type: "checkbox",
         enabled: process.platform === "win32" && app.isPackaged,
         checked: integration.login().openAtLogin,
@@ -154,7 +171,7 @@ function updateTray() {
           }).catch(reportDesktopError),
       },
       {
-        label: "后台与默认应用设置…",
+        label: t("后台与默认应用设置…"),
         click: () => {
           showWindow();
           send("command", "desktopSettings");
@@ -162,7 +179,7 @@ function updateTray() {
       },
       { type: "separator" },
       {
-        label: "退出 Folio Notes",
+        label: t("退出 Folio Notes"),
         click: () => {
           if (allowClose || !ready) app.quit();
           else {
@@ -323,7 +340,8 @@ async function persist(value) {
   // A late write would recreate the folder the data just moved out of.
   if (switchingData) return;
   const text = JSON.stringify(value);
-  if (Buffer.byteLength(text) > 64 * 1024 * 1024) throw Error("恢复数据过大");
+  if (Buffer.byteLength(text) > 64 * 1024 * 1024)
+    throw Error(t("恢复数据过大"));
   await fs.mkdir(path.dirname(sessionFile), { recursive: true });
   const temp = sessionFile + ".tmp";
   const handle = await fs.open(temp, "w");
@@ -433,6 +451,13 @@ else {
       // Paint the saved theme's page colour before the renderer loads (no light flash in dark mode).
       firstSessionRead = readSession();
       const dark = (await firstSessionRead).settings?.theme === "dark";
+      setLanguage(
+        resolveLanguage(
+          process.env.FOLIO_LANG || (await firstSessionRead).settings?.language,
+          app.getLocale(),
+        ),
+      );
+      recent.refreshJumpList().catch(() => {});
       win = new BrowserWindow({
         width: 1360,
         height: 920,
@@ -501,80 +526,88 @@ else {
         allowClose = true;
       });
       const command = (cmd) => () => send("command", cmd);
-      Menu.setApplicationMenu(
-        Menu.buildFromTemplate([
-          {
-            label: "文件",
-            submenu: [
-              {
-                label: "打开文件…",
-                accelerator: "CmdOrCtrl+O",
-                click: command("open"),
-              },
-              {
-                label: "打开文件夹…",
-                accelerator: "CmdOrCtrl+Shift+O",
-                click: command("folder"),
-              },
-              {
-                label: "新笔记",
-                accelerator: "CmdOrCtrl+N",
-                click: command("new"),
-              },
-              {
-                label: "保存",
-                accelerator: "CmdOrCtrl+S",
-                click: command("save"),
-              },
-              {
-                label: "另存为…",
-                accelerator: "CmdOrCtrl+Shift+S",
-                click: command("saveAs"),
-              },
-              { type: "separator" },
-              { role: "quit" },
-            ],
-          },
-          {
-            label: "编辑",
-            submenu: [
-              { role: "undo" },
-              { role: "redo" },
-              { type: "separator" },
-              { role: "cut" },
-              { role: "copy" },
-              { role: "paste" },
-              { role: "selectAll" },
-            ],
-          },
-          {
-            label: "查看",
-            submenu: [
-              {
-                label: "刷新当前笔记",
-                accelerator: "CmdOrCtrl+R",
-                click: command("refresh"),
-              },
-              {
-                label: "阅读",
-                accelerator: "CmdOrCtrl+1",
-                click: command("read"),
-              },
-              {
-                label: "编辑",
-                accelerator: "CmdOrCtrl+2",
-                click: command("edit"),
-              },
-              {
-                label: "源码",
-                accelerator: "CmdOrCtrl+3",
-                click: command("source"),
-              },
-              { role: "togglefullscreen" },
-            ],
-          },
-        ]),
-      );
+      const buildMenu = () =>
+        Menu.setApplicationMenu(
+          Menu.buildFromTemplate([
+            {
+              label: t("文件"),
+              submenu: [
+                {
+                  label: t("打开文件…"),
+                  accelerator: "CmdOrCtrl+O",
+                  click: command("open"),
+                },
+                {
+                  label: t("打开文件夹…"),
+                  accelerator: "CmdOrCtrl+Shift+O",
+                  click: command("folder"),
+                },
+                {
+                  label: t("新笔记"),
+                  accelerator: "CmdOrCtrl+N",
+                  click: command("new"),
+                },
+                {
+                  label: t("保存"),
+                  accelerator: "CmdOrCtrl+S",
+                  click: command("save"),
+                },
+                {
+                  label: t("另存为…"),
+                  accelerator: "CmdOrCtrl+Shift+S",
+                  click: command("saveAs"),
+                },
+                { type: "separator" },
+                { role: "quit" },
+              ],
+            },
+            {
+              label: t("编辑"),
+              submenu: [
+                { role: "undo" },
+                { role: "redo" },
+                { type: "separator" },
+                { role: "cut" },
+                { role: "copy" },
+                { role: "paste" },
+                { role: "selectAll" },
+              ],
+            },
+            {
+              label: t("查看"),
+              submenu: [
+                {
+                  label: t("刷新当前笔记"),
+                  accelerator: "CmdOrCtrl+R",
+                  click: command("refresh"),
+                },
+                {
+                  label: t("阅读"),
+                  accelerator: "CmdOrCtrl+1",
+                  click: command("read"),
+                },
+                {
+                  label: t("编辑"),
+                  accelerator: "CmdOrCtrl+2",
+                  click: command("edit"),
+                },
+                {
+                  label: t("源码"),
+                  accelerator: "CmdOrCtrl+3",
+                  click: command("source"),
+                },
+                { role: "togglefullscreen" },
+              ],
+            },
+          ]),
+        );
+      buildMenu();
+      rebuildLocalized = () => {
+        buildMenu();
+        if (process.platform !== "darwin") win?.setMenuBarVisibility(false);
+        updateTray();
+        recent.refreshJumpList().catch(() => {});
+      };
       // Keep native accelerators, but not the menu strip (including on Alt).
       // Auto-hide would let Alt reveal the strip again, so it stays disabled.
       if (process.platform !== "darwin") win.setMenuBarVisibility(false);
@@ -584,18 +617,25 @@ else {
           paths.length > 100 ||
           paths.some((p) => typeof p !== "string" || !path.isAbsolute(p))
         )
-          throw Error("无效拖入文件");
+          throw Error(t("无效拖入文件"));
         const documents = [],
           errors = [];
         for (const file of new Set(paths)) {
           if (!markdownPath(file)) {
-            errors.push(path.basename(file) + "：不支持的文件类型");
+            errors.push(
+              t("{name}：不支持的文件类型", { name: path.basename(file) }),
+            );
             continue;
           }
           try {
             documents.push(await openFile(file));
           } catch (error) {
-            errors.push(path.basename(file) + "：" + error.message);
+            errors.push(
+              t("{name}：{error}", {
+                name: path.basename(file),
+                error: error.message,
+              }),
+            );
           }
         }
         return { documents, errors };
@@ -605,7 +645,7 @@ else {
           typeof text !== "string" ||
           Buffer.byteLength(text, "utf8") > 32 * 1024 * 1024
         )
-          throw Error("复制内容过大或格式无效");
+          throw Error(t("复制内容过大或格式无效"));
         clipboard.writeText(text);
       });
       api("windowState", windowState);
@@ -617,7 +657,7 @@ else {
           win.setFullScreen(!win.isFullScreen());
         // Same path as the system close: unsaved notes are asked about first.
         else if (action === "close") win.close();
-        else throw Error("无效窗口操作");
+        else throw Error(t("无效窗口操作"));
       });
       const desktopState = async () => ({
         ...(await integration.status()),
@@ -632,11 +672,11 @@ else {
       api("desktopAction", (action) =>
         desktopAction(async () => {
           if (!action || typeof action !== "object")
-            throw Error("无效系统操作");
+            throw Error(t("无效系统操作"));
           switch (action.type) {
             case "background":
               if (!tray && action.value)
-                throw Error("托盘不可用，无法隐藏窗口");
+                throw Error(t("托盘不可用，无法隐藏窗口"));
               await integration.setBackground(action.value);
               break;
             case "startup":
@@ -653,7 +693,7 @@ else {
               break;
             case "portable": {
               if (!app.isPackaged || profile)
-                throw Error("便携模式仅在打包版可用");
+                throw Error(t("便携模式仅在打包版可用"));
               if (Boolean(action.value) === portable) break;
               // The renderer flushed tabs and drafts first; let it land.
               await sessionWrite.catch(() => {});
@@ -682,7 +722,7 @@ else {
               return { ...(await desktopState()), restarting: true };
             }
             default:
-              throw Error("无效系统操作");
+              throw Error(t("无效系统操作"));
           }
           updateTray();
           return desktopState();
@@ -728,12 +768,12 @@ else {
       api("pickImage", async (fileId) => {
         const file = files.file(fileId);
         const result = await dialog.showOpenDialog(win, {
-          title: "插入图片（复制到笔记旁的 assets 文件夹）",
+          title: t("插入图片（复制到笔记旁的 assets 文件夹）"),
           defaultPath: path.dirname(file.path),
           properties: ["openFile"],
           filters: [
             {
-              name: "图片",
+              name: t("图片"),
               extensions: [
                 "png",
                 "jpg",
@@ -754,7 +794,7 @@ else {
       api("insertImages", async (fileId, items) => {
         files.file(fileId);
         if (!Array.isArray(items) || !items.length || items.length > 20)
-          throw Error("每次可插入 1–20 张图片");
+          throw Error(t("每次可插入 1–20 张图片"));
         const images = [],
           errors = [];
         let total = 0;
@@ -763,7 +803,8 @@ else {
             if (typeof item?.path === "string" && path.isAbsolute(item.path)) {
               const stat = await fs.stat(item.path);
               total += stat.size;
-              if (total > 64 * 1024 * 1024) throw Error("图片合计超过 64 MB");
+              if (total > 64 * 1024 * 1024)
+                throw Error(t("图片合计超过 64 MB"));
               images.push(await files.importImage(fileId, item.path));
             } else {
               if (
@@ -771,21 +812,22 @@ else {
                 !item.bytes.length ||
                 item.bytes.length > 32 * 1024 * 1024
               )
-                throw Error("剪贴板图片无效或超过 32 MB");
+                throw Error(t("剪贴板图片无效或超过 32 MB"));
               total += item.bytes.length;
-              if (total > 64 * 1024 * 1024) throw Error("图片合计超过 64 MB");
+              if (total > 64 * 1024 * 1024)
+                throw Error(t("图片合计超过 64 MB"));
               const image = nativeImage.createFromBuffer(
                 Buffer.from(item.bytes),
               );
               const size = image.getSize();
               if (image.isEmpty() || size.width * size.height > 40_000_000)
-                throw Error("无法读取剪贴板图片，或图片尺寸过大");
+                throw Error(t("无法读取剪贴板图片，或图片尺寸过大"));
               images.push(
                 await files.importImageBytes(
                   fileId,
                   image.toPNG(),
                   ".png",
-                  "粘贴图片",
+                  t("粘贴图片"),
                 ),
               );
             }
@@ -804,7 +846,7 @@ else {
           typeof query !== "string" ||
           query.length > 200
         )
-          throw Error("无效搜索");
+          throw Error(t("无效搜索"));
         return files.search(ids, query);
       });
       api("openChild", async (id, name) => {
@@ -820,9 +862,9 @@ else {
           typeof text !== "string" ||
           Buffer.byteLength(text) > 32 * 1024 * 1024
         )
-          throw Error("文档过大");
+          throw Error(t("文档过大"));
         if (!Array.isArray(excludedIds) || excludedIds.length > 100)
-          throw Error("无效的已打开标签列表");
+          throw Error(t("无效的已打开标签列表"));
         const excludedPaths = excludedIds.map((id) => files.file(id).path);
         const result = await dialog.showSaveDialog(win, {
           defaultPath: path.basename(String(name || "Untitled.md")),
@@ -837,7 +879,9 @@ else {
         }
         if (destination && excludedPaths.includes(destination))
           throw Error(
-            "目标已在其他标签页打开，请切换到该标签页保存，或选择其他文件名。",
+            t(
+              "目标已在其他标签页打开，请切换到该标签页保存，或选择其他文件名。",
+            ),
           );
         // Capture the chosen destination baseline; save() checks again before committing.
         try {
@@ -847,14 +891,14 @@ else {
         }
         const target = await openFile(result.filePath),
           saved = await files.save(target.id, text, target.version);
-        if (saved.conflict) throw Error("目标文件在保存前发生变化");
+        if (saved.conflict) throw Error(t("目标文件在保存前发生变化"));
         return { ...target, text, version: saved.version };
       });
       api("recentFiles", () => recent.list());
       // Reopen only what this process itself recorded; no arbitrary paths.
       api("openRecent", async (p) => {
         if (typeof p !== "string" || !(await recent.has(p)))
-          throw Error("该文件不在最近打开列表中");
+          throw Error(t("该文件不在最近打开列表中"));
         return openFile(p);
       });
       api("clearRecent", () => recent.clear());
@@ -866,7 +910,7 @@ else {
           return {
             error:
               error.code === "ENOENT"
-                ? "找不到图片文件，请检查路径或同步状态。"
+                ? t("找不到图片文件，请检查路径或同步状态。")
                 : error.message,
           };
         }
@@ -875,17 +919,20 @@ else {
         const info = await files.imageInfo(id, href);
         if (info.authorized) return true;
         const result = await dialog.showMessageBox(win, {
-          message: "允许笔记加载此本地图片？",
+          message: t("允许笔记加载此本地图片？"),
           detail:
             info.path +
-            "\n\n目录授权仅用于图片，不授予其他文件的读取权限。可选择仅在本次运行中加载此图片。",
-          buttons: ["取消", "仅本次加载", "记住此图片目录"],
+            "\n\n" +
+            t(
+              "目录授权仅用于图片，不授予其他文件的读取权限。可选择仅在本次运行中加载此图片。",
+            ),
+          buttons: [t("取消"), t("仅本次加载"), t("记住此图片目录")],
           defaultId: 0,
           cancelId: 0,
         });
         if (![1, 2].includes(result.response)) return false;
         if ((await files.imageInfo(id, href)).path !== info.path)
-          throw Error("图片路径已改变，请重试。");
+          throw Error(t("图片路径已改变，请重试。"));
         if (result.response === 1) files.imageFiles.add(info.path);
         else {
           files.imageDirectories.add(path.dirname(info.path));
@@ -904,30 +951,37 @@ else {
       api("session", (value) => {
         if (!value || !Array.isArray(value.tabs))
           throw Error("Invalid session");
+        // A language change in Aa arrives with the settings.
+        applyLanguage(value.settings?.language);
         if (value.tabs.length > 100)
           throw Error(
-            "最多恢复 100 个标签；请先保存并关闭多余标签。现有恢复数据未改动。",
+            t(
+              "最多恢复 100 个标签；请先保存并关闭多余标签。现有恢复数据未改动。",
+            ),
           );
         // Resolve document paths from native handles; renderer cannot plant arbitrary reopen paths.
-        const tabs = value.tabs.map(({ keepDraft, ...t }) => {
+        const tabs = value.tabs.map(({ keepDraft, ...tab }) => {
           // Unchanged drafts arrive as a reference to the copy received earlier.
           if (keepDraft) {
-            const kept = draftCache.get(t.id);
-            if (!kept) throw Error("恢复草稿需要重新发送");
-            Object.assign(t, kept);
+            const kept = draftCache.get(tab.id);
+            if (!kept) throw Error(t("恢复草稿需要重新发送"));
+            Object.assign(tab, kept);
           }
-          return { ...t, path: t.fileId ? files.file(t.fileId).path : null };
+          return {
+            ...tab,
+            path: tab.fileId ? files.file(tab.fileId).path : null,
+          };
         });
         draftCache.clear();
-        for (const t of tabs)
-          if (typeof t.draft === "string")
-            draftCache.set(t.id, {
-              draft: t.draft,
-              base: t.base,
-              version: t.version,
+        for (const tab of tabs)
+          if (typeof tab.draft === "string")
+            draftCache.set(tab.id, {
+              draft: tab.draft,
+              base: tab.base,
+              version: tab.version,
             });
-        dirty = tabs.some((t) => typeof t.draft === "string");
-        retainWatchers(value.tabs.map((t) => t.fileId).filter(Boolean));
+        dirty = tabs.some((tab) => typeof tab.draft === "string");
+        retainWatchers(value.tabs.map((tab) => tab.fileId).filter(Boolean));
         const roots = (value.roots || [])
           .map((id) => files.directories.get(id))
           .filter(Boolean);
@@ -944,7 +998,7 @@ else {
       });
       api("closeReady", async (intent = "close", flushError = null) => {
         if (!["close", "hide", "quit"].includes(intent))
-          throw Error("无效关闭操作");
+          throw Error(t("无效关闭操作"));
         // A failed recovery write (full disk, locked file, size limit) must not
         // trap the user in a window that can never close.
         let failure =
@@ -965,11 +1019,11 @@ else {
           showWindow();
           const r = await dialog.showMessageBox(win, {
             type: "error",
-            buttons: ["取消", "仍然退出"],
+            buttons: [t("取消"), t("仍然退出")],
             defaultId: 0,
             cancelId: 0,
-            message: "恢复数据未能写入",
-            detail: `${failure}\n\n${dirty ? "未保存的草稿不会在下次启动时恢复。建议取消，先保存笔记。" : "下次启动时可能无法恢复标签页和阅读位置。"}`,
+            message: t("恢复数据未能写入"),
+            detail: `${failure}\n\n${dirty ? t("未保存的草稿不会在下次启动时恢复。建议取消，先保存笔记。") : t("下次启动时可能无法恢复标签页和阅读位置。")}`,
           });
           if (r.response !== 1) return;
           allowClose = true;
@@ -980,11 +1034,13 @@ else {
           showWindow();
           const r = await dialog.showMessageBox(win, {
             type: "warning",
-            buttons: ["取消", "退出并保留恢复草稿"],
+            buttons: [t("取消"), t("退出并保留恢复草稿")],
             defaultId: 0,
             cancelId: 0,
-            message: "有未保存的笔记",
-            detail: "恢复草稿已写入本机，下次启动时恢复；原文件不会自动覆盖。",
+            message: t("有未保存的笔记"),
+            detail: t(
+              "恢复草稿已写入本机，下次启动时恢复；原文件不会自动覆盖。",
+            ),
           });
           if (r.response !== 1) return;
         }
@@ -1014,17 +1070,17 @@ else {
           }
         }
         const restored = [];
-        for (const t of (old.tabs || []).slice(0, 100)) {
+        for (const tab of (old.tabs || []).slice(0, 100)) {
           try {
             restored.push({
-              ...t,
-              document: t.path
-                ? await openFile(t.path, { remember: false })
+              ...tab,
+              document: tab.path
+                ? await openFile(tab.path, { remember: false })
                 : null,
             });
           } catch {
-            if (typeof t.draft === "string")
-              restored.push({ ...t, path: null, document: null });
+            if (typeof tab.draft === "string")
+              restored.push({ ...tab, path: null, document: null });
           }
         }
         const roots = [];
@@ -1055,7 +1111,7 @@ else {
     })
     .catch((error) => {
       console.error(error);
-      dialog.showErrorBox("Folio Notes 启动失败", error.message);
+      dialog.showErrorBox(t("Folio Notes 启动失败"), error.message);
       app.exit(1);
     });
 }

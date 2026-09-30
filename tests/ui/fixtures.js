@@ -37,6 +37,7 @@ export const FOLIO_API = [
   "clearRecent",
   "windowState",
   "windowAction",
+  "language",
 ];
 
 function harness(api) {

@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { t } from "./i18n.mjs";
 
 const execute = promisify(execFile);
 export const applicationName = "Folio Notes";
@@ -14,7 +15,7 @@ const extensions = [".md", ".markdown"];
 // Register an opt-in candidate, never write UserChoice or extension defaults.
 export function registrationCommands(executable) {
   if (!path.win32.isAbsolute(executable) || /["\r\n]/.test(executable))
-    throw Error("无效程序路径");
+    throw Error(t("无效程序路径"));
   const add = (key, name, value, type = "REG_SZ") => [
     "add",
     key,
@@ -26,7 +27,7 @@ export function registrationCommands(executable) {
     "/f",
   ];
   return [
-    add(`${classes}\\${progId}`, null, "Markdown 文档"),
+    add(`${classes}\\${progId}`, null, t("Markdown 文档")),
     add(`${classes}\\${progId}\\DefaultIcon`, null, `"${executable}",0`),
     add(
       `${classes}\\${progId}\\shell\\open\\command`,
@@ -37,7 +38,7 @@ export function registrationCommands(executable) {
     add(
       `HKCU\\${capabilities}`,
       "ApplicationDescription",
-      "离线 Markdown 笔记阅读与编辑",
+      t("离线 Markdown 笔记阅读与编辑"),
     ),
     ...extensions.map((ext) =>
       add(`HKCU\\${capabilities}\\FileAssociations`, ext, progId),
@@ -144,7 +145,7 @@ export function createIntegration({
       };
     },
     async setBackground(value) {
-      if (typeof value !== "boolean") throw Error("无效后台设置");
+      if (typeof value !== "boolean") throw Error(t("无效后台设置"));
       await fs.mkdir(profile, { recursive: true });
       const next = { closeToTray: value },
         temp = preferenceFile + ".tmp";
@@ -154,7 +155,7 @@ export function createIntegration({
     },
     setStartup(value) {
       if (!supported || typeof value !== "boolean")
-        throw Error("仅 Windows 打包版支持开机启动");
+        throw Error(t("仅 Windows 打包版支持开机启动"));
       app.setLoginItemSettings({
         ...loginOptions,
         name: applicationName,
@@ -162,12 +163,12 @@ export function createIntegration({
       });
     },
     async register() {
-      if (!supported) throw Error("仅 Windows 打包版支持文件关联");
+      if (!supported) throw Error(t("仅 Windows 打包版支持文件关联"));
       for (const command of registrationCommands(executable))
         await invoke(command);
     },
     async defaults() {
-      if (!supported) throw Error("仅 Windows 支持默认应用设置");
+      if (!supported) throw Error(t("仅 Windows 支持默认应用设置"));
       // App-specific links are a Windows 11 feature; Windows 10 uses the
       // general settings page where users can choose by file extension.
       const suffix =
@@ -177,7 +178,7 @@ export function createIntegration({
       await shell.openExternal("ms-settings:defaultapps" + suffix);
     },
     async startupSettings() {
-      if (!supported) throw Error("仅 Windows 支持启动应用设置");
+      if (!supported) throw Error(t("仅 Windows 支持启动应用设置"));
       await shell.openExternal("ms-settings:startupapps");
     },
   };

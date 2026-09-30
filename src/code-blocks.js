@@ -1,4 +1,5 @@
 import { icon } from "./icons.js";
+import { t } from "../desktop/i18n.mjs";
 
 function action(document, className, text, label) {
   const button = document.createElement("button");
@@ -29,7 +30,12 @@ export function decorateCodeBlocks(fragment) {
     actions.className = "code-actions";
     if (name.toLowerCase() !== "mermaid") {
       frame.classList.add("code-wrap");
-      const wrap = action(document, "code-wrap-toggle", "换行", "自动换行");
+      const wrap = action(
+        document,
+        "code-wrap-toggle",
+        t("换行"),
+        t("自动换行"),
+      );
       wrap.setAttribute("aria-pressed", "true");
       actions.append(wrap);
       const source = code.textContent;
@@ -39,16 +45,17 @@ export function decorateCodeBlocks(fragment) {
         const fold = action(
           document,
           "code-fold",
-          `展开 · ${lines} 行`,
-          "展开完整代码",
+          t("展开 · {lines} 行", { lines }),
+          t("展开完整代码"),
         );
         fold.dataset.lines = String(lines);
         fold.setAttribute("aria-expanded", "false");
         actions.append(fold);
       }
     }
-    const copy = action(document, "code-copy", "", "复制代码");
-    copy.innerHTML = icon("copy") + '<span aria-live="polite">复制</span>';
+    const copy = action(document, "code-copy", "", t("复制代码"));
+    copy.innerHTML =
+      icon("copy") + `<span aria-live="polite">${t("复制")}</span>`;
     actions.append(copy);
     toolbar.append(language, actions);
     pre.before(frame);
@@ -61,8 +68,13 @@ export function setCodeCollapsed(frame, collapsed) {
   const button = frame.querySelector(".code-fold");
   if (!button) return;
   button.setAttribute("aria-expanded", String(!collapsed));
-  button.textContent = collapsed ? `展开 · ${button.dataset.lines} 行` : "收起";
-  button.setAttribute("aria-label", collapsed ? "展开完整代码" : "收起长代码");
+  button.textContent = collapsed
+    ? t("展开 · {lines} 行", { lines: button.dataset.lines })
+    : t("收起");
+  button.setAttribute(
+    "aria-label",
+    collapsed ? t("展开完整代码") : t("收起长代码"),
+  );
   button.title = button.getAttribute("aria-label");
 }
 
@@ -91,17 +103,17 @@ export function wireCodeBlocks(host, report) {
       if (window.folio?.copyText) await window.folio.copyText(code.textContent);
       else await navigator.clipboard.writeText(code.textContent);
       button.innerHTML =
-        icon("check") + '<span aria-live="polite">已复制</span>';
-      button.setAttribute("aria-label", "已复制代码");
+        icon("check") + `<span aria-live="polite">${t("已复制")}</span>`;
+      button.setAttribute("aria-label", t("已复制代码"));
       setTimeout(() => {
         button.innerHTML =
-          icon("copy") + '<span aria-live="polite">复制</span>';
-        button.setAttribute("aria-label", "复制代码");
+          icon("copy") + `<span aria-live="polite">${t("复制")}</span>`;
+        button.setAttribute("aria-label", t("复制代码"));
         button.disabled = false;
       }, 1600);
     } catch (error) {
       button.disabled = false;
-      report("复制失败：" + error.message);
+      report(t("复制失败：{message}", { message: error.message }));
     }
   });
   host.addEventListener(

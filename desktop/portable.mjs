@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { existsSync, renameSync } from "node:fs";
 import path from "node:path";
+import { t } from "./i18n.mjs";
 
 // Portable mode: a "data" folder beside Folio Notes.exe holds the app's own
 // state (tabs, drafts, recent files, tray settings, backups), so a copy on a
@@ -45,7 +46,7 @@ export async function copyOwnData(from, to) {
 // copy never leaves a half-filled "data" folder that would switch modes.
 export async function enablePortable({ executable, current }) {
   const target = portableDir(executable);
-  if (existsSync(target)) throw Error("程序目录中已有 data 文件夹");
+  if (existsSync(target)) throw Error(t("程序目录中已有 data 文件夹"));
   const staging = `${target}.partial-${process.pid}`;
   try {
     await copyOwnData(current, staging);
@@ -53,7 +54,7 @@ export async function enablePortable({ executable, current }) {
   } catch (error) {
     await fs.rm(staging, { recursive: true, force: true }).catch(() => {});
     throw error.code === "EACCES" || error.code === "EPERM"
-      ? Error("程序所在文件夹不可写入，无法启用便携模式")
+      ? Error(t("程序所在文件夹不可写入，无法启用便携模式"))
       : error;
   }
   return target;

@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import { unfold } from "./positions.js";
 
 // Find in the rendered note (Ctrl+F while reading). The editor keeps
@@ -18,12 +19,12 @@ export function createFindBar({ panes, content, reader, openInSource }) {
   bar.hidden = true;
   bar.innerHTML =
     // type="text": a search input's built-in clear button sat beside our close "×".
-    '<input type="text" placeholder="在笔记中查找" aria-label="在笔记中查找" spellcheck="false">' +
-    '<span class="find-count" aria-live="polite"></span>' +
-    '<button type="button" data-find="prev" aria-label="上一个" title="上一个（Shift+Enter）">↑</button>' +
-    '<button type="button" data-find="next" aria-label="下一个" title="下一个（Enter）">↓</button>' +
-    '<button type="button" data-find="source" class="find-source" aria-label="在源码中查找" title="在源码中查找（正则、区分大小写、替换）">源码</button>' +
-    '<button type="button" data-find="close" aria-label="关闭查找" title="关闭（Esc）">×</button>';
+    `<input type="text" placeholder="${t("在笔记中查找")}" aria-label="${t("在笔记中查找")}" spellcheck="false">` +
+    `<span class="find-count" aria-live="polite"></span>` +
+    `<button type="button" data-find="prev" aria-label="${t("上一个")}" title="${t("上一个（Shift+Enter）")}">↑</button>` +
+    `<button type="button" data-find="next" aria-label="${t("下一个")}" title="${t("下一个（Enter）")}">↓</button>` +
+    `<button type="button" data-find="source" class="find-source" aria-label="${t("在源码中查找")}" title="${t("在源码中查找（正则、区分大小写、替换）")}">${t("源码")}</button>` +
+    `<button type="button" data-find="close" aria-label="${t("关闭查找")}" title="${t("关闭（Esc）")}">×</button>`;
   panes.append(bar);
   const input = bar.querySelector("input"),
     count = bar.querySelector(".find-count");
@@ -116,7 +117,7 @@ export function createFindBar({ panes, content, reader, openInSource }) {
       ? ""
       : matches.length
         ? `${current + 1 || "–"}/${matches.length}${matches.length >= MAX_MATCHES ? "+" : ""}`
-        : "无结果";
+        : t("无结果");
   }
   function go(step) {
     if (!matches.length) return;

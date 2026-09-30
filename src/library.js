@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 // Folder browser: lazily loaded tree, current-folder following and search.
 export function createLibrary({
   api,
@@ -16,7 +17,7 @@ export function createLibrary({
   let searchTimer,
     searchEpoch = 0;
   async function openFolder() {
-    if (!api) return report("请运行桌面版以访问文件夹");
+    if (!api) return report(t("请运行桌面版以访问文件夹"));
     const root = await api.pickFolder(getActive()?.fileId || null);
     if (root && !roots.some((r) => r.path === root.path)) {
       roots.push(root);
@@ -107,7 +108,7 @@ export function createLibrary({
     if (!displayedRoots.length) {
       const empty = document.createElement("div");
       empty.className = "empty-tree";
-      empty.innerHTML = "尚未添加文件夹<br><button>打开文件夹</button>";
+      empty.innerHTML = `${t("尚未添加文件夹")}<br><button>${t("打开文件夹")}</button>`;
       empty.querySelector("button").onclick = run(openFolder);
       fragment.append(empty);
     }
@@ -153,9 +154,9 @@ export function createLibrary({
           info.className = "search-info";
           info.textContent = result.items.length
             ? result.truncated
-              ? "结果较多，仅显示前 200 项"
-              : "共 " + result.items.length + " 项"
-            : "没有匹配的笔记";
+              ? t("结果较多，仅显示前 200 项")
+              : t("共 {count} 项", { count: result.items.length })
+            : t("没有匹配的笔记");
           tree.append(info);
         })(),
       250,

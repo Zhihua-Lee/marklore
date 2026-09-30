@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import DOMPurify from "dompurify";
 let library,
   initializedTheme,
@@ -27,7 +28,7 @@ export function renderDiagrams(host, theme, onLayout) {
         const error = pre.querySelector(".diagram-error");
         error?.remove();
         if (source.length > 50000) {
-          diagram.textContent = "图表超过 50,000 字符，请缩小后查看";
+          diagram.textContent = t("图表超过 50,000 字符，请缩小后查看");
           pre.append(diagram);
           pre.dataset.diagramTheme = theme;
           return;
@@ -76,8 +77,9 @@ export function renderDiagrams(host, theme, onLayout) {
           diagram.remove();
           const msg = document.createElement("div");
           msg.className = "diagram-error";
-          msg.textContent =
-            "图表语法错误：" + String(e.message || e).slice(0, 300);
+          msg.textContent = t("图表语法错误：{message}", {
+            message: String(e.message || e).slice(0, 300),
+          });
           pre.append(msg);
           pre.dataset.diagramTheme = theme;
         }

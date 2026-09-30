@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
@@ -40,10 +41,10 @@ export function createLinkPreview({
   const card = document.createElement("section");
   card.id = "link-preview";
   card.role = "dialog";
-  card.setAttribute("aria-label", "链接预览");
+  card.setAttribute("aria-label", t("链接预览"));
   card.tabIndex = -1;
   card.hidden = true;
-  card.innerHTML = `<header class="preview-heading"><div><strong class="preview-title"></strong><div class="preview-path"></div></div><button class="preview-open">打开 ↗</button><button class="preview-close icon" aria-label="关闭链接预览">${icon("close")}</button></header><div class="preview-status" role="status"></div><div class="preview-scroll" tabindex="0" aria-label="链接预览正文"><article class="prose"></article></div><footer class="preview-help"><span>F2 进入 · Esc 关闭</span><div class="preview-zoom" role="group" aria-label="预览字号"><button data-zoom="-10" aria-label="缩小预览字号">A−</button><button data-zoom="0" aria-label="重置预览字号">100%</button><button data-zoom="10" aria-label="放大预览字号">A+</button></div></footer>`;
+  card.innerHTML = `<header class="preview-heading"><div><strong class="preview-title"></strong><div class="preview-path"></div></div><button class="preview-open">${t("打开 ↗")}</button><button class="preview-close icon" aria-label="${t("关闭链接预览")}">${icon("close")}</button></header><div class="preview-status" role="status"></div><div class="preview-scroll" tabindex="0" aria-label="${t("链接预览正文")}"><article class="prose"></article></div><footer class="preview-help"><span>${t("F2 进入 · Esc 关闭")}</span><div class="preview-zoom" role="group" aria-label="${t("预览字号")}"><button data-zoom="-10" aria-label="${t("缩小预览字号")}">A−</button><button data-zoom="0" aria-label="${t("重置预览字号")}">100%</button><button data-zoom="10" aria-label="${t("放大预览字号")}">A+</button></div></footer>`;
   document.body.append(card);
   const title = card.querySelector(".preview-title"),
     path = card.querySelector(".preview-path"),
@@ -132,9 +133,9 @@ export function createLinkPreview({
     href = link.getAttribute("href") || "";
     source = null;
     positioned = false;
-    title.textContent = "链接预览";
-    path.textContent = splitLink(href).target || "当前笔记";
-    status.textContent = "正在读取…";
+    title.textContent = t("链接预览");
+    path.textContent = splitLink(href).target || t("当前笔记");
+    status.textContent = t("正在读取…");
     article.replaceChildren();
     scroller.scrollTop = 0;
     card.hidden = false;
@@ -148,9 +149,11 @@ export function createLinkPreview({
       if (!link.isConnected) return hide();
       source = doc;
       title.textContent = doc.name;
-      path.textContent = doc.path || "未保存的笔记";
+      path.textContent = doc.path || t("未保存的笔记");
       path.title = path.textContent;
-      status.textContent = doc.draft ? "当前编辑草稿 · 未保存" : "当前文件内容";
+      status.textContent = doc.draft
+        ? t("当前编辑草稿 · 未保存")
+        : t("当前文件内容");
       if (mayContainMath(doc.text) || mayContainCode(doc.text)) {
         await Promise.all([
           mayContainMath(doc.text) && loadMath(),
@@ -176,7 +179,7 @@ export function createLinkPreview({
           column < 1 ||
           column > lines[n - 1].length + 1
         ) {
-          status.textContent += " · 行列锚点超出文档范围，显示开头";
+          status.textContent += t(" · 行列锚点超出文档范围，显示开头");
         } else {
           const from =
             lines
@@ -198,7 +201,7 @@ export function createLinkPreview({
               scroller.getBoundingClientRect().top -
               12;
           };
-        } else status.textContent += " · 未找到锚点：" + anchor;
+        } else status.textContent += t(" · 未找到锚点：{anchor}", { anchor });
       }
       requestAnimationFrame(align);
       renderDiagrams(
@@ -208,7 +211,9 @@ export function createLinkPreview({
       );
     } catch (e) {
       if (token !== generation) return;
-      status.textContent = "无法预览：" + (e.message || String(e));
+      status.textContent = t("无法预览：{message}", {
+        message: e.message || String(e),
+      });
     }
   }
   function begin(link) {

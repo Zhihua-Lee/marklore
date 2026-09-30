@@ -3,6 +3,7 @@ import { markdownEdit } from "./markdown-edits.js";
 import { textOffset, findPosition } from "./positions.js";
 import { wireColorButton, closeColorPicker } from "./color-picker.js";
 import { icon } from "./icons.js";
+import { t } from "../desktop/i18n.mjs";
 import "./selection-tools.css";
 
 // Inline formulas are atomic source spans, never reverse-converted from glyphs.
@@ -111,17 +112,17 @@ export function createSelectionTools({
   bar.className = "selection-tools";
   bar.hidden = true;
   bar.setAttribute("role", "toolbar");
-  bar.setAttribute("aria-label", "选中文字格式");
+  bar.setAttribute("aria-label", t("选中文字格式"));
   const actions = [
-    ["bold", "加粗", "<b>B</b>"],
-    ["italic", "斜体", "<i>I</i>"],
-    ["strike", "删除线", "<s>S</s>"],
-    ["highlight", "高亮", icon("highlight")],
-    ["color", "文字颜色", icon("textColor")],
-    ["link", "链接", icon("link")],
-    ["inline", "行内代码", "&lt;/&gt;"],
+    ["bold", t("加粗"), "<b>B</b>"],
+    ["italic", t("斜体"), "<i>I</i>"],
+    ["strike", t("删除线"), "<s>S</s>"],
+    ["highlight", t("高亮"), icon("highlight")],
+    ["color", t("文字颜色"), icon("textColor")],
+    ["link", t("链接"), icon("link")],
+    ["inline", t("行内代码"), "&lt;/&gt;"],
   ];
-  bar.innerHTML = `<div class="selection-actions">${actions.map(([action, label, body]) => `<button type="button" data-selection-action="${action}" aria-label="${label}" title="${label}">${body}</button>`).join("")}</div><form hidden><input name="url" aria-label="链接地址" placeholder="https://… 或 note.md" required><button type="submit" aria-label="应用链接">${icon("link")}</button></form>`;
+  bar.innerHTML = `<div class="selection-actions">${actions.map(([action, label, body]) => `<button type="button" data-selection-action="${action}" aria-label="${label}" title="${label}">${body}</button>`).join("")}</div><form hidden><input name="url" aria-label="${t("链接地址")}" placeholder="${t("https://… 或 note.md")}" required><button type="submit" aria-label="${t("应用链接")}">${icon("link")}</button></form>`;
   document.body.append(bar);
   let snapshot = null,
     dragging = false,
@@ -184,7 +185,7 @@ export function createSelectionTools({
       const button = bar.querySelector(`[data-selection-action="${action}"]`);
       button.disabled = snapshot.hasMath;
       button.title = snapshot.hasMath
-        ? "含公式的选区请使用文字样式或颜色工具"
+        ? t("含公式的选区请使用文字样式或颜色工具")
         : button.getAttribute("aria-label");
     }
     position();

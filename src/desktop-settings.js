@@ -1,14 +1,15 @@
+import { t } from "../desktop/i18n.mjs";
 export const desktopSettingsMarkup = `
-<fieldset id="desktop-settings" hidden><legend>后台与系统</legend>
-  <label for="close-to-tray">关闭窗口后留在托盘<input id="close-to-tray" type="checkbox"></label>
-  <label for="start-at-login">开机启动到托盘<input id="start-at-login" type="checkbox"></label>
-  <p class="setting-hint">后台保留标签与草稿，不自动覆盖笔记。托盘菜单可重新打开或完全退出。</p>
-  <div class="desktop-actions"><button id="hide-to-tray">隐藏到托盘</button><button id="quit-app">完全退出</button><button id="startup-settings">Windows 启动管理</button><button id="update-startup" hidden>更新启动路径为此版本</button></div>
+<fieldset id="desktop-settings" hidden><legend>${t("后台与系统")}</legend>
+  <label for="close-to-tray">${t("关闭窗口后留在托盘")}<input id="close-to-tray" type="checkbox"></label>
+  <label for="start-at-login">${t("开机启动到托盘")}<input id="start-at-login" type="checkbox"></label>
+  <p class="setting-hint">${t("后台保留标签与草稿，不自动覆盖笔记。托盘菜单可重新打开或完全退出。")}</p>
+  <div class="desktop-actions"><button id="hide-to-tray">${t("隐藏到托盘")}</button><button id="quit-app">${t("完全退出")}</button><button id="startup-settings">${t("Windows 启动管理")}</button><button id="update-startup" hidden>${t("更新启动路径为此版本")}</button></div>
   <p id="association-status" class="setting-hint" role="status"></p>
-  <div class="desktop-actions"><button id="register-markdown">注册／更新 Markdown 支持</button><button id="manage-defaults">选择默认应用…</button></div>
-  <p class="setting-hint">支持 .md 和 .markdown。默认应用由 Windows 确认；移动或升级便携版后，请重新注册并更新开机启动路径。</p>
+  <div class="desktop-actions"><button id="register-markdown">${t("注册／更新 Markdown 支持")}</button><button id="manage-defaults">${t("选择默认应用…")}</button></div>
+  <p class="setting-hint">${t("支持 .md 和 .markdown。默认应用由 Windows 确认；移动或升级便携版后，请重新注册并更新开机启动路径。")}</p>
   <p id="desktop-executable" class="setting-hint"></p>
-  <label for="portable-mode">便携模式（数据保存在程序旁的 data 文件夹）<input id="portable-mode" type="checkbox"></label>
+  <label for="portable-mode">${t("便携模式（数据保存在程序旁的 data 文件夹）")}<input id="portable-mode" type="checkbox"></label>
   <p id="portable-status" class="setting-hint"></p>
 </fieldset>`;
 
@@ -41,25 +42,48 @@ export function wireDesktopSettings({ api, close, report, flush }) {
     ])
       q("#" + id).disabled = busy || !status.supported;
     const associations = (status.defaults || [])
-      .map(
-        (item) =>
-          `${item.extension}：${item.ours ? "Folio Notes" : item.known ? "其他应用" : "未读取到用户默认项"}`,
+      .map((item) =>
+        t("{extension}：{owner}", {
+          extension: item.extension,
+          owner: item.ours
+            ? "Folio Notes"
+            : item.known
+              ? t("其他应用")
+              : t("未读取到用户默认项"),
+        }),
       )
-      .join("；");
+      .join(t("；"));
+    const registration = status.registered
+      ? status.registeredHere
+        ? t("已注册当前程序。")
+        : t("注册指向其他版本，请更新。")
+      : t("尚未注册 Markdown 支持。");
+    const startupNote = status.startupOtherVersion
+      ? " " + t("开机启动指向其他版本，请更新启动路径。")
+      : status.startup && !status.startupEnabled
+        ? " " + t("开机启动被系统禁用，可在启动管理中检查。")
+        : "";
     q("#association-status").textContent = !status.supported
-      ? "系统集成仅在 Windows 打包版可用。"
-      : `${status.registered ? (status.registeredHere ? "已注册当前程序。" : "注册指向其他版本，请更新。") : "尚未注册 Markdown 支持。"} ${associations}${status.startupOtherVersion ? " 开机启动指向其他版本，请更新启动路径。" : status.startup && !status.startupEnabled ? " 开机启动被系统禁用，可在启动管理中检查。" : ""}`;
-    q("#desktop-executable").textContent = "当前程序：" + status.executable;
+      ? t("系统集成仅在 Windows 打包版可用。")
+      : `${registration} ${associations}${startupNote}`;
+    q("#desktop-executable").textContent = t("当前程序：{path}", {
+      path: status.executable,
+    });
     const portable = status.portable || {};
     if (!busy) q("#portable-mode").checked = Boolean(portable.on);
     q("#portable-mode").disabled = busy || !portable.available;
     q("#portable-status").textContent = !portable.available
-      ? "便携模式仅在打包版可用。"
+      ? t("便携模式仅在打包版可用。")
       : status.restarting
-        ? "正在重启 Folio Notes…"
+        ? t("正在重启 Folio Notes…")
         : portable.on
-          ? `数据保存在 ${portable.folder}。停用时数据复制回用户目录，data 文件夹改名保留，不会删除。`
-          : "开启后把标签、草稿、最近文件与后台设置复制到程序旁的 data 文件夹并自动重启，适合放在 U 盘中随身使用。";
+          ? t(
+              "数据保存在 {folder}。停用时数据复制回用户目录，data 文件夹改名保留，不会删除。",
+              { folder: portable.folder },
+            )
+          : t(
+              "开启后把标签、草稿、最近文件与后台设置复制到程序旁的 data 文件夹并自动重启，适合放在 U 盘中随身使用。",
+            );
   }
   async function refresh() {
     if (busy) return;

@@ -6,6 +6,7 @@ import { tags } from "@lezer/highlight";
 import { markdownEdit } from "./markdown-edits.js";
 import { icon } from "./icons.js";
 import { wireColorButton } from "./color-picker.js";
+import { t } from "../desktop/i18n.mjs";
 import "./editing.css";
 
 export const editingHighlight = syntaxHighlighting(
@@ -35,47 +36,47 @@ export const editingHighlight = syntaxHighlighting(
 );
 
 const buttons = [
-  ["bold", "粗体", "<b>B</b>", "Ctrl+B"],
-  ["italic", "斜体", "<i>I</i>", "Ctrl+I"],
-  ["strike", "删除线", "<s>S</s>"],
-  ["highlight", "文字高亮", icon("highlight")],
-  ["color", "文字颜色", icon("textColor")],
-  ["bullet", "无序列表", icon("listBullet")],
-  ["ordered", "有序列表", icon("listOrdered")],
-  ["task", "任务列表", icon("task")],
-  ["quote", "引用", icon("quote")],
-  ["inline", "行内代码", "&lt;/&gt;", "Ctrl+E"],
-  ["code", "代码块", icon("codeBlock")],
-  ["math", "公式块", "∑"],
-  ["inlineMath", "行内公式", icon("inlineMath")],
-  ["rule", "分割线", icon("rule")],
-  ["link", "插入链接", icon("link"), "Ctrl+K"],
-  ["image", "插入图片", icon("image")],
-  ["table", "插入表格", icon("table")],
+  ["bold", t("粗体"), "<b>B</b>", "Ctrl+B"],
+  ["italic", t("斜体"), "<i>I</i>", "Ctrl+I"],
+  ["strike", t("删除线"), "<s>S</s>"],
+  ["highlight", t("文字高亮"), icon("highlight")],
+  ["color", t("文字颜色"), icon("textColor")],
+  ["bullet", t("无序列表"), icon("listBullet")],
+  ["ordered", t("有序列表"), icon("listOrdered")],
+  ["task", t("任务列表"), icon("task")],
+  ["quote", t("引用"), icon("quote")],
+  ["inline", t("行内代码"), "&lt;/&gt;", "Ctrl+E"],
+  ["code", t("代码块"), icon("codeBlock")],
+  ["math", t("公式块"), "∑"],
+  ["inlineMath", t("行内公式"), icon("inlineMath")],
+  ["rule", t("分割线"), icon("rule")],
+  ["link", t("插入链接"), icon("link"), "Ctrl+K"],
+  ["image", t("插入图片"), icon("image")],
+  ["table", t("插入表格"), icon("table")],
 ];
 export function wireEditing({ view, getDocument, insertImage }) {
   const host = document.createElement("div");
   host.className = "editing-tools";
   host.setAttribute("role", "group");
-  host.setAttribute("aria-label", "Markdown 格式工具");
-  host.innerHTML = `<div class="edit-history"><button type="button" data-edit="undo" aria-label="撤销" title="撤销 Ctrl+Z">${icon("undo")}</button><button type="button" data-edit="redo" aria-label="重做" title="重做 Ctrl+Shift+Z">${icon("redo")}</button></div><select aria-label="段落样式" title="段落样式"><option value="">段落</option><option value="0">正文</option>${Array.from({ length: 6 }, (_, i) => `<option value="${i + 1}">标题 ${i + 1}</option>`).join("")}</select>${buttons.map(([id, label, content, shortcut]) => `<button type="button" data-edit="${id}" aria-label="${label}" title="${label}${shortcut ? " " + shortcut : ""}">${content}</button>`).join("")}`;
+  host.setAttribute("aria-label", t("Markdown 格式工具"));
+  host.innerHTML = `<div class="edit-history"><button type="button" data-edit="undo" aria-label="${t("撤销")}" title="${t("撤销 Ctrl+Z")}">${icon("undo")}</button><button type="button" data-edit="redo" aria-label="${t("重做")}" title="${t("重做 Ctrl+Shift+Z")}">${icon("redo")}</button></div><select aria-label="${t("段落样式")}" title="${t("段落样式")}"><option value="">${t("段落")}</option><option value="0">${t("正文")}</option>${Array.from({ length: 6 }, (_, i) => `<option value="${i + 1}">${t("标题 {level}", { level: i + 1 })}</option>`).join("")}</select>${buttons.map(([id, label, content, shortcut]) => `<button type="button" data-edit="${id}" aria-label="${label}" title="${label}${shortcut ? " " + shortcut : ""}">${content}</button>`).join("")}`;
   const groups = [
-    ["编辑历史", [".edit-history"]],
+    [t("编辑历史"), [".edit-history"]],
     [
-      "文字样式",
+      t("文字样式"),
       [
-        '[aria-label="段落样式"]',
+        "select",
         ...["bold", "italic", "strike", "highlight", "color", "inline"].map(
           (id) => `[data-edit="${id}"]`,
         ),
       ],
     ],
     [
-      "段落结构",
+      t("段落结构"),
       ["bullet", "ordered", "task", "quote"].map((id) => `[data-edit="${id}"]`),
     ],
     [
-      "插入内容",
+      t("插入内容"),
       [
         ...["link", "image", "table", "code", "math", "inlineMath", "rule"].map(
           (id) => `[data-edit="${id}"]`,
@@ -132,16 +133,18 @@ export function wireEditing({ view, getDocument, insertImage }) {
       state = view.state;
     if (!doc || doc.mode === "read") return;
     const selection = state.selection.main;
-    const title = { link: "插入链接", table: "插入表格", code: "代码块" }[
-      action
-    ];
+    const title = {
+      link: t("插入链接"),
+      table: t("插入表格"),
+      code: t("代码块"),
+    }[action];
     const fields =
       action === "table"
-        ? '<div class="insert-grid"><label>列数<input name="columns" type="number" min="1" max="12" value="3" required></label><label>正文行数<input name="rows" type="number" min="1" max="30" value="3" required></label></div><p>首行为表头；插入后可按 Tab 在单元格间移动。</p>'
+        ? `<div class="insert-grid"><label>${t("列数")}<input name="columns" type="number" min="1" max="12" value="3" required></label><label>${t("正文行数")}<input name="rows" type="number" min="1" max="30" value="3" required></label></div><p>${t("首行为表头；插入后可按 Tab 在单元格间移动。")}</p>`
         : action === "code"
-          ? '<label>语言<input name="language" list="code-languages" placeholder="text / python / javascript…" pattern="[a-zA-Z0-9_+#.\\-]*" maxlength="40" autofocus></label><datalist id="code-languages"><option value="python"><option value="javascript"><option value="typescript"><option value="r"><option value="julia"><option value="cpp"><option value="sql"><option value="bash"><option value="json"><option value="markdown"><option value="mermaid"></datalist>'
-          : '<label>显示文字<input name="label" maxlength="2000"></label><label>链接或文件路径<input name="url" required placeholder="https://… 或 chapter.md#标题" autofocus></label>';
-    dialog.innerHTML = `<form><h2 id="edit-insert-title">${title}</h2>${fields}<p class="insert-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" data-cancel>取消</button><button type="submit" class="primary">插入</button></div></form>`;
+          ? `<label>${t("语言")}<input name="language" list="code-languages" placeholder="text / python / javascript…" pattern="[a-zA-Z0-9_+#.\\-]*" maxlength="40" autofocus></label><datalist id="code-languages"><option value="python"><option value="javascript"><option value="typescript"><option value="r"><option value="julia"><option value="cpp"><option value="sql"><option value="bash"><option value="json"><option value="markdown"><option value="mermaid"></datalist>`
+          : `<label>${t("显示文字")}<input name="label" maxlength="2000"></label><label>${t("链接或文件路径")}<input name="url" required placeholder="${t("https://… 或 chapter.md#标题")}" autofocus></label>`;
+    dialog.innerHTML = `<form><h2 id="edit-insert-title">${title}</h2>${fields}<p class="insert-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" data-cancel>${t("取消")}</button><button type="submit" class="primary">${t("插入")}</button></div></form>`;
     if (action === "link")
       dialog.querySelector('[name="label"]').value = state.sliceDoc(
         selection.from,
@@ -152,7 +155,7 @@ export function wireEditing({ view, getDocument, insertImage }) {
       event.preventDefault();
       try {
         if (doc !== getDocument() || state !== view.state)
-          throw Error("笔记已改变，请关闭此窗口后重新插入。");
+          throw Error(t("笔记已改变，请关闭此窗口后重新插入。"));
         apply(
           action,
           Object.fromEntries(new FormData(event.currentTarget)),
@@ -183,7 +186,7 @@ export function wireEditing({ view, getDocument, insertImage }) {
     const action = event.target.closest("[data-edit]")?.dataset.edit;
     if (action) execute(action);
   });
-  host.querySelector('[aria-label="段落样式"]').onchange = (event) => {
+  host.querySelector("select").onchange = (event) => {
     if (event.target.value !== "")
       apply("heading", { level: event.target.value });
     event.target.value = "";
@@ -203,7 +206,7 @@ export function wireEditing({ view, getDocument, insertImage }) {
               state.doc !== view.state.doc ||
               state.selection !== view.state.selection
             )
-              throw Error("笔记或选区已改变，请重新选择文字。");
+              throw Error(t("笔记或选区已改变，请重新选择文字。"));
             if (!state.selection.main.empty) apply(action, options, doc);
           },
           focus() {

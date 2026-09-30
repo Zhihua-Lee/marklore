@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 // Describe failed local resources without broadening filesystem access on render.
 export function wireImageErrors(api, report) {
   const failures = new WeakMap();
@@ -42,16 +43,16 @@ export function wireImageErrors(api, report) {
         const label = document.createElement("span"),
           reason = document.createElement("small"),
           button = document.createElement("button");
-        label.textContent = img.alt || "图片";
+        label.textContent = img.alt || t("图片");
         reason.textContent =
           info.error ||
           (info.authorized
-            ? "图片解码失败，请检查文件内容或同步状态。"
-            : "图片位于当前授权目录之外。");
+            ? t("图片解码失败，请检查文件内容或同步状态。")
+            : t("图片位于当前授权目录之外。"));
         panel.title = info.path || href;
         button.type = "button";
         button.textContent =
-          !info.error && !info.authorized ? "授权加载图片…" : "重试";
+          !info.error && !info.authorized ? t("授权加载图片…") : t("重试");
         button.onclick = async (event) => {
           event.stopPropagation();
           button.disabled = true;

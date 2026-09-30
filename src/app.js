@@ -1,3 +1,6 @@
+// First: fixes the interface language before any module builds markup.
+import "./language.js";
+import { t } from "../desktop/i18n.mjs";
 import { createNavigationHistory } from "./navigation-history.js";
 import { createTabBar } from "./tab-bar.js";
 import { insertDerivedTab } from "./tab-groups.js";
@@ -106,15 +109,15 @@ configureColorTools(
 let editingKeys = [];
 let blockEditor, imageInsertion;
 $("#app").innerHTML = `
-<header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="切换文件夹浏览" aria-label="切换文件夹浏览">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="Folio Notes 菜单" aria-label="应用菜单" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="向左浏览标签">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="打开的笔记"></div><button id="tabs-forward" class="icon tab-nav" aria-label="向右浏览标签">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="新笔记" title="新笔记 Ctrl+N">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="切换本文目录" aria-label="切换本文目录">${icon("outline")}</button></div></header>
-<div class="workspace"><aside id="sidebar" class="dock" aria-label="左侧栏"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">笔记库</span><span><button id="tree-refresh" class="icon" aria-label="刷新文件树" title="刷新文件树">${icon("refresh")}</button><button id="folder" class="icon" aria-label="打开文件夹" title="打开文件夹">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="搜索笔记…" aria-label="筛选文件" title="搜索文件名，包含子文件夹"><div id="tree"><div class="empty-tree">尚未添加文件夹<br><button id="folder-empty">打开文件夹</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">本文目录</span></div><nav id="outline" aria-label="本文目录"></nav></section></aside>
-<main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="文件操作"><button id="open" class="icon" aria-label="打开文件" title="打开文件 Ctrl+O">${icon("open")}</button><button id="save" class="icon" aria-label="保存" title="保存 Ctrl+S">${icon("save")}</button></div><div class="modes" role="group" aria-label="查看模式"><button data-mode="read">阅读</button><button data-mode="edit">编辑</button><button data-mode="source">源码</button></div><div class="toolbar-group reading-tools" role="group" aria-label="阅读设置"><button id="width-toggle" class="icon" aria-label="切换阅读宽度" title="切换阅读宽度" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="外观与布局" aria-label="外观与布局">Aa</button></div></div>
-<section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Folio Notes</h1></div><p>打开一篇笔记，或选择一个文件夹。</p><div class="start-actions"><button id="start-open">${icon("open")}<span>打开文件</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>打开文件夹</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>新建笔记</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">最近打开</h2><button id="recent-clear" type="button">清除记录</button></div><ul id="recent-list"></ul></section></div></section>
-<div id="conflict" role="alert" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="调整编辑预览比例" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="笔记预览"><article id="content" class="prose"></article></div></div>
-<span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="右侧栏"></aside></div>
+<header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Folio Notes 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
+<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("筛选文件")}" title="${t("搜索文件名，包含子文件夹")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
+<main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("外观与布局")}" aria-label="${t("外观与布局")}">Aa</button></div></div>
+<section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Folio Notes</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
+<div id="conflict" role="alert" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div></div>
+<span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="${t("右侧栏")}"></aside></div>
 <div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div>
-<div id="app-menu" class="context app-menu" role="menu" aria-label="应用菜单" hidden></div>${appearanceMarkup}
-<dialog id="confirm"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-detail"></p><div class="dialog-actions"><button value="cancel">取消</button><button value="discard">放弃修改</button><button value="save" class="primary">保存</button></div></form></dialog>`;
+<div id="app-menu" class="context app-menu" role="menu" aria-label="${t("应用菜单")}" hidden></div>${appearanceMarkup}
+<dialog id="confirm"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-detail"></p><div class="dialog-actions"><button value="cancel">${t("取消")}</button><button value="discard">${t("放弃修改")}</button><button value="save" class="primary">${t("保存")}</button></div></form></dialog>`;
 
 // Keep document controls beside the tabs instead of consuming a second row.
 $(".topbar").insertBefore($(".toolbar"), $("#panel-controls-right"));
@@ -122,9 +125,9 @@ $(".topbar").insertBefore($(".document-tools"), $("#tabs-back"));
 // File actions, tabs and reading actions form three compact groups.
 $(".document-tools").append($("#app-menu-toggle"));
 $("#app-menu-toggle").innerHTML = icon("export");
-$("#app-menu-toggle").title = "导出";
-$("#app-menu-toggle").setAttribute("aria-label", "导出");
-$("#app-menu").setAttribute("aria-label", "导出");
+$("#app-menu-toggle").title = t("导出");
+$("#app-menu-toggle").setAttribute("aria-label", t("导出"));
+$("#app-menu").setAttribute("aria-label", t("导出"));
 const tabStrip = document.createElement("div");
 tabStrip.className = "tab-strip";
 $(".topbar").insertBefore(tabStrip, $("#tabs-back"));
@@ -145,15 +148,15 @@ $(".reading-tools").insertBefore($("#theme"), $("#weight"));
 const historyControls = document.createElement("div");
 historyControls.className = "history-controls";
 historyControls.setAttribute("role", "group");
-historyControls.setAttribute("aria-label", "阅读历史");
-historyControls.innerHTML = `<button id="history-back" class="icon" aria-label="后退" title="后退 · Alt+←">${icon("chevronLeft")}</button><button id="history-forward" class="icon" aria-label="前进" title="前进 · Alt+→">${icon("chevronRight")}</button>`;
+historyControls.setAttribute("aria-label", t("阅读历史"));
+historyControls.innerHTML = `<button id="history-back" class="icon" aria-label="${t("后退")}" title="${t("后退 · Alt+←")}">${icon("chevronLeft")}</button><button id="history-forward" class="icon" aria-label="${t("前进")}" title="${t("前进 · Alt+→")}">${icon("chevronRight")}</button>`;
 $(".topbar").insertBefore(historyControls, $(".document-tools"));
 // Desktop (Windows): compact window controls drawn by the page, set apart at
 // the toolbar's right end. main.mjs removes the system title bar.
 const windowControls = document.createElement("div");
 windowControls.className = "window-controls";
 windowControls.setAttribute("role", "group");
-windowControls.setAttribute("aria-label", "窗口");
+windowControls.setAttribute("aria-label", t("窗口"));
 windowControls.hidden = true;
 windowControls.innerHTML = ["fullScreen", "minimize", "maximize", "close"]
   .map(
@@ -169,10 +172,10 @@ $(".topbar").append(windowControls);
 function showWindowState({ fullScreen, maximized, own } = {}) {
   if (own !== undefined) windowControls.hidden = !own;
   const labels = {
-    fullScreen: fullScreen ? ["退出全屏", "F11"] : ["全屏", "F11"],
-    minimize: ["最小化"],
-    maximize: maximized ? ["还原"] : ["最大化"],
-    close: ["关闭"],
+    fullScreen: fullScreen ? [t("退出全屏"), "F11"] : [t("全屏"), "F11"],
+    minimize: [t("最小化")],
+    maximize: maximized ? [t("还原")] : [t("最大化")],
+    close: [t("关闭")],
   };
   const icons = {
     fullScreen: fullScreen ? "exitFullScreen" : "fullScreen",
@@ -259,7 +262,7 @@ function docFrom(file = {}) {
     id: crypto.randomUUID(),
     fileId: file.id || null,
     path: file.path || null,
-    name: file.name || "未命名.md",
+    name: file.name || t("未命名.md"),
     text: file.text || "",
     base: file.text || "",
     version: file.version || null,
@@ -284,7 +287,7 @@ function add(file, { activate = true, opener = null } = {}) {
     return existing;
   }
   if (tabs.length >= 100) {
-    toast("最多同时打开 100 个标签页，请先关闭一些笔记。");
+    toast(t("最多同时打开 100 个标签页，请先关闭一些笔记。"));
     return null;
   }
   const doc = docFrom(file);
@@ -738,10 +741,16 @@ function updateStatus() {
   }
   setText(
     "#status",
-    dirty(active) ? "● 未保存" : active.fileId ? "已保存" : "本地草稿",
+    dirty(active) ? t("● 未保存") : active.fileId ? t("已保存") : t("本地草稿"),
   );
   const line = view.state.doc.lineAt(view.state.selection.main.head);
-  setText("#editor-position", `行 ${line.number} / ${view.state.doc.lines}`);
+  setText(
+    "#editor-position",
+    t("行 {line} / {lines}", {
+      line: line.number,
+      lines: view.state.doc.lines,
+    }),
+  );
   const title = (dirty(active) ? "● " : "") + active.name + " — Folio Notes";
   if (document.title !== title) document.title = title;
 }
@@ -805,13 +814,13 @@ async function closeTab(doc) {
   if (!doc || doc.closing) return;
   if (doc === active) blockEditor?.finish();
   if (doc.saving) {
-    toast("正在保存，请保存完成后再关闭。");
+    toast(t("正在保存，请保存完成后再关闭。"));
     return;
   }
   doc.closing = true;
   try {
     if (dirty(doc)) {
-      $("#confirm-title").textContent = "保存修改？";
+      $("#confirm-title").textContent = t("保存修改？");
       $("#confirm-detail").textContent = doc.name;
       const modal = $("#confirm");
       modal.showModal();
@@ -825,7 +834,7 @@ async function closeTab(doc) {
         if (!(await save(false, doc))) return;
         // The editor remains usable during disk I/O; only the captured snapshot was saved.
         if (dirty(doc)) {
-          toast("保存期间有新的修改，已保留标签页，请再次保存或确认关闭。");
+          toast(t("保存期间有新的修改，已保留标签页，请再次保存或确认关闭。"));
           return;
         }
       }
@@ -898,12 +907,12 @@ async function navigateLink(href, source = active) {
   const { target, anchor } = splitLink(href);
   if (/^https?:\/\//i.test(href)) {
     if (api && source.fileId) await api.link(source.fileId, href);
-    else toast("请在桌面版已打开的笔记中使用外部链接");
+    else toast(t("请在桌面版已打开的笔记中使用外部链接"));
     return;
   }
   if (target) {
-    if (!api) return toast("请在桌面版打开文件链接");
-    if (!source.fileId) return toast("请先保存当前笔记");
+    if (!api) return toast(t("请在桌面版打开文件链接"));
+    if (!source.fileId) return toast(t("请先保存当前笔记"));
     const file = await api.link(source.fileId, target);
     if (!file) return;
     if (!add(file, { opener })) return;
@@ -956,7 +965,7 @@ async function navigateLink(href, source = active) {
     else readingHistory.visit({ id: active.id, anchor: destination }, origin);
     updateHistoryButtons();
     scheduleSession();
-  } else toast("没有找到锚点：" + anchor);
+  } else toast(t("没有找到锚点：{anchor}", { anchor }));
 }
 const linkPreview = createLinkPreview({
   host: $("#content"),
@@ -972,8 +981,8 @@ const linkPreview = createLinkPreview({
       { target } = splitLink(href);
     const opener = { id: source?.id, groupId: source?.groupId };
     if (!target) return { ...source, draft: dirty(source) };
-    if (!api?.preview) throw Error("请在桌面版中预览本地文件");
-    if (!source?.fileId) throw Error("请先保存当前笔记以确定相对路径");
+    if (!api?.preview) throw Error(t("请在桌面版中预览本地文件"));
+    if (!source?.fileId) throw Error(t("请先保存当前笔记以确定相对路径"));
     const file = await api.preview(source.fileId, target);
     const existing = tabs.find(
       (t) => t.fileId === file.id || t.path === file.path,
@@ -1038,7 +1047,7 @@ $("#content").addEventListener("change", (event) => {
     doc.sliceString(from, doc.lineAt(from).to).match(TASK_MARKER);
   if (!match) {
     box.checked = !box.checked;
-    toast("无法定位该任务的源码，未修改");
+    toast(t("无法定位该任务的源码，未修改"));
     return;
   }
   const at = from + match[1].length + 1;
@@ -1210,7 +1219,7 @@ $("#reader").addEventListener(
 );
 
 async function openFiles() {
-  if (!api) return toast("请运行桌面版以访问本地文件");
+  if (!api) return toast(t("请运行桌面版以访问本地文件"));
   for (const file of await api.pickFiles()) add(file);
 }
 const { openFolder, renderTree, followCurrentFolder } = createLibrary({
@@ -1225,17 +1234,17 @@ const { openFolder, renderTree, followCurrentFolder } = createLibrary({
 });
 function contextMenu(e, doc) {
   showContext(e, [
-    ["在文件夹中显示", () => api.reveal(doc.fileId), !doc.fileId],
-    ["刷新文件", () => checkDisk(doc, true), !doc.fileId],
+    [t("在文件夹中显示"), () => api.reveal(doc.fileId), !doc.fileId],
+    [t("刷新文件"), () => checkDisk(doc, true), !doc.fileId],
     ...tabBar.actions(doc),
-    ["关闭标签", () => closeTab(doc), false],
+    [t("关闭标签"), () => closeTab(doc), false],
   ]);
 }
 const { showContext, dismiss: dismissMenus } = createMenus({
   run,
   appMenuEntries: () => [
-    ["导出 PDF…", "", commands.exportPDF, !active || exporting],
-    ["导出 HTML…", "", commands.exportHTML, !active || exporting],
+    [t("导出 PDF…"), "", commands.exportPDF, !active || exporting],
+    [t("导出 HTML…"), "", commands.exportHTML, !active || exporting],
   ],
 });
 wireFileDrop({
@@ -1268,13 +1277,26 @@ function applySettings() {
   document.documentElement.dataset.wide = String(settings.wide);
   smoothScroll.set(settings.smoothScroll);
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
-  $("#width-toggle").title = settings.wide ? "切换为窄版" : "切换为宽版";
+  $("#width-toggle").title = settings.wide ? t("切换为窄版") : t("切换为宽版");
   applyAppearance(settings);
   refreshColorButtons();
   updateHistoryButtons();
   if (themeChanged) renderDiagrams($("#content"), settings.theme, () => {});
 }
 function changeSettings(patch) {
+  if ("language" in patch && patch.language !== settings.language) {
+    // The interface is built once in its language: save tabs and drafts
+    // (main switches menus and tray on receipt), then rebuild the page.
+    settings.language = patch.language;
+    try {
+      localStorage.setItem("folio-language", patch.language);
+    } catch {
+      /* The browser demo just follows the browser language. */
+    }
+    return Promise.resolve(api ? flushSession() : null)
+      .catch(() => {})
+      .then(() => location.reload());
+  }
   const geometryChanged = Object.keys(patch).some((key) =>
     [
       "zoom",
@@ -1358,7 +1380,7 @@ const commands = {
   open: openFiles,
   folder: openFolder,
   new: () => {
-    if (!add({ name: "未命名.md" }, { opener: active })) return;
+    if (!add({ name: t("未命名.md") }, { opener: active })) return;
     setMode("edit");
     requestAnimationFrame(() => view.focus());
   },
@@ -1377,7 +1399,7 @@ const commands = {
   desktopSettings: () => openDesktopSettings(),
   close: async (intent = "close") => {
     if (tabs.some((t) => t.saving)) {
-      toast("文件正在保存，请完成后再关闭");
+      toast(t("文件正在保存，请完成后再关闭"));
       return;
     }
     // Report a failed recovery write instead of aborting: main asks whether to quit anyway.
@@ -1399,8 +1421,11 @@ async function exportActive(format) {
     if (!result.canceled)
       toast(
         result.warnings?.length
-          ? `已导出；${result.warnings.length} 项内容无法完整嵌入：${result.warnings[0]}`
-          : `已导出 ${format.toUpperCase()}`,
+          ? t("已导出；{count} 项内容无法完整嵌入：{first}", {
+              count: result.warnings.length,
+              first: result.warnings[0],
+            })
+          : t("已导出 {format}", { format: format.toUpperCase() }),
       );
   } finally {
     exporting = false;
@@ -1513,7 +1538,8 @@ window.addEventListener("beforeunload", () => {
 async function untouchedLegacyWelcome(entry) {
   if (
     entry.document ||
-    entry.name !== "欢迎.md" ||
+    // The legacy welcome file name is stored data: match it untranslated.
+    entry.name !== "欢迎.md" || // i18n-ignore
     typeof entry.content !== "string" ||
     typeof entry.draft === "string"
   )

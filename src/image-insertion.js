@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import { isolateHistory } from "@codemirror/commands";
 import { markdownEdit } from "./markdown-edits.js";
 
@@ -14,7 +15,7 @@ export function createImageInsertion({
   let busy = false;
   function capture(event) {
     const doc = getDocument();
-    if (!doc?.fileId) throw Error("请先保存笔记，再插入本地图片。");
+    if (!doc?.fileId) throw Error(t("请先保存笔记，再插入本地图片。"));
     const local = getBlockEditor().imageInsertion();
     if (local) return { doc, commit: local };
     const state = view.state;
@@ -44,14 +45,14 @@ export function createImageInsertion({
   }
   async function insert(files, event) {
     if (busy) {
-      report("正在插入图片，请稍后。");
+      report(t("正在插入图片，请稍后。"));
       return;
     }
     busy = true;
     try {
       const { doc, commit } = capture(event);
       if (!api?.pickImage || (files && !api?.insertImages))
-        throw Error("请在桌面版中插入图片。");
+        throw Error(t("请在桌面版中插入图片。"));
       const result = files
         ? await api.insertImages(doc.fileId, files)
         : {
@@ -60,9 +61,11 @@ export function createImageInsertion({
           };
       if (result.images.length && !commit(result.images))
         report(
-          "图片已复制到 assets；笔记已切换或修改，未插入到其他位置。请重新插入。",
+          t(
+            "图片已复制到 assets；笔记已切换或修改，未插入到其他位置。请重新插入。",
+          ),
         );
-      if (result.errors.length) report(result.errors.slice(0, 3).join("；"));
+      if (result.errors.length) report(result.errors.slice(0, 3).join(t("；")));
     } catch (error) {
       report(error.message);
     } finally {

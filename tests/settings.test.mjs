@@ -52,6 +52,7 @@ test("enumerated settings reject unknown values", () => {
     wide: "true",
     showHistoryButtons: 1,
     smoothScroll: "fast",
+    language: "fr",
     tabGroups: "none",
   });
   assert.equal(result.typeface, "literata");
@@ -65,6 +66,7 @@ test("enumerated settings reject unknown values", () => {
   assert.equal(result.wide, false);
   assert.equal(result.showHistoryButtons, false);
   assert.equal(result.smoothScroll, "off");
+  assert.equal(result.language, "auto");
   assert.deepEqual(result.tabGroups, []);
 });
 
@@ -82,6 +84,7 @@ test("valid stored choices survive normalization", () => {
     wide: true,
     showHistoryButtons: true,
     smoothScroll: "all",
+    language: "en",
     tabGroups: groups,
     sidebar: false,
     split: 40,
@@ -97,6 +100,7 @@ test("valid stored choices survive normalization", () => {
   assert.equal(result.wide, true);
   assert.equal(result.showHistoryButtons, true);
   assert.equal(result.smoothScroll, "all");
+  assert.equal(result.language, "en");
   assert.equal(result.tabGroups, groups);
   assert.equal(result.sidebar, false);
   assert.equal(result.split, 40);

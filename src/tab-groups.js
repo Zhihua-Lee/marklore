@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 export const groupColors = {
   green: "#568878",
   blue: "#6087ad",
@@ -35,7 +36,7 @@ export function normalizeGroups(tabs, groups) {
         )
           return false;
         seen.add(g.id);
-        g.name = g.name.trim().slice(0, 40) || "分组";
+        g.name = g.name.trim().slice(0, 40) || t("分组");
         g.color = Object.hasOwn(groupColors, g.color) ? g.color : "green";
         g.collapsed = g.collapsed === true;
         return tabs.some((t) => t.groupId === g.id);

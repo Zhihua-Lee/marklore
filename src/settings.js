@@ -17,6 +17,7 @@ export function defaultSettings() {
     navigationScope: "all",
     showHistoryButtons: false,
     smoothScroll: "off",
+    language: "auto",
     outline: true,
     librarySide: "left",
     outlineSide: "right",
@@ -56,6 +57,9 @@ export function normalizeSettings(saved = {}) {
   )
     settings.smoothScroll = "touchpad";
   delete settings.touchpadScroll;
+  settings.language = ["zh", "en"].includes(settings.language)
+    ? settings.language
+    : "auto";
   settings.smoothScroll = ["touchpad", "all"].includes(settings.smoothScroll)
     ? settings.smoothScroll
     : "off";

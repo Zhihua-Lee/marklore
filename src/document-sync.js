@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 // Disk synchronisation for open notes: save, save as, change detection and
 // the conflict bar shown when a dirty note changed on disk.
 export function createDocumentSync({
@@ -18,7 +19,7 @@ export function createDocumentSync({
   async function save(as = false, doc = getActive()) {
     if (!doc) return false;
     if (!api) {
-      report("浏览器演示不写入磁盘；请运行桌面版");
+      report(t("浏览器演示不写入磁盘；请运行桌面版"));
       return false;
     }
     if (doc.saving) return false;
@@ -37,7 +38,9 @@ export function createDocumentSync({
         );
         if (other) {
           report(
-            "目标已在另一标签中打开，未合并标签；两份编辑内容均已保留，请检查目标文件。",
+            t(
+              "目标已在另一标签中打开，未合并标签；两份编辑内容均已保留，请检查目标文件。",
+            ),
           );
           run(() => checkDisk(other))();
           return false;
@@ -70,7 +73,7 @@ export function createDocumentSync({
       if (conflict) {
         // checkDisk deliberately ignores saves in flight; release that guard first.
         await checkDisk(doc, true);
-        report("磁盘内容已改变，未覆盖。请处理冲突或另存副本。");
+        report(t("磁盘内容已改变，未覆盖。请处理冲突或另存副本。"));
       }
     }
   }
@@ -104,7 +107,7 @@ export function createDocumentSync({
       )
         return;
       if (result.unchanged) {
-        if (manual) report("已是磁盘最新版本");
+        if (manual) report(t("已是磁盘最新版本"));
         return;
       }
       if (dirty(doc)) {
@@ -115,9 +118,10 @@ export function createDocumentSync({
       loadFromDisk(doc, result);
       if (doc === getActive()) updateStatus();
       changed();
-      if (manual) report("已从磁盘刷新");
+      if (manual) report(t("已从磁盘刷新"));
     } catch (e) {
-      if (manual || doc === getActive()) report("保留当前内容：" + e.message);
+      if (manual || doc === getActive())
+        report(t("保留当前内容：{message}", { message: e.message }));
     } finally {
       doc.checking = false;
     }
@@ -129,13 +133,15 @@ export function createDocumentSync({
     if (bar.hidden) return;
     const doc = getActive(),
       label = document.createElement("span");
-    label.textContent = "磁盘有新版本，你的未保存内容已保留。";
+    label.textContent = t("磁盘有新版本，你的未保存内容已保留。");
     bar.append(label);
     const load = document.createElement("button");
-    load.textContent = "加载磁盘版本";
+    load.textContent = t("加载磁盘版本");
     load.onclick = async () => {
       // Destructive resolution uses an explicit confirmation, not a one-click discard.
-      if (!window.confirm("放弃当前未保存修改，加载磁盘版本？建议先另存副本。"))
+      if (
+        !window.confirm(t("放弃当前未保存修改，加载磁盘版本？建议先另存副本。"))
+      )
         return;
       loadFromDisk(doc, doc.conflict);
       doc.conflict = null;
@@ -144,13 +150,13 @@ export function createDocumentSync({
       changed();
     };
     const copy = document.createElement("button");
-    copy.textContent = "另存我的副本";
+    copy.textContent = t("另存我的副本");
     copy.onclick = run(() => save(true, doc));
     const keep = document.createElement("button");
-    keep.textContent = "继续编辑";
+    keep.textContent = t("继续编辑");
     keep.onclick = () => {
       bar.hidden = true;
-      report("保留编辑；原文件仍有冲突，保存时会再次检查。");
+      report(t("保留编辑；原文件仍有冲突，保存时会再次检查。"));
     };
     bar.append(load, copy, keep);
   }

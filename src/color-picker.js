@@ -1,4 +1,5 @@
 import { highlightColors, textColors } from "./text-colors.js";
+import { t } from "../desktop/i18n.mjs";
 let readSettings = () => ({}),
   writeSettings = () => {},
   dismiss = null;
@@ -21,7 +22,10 @@ export function refreshColorButtons() {
   for (const button of document.querySelectorAll("button[data-color-action]")) {
     const color = remembered(button.dataset.colorAction);
     button.style.setProperty("--selected-color", color);
-    button.title = `${button.getAttribute("aria-label")} · ${color} · 左键应用，右键或 ↓ 选色`;
+    button.title = t("{label} · {color} · 左键应用，右键或 ↓ 选色", {
+      label: button.getAttribute("aria-label"),
+      color,
+    });
   }
 }
 export function wireColorButton(button, action, capture) {
@@ -60,9 +64,9 @@ function openPalette(button, action, context) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute(
     "aria-label",
-    action === "highlight" ? "高亮调色板" : "文字调色板",
+    action === "highlight" ? t("高亮调色板") : t("文字调色板"),
   );
-  panel.innerHTML = `<div class="color-swatches">${colors.map(([name, value]) => `<button type="button" data-color="${value}" aria-label="${name}" title="${name}" aria-pressed="${remembered(action) === value}" style="--swatch:${value}"><span></span></button>`).join("")}</div><form class="custom-color"><label>自定义<input type="color" aria-label="自定义颜色" value="${remembered(action)}"></label><button type="submit">应用</button></form><p role="alert" hidden></p><button type="button" data-clear>${action === "highlight" ? "清除高亮" : "恢复默认颜色"}</button>`;
+  panel.innerHTML = `<div class="color-swatches">${colors.map(([name, value]) => `<button type="button" data-color="${value}" aria-label="${name}" title="${name}" aria-pressed="${remembered(action) === value}" style="--swatch:${value}"><span></span></button>`).join("")}</div><form class="custom-color"><label>${t("自定义")}<input type="color" aria-label="${t("自定义颜色")}" value="${remembered(action)}"></label><button type="submit">${t("应用")}</button></form><p role="alert" hidden></p><button type="button" data-clear>${action === "highlight" ? t("清除高亮") : t("恢复默认颜色")}</button>`;
   document.body.append(panel);
   let closed = false;
   function close(focus = false) {

@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import { isImageFile } from "./image-insertion.js";
 export function wireFileDrop({ api, opened, report, insertImages }) {
   const isFiles = (event) =>
@@ -46,18 +47,19 @@ export function wireFileDrop({ api, opened, report, insertImages }) {
       const images = files.filter(isImageFile);
       if (images.length) {
         if (images.length !== files.length)
-          report("请将笔记文件和图片分开拖入，以免插入到错误的笔记。");
+          report(t("请将笔记文件和图片分开拖入，以免插入到错误的笔记。"));
         else await insertImages(images, event);
         return;
       }
       if (!api?.openDroppedFiles) {
-        report("请在桌面版中拖入本地 Markdown 文件");
+        report(t("请在桌面版中拖入本地 Markdown 文件"));
         return;
       }
       try {
         const result = await api.openDroppedFiles(files);
         opened(result.documents);
-        if (result.errors.length) report(result.errors.slice(0, 3).join("；"));
+        if (result.errors.length)
+          report(result.errors.slice(0, 3).join(t("；")));
       } catch (error) {
         report(error.message);
       }

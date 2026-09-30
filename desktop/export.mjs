@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
+import { t } from "./i18n.mjs";
 
 const limit = 96 * 1024 * 1024;
 const escape = (value) =>
@@ -29,7 +30,7 @@ async function boundedPrint(render) {
       render(),
       new Promise((_resolve, reject) => {
         timer = setTimeout(
-          () => reject(Error("导出排版超过 30 秒，请缩小笔记后重试")),
+          () => reject(Error(t("导出排版超过 30 秒，请缩小笔记后重试"))),
           30000,
         );
       }),
@@ -55,23 +56,23 @@ export async function buildExportDocument(
     !Array.isArray(payload.images) ||
     payload.images.length > 500
   )
-    throw Error("无效或过大的导出内容");
+    throw Error(t("无效或过大的导出内容"));
   if (payload.fileId) files.file(payload.fileId);
   let html = payload.html,
     css = payload.css;
   if (/<\/style/i.test(css) || /@import\b/i.test(css))
-    throw Error("不支持的导出样式");
+    throw Error(t("不支持的导出样式"));
   const assetNames = await fs.readdir(path.join(dist, "assets"));
   const fontFaces = [...css.matchAll(/@font-face\s*\{[^}]*\}/g)];
   for (const [face] of fontFaces) {
     const font = face.match(
       /url\(\s*(?:["'])?(?:\.\/)?(?:fonts|files)\/((?:KaTeX_[A-Za-z0-9]+-[A-Za-z]+|literata-[a-z-]+|jetbrains-mono-[a-z-]+))\.woff2(?:["'])?\)/,
     )?.[1];
-    if (!font) throw Error("导出字体资源缺失");
+    if (!font) throw Error(t("导出字体资源缺失"));
     const bundled = assetNames.find(
       (name) => name.startsWith(font + "-") && name.endsWith(".woff2"),
     );
-    if (!bundled) throw Error("缺少离线数学字体：" + font);
+    if (!bundled) throw Error(t("缺少离线数学字体：{font}", { font }));
     const bytes = await fs.readFile(path.join(dist, "assets", bundled));
     const embedded = face.replace(
       /src:[^;}]+/,
@@ -81,7 +82,7 @@ export async function buildExportDocument(
   }
   // No resource URL other than the embedded fonts is allowed in the export CSS.
   if (/url\((?!["']?data:font\/woff2;base64,)/i.test(css))
-    throw Error("导出样式包含非离线资源");
+    throw Error(t("导出样式包含非离线资源"));
   for (const image of payload.images) {
     if (
       !payload.fileId ||
@@ -90,24 +91,24 @@ export async function buildExportDocument(
       typeof image.path !== "string" ||
       image.path.length > 8192
     )
-      throw Error("无效导出图片");
+      throw Error(t("无效导出图片"));
     const file = await files.asset(payload.fileId, image.path);
     const stat = await fs.stat(file);
     if (!stat.isFile() || stat.size > 20 * 1024 * 1024)
-      throw Error("单张导出图片上限为 20 MB");
+      throw Error(t("单张导出图片上限为 20 MB"));
     const bytes = await fs.readFile(file);
-    if (bytes.length > 20 * 1024 * 1024) throw Error("导出图片过大");
+    if (bytes.length > 20 * 1024 * 1024) throw Error(t("导出图片过大"));
     const source = `src="folio-export-image:${image.key}"`;
-    if (!html.includes(source)) throw Error("导出图片引用无效");
+    if (!html.includes(source)) throw Error(t("导出图片引用无效"));
     html = html.replaceAll(
       source,
       `src="data:${imageTypes[path.extname(file).toLowerCase()]};base64,${bytes.toString("base64")}"`,
     );
     if (Buffer.byteLength(html) > limit)
-      throw Error("导出内容过大（上限 96 MB）");
+      throw Error(t("导出内容过大（上限 96 MB）"));
   }
   if (/folio-(?:asset|export-image):/i.test(html))
-    throw Error("存在未嵌入的图片");
+    throw Error(t("存在未嵌入的图片"));
   const title = String(payload.name || "Untitled").slice(0, 500);
   const notices = await fs.readFile(noticesPath, "utf8");
   // The first policy cannot be weakened by note markup. No scripts, connections,
@@ -118,16 +119,16 @@ export async function buildExportDocument(
 async function destinationSnapshot(destination, files) {
   const extension = path.extname(destination).toLowerCase();
   if (![".pdf", ".html", ".htm"].includes(extension))
-    throw Error("导出目标必须使用 .pdf 或 .html 扩展名");
+    throw Error(t("导出目标必须使用 .pdf 或 .html 扩展名"));
   const parent = await fs.realpath(path.dirname(destination));
   const actual = path.join(parent, path.basename(destination));
   for (const source of files.files.values())
     if (source.path.toLowerCase() === actual.toLowerCase())
-      throw Error("不能覆盖已打开的笔记");
+      throw Error(t("不能覆盖已打开的笔记"));
   try {
     const stat = await fs.lstat(actual);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > limit)
-      throw Error("导出目标不是可替换的普通文件");
+      throw Error(t("导出目标不是可替换的普通文件"));
     return { actual, hash: digest(await fs.readFile(actual)) };
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
@@ -145,7 +146,7 @@ export function createExporter({
 }) {
   let exporting = false;
   return async (payload) => {
-    if (exporting) throw Error("正在导出，请稍候");
+    if (exporting) throw Error(t("正在导出，请稍候"));
     exporting = true;
     let printer,
       temp,
@@ -166,7 +167,7 @@ export function createExporter({
         "." +
         extension;
       const choice = await dialog.showSaveDialog(owner(), {
-        title: extension === "pdf" ? "导出 PDF" : "导出独立 HTML",
+        title: extension === "pdf" ? t("导出 PDF") : t("导出独立 HTML"),
         defaultPath: name,
         filters: [
           {
@@ -177,7 +178,7 @@ export function createExporter({
       });
       if (choice.canceled || !choice.filePath) return { canceled: true };
       if (path.extname(choice.filePath).toLowerCase() !== "." + extension)
-        throw Error("请选择 ." + extension + " 导出文件");
+        throw Error(t("请选择 .{extension} 导出文件", { extension }));
       const destination = await destinationSnapshot(choice.filePath, files);
       let bytes = Buffer.from(document, "utf8");
       if (payload.format === "pdf") {
@@ -222,10 +223,11 @@ export function createExporter({
         printer.webContents.on("will-navigate", (event) =>
           event.preventDefault(),
         );
+        const decodeError = JSON.stringify(t("导出图片解码失败"));
         bytes = await boundedPrint(async () => {
           await printer.loadURL(printURL);
           await printer.webContents.executeJavaScript(
-            `(async()=>{await document.fonts.ready; await Promise.all([...document.images].map(image=>image.decode().catch(()=>{throw Error("导出图片解码失败")}))); return true})()`,
+            `(async()=>{await document.fonts.ready; await Promise.all([...document.images].map(image=>image.decode().catch(()=>{throw Error(${decodeError})}))); return true})()`,
           );
           return printer.webContents.printToPDF({
             printBackground: true,
@@ -235,13 +237,13 @@ export function createExporter({
           });
         });
       }
-      if (bytes.length > limit) throw Error("导出结果过大（上限 96 MB）");
+      if (bytes.length > limit) throw Error(t("导出结果过大（上限 96 MB）"));
       const beforeWrite = await destinationSnapshot(choice.filePath, files);
       if (
         beforeWrite.actual !== destination.actual ||
         beforeWrite.hash !== destination.hash
       )
-        throw Error("目标文件在导出期间改变，请另选文件名");
+        throw Error(t("目标文件在导出期间改变，请另选文件名"));
       temp = path.join(
         path.dirname(destination.actual),
         ".folio-export-" + randomUUID() + ".tmp",
@@ -258,7 +260,7 @@ export function createExporter({
         beforeReplace.actual !== destination.actual ||
         beforeReplace.hash !== destination.hash
       )
-        throw Error("目标文件在导出期间改变，请另选文件名");
+        throw Error(t("目标文件在导出期间改变，请另选文件名"));
       await fs.rename(temp, destination.actual);
       temp = null;
       return {

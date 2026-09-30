@@ -1,4 +1,5 @@
 import { highlightInk } from "./text-colors.js";
+import { t } from "../desktop/i18n.mjs";
 // Source-only transformations: one reversible editor transaction, no HTML roundtrip.
 export function markdownEdit(text, from, to, action, options = {}) {
   const selected = text.slice(from, to);
@@ -15,7 +16,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
   if (action === "highlight" || action === "color") {
     const color = options.color?.toLowerCase() ?? null;
     if (color !== null && !/^#[\da-f]{6}$/.test(color))
-      throw Error("请选择有效的颜色。");
+      throw Error(t("请选择有效的颜色。"));
     const mark = action === "highlight",
       tag = mark ? "mark" : "span";
     const pattern = mark
@@ -62,7 +63,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
         .join("\n");
       return result(start, end, painted);
     }
-    body ||= "文字";
+    body ||= t("文字");
     const prefix =
       start === 0 || text[start - 1] === "\n"
         ? body.match(/^(?:\s*(?:#{1,6}\s+|>\s*|[-+*]\s+|\d+[.)]\s+))*/)[0]
@@ -107,7 +108,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
           text.slice(to).match(/^\*+/)[0].length % 2 === 1))
     )
       return result(from - n, to + n, selected);
-    const body = selected || (action === "inlineMath" ? "x" : "文字");
+    const body = selected || (action === "inlineMath" ? "x" : t("文字"));
     const pad = action === "inline" && /^`|`$/.test(body) ? " " : "";
     return result(
       from,
@@ -146,7 +147,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
     const fence = "`".repeat(
       Math.max(3, ...[...selected.matchAll(/`+/g)].map((m) => m[0].length + 1)),
     );
-    const body = selected || "代码";
+    const body = selected || t("代码");
     const language = (options.language || "").replace(/[^\w+#.-]/g, "");
     return block(
       `${fence}${language}\n${body}\n${fence}`,
@@ -178,9 +179,11 @@ export function markdownEdit(text, from, to, action, options = {}) {
       rows < 1 ||
       rows > 30
     )
-      throw Error("表格范围：1–12 列，1–30 行");
+      throw Error(t("表格范围：1–12 列，1–30 行"));
     const line = (cells) => "| " + cells.join(" | ") + " |";
-    const header = Array.from({ length: columns }, (_, i) => `列 ${i + 1}`);
+    const header = Array.from({ length: columns }, (_, i) =>
+      t("列 {n}", { n: i + 1 }),
+    );
     const body = [
       line(header),
       line(header.map(() => "---")),
@@ -196,11 +199,11 @@ export function markdownEdit(text, from, to, action, options = {}) {
       (/^[a-z][a-z\d+.-]*:/i.test(url) &&
         !/^(?:https?:|mailto:|tel:|[a-z]:[\\/])/i.test(url))
     )
-      throw Error("请输入有效的链接或本地路径");
+      throw Error(t("请输入有效的链接或本地路径"));
     const label = (
       options.label ||
       selected ||
-      (action === "image" ? "图片" : "链接")
+      (action === "image" ? t("图片") : t("链接"))
     )
       .replace(/[\r\n]+/g, " ")
       .replace(/[\\\[\]]/g, "\\$&");
@@ -218,7 +221,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
   if (action === "heading") {
     const level = Number(options.level);
     if (!Number.isInteger(level) || level < 0 || level > 6)
-      throw Error("无效标题层级");
+      throw Error(t("无效标题层级"));
     return result(
       start,
       end,
@@ -238,7 +241,7 @@ export function markdownEdit(text, from, to, action, options = {}) {
     task: /^(\s*)[-+*] \[[ xX]\] /,
     quote: /^(\s*)> ?/,
   };
-  if (!Object.hasOwn(patterns, action)) throw Error("未知编辑操作");
+  if (!Object.hasOwn(patterns, action)) throw Error(t("未知编辑操作"));
   const pattern = patterns[action];
   const remove =
     lines.some((l) => l.trim()) &&

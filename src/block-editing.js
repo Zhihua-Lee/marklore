@@ -14,19 +14,20 @@ import { markdownEdit } from "./markdown-edits.js";
 import { atPoint, selectionSource } from "./positions.js";
 import { icon } from "./icons.js";
 import { wireColorButton, closeColorPicker } from "./color-picker.js";
+import { t } from "../desktop/i18n.mjs";
 import "./block-editing.css";
 
 const labels = {
-  paragraph_open: "段落",
-  heading_open: "标题",
-  bullet_list_open: "列表",
-  ordered_list_open: "列表",
-  blockquote_open: "引用",
-  table_open: "表格",
-  fence: "代码块",
-  code_block: "代码块",
-  folio_math_block: "公式",
-  hr: "分割线",
+  paragraph_open: t("段落"),
+  heading_open: t("标题"),
+  bullet_list_open: t("列表"),
+  ordered_list_open: t("列表"),
+  blockquote_open: t("引用"),
+  table_open: t("表格"),
+  fence: t("代码块"),
+  code_block: t("代码块"),
+  folio_math_block: t("公式"),
+  hr: t("分割线"),
 };
 export function createBlockEditor({
   content,
@@ -47,8 +48,8 @@ export function createBlockEditor({
   launch.type = "button";
   launch.hidden = true;
   launch.innerHTML = icon("pencil");
-  launch.title = "就地编辑此块 · Alt+Enter";
-  launch.setAttribute("aria-label", "就地编辑此块");
+  launch.title = t("就地编辑此块 · Alt+Enter");
+  launch.setAttribute("aria-label", t("就地编辑此块"));
   document.body.append(launch);
   function position() {
     frame = 0;
@@ -146,7 +147,7 @@ export function createBlockEditor({
     const doc = getDocument();
     if (session || !doc || !target?.isConnected || doc.mode !== "edit") return;
     if (doc.previewText !== doc.text) {
-      report("预览正在更新，请稍后再试。");
+      report(t("预览正在更新，请稍后再试。"));
       return;
     }
     const from = Number(target.dataset.editFrom);
@@ -171,34 +172,37 @@ export function createBlockEditor({
     panel.dataset.kind = kind;
     panel.dataset.from = String(from);
     panel.dataset.to = String(to);
-    panel.setAttribute("aria-label", `就地编辑${labels[kind] || "源码块"}`);
-    panel.innerHTML = `<div class="block-edit-tools" role="group" aria-label="就地编辑格式"><span class="block-edit-label">${labels[kind] || "源码块"}</span><button type="button" data-format="bold" title="粗体 Ctrl+B" aria-label="就地加粗"><b>B</b></button><button type="button" data-format="italic" title="斜体 Ctrl+I" aria-label="就地斜体"><i>I</i></button><button type="button" data-format="inline" title="行内代码 Ctrl+E" aria-label="就地行内代码">&lt;/&gt;</button><button type="button" data-format="link" title="链接 Ctrl+K" aria-label="就地插入链接">${icon("link")}</button><span class="block-edit-spacer"></span><button type="button" data-history="undo" aria-label="就地撤销" title="撤销">${icon("undo")}</button><button type="button" data-history="redo" aria-label="就地重做" title="重做">${icon("redo")}</button></div><form class="block-edit-link" hidden><label>链接<input name="url" required placeholder="https://… 或 chapter.md"></label><button type="submit">插入</button><button type="button" data-link-cancel>取消</button><span role="alert"></span></form><div class="block-edit-input"></div><div class="block-edit-actions"><span>Markdown · Ctrl+Enter 完成</span><button type="button" data-cancel>取消</button><button type="button" data-done>完成</button></div>`;
+    panel.setAttribute(
+      "aria-label",
+      t("就地编辑{block}", { block: labels[kind] || t("源码块") }),
+    );
+    panel.innerHTML = `<div class="block-edit-tools" role="group" aria-label="${t("就地编辑格式")}"><span class="block-edit-label">${labels[kind] || t("源码块")}</span><button type="button" data-format="bold" title="${t("粗体 Ctrl+B")}" aria-label="${t("就地加粗")}"><b>B</b></button><button type="button" data-format="italic" title="${t("斜体 Ctrl+I")}" aria-label="${t("就地斜体")}"><i>I</i></button><button type="button" data-format="inline" title="${t("行内代码 Ctrl+E")}" aria-label="${t("就地行内代码")}">&lt;/&gt;</button><button type="button" data-format="link" title="${t("链接 Ctrl+K")}" aria-label="${t("就地插入链接")}">${icon("link")}</button><span class="block-edit-spacer"></span><button type="button" data-history="undo" aria-label="${t("就地撤销")}" title="${t("撤销")}">${icon("undo")}</button><button type="button" data-history="redo" aria-label="${t("就地重做")}" title="${t("重做")}">${icon("redo")}</button></div><form class="block-edit-link" hidden><label>${t("链接")}<input name="url" required placeholder="${t("https://… 或 chapter.md")}"></label><button type="submit">${t("插入")}</button><button type="button" data-link-cancel>${t("取消")}</button><span role="alert"></span></form><div class="block-edit-input"></div><div class="block-edit-actions"><span>${t("Markdown · Ctrl+Enter 完成")}</span><button type="button" data-cancel>${t("取消")}</button><button type="button" data-done>${t("完成")}</button></div>`;
     target.classList.remove("block-edit-hover");
     const picture = document.createElement("button");
     picture.type = "button";
-    picture.setAttribute("aria-label", "就地插入图片");
-    picture.title = "插入图片";
+    picture.setAttribute("aria-label", t("就地插入图片"));
+    picture.title = t("插入图片");
     picture.innerHTML = icon("image");
     panel.querySelector(".block-edit-spacer").before(picture);
-    for (const [action, label, glyph] of [
-      ["highlight", "文字高亮", "highlight"],
-      ["color", "文字颜色", "textColor"],
+    for (const [action, label, inPlace, glyph] of [
+      ["highlight", t("文字高亮"), t("就地文字高亮"), "highlight"],
+      ["color", t("文字颜色"), t("就地文字颜色"), "textColor"],
     ]) {
       const button = document.createElement("button");
       button.type = "button";
       button.dataset.format = action;
-      button.setAttribute("aria-label", "就地" + label);
+      button.setAttribute("aria-label", inPlace);
       button.title = label;
       button.innerHTML = icon(glyph);
       panel.querySelector('[data-format="inline"]').before(button);
     }
     for (const [label, controls] of [
       [
-        "文字样式",
+        t("文字样式"),
         [...panel.querySelectorAll('[data-format]:not([data-format="link"])')],
       ],
-      ["插入内容", [panel.querySelector('[data-format="link"]'), picture]],
-      ["编辑历史", [...panel.querySelectorAll("[data-history]")]],
+      [t("插入内容"), [panel.querySelector('[data-format="link"]'), picture]],
+      [t("编辑历史"), [...panel.querySelectorAll("[data-history]")]],
     ]) {
       const group = document.createElement("div");
       group.className = "edit-tool-group";
@@ -242,7 +246,7 @@ export function createBlockEditor({
           drawSelection(),
           EditorView.lineWrapping,
           EditorView.contentAttributes.of({
-            "aria-label": "当前块 Markdown",
+            "aria-label": t("当前块 Markdown"),
             spellcheck: "false",
           }),
           Prec.highest(
@@ -311,7 +315,7 @@ export function createBlockEditor({
                 state.doc !== s.editor.state.doc ||
                 state.selection !== s.editor.state.selection
               )
-                throw Error("编辑内容或选区已改变，请重新选择文字。");
+                throw Error(t("编辑内容或选区已改变，请重新选择文字。"));
               if (!state.selection.main.empty) applyFormat(action, options);
             },
             focus() {
@@ -344,7 +348,7 @@ export function createBlockEditor({
       s.doc !== getDocument() ||
       s.expected !== sourceView.state.doc.toString()
     ) {
-      report("笔记已发生其他修改，就地编辑已停止。");
+      report(t("笔记已发生其他修改，就地编辑已停止。"));
       finish();
       return;
     }
@@ -405,7 +409,7 @@ export function createBlockEditor({
     if (!session) return;
     if (session.expected === sourceView.state.doc.toString())
       sync(session.original);
-    else report("笔记已有其他修改，未覆盖当前内容。");
+    else report(t("笔记已有其他修改，未覆盖当前内容。"));
     finish();
   }
   return {

@@ -1,7 +1,9 @@
-// Regenerates the README screenshots and animations in docs/images from the
-// real desktop app and docs/sample-notebook (copied to a temporary folder; the
-// repository notes are never modified). Needs a build (pnpm build) and ffmpeg
-// on PATH. Usage: node tools/readme-media.mjs [scene ...]
+// Regenerates the README screenshots and animations from the real desktop app
+// and a sample notebook (copied to a temporary folder; the repository notes are
+// never modified). Needs a build (pnpm build) and ffmpeg on PATH. Usage:
+//   node tools/readme-media.mjs [--lang=en] [scene ...]
+// Chinese (default): docs/sample-notebook -> docs/images; English:
+// docs/sample-notebook-en -> docs/images/en, with the interface in English.
 import { _electron as electron } from "@playwright/test";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -10,17 +12,60 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const out = path.join(root, "docs/images");
+const args = process.argv.slice(2);
+const english = args.includes("--lang=en");
+// What each scene clicks and types, per language.
+const L = english
+  ? {
+      notebook: "docs/sample-notebook-en",
+      folder: "Sample notebook",
+      note: "Fourier-analysis.md",
+      out: "docs/images/en",
+      language: "en",
+      outline: [
+        "Window functions",
+        "Discrete implementation",
+        "Parseval's identity",
+        "Definition",
+      ],
+      link: "convolution theorem",
+      find: "convolution",
+      editHeading: "Parseval's identity",
+      editParagraph: "Energy is the same in both domains",
+      editText:
+        " In the discrete case, $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$ as well.",
+      darkHeading: "Discrete implementation",
+    }
+  : {
+      notebook: "docs/sample-notebook",
+      folder: "示例笔记库",
+      note: "傅里叶分析.md",
+      out: "docs/images",
+      language: "zh",
+      outline: ["窗函数", "离散实现", "Parseval 恒等式", "定义"],
+      link: "卷积定理",
+      find: "卷积",
+      editHeading: "Parseval 恒等式",
+      editParagraph: "能量在两个域中守恒",
+      editText:
+        "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
+      darkHeading: "离散实现",
+    };
+const out = path.join(root, L.out);
+// Stills are resized to this; recordings keep the window's own size
+// (1360 x 920, desktop/main.mjs), because Playwright's video viewport and the
+// input coordinates drift apart (28 px) when a recorded window is resized.
 const size = { width: 1280, height: 800 };
-const only = new Set(process.argv.slice(2));
+const recordSize = { width: 1360, height: 920 };
+const only = new Set(args.filter((a) => !a.startsWith("--")));
 await fs.mkdir(out, { recursive: true });
 
 async function session({ scale, theme = "light", record = false }) {
   const temp = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "folio-media-")),
   );
-  const notes = path.join(temp, "示例笔记库");
-  await fs.cp(path.join(root, "docs/sample-notebook"), notes, {
+  const notes = path.join(temp, L.folder);
+  await fs.cp(path.join(root, L.notebook), notes, {
     recursive: true,
   });
   const profile = path.join(temp, "profile");
@@ -29,32 +74,42 @@ async function session({ scale, theme = "light", record = false }) {
     path.join(profile, "session.json"),
     JSON.stringify({
       roots: [notes],
-      settings: { theme, sidebar: true, outline: true },
+      settings: { theme, sidebar: true, outline: true, language: L.language },
     }),
   );
   const app = await electron.launch({
     args: [
       `--force-device-scale-factor=${scale}`,
       root,
-      path.join(notes, "傅里叶分析.md"),
+      path.join(notes, L.note),
     ],
     env: {
       ...process.env,
       FOLIO_DATA_DIR: profile,
       ELECTRON_RUN_AS_NODE: undefined,
     },
-    ...(record && { recordVideo: { dir: path.join(temp, "video"), size } }),
+    ...(record && {
+      recordVideo: { dir: path.join(temp, "video"), size: recordSize },
+    }),
   });
   const page = await app.firstWindow();
   const started = Date.now();
-  await app.evaluate(({ BrowserWindow }, { width, height }) => {
-    const win = BrowserWindow.getAllWindows()[0];
-    win.setContentSize(width, height);
-    win.center();
-  }, size);
+  if (!record)
+    await app.evaluate(({ BrowserWindow }, { width, height }) => {
+      const win = BrowserWindow.getAllWindows()[0];
+      win.setContentSize(width, height);
+      win.center();
+    }, size);
   await page.locator("#content h1").waitFor();
   await page.locator("#content .katex").first().waitFor();
-  await page.locator("#tree").getByText("傅里叶分析.md").waitFor();
+  // Let every formula render first: layout that settles mid-scene moves links
+  // (an open link preview closes when its link moves).
+  await page.waitForFunction(
+    () => !document.querySelector("#content [data-folio-math]"),
+    null,
+    { timeout: 30000 },
+  );
+  await page.locator("#tree").getByText(L.note).waitFor();
   // Recordings have no system cursor: draw one, plus a key hint. The link
   // preview's file path is hidden (it would show the temporary folder).
   await page.addStyleTag({
@@ -175,7 +230,7 @@ await still("edit-dark", "dark", async ({ page }) => {
   await page.locator('.modes [data-mode="edit"]').click();
   await page
     .locator("#outline")
-    .getByRole("button", { name: "离散实现", exact: true })
+    .getByRole("button", { name: L.darkHeading, exact: true })
     .click();
   await page.waitForTimeout(900);
 });
@@ -183,7 +238,7 @@ await still("edit-dark", "dark", async ({ page }) => {
 await scene("outline", "light", async ({ page, moveTo }) => {
   const outline = (name) =>
     page.locator("#outline").getByRole("button", { name, exact: true });
-  for (const name of ["窗函数", "离散实现", "Parseval 恒等式", "定义"]) {
+  for (const name of L.outline) {
     await moveTo(outline(name));
     await page.mouse.down();
     await page.mouse.up();
@@ -191,14 +246,58 @@ await scene("outline", "light", async ({ page, moveTo }) => {
   }
 });
 
-await scene("preview", "light", async ({ page, moveTo, keys }) => {
-  const link = page.locator("#content a", { hasText: "卷积定理" }).first();
+await scene("preview", "light", async ({ page, keys, mark }) => {
+  const link = page.locator("#content a", { hasText: L.link }).first();
   await link.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(500);
-  await moveTo(link);
-  await page.locator("#link-preview").waitFor({ state: "visible" });
+  // Measure only once the page is still: the smooth scroll has ended and idle
+  // table layout (which keeps the reading line, so content below it may move)
+  // has settled.
+  await page.waitForFunction(
+    () =>
+      new Promise((resolve) => {
+        const reader = document.querySelector("#reader"),
+          content = document.querySelector("#content"),
+          top = reader.scrollTop,
+          height = content.offsetHeight;
+        setTimeout(
+          () =>
+            resolve(
+              reader.scrollTop === top && content.offsetHeight === height,
+            ),
+          1200,
+        );
+      }),
+    null,
+    { timeout: 20000 },
+  );
+  // Idle table layout runs within its 3 s idle-callback timeout; recording
+  // keeps the page busy enough that it tends to wait that long.
+  await page.waitForTimeout(3500);
+  // Aim at the link's first line: a link that wraps has a bounding box whose
+  // centre lies between the lines, off the link.
+  const onLink = async () => {
+    const r = await link.evaluate((el) => el.getClientRects()[0].toJSON());
+    await page.mouse.move(r.x + Math.min(40, r.width / 2), r.y + r.height / 2, {
+      steps: 24,
+    });
+  };
+  await mark();
+  // Late layout (idle table sizing) can shift the link from under the
+  // pointer; aim again until the preview opens.
+  for (let tries = 0; ; tries++) {
+    await onLink();
+    const shown = await page
+      .locator("#link-preview")
+      .waitFor({ state: "visible", timeout: 1500 })
+      .then(
+        () => true,
+        () => false,
+      );
+    if (shown) break;
+    if (tries === 3) throw Error("The link preview did not open");
+  }
   await page.waitForTimeout(1600);
-  await moveTo(link);
+  await onLink();
   await page.mouse.down();
   await page.mouse.up();
   await page.waitForTimeout(1400);
@@ -208,7 +307,7 @@ await scene("preview", "light", async ({ page, moveTo, keys }) => {
 
 await scene("find", "light", async ({ page, keys }) => {
   await keys("Ctrl + F", "Control+f");
-  await page.keyboard.type("卷积", { delay: 180 });
+  await page.keyboard.type(L.find, { delay: 180 });
   await page.waitForTimeout(700);
   for (let i = 0; i < 3; i++) await keys("Enter", "Enter");
   await keys("Esc", "Escape");
@@ -218,18 +317,15 @@ await scene("edit", "light", async ({ page, mark }) => {
   await page.keyboard.press("Control+2");
   await page
     .locator("#outline")
-    .getByRole("button", { name: "Parseval 恒等式", exact: true })
+    .getByRole("button", { name: L.editHeading, exact: true })
     .click();
   await page.waitForTimeout(900);
   // Alt+double-click in the preview puts the editor cursor on that text.
   await page
-    .locator("#content p", { hasText: "能量在两个域中守恒" })
+    .locator("#content p", { hasText: L.editParagraph })
     .dblclick({ modifiers: ["Alt"] });
   await page.keyboard.press("End");
   await mark();
-  await page.keyboard.type(
-    "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
-    { delay: 55 },
-  );
+  await page.keyboard.type(L.editText, { delay: 55 });
   await page.waitForTimeout(1800);
 });

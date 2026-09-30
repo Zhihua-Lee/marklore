@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
+import { t } from "./i18n.mjs";
 
 export const MAX_BYTES = 32 * 1024 * 1024;
 export const markdownPath = (p) => /\.(md|markdown|mdown|mkd|txt)$/i.test(p);
@@ -14,12 +15,12 @@ export function within(root, file) {
 }
 async function unchangedPath(file) {
   if ((await fs.realpath(file)) !== file)
-    throw Error("文件或文件夹路径已改变，请重新打开");
+    throw Error(t("文件或文件夹路径已改变，请重新打开"));
   return file;
 }
 export function decode(bytes) {
   if (bytes.includes(0) && !(bytes[0] === 255 && bytes[1] === 254))
-    throw Error("不支持二进制文件或 UTF-16BE，请转换为 UTF-8");
+    throw Error(t("不支持二进制文件或 UTF-16BE，请转换为 UTF-8"));
   const bom = bytes[0] === 239 && bytes[1] === 187 && bytes[2] === 191;
   const utf16 = bytes[0] === 255 && bytes[1] === 254;
   const encoding = utf16 ? "utf-16le" : "utf-8";
@@ -62,7 +63,7 @@ export class FileStore {
   }
   file(id) {
     const entry = this.files.get(id);
-    if (!entry) throw Error("未授权的文件");
+    if (!entry) throw Error(t("未授权的文件"));
     return entry;
   }
   async readBytes(file) {
@@ -70,9 +71,9 @@ export class FileStore {
     try {
       const stat = await handle.stat();
       if (!stat.isFile() || stat.size > MAX_BYTES)
-        throw Error("文件过大（上限 32 MB）或不是普通文件");
+        throw Error(t("文件过大（上限 32 MB）或不是普通文件"));
       const bytes = await handle.readFile();
-      if (bytes.length > MAX_BYTES) throw Error("文件过大");
+      if (bytes.length > MAX_BYTES) throw Error(t("文件过大"));
       return bytes;
     } finally {
       await handle.close();
@@ -80,7 +81,7 @@ export class FileStore {
   }
   async open(file) {
     const real = await fs.realpath(file);
-    if (!markdownPath(real)) throw Error("仅支持 Markdown 或文本文件");
+    if (!markdownPath(real)) throw Error(t("仅支持 Markdown 或文本文件"));
     const existing = [...this.files].find(([, f]) => f.path === real);
     const id = existing?.[0] ?? randomUUID();
     const bytes = await this.readBytes(real),
@@ -105,9 +106,9 @@ export class FileStore {
   }
   async save(id, text, version) {
     if (typeof text !== "string" || Buffer.byteLength(text) > MAX_BYTES)
-      throw Error("无效或过大的文档");
+      throw Error(t("无效或过大的文档"));
     const file = this.file(id);
-    if (this.locks.has(file.path)) throw Error("正在保存，请稍候");
+    if (this.locks.has(file.path)) throw Error(t("正在保存，请稍候"));
     this.locks.add(file.path);
     const temp = path.join(
       path.dirname(file.path),
@@ -121,7 +122,7 @@ export class FileStore {
       const info = decode(current),
         bytes = encode(text, info);
       if (bytes.length > MAX_BYTES)
-        throw Error("编码后的文件过大（上限 32 MB），未保存");
+        throw Error(t("编码后的文件过大（上限 32 MB），未保存"));
       const stat = await fs.stat(file.path);
       const handle = await fs.open(temp, "wx", stat.mode);
       try {
@@ -175,7 +176,7 @@ export class FileStore {
   }
   async list(id) {
     const folder = this.directories.get(id);
-    if (!folder) throw Error("未授权的文件夹");
+    if (!folder) throw Error(t("未授权的文件夹"));
     await unchangedPath(folder);
     const result = [];
     for (const item of await fs.readdir(folder, { withFileTypes: true })) {
@@ -208,10 +209,10 @@ export class FileStore {
   }
   async openChild(id, name) {
     const folder = this.directories.get(id);
-    if (!folder || path.basename(name) !== name) throw Error("未授权的文件");
+    if (!folder || path.basename(name) !== name) throw Error(t("未授权的文件"));
     await unchangedPath(folder);
     const real = await fs.realpath(path.join(folder, name));
-    if (!within(folder, real)) throw Error("文件位于所选文件夹之外");
+    if (!within(folder, real)) throw Error(t("文件位于所选文件夹之外"));
     return this.open(real);
   }
   async search(ids, query, limit = 200) {
@@ -249,13 +250,14 @@ export class FileStore {
     if (/^file:/i.test(decoded))
       decoded = decoded.replace(/^file:\/+(?=[a-z]:)/i, "");
     if (/^[\\/]{2}/.test(decoded))
-      throw Error("暂不支持网络共享路径，请使用本机磁盘文件");
+      throw Error(t("暂不支持网络共享路径，请使用本机磁盘文件"));
     if (/^[a-z][a-z0-9+.-]*:/i.test(decoded) && !/^[a-z]:[\\/]/i.test(decoded))
-      throw Error("不支持此链接协议");
+      throw Error(t("不支持此链接协议"));
     return path.resolve(path.dirname(base), decoded);
   }
   async linkTarget(id, href) {
-    if (typeof href !== "string" || href.length > 8192) throw Error("无效链接");
+    if (typeof href !== "string" || href.length > 8192)
+      throw Error(t("无效链接"));
     const base = this.file(id),
       target = this.resolve(id, href);
     await unchangedPath(base.path);
@@ -276,9 +278,9 @@ export class FileStore {
     } = await this.linkTarget(id, href);
     if (!authorized)
       throw Error(
-        "目标位于授权文件夹之外；请点击链接确认打开，或先添加笔记文件夹。",
+        t("目标位于授权文件夹之外；请点击链接确认打开，或先添加笔记文件夹。"),
       );
-    if (!markdownPath(real)) throw Error("仅预览 Markdown 或文本文件");
+    if (!markdownPath(real)) throw Error(t("仅预览 Markdown 或文本文件"));
     // A known handle lets the renderer prefer an open, unsaved document without
     // transferring or changing its disk baseline. Preview does not start a watcher.
     if (existingId)
@@ -287,15 +289,15 @@ export class FileStore {
   }
   async imageInfo(id, href) {
     if (typeof href !== "string" || href.length > 8192)
-      throw Error("无效图片路径");
+      throw Error(t("无效图片路径"));
     const file = this.file(id),
       real = await fs.realpath(this.resolve(id, href));
     await unchangedPath(file.path);
     if (!/\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(real))
-      throw Error("不支持的图片类型");
+      throw Error(t("不支持的图片类型"));
     const stat = await fs.stat(real);
     if (!stat.isFile() || stat.size > 64 * 1024 * 1024)
-      throw Error("图片不是普通文件或超过 64 MB");
+      throw Error(t("图片不是普通文件或超过 64 MB"));
     const roots = [
       path.dirname(file.path),
       ...this.directories.values(),
@@ -309,7 +311,7 @@ export class FileStore {
   }
   async asset(id, href) {
     const { path: real, authorized } = await this.imageInfo(id, href);
-    if (!authorized) throw Error("图片位于授权文件夹之外");
+    if (!authorized) throw Error(t("图片位于授权文件夹之外"));
     return real;
   }
   async importImage(id, source) {
@@ -318,7 +320,7 @@ export class FileStore {
     const real = await fs.realpath(source);
     const extension = path.extname(real).toLowerCase();
     if (!/^\.(png|jpe?g|gif|webp|bmp|avif|svg)$/.test(extension))
-      throw Error("请选择 PNG、JPEG、GIF、WebP、BMP、AVIF 或 SVG 图片");
+      throw Error(t("请选择 PNG、JPEG、GIF、WebP、BMP、AVIF 或 SVG 图片"));
     const bytes = await this.readBytes(real);
     return this.importImageBytes(
       id,
@@ -327,7 +329,7 @@ export class FileStore {
       path.basename(real, extension),
     );
   }
-  async importImageBytes(id, bytes, extension, label = "图片") {
+  async importImageBytes(id, bytes, extension, label = t("图片")) {
     const file = this.file(id);
     await unchangedPath(file.path);
     if (
@@ -336,12 +338,12 @@ export class FileStore {
       bytes.length > MAX_BYTES ||
       !/^\.(png|jpe?g|gif|webp|bmp|avif|svg)$/.test(extension)
     )
-      throw Error("图片类型不支持或超过 32 MB");
+      throw Error(t("图片类型不支持或超过 32 MB"));
     const parent = path.dirname(file.path);
     const folder = path.join(parent, "assets");
     await fs.mkdir(folder, { recursive: true });
     const resolved = await fs.realpath(folder);
-    if (!within(parent, resolved)) throw Error("图片目录位于笔记文件夹之外");
+    if (!within(parent, resolved)) throw Error(t("图片目录位于笔记文件夹之外"));
     const name = `image-${randomUUID()}${extension}`;
     // Exclusive creation never overwrites an existing attachment or source image.
     await fs.writeFile(path.join(resolved, name), bytes, { flag: "wx" });

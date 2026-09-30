@@ -1,3 +1,4 @@
+import { t } from "../desktop/i18n.mjs";
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
@@ -16,7 +17,7 @@ async function completeDiagrams(host) {
     const observer = new MutationObserver(check);
     const timeout = setTimeout(() => {
       observer.disconnect();
-      reject(Error("图表仍在渲染，请稍后再次导出"));
+      reject(Error(t("图表仍在渲染，请稍后再次导出")));
     }, 15000);
     function check() {
       if (
@@ -39,9 +40,9 @@ async function completeDiagrams(host) {
 }
 
 export async function exportNote(format, { doc }) {
-  if (!window.folio?.exportNote) throw Error("请在桌面版中导出笔记");
+  if (!window.folio?.exportNote) throw Error(t("请在桌面版中导出笔记"));
   if (!doc || !["pdf", "html"].includes(format))
-    throw Error("没有可导出的笔记");
+    throw Error(t("没有可导出的笔记"));
   const host = document.createElement("article");
   host.style.cssText =
     "position:fixed;left:-20000px;top:0;width:760px;visibility:hidden;pointer-events:none";
@@ -86,11 +87,12 @@ export async function exportNote(format, { doc }) {
       if (source.startsWith("folio-asset:")) {
         const url = new URL(source),
           key = crypto.randomUUID();
-        if (url.hostname !== doc.fileId) throw Error("图片不属于当前笔记");
+        if (url.hostname !== doc.fileId) throw Error(t("图片不属于当前笔记"));
         images.push({ key, path: url.searchParams.get("path") || "" });
         image.setAttribute("src", "folio-export-image:" + key);
       } else if (!/^data:image\/(png|jpeg|gif|webp);base64,/i.test(source)) {
-        const label = image.alt || "有一张图片无法嵌入（远程图片不联网下载）";
+        const label =
+          image.alt || t("有一张图片无法嵌入（远程图片不联网下载）");
         const placeholder = document.createElement("span");
         placeholder.textContent = label;
         placeholder.className = "export-image-note";

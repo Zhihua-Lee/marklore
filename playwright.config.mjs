@@ -18,6 +18,9 @@ export default defineConfig({
     channel: (process.env.FOLIO_BROWSER_CHANNEL ?? "msedge") || undefined,
     headless: true,
     viewport: { width: 1360, height: 900 },
+    // The interface follows the system language; specs assert Chinese text.
+    // tests/ui/english.spec.js switches to en-US.
+    locale: "zh-CN",
     baseURL: process.env.FOLIO_BASE_URL || "http://127.0.0.1:5173",
     trace: ci ? "retain-on-failure" : "off",
   },

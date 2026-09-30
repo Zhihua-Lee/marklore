@@ -1,3 +1,5 @@
+import { t } from "../desktop/i18n.mjs";
+
 const collator = new Intl.Collator(undefined, {
   numeric: true,
   sensitivity: "base",
@@ -93,9 +95,9 @@ export function decorateSortableTables(fragment) {
       button.className = "table-sort";
       const label =
         cellText(header).trim().slice(0, 100) ||
-        `第 ${header.cellIndex + 1} 列`;
-      button.setAttribute("aria-label", `按${label}排序`);
-      button.title = "点击切换：升序 → 降序 → 原始顺序";
+        t("第 {n} 列", { n: header.cellIndex + 1 });
+      button.setAttribute("aria-label", t("按{label}排序", { label }));
+      button.title = t("点击切换：升序 → 降序 → 原始顺序");
       button.textContent = "↕";
       header.append(button);
     }

@@ -7,6 +7,7 @@ import { decorateSortableTables } from "./table-sort.js";
 import DOMPurify from "dompurify";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
+import { t } from "../desktop/i18n.mjs";
 
 export function lineOffsets(source) {
   const offsets = [0];
@@ -647,7 +648,7 @@ export function renderMarkdown(
     scroll.className = "table-scroll";
     scroll.tabIndex = 0;
     scroll.setAttribute("role", "region");
-    scroll.setAttribute("aria-label", "表格，可横向滚动");
+    scroll.setAttribute("aria-label", t("表格，可横向滚动"));
     table.before(scroll);
     scroll.append(table);
   }
@@ -662,7 +663,7 @@ export function renderMarkdown(
       input.closest("li.task-list-item[data-from]")
     ) {
       input.disabled = false;
-      input.setAttribute("aria-label", "切换任务完成状态");
+      input.setAttribute("aria-label", t("切换任务完成状态"));
     } else input.disabled = true;
   }
   for (const img of template.content.querySelectorAll("img")) {
@@ -674,7 +675,9 @@ export function renderMarkdown(
       img.src = `folio-asset://${fileId}/?path=${encodeURIComponent(src)}`;
     else {
       img.removeAttribute("src");
-      img.alt = (img.alt || "图片") + "（远程图片默认禁用）";
+      img.alt = t("{alt}（远程图片默认禁用）", {
+        alt: img.alt || t("图片"),
+      });
     }
   }
   for (const a of template.content.querySelectorAll("a")) {
@@ -725,7 +728,10 @@ export function renderMarkdown(
       button.type = "button";
       button.className = "fold";
       button.textContent = "▾";
-      button.setAttribute("aria-label", "折叠 " + node.textContent);
+      button.setAttribute(
+        "aria-label",
+        t("折叠 {heading}", { heading: node.textContent }),
+      );
       button.setAttribute("aria-expanded", "true");
       node.prepend(button);
       const rail = document.createElement("button");
@@ -733,7 +739,9 @@ export function renderMarkdown(
       rail.type = "button";
       rail.setAttribute(
         "aria-label",
-        "切换章节折叠：" + node.textContent.replace(/^▾/, ""),
+        t("切换章节折叠：{heading}", {
+          heading: node.textContent.replace(/^▾/, ""),
+        }),
       );
       rail.setAttribute("aria-expanded", "true");
       section.append(rail);
@@ -759,7 +767,7 @@ export function renderMarkdown(
     section.dataset.blockCount = String(count);
     const summary = document.createElement("span");
     summary.className = "section-summary";
-    summary.textContent = `${count} 块`;
+    summary.textContent = count === 1 ? t("1 块") : t("{count} 块", { count });
     summary.setAttribute("aria-hidden", "true");
     section.firstElementChild.append(summary);
   }

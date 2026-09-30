@@ -214,10 +214,10 @@ test("table styles, adaptive measure and motion-free hover remain selectable and
   await page.locator("#content tbody tr").first().hover();
   await page.screenshot({ path: ".local/table-dark-hover-v018.png" });
   await page.locator("#theme").click();
-  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("combobox", { name: "表格风格" }).selectOption("grid");
   await page.getByRole("combobox", { name: "表格宽度" }).selectOption("full");
-  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await expect(wrapper).toHaveCSS("border-radius", "0px");
   // Chromium snaps CSS borders to device pixels at the current reading zoom.
   expect(
@@ -232,9 +232,9 @@ test("table styles, adaptive measure and motion-free hover remain selectable and
     .toBe("grid");
   await page.reload();
   await expect(wrapper).toHaveCSS("border-radius", "0px");
-  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("combobox", { name: "表格风格" }).selectOption("plain");
-  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await expect(page.locator("#content td").first()).toHaveCSS(
     "border-right-width",
     "0px",

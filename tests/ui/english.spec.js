@@ -95,9 +95,7 @@ test("an English system gets an English interface", async ({ page }) => {
   await page.keyboard.press("Escape");
   await page.locator("#weight").click();
   await expect(page.locator("#appearance")).toBeVisible();
-  await expect(page.locator("#appearance-title")).toHaveText(
-    "Appearance & layout",
-  );
+  await expect(page.locator("#appearance-title")).toHaveText("Settings");
   expect(await chineseInChrome(page, "#appearance")).toEqual([]);
   // Language names are shown in their own language.
   await expect(

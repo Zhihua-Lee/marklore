@@ -129,11 +129,11 @@ try {
   await expect(group).toHaveAttribute("aria-expanded", "false");
   await group.click();
   await expect(page.getByRole("tab")).toHaveCount(2);
-  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await page
     .getByRole("combobox", { name: "前进 / 后退按钮" })
     .selectOption("visible");
-  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await expect(page.locator(".history-controls")).toBeVisible();
   await fs.mkdir(path.join(root, ".local"), { recursive: true });
   await page.screenshot({

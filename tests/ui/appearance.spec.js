@@ -134,10 +134,10 @@ async function boot(page, { count = 1, text = mathText } = {}) {
 
 async function appearance(page) {
   await page.locator("#weight").click();
-  await expect(page.getByRole("dialog", { name: "外观与布局" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
 }
 async function closeAppearance(page) {
-  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
 }
 async function actualFonts(page) {
   const cdp = await page.context().newCDPSession(page);

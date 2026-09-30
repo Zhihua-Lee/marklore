@@ -53,10 +53,10 @@ try {
   await page.keyboard.press("Control+End");
   await page.keyboard.type("\nUNSAVED DRAFT INCLUDED");
   await command("read");
-  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("combobox", { name: "表格风格" }).selectOption("grid");
   await page.getByRole("combobox", { name: "表格宽度" }).selectOption("full");
-  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await page.locator("#content .diagram svg").waitFor();
   await page.locator("#content .fold").first().click();
   const choose = (destination) =>

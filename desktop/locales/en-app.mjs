@@ -304,4 +304,12 @@ export default {
   界面语言: "Language",
   跟随系统: "System default",
   关: "Off",
+  设置: "Settings",
+  关闭设置: "Close settings",
+  "关闭 Esc": "Close Esc",
+  更改立即生效: "Changes apply immediately",
+  设置分类: "Settings sections",
+  主题与语言: "Theme & language",
+  布局与侧栏: "Layout & sidebars",
+  导航与滚动: "Navigation & scrolling",
 };

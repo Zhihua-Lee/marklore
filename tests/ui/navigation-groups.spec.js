@@ -73,9 +73,9 @@ async function section(page, number) {
   return settled(page);
 }
 async function appearance(page, name, value) {
-  await page.getByRole("button", { name: "外观与布局", exact: true }).click();
+  await page.getByRole("button", { name: "设置", exact: true }).click();
   await page.getByRole("combobox", { name, exact: true }).selectOption(value);
-  await page.getByRole("button", { name: "关闭外观设置" }).click();
+  await page.getByRole("button", { name: "关闭设置" }).click();
 }
 async function createGroup(page, tab, name) {
   await page

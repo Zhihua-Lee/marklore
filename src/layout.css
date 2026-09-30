@@ -627,3 +627,84 @@ body.file-drop::after {
   :is([data-window="minimize"], [data-window="maximize"]) {
   display: none;
 }
+/* Settings: a fixed title bar, section links, one scrolling pane. */
+#appearance {
+  width: min(720px, calc(100vw - 32px));
+  height: min(620px, calc(100vh - 48px));
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+}
+#appearance[open] {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+#appearance .settings-title {
+  gap: 12px;
+  margin: 0;
+  padding: 14px 14px 14px 22px;
+  border-bottom: 1px solid var(--line);
+}
+#appearance .settings-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.settings-body {
+  display: grid;
+  grid-template-columns: 172px minmax(0, 1fr);
+  min-height: 0;
+}
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.settings-nav button {
+  text-align: left;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  background: transparent;
+}
+.settings-nav button:hover {
+  background: var(--hover);
+}
+.settings-nav button[aria-current="true"] {
+  background: var(--hover);
+  color: var(--ink);
+  font-weight: 600;
+}
+.settings-pane {
+  position: relative;
+  overflow: auto;
+  padding: 16px 22px 24px;
+}
+@media (max-width: 620px) {
+  .settings-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .settings-nav {
+    flex-direction: row;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 8px;
+  }
+  .settings-nav button {
+    flex: none;
+  }
+}
+/* Fieldsets default to min-width: min-content, which pushed controls past
+   the pane's edge. */
+#appearance fieldset {
+  min-width: 0;
+}
+.settings-pane {
+  overflow-x: hidden;
+}

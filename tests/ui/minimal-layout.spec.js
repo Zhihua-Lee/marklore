@@ -814,14 +814,11 @@ test("wide reading expands the measure, preserves the current paragraph and pers
   );
 });
 
-test("Aa keeps zoom settings while the adjacent theme button is directly accessible", async ({
+test("settings keep zoom while the adjacent theme button is directly accessible", async ({
   page,
 }) => {
   await boot(page);
-  await expect(page.locator("#weight")).toHaveAttribute(
-    "aria-label",
-    "外观与布局",
-  );
+  await expect(page.locator("#weight")).toHaveAttribute("aria-label", "设置");
   await expect(
     page.locator(".toolbar #zoom-in, .toolbar #zoom-out"),
   ).toHaveCount(0);

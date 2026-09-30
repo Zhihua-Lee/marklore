@@ -139,8 +139,9 @@ export function wireDesktopSettings({ api, close, report, flush }) {
     if (q("#appearance").open) refresh();
   });
   return () => {
-    if (!q("#appearance").open) q("#appearance").showModal();
-    section.scrollIntoView({ block: "nearest" });
+    q("#appearance").dispatchEvent(
+      new CustomEvent("folio:open-section", { detail: "desktop-settings" }),
+    );
     q("#close-to-tray").focus();
     refresh();
   };

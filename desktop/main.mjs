@@ -484,7 +484,11 @@ else {
           send("disk", null);
         }
       });
-      win.webContents.on("will-navigate", (event) => event.preventDefault());
+      // Notes never navigate the window away. The one exception is the page
+      // reloading itself (a language change rebuilds the interface).
+      win.webContents.on("will-navigate", (event, url) => {
+        if (url !== win.webContents.getURL()) event.preventDefault();
+      });
       // Full screen and maximise also change by F11, double-click and snapping,
       // and not every path emits its own event: report any change on resize.
       let shownState = "";

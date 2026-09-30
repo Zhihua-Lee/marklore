@@ -166,6 +166,30 @@ test("hover-preview zoom is independent, preserves the main page and remembers i
     .toBe(110);
 });
 
+// Newer Chromium blurs a focused button that disables itself, as Copy does
+// while it writes; with the pointer still on the card that is not leaving.
+test("hover preview stays open when focus drops while the pointer is on it", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.getByRole("link", { name: "Preview", exact: true }).hover();
+  const card = page.locator("#link-preview");
+  await expect(card).toBeVisible();
+  const copy = card
+    .getByRole("button", { name: "复制代码", exact: true })
+    .first();
+  await copy.hover();
+  await copy.evaluate((button) => {
+    button.focus();
+    button.blur();
+  });
+  await page.waitForTimeout(500);
+  await expect(card).toBeVisible();
+  // Leaving for real still closes it.
+  await page.mouse.move(5, 500);
+  await expect(card).toBeHidden();
+});
+
 // On a slow machine highlight.js can arrive just after a preview opened; the
 // re-render it triggers keeps unchanged blocks, so the preview must stay.
 test("an open hover preview survives the late highlighter re-render", async ({

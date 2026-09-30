@@ -236,6 +236,15 @@ export function createLinkPreview({
       origin?.contains(event.relatedTarget)
     )
       return;
+    // Focus dropping to nothing is not leaving while the pointer is still on
+    // the card or its link: newer Chromium blurs a button that disables
+    // itself (Copy does, while it writes).
+    if (
+      event.type === "focusout" &&
+      !event.relatedTarget &&
+      (card.matches(":hover") || origin?.matches(":hover"))
+    )
+      return;
     clearTimeout(leaveTimer);
     leaveTimer = setTimeout(() => hide(), 240);
   }

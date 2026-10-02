@@ -46,7 +46,7 @@ export function wireDesktopSettings({ api, close, report, flush }) {
         t("{extension}：{owner}", {
           extension: item.extension,
           owner: item.ours
-            ? "Folio Notes"
+            ? "Marklore"
             : item.known
               ? t("其他应用")
               : t("未读取到用户默认项"),
@@ -78,7 +78,7 @@ export function wireDesktopSettings({ api, close, report, flush }) {
     q("#portable-status").textContent = !portable.available
       ? t("仅打包版可用")
       : status.restarting
-        ? t("正在重启 Folio Notes…")
+        ? t("正在重启 Marklore…")
         : portable.on
           ? t("数据在 {folder}", { folder: portable.folder })
           : t("数据存到程序旁的 data 文件夹，可随 U 盘携带");

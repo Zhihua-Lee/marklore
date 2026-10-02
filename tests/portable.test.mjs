@@ -15,7 +15,7 @@ async function fixture() {
   const root = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "folio-portable-")),
   );
-  const program = path.join(root, "Folio Notes");
+  const program = path.join(root, "Marklore");
   const profile = path.join(root, "profile");
   await fs.mkdir(program);
   await fs.mkdir(path.join(profile, "backups"), { recursive: true });
@@ -25,7 +25,7 @@ async function fixture() {
   await fs.writeFile(path.join(profile, "desktop-settings.json"), "{}");
   await fs.writeFile(path.join(profile, "backups", "note.md"), "old");
   await fs.writeFile(path.join(profile, "Cache", "blob"), "chromium");
-  return { root, executable: path.join(program, "Folio Notes.exe"), profile };
+  return { root, executable: path.join(program, "Marklore.exe"), profile };
 }
 const exists = (p) =>
   fs.access(p).then(

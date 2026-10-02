@@ -5,7 +5,7 @@ export default {
 
   // App shell (src/app.js)
   切换文件夹浏览: "Toggle folder browser",
-  "Folio Notes 菜单": "Folio Notes menu",
+  "Marklore 菜单": "Marklore menu",
   应用菜单: "App menu",
   向左浏览标签: "Scroll tabs left",
   打开的笔记: "Open notes",
@@ -127,8 +127,6 @@ export default {
   "前进 / 后退按钮": "Back / Forward buttons",
   隐藏: "Hidden",
   显示: "Visible",
-  "由 Folio 按屏幕刷新逐帧移动页面，速度更均匀，跟手稍慢 1–3 帧":
-    "Folio moves the page frame by frame with the display refresh: steadier speed, 1–3 frames more latency",
   平滑滚动: "Smooth scrolling",
   仅触控板: "Touchpad only",
   "触控板、滚轮与滚动条": "Touchpad, wheel and scrollbar",
@@ -181,11 +179,11 @@ export default {
   "当前程序：{path}": "Current app: {path}",
   "便携模式仅在打包版可用。":
     "Portable mode is only available in the packaged app.",
-  "正在重启 Folio Notes…": "Restarting Folio Notes…",
+  "正在重启 Marklore…": "Restarting Marklore…",
   "数据保存在 {folder}。停用时数据复制回用户目录，data 文件夹改名保留，不会删除。":
     "Data is stored in {folder}. Turning this off copies the data back to your user folder; the data folder is renamed and kept, never deleted.",
   "开启后把标签、草稿、最近文件与后台设置复制到程序旁的 data 文件夹并自动重启，适合放在 U 盘中随身使用。":
-    "Copies tabs, drafts, recent files and background settings to a data folder next to the app and restarts. Useful for carrying Folio Notes on a USB drive.",
+    "Copies tabs, drafts, recent files and background settings to a data folder next to the app and restarts. Useful for carrying Marklore on a USB drive.",
 
   // Tabs and groups (src/tab-bar.js, src/tab-groups.js)
   "编辑分组…": "Edit group…",
@@ -289,7 +287,7 @@ export default {
   "图片解码失败，请检查文件内容或同步状态。":
     "The image could not be decoded. Check the file contents or sync status.",
   "图片位于当前授权目录之外。":
-    "The image is outside the folders Folio Notes has access to.",
+    "The image is outside the folders Marklore has access to.",
   "授权加载图片…": "Allow loading image…",
   重试: "Retry",
   "请先保存笔记，再插入本地图片。":

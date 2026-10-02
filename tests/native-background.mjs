@@ -90,7 +90,7 @@ try {
       .toBe(1);
     const [write] = await instance.evaluate(() => globalThis.__desktopWrites);
     assert.deepEqual(write.args, ["--background"]);
-    assert.equal(write.name, "Folio Notes");
+    assert.equal(write.name, "Marklore");
     assert.equal(write.openAtLogin, true);
     await page.locator("#manage-defaults").click();
     await expect
@@ -98,7 +98,7 @@ try {
       .toBe(1);
     assert.deepEqual(await instance.evaluate(() => globalThis.__desktopUris), [
       Number(os.release().split(".")[2]) >= 22000
-        ? "ms-settings:defaultapps?registeredAppUser=Folio%20Notes"
+        ? "ms-settings:defaultapps?registeredAppUser=Marklore"
         : "ms-settings:defaultapps",
     ]);
   }
@@ -120,7 +120,7 @@ try {
   );
   await instance.evaluate(() =>
     globalThis.__desktopTrayMenu.items
-      .find((item) => item.label === "打开 Folio Notes")
+      .find((item) => item.label === "打开 Marklore")
       .click(),
   );
   await expect(page.locator("#content")).toContainText(
@@ -146,7 +146,7 @@ try {
   );
   await instance.evaluate(() => {
     globalThis.__desktopTrayMenu.items
-      .find((item) => item.label === "打开 Folio Notes")
+      .find((item) => item.label === "打开 Marklore")
       .click();
   });
   await expect.poll(visible).toBe(true);
@@ -177,7 +177,7 @@ try {
       return { response: 0 };
     };
     globalThis.__desktopTrayMenu.items
-      .find((item) => item.label === "退出 Folio Notes")
+      .find((item) => item.label === "退出 Marklore")
       .click();
   });
   await expect
@@ -194,7 +194,7 @@ try {
   await instance.evaluate(({ dialog }) => {
     dialog.showMessageBox = async () => ({ response: 1 });
     globalThis.__desktopTrayMenu.items
-      .find((item) => item.label === "退出 Folio Notes")
+      .find((item) => item.label === "退出 Marklore")
       .click();
   });
   await exited;

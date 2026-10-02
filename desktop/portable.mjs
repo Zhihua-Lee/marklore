@@ -3,7 +3,7 @@ import { existsSync, renameSync } from "node:fs";
 import path from "node:path";
 import { t } from "./i18n.mjs";
 
-// Portable mode: a "data" folder beside Folio Notes.exe holds the app's own
+// Portable mode: a "data" folder beside Marklore.exe holds the app's own
 // state (tabs, drafts, recent files, tray settings, backups), so a copy on a
 // USB stick keeps it. Chromium's caches stay in the user profile (main.mjs
 // points sessionData there): they are large, need no carrying, and would keep
@@ -67,7 +67,7 @@ export async function disablePortable({ executable, fallback }) {
   await copyOwnData(source, fallback);
   await fs.writeFile(
     path.join(source, DISABLED_MARK),
-    "Folio Notes portable mode was switched off; this folder is renamed on the next start.\n",
+    "Marklore portable mode was switched off; this folder is renamed on the next start.\n",
   );
 }
 

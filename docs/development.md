@@ -16,8 +16,8 @@
 依赖版本由 [package.json](../package.json) 与 [pnpm-lock.yaml](../pnpm-lock.yaml) 管理。首次安装和 Electron 下载需要联网；日常使用不依赖网络服务。
 
 ```powershell
-git clone https://github.com/Zhihua-Lee/folio-notes.git
-cd folio-notes
+git clone https://github.com/Zhihua-Lee/marklore.git
+cd marklore
 pnpm install --frozen-lockfile
 ```
 
@@ -37,7 +37,7 @@ pnpm start
 需要隔离配置与草稿时，可在启动前指定数据目录，例如：
 
 ```powershell
-$env:FOLIO_DATA_DIR = Join-Path $env:TEMP "folio-notes-dev"
+$env:FOLIO_DATA_DIR = Join-Path $env:TEMP "marklore-dev"
 pnpm start
 Remove-Item Env:FOLIO_DATA_DIR
 ```
@@ -93,12 +93,12 @@ pnpm dist
 
 `pnpm run notices` 生成第三方依赖声明；`pnpm dist` 构建前端并生成 Windows 目录包，输出为 `release/win-unpacked/`。当前构建不做代码签名，也不自动发布到 GitHub Releases。
 
-分发时保留整个目录，以及 Electron／Chromium 随附的许可文件。不要只复制 `Folio Notes.exe`。
+分发时保留整个目录，以及 Electron／Chromium 随附的许可文件。不要只复制 `Marklore.exe`。
 
 验证打包后的程序：
 
 ```powershell
-$env:FOLIO_TEST_EXE = (Resolve-Path ".\release\win-unpacked\Folio Notes.exe").Path
+$env:FOLIO_TEST_EXE = (Resolve-Path ".\release\win-unpacked\Marklore.exe").Path
 pnpm test:native
 Remove-Item Env:FOLIO_TEST_EXE
 ```

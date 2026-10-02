@@ -2,7 +2,7 @@
 
 English · [简体中文](#参与贡献)
 
-Thanks for your interest. Folio Notes is maintained by one person in spare time, so replies may take a while.
+Thanks for your interest. Marklore is maintained by one person in spare time, so replies may take a while.
 
 ## What the project is
 
@@ -18,7 +18,7 @@ Not planned:
 
 Bug reports, questions and suggestions are welcome. For a bug, please include:
 
-- the Folio Notes version (the release you downloaded, e.g. `v0.1.42`) and your Windows version;
+- the Marklore version (the release you downloaded, e.g. `v0.1.42`) and your Windows version;
 - steps to reproduce it, what you expected and what happened;
 - a small Markdown sample if the problem is about rendering. Please remove anything private first.
 
@@ -48,7 +48,7 @@ By submitting a contribution you agree that it is licensed under the project's [
 
 ## 参与贡献
 
-感谢关注。Folio Notes 由一个人利用业余时间维护，回复可能比较慢。
+感谢关注。Marklore 由一个人利用业余时间维护，回复可能比较慢。
 
 **项目定位**：一个 Windows 上的 Markdown 知识库，阅读、编辑和笔记互链都在同一个软件里完成。笔记始终是磁盘上的普通 `.md` 文件，人、脚本和 AI 工具都能直接创建和维护。
 

@@ -6,10 +6,12 @@ import path from "node:path";
 import {
   createIntegration,
   registrationCommands,
+  legacyCommands,
+  legacy,
   progId,
 } from "../desktop/integration.mjs";
 
-const executable = "D:\\Portable Apps\\Folio Notes\\Folio Notes.exe";
+const executable = "D:\\Portable Apps\\Marklore\\Marklore.exe";
 function fixture(profile, overrides = {}) {
   const calls = [],
     launches = [],
@@ -108,17 +110,36 @@ test("startup and application registration require explicit actions and keep a s
     [true, false].map((openAtLogin) => ({
       path: executable,
       args: ["--background"],
-      name: "Folio Notes",
+      name: "Marklore",
       openAtLogin,
     })),
   );
   assert.throws(() => integration.setStartup("true"));
   await integration.register();
-  assert.deepEqual(calls, registrationCommands(executable));
+  // Each startup change also drops a Folio Notes login entry, and
+  // registering replaces the Folio Notes file-association entries.
+  const oldLogin = [
+    "delete",
+    "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+    "/v",
+    "Folio Notes",
+    "/f",
+  ];
+  assert.deepEqual(calls, [
+    oldLogin,
+    oldLogin,
+    ...registrationCommands(executable),
+    ...legacyCommands(),
+  ]);
+  assert.ok(legacyCommands().every((c) => c[0] === "delete"));
+  assert.ok(
+    legacyCommands().some((c) => c.includes(legacy.progId)) &&
+      !legacyCommands().some((c) => c.join(" ").includes("Marklore")),
+  );
   await integration.defaults();
   await integration.startupSettings();
   assert.deepEqual(launches, [
-    "ms-settings:defaultapps?registeredAppUser=Folio%20Notes",
+    "ms-settings:defaultapps?registeredAppUser=Marklore",
     "ms-settings:startupapps",
   ]);
 });
@@ -128,11 +149,10 @@ test("status distinguishes another portable version and protected per-extension 
     run: async (_exe, args) => {
       let value = null;
       if (args[1].endsWith("RegisteredApplications"))
-        value = "Software\\FolioNotes\\Capabilities";
-      if (args[1].endsWith("command"))
-        value = '"D:\\old\\Folio Notes.exe" "%1"';
+        value = "Software\\Marklore\\Capabilities";
+      if (args[1].endsWith("command")) value = '"D:\\old\\Marklore.exe" "%1"';
       if (args[1].endsWith("Run"))
-        value = '"D:\\old\\Folio Notes.exe" --background';
+        value = '"D:\\old\\Marklore.exe" --background';
       if (args[1].includes("\\.md\\")) value = progId;
       if (args[1].includes("\\.markdown\\")) value = "Other.App";
       return { stdout: `    value    REG_SZ    ${value}\r\n` };
@@ -146,6 +166,19 @@ test("status distinguishes another portable version and protected per-extension 
     status.defaults.map((d) => d.ours),
     [true, false],
   );
+});
+
+test("a Folio Notes login entry counts as another version", async () => {
+  const { integration } = fixture("unused", {
+    run: async (_exe, args) => {
+      if (args[1].endsWith("Run") && args[3] === legacy.name)
+        return {
+          stdout: '    Folio Notes    REG_SZ    "D:\\old\\Folio Notes.exe"\r\n',
+        };
+      throw Object.assign(Error("not found"), { code: 1 });
+    },
+  });
+  assert.equal((await integration.status()).startupOtherVersion, true);
 });
 
 test("Windows 10 opens the supported general defaults page", async () => {

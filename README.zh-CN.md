@@ -1,16 +1,16 @@
-# Folio Notes
+# Marklore
 
 [English](README.md) · 简体中文
 
 **面向 Windows 的离线 Markdown 笔记应用：读得舒服，写得顺手，笔记始终是你自己的普通文件。**
 
-[![CI](https://github.com/Zhihua-Lee/folio-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhihua-Lee/folio-notes/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Zhihua-Lee/folio-notes?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/Zhihua-Lee/folio-notes/releases/latest)
+[![CI](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Zhihua-Lee/marklore?label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC)](https://github.com/Zhihua-Lee/marklore/releases/latest)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-285e50)
 
 [安装](#安装) · [功能](#功能一览) · [快速上手](#快速上手) · [使用指南](docs/user-guide.md) · [开发指南](docs/development.md) · [验证记录](VERIFICATION.md)
 
-![Folio Notes 阅读界面：左侧笔记库，中间渲染后的公式与表格，右侧本文目录](docs/images/overview.png)
+![Marklore 阅读界面：左侧笔记库，中间渲染后的公式与表格，右侧本文目录](docs/images/overview.png)
 
 在同一个工作区阅读、编辑和整理本地笔记：多标签与彩色分组组织材料，目录、链接预览和前进／后退历史穿梭长文，KaTeX 公式、代码高亮和 Mermaid 图表记录技术内容。笔记就是磁盘上的 `.md` 文件，不导入数据库、不上传云端。
 
@@ -18,21 +18,21 @@
 
 ## 安装
 
-Folio Notes 是免安装的便携应用，无需管理员权限。
+Marklore 是免安装的便携应用，无需管理员权限。
 
-1. 打开 [Releases 最新版本](https://github.com/Zhihua-Lee/folio-notes/releases/latest)，下载 `Folio-Notes-vX.Y.Z-win-x64.zip`。
+1. 打开 [Releases 最新版本](https://github.com/Zhihua-Lee/marklore/releases/latest)，下载 `Marklore-vX.Y.Z-win-x64.zip`。
 2. （可选）校验下载文件，将输出与同页 `SHA256SUMS-vX.Y.Z.txt` 中的对应行比对：
    ```powershell
-   Get-FileHash .\Folio-Notes-vX.Y.Z-win-x64.zip -Algorithm SHA256
+   Get-FileHash .\Marklore-vX.Y.Z-win-x64.zip -Algorithm SHA256
    ```
-3. 将压缩包**完整解压**到任意目录，例如 `D:\Apps\Folio Notes`。保留同目录下的 DLL、`resources` 和 `locales`，不要只复制 EXE。
-4. 运行 `Folio Notes.exe`。当前构建未代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”，选择 **更多信息 → 仍要运行**。
+3. 将压缩包**完整解压**到任意目录，例如 `D:\Apps\Marklore`。保留同目录下的 DLL、`resources` 和 `locales`，不要只复制 EXE。
+4. 运行 `Marklore.exe`。当前构建未代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”，选择 **更多信息 → 仍要运行**。
 
 **便携模式**：在 `设置 → 后台与系统 → 便携模式` 中开启后，标签、草稿、最近文件和设置保存在程序旁的 `data` 文件夹，整个文件夹（例如放在 U 盘中）可以带着状态随身使用。
 
 **升级**：把新版本解压到新目录并从新目录启动即可，设置、恢复草稿和最近文件保存在用户数据目录中（便携模式下在 `data` 文件夹），不随程序目录走。确认新版本正常后删除旧目录；若启用过开机启动或 Markdown 关联，请在新版本的 `设置 → 后台与系统` 中重新注册。
 
-**卸载**：删除程序目录；如需同时清除设置与恢复数据，再删除 `%APPDATA%\folio-notes`（其中包含明文草稿，请勿公开上传）。
+**卸载**：删除程序目录；如需同时清除设置与恢复数据，再删除 `%APPDATA%\Marklore`（改名前的版本为 `%APPDATA%\folio-notes`；其中包含明文草稿，请勿公开上传）。
 
 想先看看效果？仓库中的[示例笔记库](docs/sample-notebook)包含公式、表格、代码、图表和互相链接的笔记，用 **打开文件夹** 选择它即可。
 
@@ -110,8 +110,8 @@ Folio Notes 是免安装的便携应用，无需管理员权限。
 开发基线为 **Windows、Node.js 24、pnpm 11**。首次安装依赖需要联网，构建后的桌面应用可离线使用。以下操作面向仓库所有者及已获授权的使用者。
 
 ```powershell
-git clone https://github.com/Zhihua-Lee/folio-notes.git
-cd folio-notes
+git clone https://github.com/Zhihua-Lee/marklore.git
+cd marklore
 pnpm install --frozen-lockfile
 pnpm build
 pnpm start
@@ -131,7 +131,7 @@ pnpm start
 | [参与贡献](CONTRIBUTING.md)           | 项目定位、如何报告问题和提交改动。                                     |
 | [第三方声明](THIRD-PARTY-NOTICES.txt) | 依赖与字体的许可证文本。                                               |
 
-发行目录未附完整指南时，请在[项目仓库](https://github.com/Zhihua-Lee/folio-notes)中阅读上述文档。
+发行目录未附完整指南时，请在[项目仓库](https://github.com/Zhihua-Lee/marklore)中阅读上述文档。
 
 ## 许可证
 

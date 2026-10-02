@@ -18,6 +18,7 @@ import { fileURLToPath } from "node:url";
 import { FileStore, within, markdownPath } from "./files.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
+import { profileFolder } from "./profile-folder.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
 import {
@@ -52,8 +53,15 @@ const profile = process.env.FOLIO_DATA_DIR;
 // FOLIO_PROFILE_DIR stands in for it in tests (unlike FOLIO_DATA_DIR, it
 // keeps portable detection), so they never touch the real profile.
 const stand = process.env.FOLIO_PROFILE_DIR;
+// Named explicitly, not derived from the app name, so it survives renames;
+// the Folio Notes folder is moved here on first start (profile-folder.mjs).
+// An isolated profile (FOLIO_DATA_DIR) must not move the real one either.
 const profileData =
-  stand && path.isAbsolute(stand) ? stand : app.getPath("userData");
+  stand && path.isAbsolute(stand)
+    ? stand
+    : profile && path.isAbsolute(profile)
+      ? profile
+      : profileFolder(app.getPath("appData"));
 if (!profile && app.isPackaged) retireDisabled(process.execPath);
 const portable = !profile && app.isPackaged && isPortable(process.execPath);
 if (profile && path.isAbsolute(profile)) app.setPath("userData", profile);
@@ -144,7 +152,7 @@ function updateTray() {
   if (!tray) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: t("打开 Folio Notes"), click: showWindow },
+      { label: t("打开 Marklore"), click: showWindow },
       { label: t("隐藏到托盘"), click: () => send("command", "hide") },
       { type: "separator" },
       {
@@ -179,7 +187,7 @@ function updateTray() {
       },
       { type: "separator" },
       {
-        label: t("退出 Folio Notes"),
+        label: t("退出 Marklore"),
         click: () => {
           if (allowClose || !ready) app.quit();
           else {
@@ -196,7 +204,7 @@ function createTray() {
     tray = new Tray(
       nativeImage.createFromPath(path.join(here, "icons/tray.png")),
     );
-    tray.setToolTip("Folio Notes");
+    tray.setToolTip("Marklore");
     tray.on("click", showWindow);
     tray.on("double-click", showWindow);
     updateTray();
@@ -382,7 +390,7 @@ else {
       await integration.load();
       recent.refreshJumpList().catch(() => {});
       if (process.platform === "win32")
-        app.setAppUserModelId("io.folionotes.desktop");
+        app.setAppUserModelId("io.marklore.desktop");
       session.defaultSession.setPermissionRequestHandler(
         (_wc, _permission, done) => done(false),
       );
@@ -466,7 +474,7 @@ else {
         show: false,
         autoHideMenuBar: false,
         backgroundColor: dark ? "#202523" : "#f6f5f1",
-        title: "Folio Notes",
+        title: "Marklore",
         icon: path.join(here, "icons/folio.png"),
         ...(ownWindowControls && { titleBarStyle: "hidden" }),
         webPreferences: {
@@ -1115,7 +1123,7 @@ else {
     })
     .catch((error) => {
       console.error(error);
-      dialog.showErrorBox(t("Folio Notes 启动失败"), error.message);
+      dialog.showErrorBox(t("Marklore 启动失败"), error.message);
       app.exit(1);
     });
 }

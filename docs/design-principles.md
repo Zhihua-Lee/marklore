@@ -9,7 +9,7 @@ were built on the same rules. New work should keep to them.
 
 ## Independent implementation
 
-Folio Notes is an independent implementation. No MDLook code, templates, binaries,
+Marklore is an independent implementation. No MDLook code, templates, binaries,
 fonts or other assets are inputs; requirements come from the user's workflow, not
 from another viewer. Fonts and dependencies ship only from their upstream packages,
 with license notices in the distribution.

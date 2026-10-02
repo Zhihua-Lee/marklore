@@ -1,6 +1,6 @@
 {
-  "name": "folio-notes",
-  "version": "0.1.42",
+  "name": "marklore",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
@@ -62,8 +62,8 @@
     "vite": "8.3.1"
   },
   "build": {
-    "appId": "io.folionotes.desktop",
-    "productName": "Folio Notes",
+    "appId": "io.marklore.desktop",
+    "productName": "Marklore",
     "directories": {
       "output": "release"
     },

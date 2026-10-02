@@ -43,7 +43,7 @@ for (const name of Object.keys(pkg.dependencies)) await visit(name, root);
 sections.sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 await fs.writeFile(
   "THIRD-PARTY-NOTICES.txt",
-  "Folio Notes — bundled application dependencies\nElectron/Chromium runtime licenses are also supplied beside the executable.\n\n" +
+  "Marklore — bundled application dependencies\nElectron/Chromium runtime licenses are also supplied beside the executable.\n\n" +
     sections.join("\n\n" + "=".repeat(78) + "\n\n"),
 );
 console.log(`Collected license texts for ${sections.length} runtime packages.`);

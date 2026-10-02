@@ -6,11 +6,40 @@ import os from "node:os";
 import { t } from "./i18n.mjs";
 
 const execute = promisify(execFile);
-export const applicationName = "Folio Notes";
-export const progId = "FolioNotes.Markdown";
+export const applicationName = "Marklore";
+export const progId = "Marklore.Markdown";
 const classes = "HKCU\\Software\\Classes";
-const capabilities = "Software\\FolioNotes\\Capabilities";
+const capabilities = "Software\\Marklore\\Capabilities";
 const extensions = [".md", ".markdown"];
+const runKey = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+// What versions named Folio Notes registered; removed when registering again.
+export const legacy = {
+  name: "Folio Notes",
+  progId: "FolioNotes.Markdown",
+  key: "HKCU\\Software\\FolioNotes",
+};
+
+// Deletes the Folio Notes entries; each may already be gone.
+export function legacyCommands() {
+  return [
+    ["delete", `${classes}\\${legacy.progId}`, "/f"],
+    ["delete", legacy.key, "/f"],
+    [
+      "delete",
+      "HKCU\\Software\\RegisteredApplications",
+      "/v",
+      legacy.name,
+      "/f",
+    ],
+    ...extensions.map((ext) => [
+      "delete",
+      `${classes}\\${ext}\\OpenWithProgids`,
+      "/v",
+      legacy.progId,
+      "/f",
+    ]),
+  ];
+}
 
 // Register an opt-in candidate, never write UserChoice or extension defaults.
 export function registrationCommands(executable) {
@@ -78,6 +107,9 @@ export function createIntegration({
       timeout: 10000,
       maxBuffer: 1024 * 1024,
     });
+  async function forget(commands) {
+    for (const command of commands) await invoke(command).catch(() => {});
+  }
   async function query(key, name) {
     try {
       const result = await invoke([
@@ -113,28 +145,32 @@ export function createIntegration({
       const startup = this.login();
       if (!supported)
         return { ...preferences, supported, startup: false, executable };
-      const [registration, command, startupCommand, ...defaults] =
-        await Promise.all([
-          query("HKCU\\Software\\RegisteredApplications", applicationName),
-          query(`${classes}\\${progId}\\shell\\open\\command`, null),
+      const [
+        registration,
+        command,
+        startupCommand,
+        legacyStartup,
+        ...defaults
+      ] = await Promise.all([
+        query("HKCU\\Software\\RegisteredApplications", applicationName),
+        query(`${classes}\\${progId}\\shell\\open\\command`, null),
+        query(runKey, applicationName),
+        query(runKey, legacy.name),
+        ...extensions.map((ext) =>
           query(
-            "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-            applicationName,
+            `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${ext}\\UserChoice`,
+            "ProgId",
           ),
-          ...extensions.map((ext) =>
-            query(
-              `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${ext}\\UserChoice`,
-              "ProgId",
-            ),
-          ),
-        ]);
+        ),
+      ]);
       return {
         ...preferences,
         supported,
         executable,
         startup: startup.openAtLogin,
         startupEnabled: startup.executableWillLaunchAtLogin,
-        startupOtherVersion: Boolean(startupCommand) && !startup.openAtLogin,
+        startupOtherVersion:
+          Boolean(startupCommand || legacyStartup) && !startup.openAtLogin,
         registered: registration === capabilities,
         registeredHere: command === `"${executable}" "%1"`,
         defaults: extensions.map((extension, i) => ({
@@ -161,11 +197,14 @@ export function createIntegration({
         name: applicationName,
         openAtLogin: value,
       });
+      // A Folio Notes login entry would also start the old version.
+      return forget([["delete", runKey, "/v", legacy.name, "/f"]]);
     },
     async register() {
       if (!supported) throw Error(t("仅 Windows 打包版支持文件关联"));
       for (const command of registrationCommands(executable))
         await invoke(command);
+      await forget(legacyCommands());
     },
     async defaults() {
       if (!supported) throw Error(t("仅 Windows 支持默认应用设置"));

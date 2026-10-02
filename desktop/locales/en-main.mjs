@@ -2,12 +2,12 @@
 export default {
   // Menus, tray, jump list
   最近打开: "Recent",
-  "打开 Folio Notes": "Open Folio Notes",
+  "打开 Marklore": "Open Marklore",
   隐藏到托盘: "Hide to tray",
   关闭窗口后留在后台: "Keep running in the background when closed",
   开机启动: "Start at login",
   "后台与默认应用设置…": "Background & default app settings…",
-  "退出 Folio Notes": "Quit Folio Notes",
+  "退出 Marklore": "Quit Marklore",
   文件: "File",
   "打开文件…": "Open file…",
   "打开文件夹…": "Open folder…",
@@ -42,7 +42,7 @@ export default {
   有未保存的笔记: "You have unsaved notes",
   "恢复草稿已写入本机，下次启动时恢复；原文件不会自动覆盖。":
     "Recovery drafts are stored on this computer and restored at next start. The original files are not overwritten automatically.",
-  "Folio Notes 启动失败": "Folio Notes failed to start",
+  "Marklore 启动失败": "Marklore failed to start",
   "在系统浏览器打开外部链接？": "Open external link in the system browser?",
   "打开当前笔记文件夹之外的文件？":
     "Open a file outside the current note folder?",

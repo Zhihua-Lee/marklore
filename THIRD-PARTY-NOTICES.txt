@@ -1,4 +1,4 @@
-Folio Notes — bundled application dependencies
+Marklore — bundled application dependencies
 Electron/Chromium runtime licenses are also supplied beside the executable.
 
 @antfu/install-pkg@2.1.0

@@ -10,7 +10,7 @@ async function boot(page, state = {}) {
         startup: false,
         supported: true,
         trayAvailable: true,
-        executable: "D:\\Folio Notes.exe",
+        executable: "D:\\Marklore.exe",
         defaults: [],
         ...state,
       },

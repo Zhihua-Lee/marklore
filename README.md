@@ -1,16 +1,16 @@
-# Folio Notes
+# Marklore
 
 English · [简体中文](README.zh-CN.md)
 
 **An offline Markdown notebook for Windows: comfortable to read, quick to write, and your notes stay plain files.**
 
-[![CI](https://github.com/Zhihua-Lee/folio-notes/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhihua-Lee/folio-notes/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/Zhihua-Lee/folio-notes?label=release)](https://github.com/Zhihua-Lee/folio-notes/releases/latest)
+[![CI](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Zhihua-Lee/marklore?label=release)](https://github.com/Zhihua-Lee/marklore/releases/latest)
 ![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-285e50)
 
 [Install](#install) · [Features](#features) · [Getting started](#getting-started) · [User guide (Chinese)](docs/user-guide.md) · [Development](docs/development.md) · [Verification](VERIFICATION.md)
 
-![Folio Notes reading view: the library on the left, rendered formulas and tables in the middle, the outline on the right](docs/images/en/overview.png)
+![Marklore reading view: the library on the left, rendered formulas and tables in the middle, the outline on the right](docs/images/en/overview.png)
 
 Read, edit and organize local notes in one workspace. Tabs and colored groups keep material together. The outline, link previews and back/forward history take you through long documents. KaTeX formulas, syntax-highlighted code and Mermaid diagrams cover technical writing. Notes are `.md` files on your disk: there is no database to import into and nothing is uploaded.
 
@@ -18,21 +18,21 @@ The interface is available in English and Chinese. It follows the system languag
 
 ## Install
 
-Folio Notes is portable and needs no administrator rights.
+Marklore is portable and needs no administrator rights.
 
-1. Download `Folio-Notes-vX.Y.Z-win-x64.zip` from the [latest release](https://github.com/Zhihua-Lee/folio-notes/releases/latest).
+1. Download `Marklore-vX.Y.Z-win-x64.zip` from the [latest release](https://github.com/Zhihua-Lee/marklore/releases/latest).
 2. (Optional) Verify the download against the matching line in `SHA256SUMS-vX.Y.Z.txt` on the same page:
    ```powershell
-   Get-FileHash .\Folio-Notes-vX.Y.Z-win-x64.zip -Algorithm SHA256
+   Get-FileHash .\Marklore-vX.Y.Z-win-x64.zip -Algorithm SHA256
    ```
-3. **Extract the whole archive** to any folder, for example `D:\Apps\Folio Notes`. Keep the DLLs, `resources` and `locales` next to the EXE; do not copy the EXE alone.
-4. Run `Folio Notes.exe`. The build is not code-signed, so on first launch Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
+3. **Extract the whole archive** to any folder, for example `D:\Apps\Marklore`. Keep the DLLs, `resources` and `locales` next to the EXE; do not copy the EXE alone.
+4. Run `Marklore.exe`. The build is not code-signed, so on first launch Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
 
 **Portable mode:** turn on `Settings → Background & system → Portable mode` to keep your tabs, drafts, recent files and settings in a `data` folder next to the program. The whole folder, for example on a USB stick, then carries its state with it.
 
 **Update:** extract the new version to a new folder and start it from there. Settings, recovery drafts and recent files live in your user profile (or in `data` in portable mode), not in the program folder. Delete the old folder once the new one works. If you enabled start at login or Markdown file registration, register again from the new version in `Settings → Background & system`.
 
-**Uninstall:** delete the program folder. To also remove settings and recovery data, delete `%APPDATA%\folio-notes`. It contains drafts in plain text, so do not share it.
+**Uninstall:** delete the program folder. To also remove settings and recovery data, delete `%APPDATA%\Marklore` (`%APPDATA%\folio-notes` for versions before the rename). It contains drafts in plain text, so do not share it.
 
 Want to try it first? The [sample notebook](docs/sample-notebook-en) has formulas, tables, code, a diagram and linked notes: choose it with **Open folder**.
 
@@ -97,21 +97,21 @@ All three modes share one draft, and switching modes or tabs keeps your reading 
 
 ## Data and privacy
 
-**Only an explicit save writes back to your Markdown file.** Recovery drafts and workspace state are stored on this computer. Before saving, Folio checks the file on disk and offers to resolve a conflict if another program changed it. Image attachments go into an `assets` folder next to the note; keep it with the note when you move it.
+**Only an explicit save writes back to your Markdown file.** Recovery drafts and workspace state are stored on this computer. Before saving, Marklore checks the file on disk and offers to resolve a conflict if another program changed it. Image attachments go into an `assets` folder next to the note; keep it with the note when you move it.
 
 There is no cloud sync, no telemetry and no automatic upload, and remote images are not downloaded. Local recovery data contains drafts and file paths in plain text, and backups do not expire automatically.
 
 ## Compatibility
 
-Folio Notes is a **Windows desktop preview** (Windows 10 / 11, x64). Formulas render within KaTeX's supported syntax. The first open of a very long note or one with many formulas or diagrams can still take noticeable time. The current version is in [package.json](package.json); the tests run for each version and their scope are in [VERIFICATION.md](VERIFICATION.md).
+Marklore is a **Windows desktop preview** (Windows 10 / 11, x64). Formulas render within KaTeX's supported syntax. The first open of a very long note or one with many formulas or diagrams can still take noticeable time. The current version is in [package.json](package.json); the tests run for each version and their scope are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Run from source
 
 The development baseline is **Windows, Node.js 24 and pnpm 11**. Installing dependencies needs the internet once; the built app then works offline. The steps below are for the repository owner and authorized users.
 
 ```powershell
-git clone https://github.com/Zhihua-Lee/folio-notes.git
-cd folio-notes
+git clone https://github.com/Zhihua-Lee/marklore.git
+cd marklore
 pnpm install --frozen-lockfile
 pnpm build
 pnpm start

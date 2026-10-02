@@ -128,6 +128,7 @@ pnpm start
 | [验证记录](VERIFICATION.md)           | 按版本记录的回归检查、测试结果及验证边界。                             |
 | [设计原则](docs/design-principles.md) | 独立实现、文档模型、定位、安全与阅读界面的设计原则及 v0.1.0 原始计划。 |
 | [示例笔记库](docs/sample-notebook)    | 用于体验功能与生成 README 媒体的示例笔记。                             |
+| [参与贡献](CONTRIBUTING.md)           | 项目定位、如何报告问题和提交改动。                                     |
 | [第三方声明](THIRD-PARTY-NOTICES.txt) | 依赖与字体的许可证文本。                                               |
 
 发行目录未附完整指南时，请在[项目仓库](https://github.com/Zhihua-Lee/folio-notes)中阅读上述文档。

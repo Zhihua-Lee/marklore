@@ -127,6 +127,7 @@ pnpm start
 | [Development guide](docs/development.md) (Chinese) | Setup, workflow, tests, Windows packaging and source layout.                                             |
 | [Verification](VERIFICATION.md)                    | Regression checks, results and their limits for each version.                                            |
 | [Sample notebook](docs/sample-notebook-en)         | Notes for trying the features, also used to generate the README media ([Chinese](docs/sample-notebook)). |
+| [Contributing](CONTRIBUTING.md)                    | Scope, how to report issues and how to propose changes.                                                  |
 | [Third-party notices](THIRD-PARTY-NOTICES.txt)     | Licenses of dependencies and fonts.                                                                      |
 
 ## License

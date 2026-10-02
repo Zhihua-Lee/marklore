@@ -134,6 +134,6 @@ pnpm start
 
 ## 许可证
 
-自有代码与文档采用 **All Rights Reserved** 声明，**不是开源许可**。第三方使用、修改或分发须取得权利人的单独书面许可；仓库访问权限本身不授予这些权限。完整条款见 [LICENSE](LICENSE)。
+自有代码与文档采用 [MIT 许可证](LICENSE)。
 
 第三方组件、字体及 Electron／Chromium 运行时继续适用各自许可证。分发前的检查事项见[开发指南](docs/development.md#分发前检查)。

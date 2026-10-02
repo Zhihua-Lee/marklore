@@ -2,7 +2,7 @@
 
 [返回 README](../README.md) · [使用指南](user-guide.md) · [验证记录](../VERIFICATION.md)
 
-本指南面向仓库所有者和已获授权的开发者。自有代码与文档的使用权限见 [LICENSE](../LICENSE)。
+本指南面向参与开发的人。自有代码与文档采用 MIT 许可证，见 [LICENSE](../LICENSE)。
 
 ## 环境准备
 
@@ -150,6 +150,6 @@ pnpm exec prettier --check README.md docs/user-guide.md docs/development.md
 
 ## 分发前检查
 
-自有代码与文档为保留所有权利声明，第三方组件仍受各自许可证约束。公开分发前需核对 [THIRD-PARTY-NOTICES.txt](../THIRD-PARTY-NOTICES.txt)、依赖、字体以及 Electron／Chromium 随包许可，并完成已有项目说明中列出的 Mermaid／elkjs（EPL-2.0）源码提供与告知事项检查。
+自有代码与文档采用 MIT 许可证，第三方组件仍受各自许可证约束。公开分发前需核对 [THIRD-PARTY-NOTICES.txt](../THIRD-PARTY-NOTICES.txt)、依赖、字体以及 Electron／Chromium 随包许可，并完成已有项目说明中列出的 Mermaid／elkjs（EPL-2.0）源码提供与告知事项检查。
 
-本项目独立实现，不包含 MDLook 的实现、资源或二进制。不得从其他查看器提取字体或资源纳入发行包；已有第三方授权和此前已授出的权限不因本仓库声明而被追溯撤回。
+本项目独立实现，不包含 MDLook 的实现、资源或二进制。不得从其他查看器提取字体或资源纳入发行包。

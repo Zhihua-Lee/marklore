@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
   "author": "Zhihua-Lee",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "main": "desktop/main.mjs",
   "packageManager": "pnpm@11.19.0",
   "engines": {

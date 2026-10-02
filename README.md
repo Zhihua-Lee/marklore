@@ -131,6 +131,6 @@ pnpm start
 
 ## License
 
-The project's own code and documentation are **All Rights Reserved**; this is **not an open-source license**. Using, modifying or distributing it requires separate written permission from the copyright holder, and access to this repository does not grant those rights. See [LICENSE](LICENSE).
+The project's own code and documentation are released under the [MIT License](LICENSE).
 
 Third-party components, fonts and the Electron / Chromium runtime remain under their own licenses. See the [development guide](docs/development.md) for pre-distribution checks.

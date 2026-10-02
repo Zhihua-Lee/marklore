@@ -1,29 +1,16 @@
-Folio Notes — All Rights Reserved
+MIT License
 
 Copyright (c) 2026 Zhihua-Lee
 
-This notice applies to the original Folio Notes code and documentation in
-this repository, to the extent rights are held by the copyright holder.
-This is proprietary software, not an open-source license.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-No permission is granted to third parties to use, reproduce, modify, publish,
-distribute, sublicense, sell, or otherwise commercially exploit this software
-without separate prior written permission from Zhihua-Lee. Access to this
-repository or receipt of a copy does not itself grant these permissions.
-
-This notice does not limit rights that cannot be restricted under applicable
-law or rights required by the hosting platform's applicable terms.
-
-Third-party components, including dependencies, fonts, and the Electron /
-Chromium runtime, remain governed by their respective licenses. See
-THIRD-PARTY-NOTICES.txt and the runtime's accompanying license files. This
-notice does not replace, revoke, or restrict permissions under those licenses.
-
-Nothing in this notice retroactively revokes permissions previously granted
-by the copyright holder or restricts rights under an earlier applicable license.
-
-Separate written agreements from the copyright holder may grant additional
-rights. Requests for permission may be directed to GitHub user Zhihua-Lee.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,

@@ -100,6 +100,17 @@ test("the index finds backlinks, follows changes and checks links", async () => 
     const index = createLinkIndex();
     await index.follow([root]);
     assert.equal(index.size, 3);
+    // Every note with its anchors, for the link picker; headings know their level.
+    const listed = await index.notes();
+    assert.equal(listed.length, 3);
+    const bNote = listed.find((n) => n.path.endsWith("B.md"));
+    assert.deepEqual(
+      bNote.anchors.map((a) => [a.id, a.kind, a.level ?? null, a.label]),
+      [
+        ["b", "heading", 1, "B"],
+        ["def", "explicit", null, "Definition（X）"],
+      ],
+    );
     const b = path.join(root, "B.md");
     let back = await index.backlinks(b);
     assert.deepEqual(

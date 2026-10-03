@@ -45,6 +45,8 @@ function headingLabel(raw) {
 // A label for an explicit anchor: the bold lead of what it marks
 // ("**Definition（ERM）。**"), otherwise its first words.
 function anchorLabel(line) {
+  // An anchor written inline (at the start of a list item) is not its name.
+  line = line.replace(/<a\b[^>]*>\s*<\/a>/gi, "");
   const bold = line.match(/^\s*(?:[-*+]\s+|\d+[.)]\s+|>\s*)?\*\*(.+?)\*\*/);
   const text = plainText(bold ? bold[1] : line).replace(
     /[。．.:：，,；;]+$/,
@@ -131,7 +133,12 @@ export function parseNote(text, file) {
       const raw = atx ? atx[2] || "" : line.trim();
       const id = slugFor(headingLabel(raw));
       section = plainText(raw);
-      anchors.push({ id, kind: "heading", line: i + 1, label: section });
+      const level = atx
+        ? atx[1].length
+        : lines[i + 1].trim().startsWith("=")
+          ? 1
+          : 2;
+      anchors.push({ id, kind: "heading", level, line: i + 1, label: section });
       // Explicit anchors just above a heading mark the heading itself.
       for (const anchor of pendingAnchors) anchor.heading = id;
       pendingAnchors = [];
@@ -314,6 +321,14 @@ export function createLinkIndex({
         return "ok";
       const anchors = await this.anchors(file).catch(() => []);
       return anchors.some((a) => a.id === fragment) ? "ok" : "missing-anchor";
+    },
+    // Every note in the library with its anchors, for the link picker.
+    async notes() {
+      await ready;
+      return [...notes.values()].map((note) => ({
+        path: note.path,
+        anchors: note.anchors,
+      }));
     },
     get size() {
       return notes.size;

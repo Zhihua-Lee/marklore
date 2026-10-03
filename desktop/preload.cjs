@@ -48,6 +48,7 @@ for (const name of [
   "clearRecent",
   "backlinks",
   "linkStatus",
+  "linkTargets",
   "windowState",
   "windowAction",
 ])

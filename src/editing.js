@@ -7,6 +7,7 @@ import { markdownEdit } from "./markdown-edits.js";
 import { icon } from "./icons.js";
 import { wireColorButton } from "./color-picker.js";
 import { t } from "../desktop/i18n.mjs";
+import { attachLinkPicker } from "./link-picker.js";
 import "./editing.css";
 
 export const editingHighlight = syntaxHighlighting(
@@ -54,7 +55,12 @@ const buttons = [
   ["image", t("插入图片"), icon("image")],
   ["table", t("插入表格"), icon("table")],
 ];
-export function wireEditing({ view, getDocument, insertImage }) {
+export function wireEditing({
+  view,
+  getDocument,
+  insertImage,
+  getLinkTargets = null,
+}) {
   const host = document.createElement("div");
   host.className = "editing-tools";
   host.setAttribute("role", "group");
@@ -145,11 +151,22 @@ export function wireEditing({ view, getDocument, insertImage }) {
           ? `<label>${t("语言")}<input name="language" list="code-languages" placeholder="text / python / javascript…" pattern="[a-zA-Z0-9_+#.\\-]*" maxlength="40" autofocus></label><datalist id="code-languages"><option value="python"><option value="javascript"><option value="typescript"><option value="r"><option value="julia"><option value="cpp"><option value="sql"><option value="bash"><option value="json"><option value="markdown"><option value="mermaid"></datalist>`
           : `<label>${t("显示文字")}<input name="label" maxlength="2000"></label><label>${t("链接或文件路径")}<input name="url" required placeholder="${t("https://… 或 chapter.md#标题")}" autofocus></label>`;
     dialog.innerHTML = `<form><h2 id="edit-insert-title">${title}</h2>${fields}<p class="insert-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" data-cancel>${t("取消")}</button><button type="submit" class="primary">${t("插入")}</button></div></form>`;
-    if (action === "link")
-      dialog.querySelector('[name="label"]').value = state.sliceDoc(
-        selection.from,
-        selection.to,
-      );
+    if (action === "link") {
+      const label = dialog.querySelector('[name="label"]');
+      label.value = state.sliceDoc(selection.from, selection.to);
+      // Pick a note or anchor in the library instead of typing its path; an
+      // empty label takes the name of what is picked.
+      if (getLinkTargets && doc.fileId) {
+        let filled = !label.value;
+        label.oninput = () => (filled = false);
+        attachLinkPicker(dialog.querySelector('[name="url"]'), {
+          getTargets: () => getLinkTargets(doc),
+          onPick: (pick) => {
+            if (filled) label.value = pick.label;
+          },
+        });
+      }
+    }
     dialog.querySelector("[data-cancel]").onclick = () => dialog.close();
     dialog.querySelector("form").onsubmit = (event) => {
       event.preventDefault();

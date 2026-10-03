@@ -1,0 +1,48 @@
+/* Suggestions under a link field (placed by link-picker.js). */
+.link-picker {
+  position: fixed;
+  z-index: 60;
+  max-height: min(320px, 50vh);
+  overflow: auto;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 10px 28px #0003;
+  font: 400 13px/1.4 var(--font-ui);
+  text-align: left;
+}
+.link-picker[hidden] {
+  display: none;
+}
+.link-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.link-option:hover,
+.link-option.active {
+  background: var(--hover);
+}
+.link-option-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.link-option[data-kind="note"] .link-option-title {
+  font-weight: 600;
+}
+.link-option[data-kind="explicit"] .link-option-title {
+  color: color-mix(in srgb, var(--ink) 85%, var(--muted));
+}
+.link-option-detail {
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 11.5px;
+}

@@ -13,7 +13,7 @@ const BLOCKS =
 const arrowIn = icon("backlink");
 
 // An author anchor (<a id="..."></a> on its own line) marks what follows it.
-function explicitAnchors(content) {
+export function explicitAnchors(content) {
   return [...content.querySelectorAll("a[id]")].filter(
     (a) =>
       !a.textContent.trim() &&
@@ -21,7 +21,11 @@ function explicitAnchors(content) {
       !a.closest(HEADINGS),
   );
 }
-function markedBlock(anchor, content) {
+export function markedBlock(anchor, content) {
+  // Written inside a block with text of its own (a list item's first words):
+  // it marks that block.
+  const own = anchor.parentElement?.closest(BLOCKS);
+  if (own && content.contains(own) && own.textContent.trim()) return own;
   const walker = document.createTreeWalker(content, NodeFilter.SHOW_ELEMENT);
   walker.currentNode = anchor;
   for (let el = walker.nextNode(); el; el = walker.nextNode()) {
@@ -32,8 +36,14 @@ function markedBlock(anchor, content) {
   return null;
 }
 // A short name for an anchored block: its bold lead, or its first words.
-function blockLabel(block) {
-  if (block.matches(HEADINGS)) return block.textContent.trim();
+export function blockLabel(block) {
+  if (block.matches(HEADINGS)) {
+    // Without the fold control, the folded-section summary and our count.
+    const copy = block.cloneNode(true);
+    for (const extra of copy.querySelectorAll("button,.section-summary"))
+      extra.remove();
+    return copy.textContent.replace(/\s+/g, " ").trim();
+  }
   // Our own count may already sit first in the block: look past it.
   const first = [...block.children].find(
     (child) => !child.matches(".backlink-badge"),

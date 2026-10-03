@@ -50,6 +50,7 @@ import { createPreviewCache } from "./render-cache.js";
 import { renderDiagrams } from "./diagrams.js";
 import { createLinkPreview, splitLink } from "./link-preview.js";
 import { createBacklinks } from "./backlinks.js";
+import { createLinkHere, pastedLink } from "./link-here.js";
 import { wireDesktopSettings } from "./desktop-settings.js";
 import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
@@ -110,7 +111,7 @@ configureColorTools(
   },
 );
 let editingKeys = [];
-let blockEditor, imageInsertion, backlinks;
+let blockEditor, imageInsertion, backlinks, linkHere;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("筛选文件")}" title="${t("搜索文件名，包含子文件夹")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
@@ -393,6 +394,20 @@ function stateFor(doc) {
         dblclick: () => {
           requestAnimationFrame(sourceToPreview);
         },
+        // A link copied with "Copy link to here" (a full file:/// path)
+        // becomes relative to the note it is pasted into.
+        paste: (event, editor) => {
+          const link = pastedLink(
+            event.clipboardData?.getData("text/plain") || "",
+            active,
+          );
+          if (!link) return false;
+          event.preventDefault();
+          editor.dispatch(editor.state.replaceSelection(link), {
+            userEvent: "input.paste",
+          });
+          return true;
+        },
       }),
     ],
   });
@@ -408,6 +423,8 @@ editingKeys = wireEditing({
   view,
   getDocument: () => active,
   insertImage: () => imageInsertion.pick(),
+  getLinkTargets: (doc) =>
+    api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
 });
 blockEditor = createBlockEditor({
   content: $("#content"),
@@ -441,6 +458,8 @@ selectionTools = createSelectionTools({
   getDocument: () => active,
   blocked: () => blockEditor.active,
   report: toast,
+  getLinkTargets: (doc) =>
+    api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
   // Read mode formats from the page only when the reader turned it on.
   editable: (doc) =>
     doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat),
@@ -1000,6 +1019,18 @@ async function navigateLink(href, source = active) {
     scheduleSession();
   } else toast(t("没有找到锚点：{anchor}", { anchor }));
 }
+linkHere = createLinkHere({
+  content: $("#content"),
+  view,
+  getActive: () => active,
+  render: () => {
+    clearTimeout(renderingTimer);
+    render(true);
+  },
+  report: toast,
+  copyText: (text) =>
+    api?.copyText ? api.copyText(text) : navigator.clipboard.writeText(text),
+});
 backlinks = createBacklinks({
   api,
   content: $("#content"),
@@ -1303,6 +1334,21 @@ const { showContext, dismiss: dismissMenus } = createMenus({
     [t("导出 PDF…"), "", commands.exportPDF, !active || exporting],
     [t("导出 HTML…"), "", commands.exportHTML, !active || exporting],
   ],
+});
+// Right-click in the note: copy, and copy a link to the place under the
+// pointer (adding an anchor there if it has none).
+$("#content").addEventListener("contextmenu", (event) => {
+  if (!active || event.target.closest(".block-editor,input,textarea")) return;
+  event.preventDefault();
+  const selection = window.getSelection();
+  const selected =
+    selection &&
+    !selection.isCollapsed &&
+    $("#content").contains(selection.anchorNode);
+  showContext(event, [
+    ...(selected ? [[t("复制"), () => document.execCommand("copy")]] : []),
+    [t("复制指向这里的链接"), () => linkHere.copy(event.target), !active.path],
+  ]);
 });
 wireFileDrop({
   insertImages: (files, event) => imageInsertion.insert(files, event),

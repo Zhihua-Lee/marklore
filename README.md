@@ -70,6 +70,13 @@ Beside each section, definition or theorem that other notes link to, a small cou
 
 Definitions and theorems marked with an anchor (`<a id="erm"></a>` above a bold lead such as **Definition (ERM).**) can also be listed in the outline, under their section, with their counts: choose `Settings → Layout & sidebars → Anchors in the outline`.
 
+Linking without typing paths:
+
+- **Copy link to here:** right-click a heading, definition or paragraph. A paragraph without an anchor gets one, named after its bold lead (you can change it). Paste the link into another note and Marklore makes the path relative to that note.
+- **Pick a target:** in a link field (`Ctrl+K`, or Link in the format bar), type part of a note's name; choosing it lists its headings and anchors.
+
+Both write ordinary Markdown links and `<a id>` anchors, which other Markdown tools read too.
+
 ![Hovering the count beside a definition lists the two notes that cite it; one opens at the citing sentence, Alt+← returns, and an anchored paragraph is reached from the outline](docs/images/en/backlinks.gif)
 
 ### Live preview while you edit

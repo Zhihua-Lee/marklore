@@ -916,6 +916,24 @@ else {
           snippet: link.snippet,
         }));
       });
+      // Notes in the library and their anchors, with paths relative to this
+      // note, for picking a link target ("" is this note itself).
+      api("linkTargets", async (id) => {
+        const file = files.file(id).path,
+          base = path.dirname(file),
+          self = file.toLowerCase();
+        return (await linkIndex.notes()).map((note) => ({
+          name: path.basename(note.path),
+          rel:
+            note.path.toLowerCase() === self
+              ? ""
+              : path.relative(base, note.path).split(path.sep).join("/"),
+          anchors: note.anchors
+            .filter((anchor) => !anchor.heading)
+            .slice(0, 300)
+            .map(({ id, kind, label, level }) => ({ id, kind, label, level })),
+        }));
+      });
       // For each href in this note: "ok", "missing-file" or "missing-anchor".
       api("linkStatus", async (id, hrefs) => {
         if (!Array.isArray(hrefs) || hrefs.length > 2000)

@@ -4,6 +4,7 @@ import { textOffset, findPosition } from "./positions.js";
 import { wireColorButton, closeColorPicker } from "./color-picker.js";
 import { icon } from "./icons.js";
 import { t } from "../desktop/i18n.mjs";
+import { attachLinkPicker } from "./link-picker.js";
 import "./selection-tools.css";
 
 // Blocks whose text can be formatted, and inline elements that come from
@@ -312,6 +313,7 @@ export function createSelectionTools({
   render,
   report,
   editable = (doc) => doc.mode === "edit",
+  getLinkTargets = null,
 }) {
   const bar = document.createElement("div");
   bar.className = "selection-tools";
@@ -482,6 +484,14 @@ export function createSelectionTools({
     event.preventDefault();
     apply("link", { url: form.elements.url.value });
   };
+  // Choosing a note's anchor (or a note twice) links the selection at once.
+  if (getLinkTargets)
+    attachLinkPicker(form.elements.url, {
+      getTargets: () => getLinkTargets(getDocument()),
+      onPick: (pick) => {
+        if (pick.final) apply("link", { url: pick.href });
+      },
+    });
   for (const action of ["highlight", "color"]) {
     wireColorButton(
       bar.querySelector(`[data-selection-action="${action}"]`),

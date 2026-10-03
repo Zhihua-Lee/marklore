@@ -354,4 +354,19 @@ export default {
   所有锚点: "All anchors",
   "定义、定理等用锚点标出的位置，以及被引用的次数":
     "Definitions, theorems and other anchored places, with how often they are linked",
+  // Links to places: copy a link here, pick a link target
+  复制指向这里的链接: "Copy link to here",
+  锚点名称: "Anchor name",
+  "将在这一段上方加入锚点，保存本笔记后，其他笔记中的链接即可跳到这里。":
+    "An anchor is added above this paragraph; once this note is saved, links from other notes lead here.",
+  加入锚点并复制: "Add anchor and copy",
+  "名称只能包含文字、数字、- 和 _": "Use only letters, digits, - and _",
+  这个名称已被本笔记使用: "This note already uses that name",
+  "已加入锚点并复制链接；保存本笔记后链接生效":
+    "Anchor added and link copied; it works once this note is saved",
+  "已复制指向“{label}”的链接": "Copied a link to “{label}”",
+  "请先保存当前笔记，链接需要它的位置":
+    "Save this note first: a link needs its location",
+  这里无法加入锚点: "An anchor cannot be added here",
+  本笔记: "This note",
 };

@@ -35,6 +35,28 @@ const L = english
       editText:
         " In the discrete case, $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$ as well.",
       darkHeading: "Discrete implementation",
+      agent: {
+        file: "Laplace-transform.md",
+        title: "Laplace transform",
+        steps: [
+          {
+            label: "AI agent: creates Laplace-transform.md",
+            text: "# Laplace transform\n\nThe Laplace transform extends the [Fourier transform](Fourier-analysis.md) to complex frequencies $s = \\sigma + i\\omega$, which suits systems with initial conditions.\n",
+          },
+          {
+            label: "AI agent: adds the definition",
+            text: "\n## Definition\n\n$$\nF(s) = \\int_0^\\infty f(t)\\,e^{-st}\\,dt\n$$\n",
+          },
+          {
+            label: "AI agent: adds common pairs",
+            text: "\n## Common pairs\n\n| $f(t)$ | $F(s)$ |\n| --- | --- |\n| $1$ | $\\dfrac{1}{s}$ |\n| $e^{at}$ | $\\dfrac{1}{s-a}$ |\n| $\\sin \\omega t$ | $\\dfrac{\\omega}{s^2+\\omega^2}$ |\n",
+          },
+          {
+            label: "AI agent: links related notes",
+            text: "\n## Related\n\n- [Convolution theorem](Convolution-theorem.md#theorem): convolution in time is a product in $s$.\n- [Fourier analysis](Fourier-analysis.md#definition): set $s = i\\omega$ to get the Fourier transform back.\n",
+          },
+        ],
+      },
     }
   : {
       notebook: "docs/sample-notebook",
@@ -50,6 +72,28 @@ const L = english
       editText:
         "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
       darkHeading: "离散实现",
+      agent: {
+        file: "拉普拉斯变换.md",
+        title: "拉普拉斯变换",
+        steps: [
+          {
+            label: "AI 新建：拉普拉斯变换.md",
+            text: "# 拉普拉斯变换\n\n拉普拉斯变换把[傅里叶变换](傅里叶分析.md)推广到复频率 $s = \\sigma + i\\omega$，适合分析带初始条件的系统。\n",
+          },
+          {
+            label: "AI 补充：定义",
+            text: "\n## 定义\n\n$$\nF(s) = \\int_0^\\infty f(t)\\,e^{-st}\\,dt\n$$\n",
+          },
+          {
+            label: "AI 补充：常用变换对",
+            text: "\n## 常用变换对\n\n| $f(t)$ | $F(s)$ |\n| --- | --- |\n| $1$ | $\\dfrac{1}{s}$ |\n| $e^{at}$ | $\\dfrac{1}{s-a}$ |\n| $\\sin \\omega t$ | $\\dfrac{\\omega}{s^2+\\omega^2}$ |\n",
+          },
+          {
+            label: "AI 补充：链接相关笔记",
+            text: "\n## 相关笔记\n\n- [卷积定理](卷积定理.md#定理)：时域卷积对应 $s$ 域乘积。\n- [傅里叶分析](傅里叶分析.md#定义)：令 $s = i\\omega$ 即回到傅里叶变换。\n",
+          },
+        ],
+      },
     };
 const out = path.join(root, L.out);
 // Stills are resized to this; recordings keep the window's own size
@@ -80,12 +124,16 @@ async function session({ scale, theme = "light", record = false }) {
   const app = await electron.launch({
     args: [
       `--force-device-scale-factor=${scale}`,
+      // Keep painting while other windows cover it (it is shown inactive).
+      "--disable-features=CalculateNativeWinOcclusion",
       root,
       path.join(notes, L.note),
     ],
     env: {
       ...process.env,
       FOLIO_DATA_DIR: profile,
+      // Shown without taking the foreground from whoever uses the computer.
+      FOLIO_TEST_INACTIVE: "1",
       ELECTRON_RUN_AS_NODE: undefined,
     },
     ...(record && {
@@ -157,13 +205,19 @@ async function session({ scale, theme = "light", record = false }) {
       document.querySelector("#demo-keys").classList.remove("shown"),
     );
   };
+  const caption = (label) =>
+    page.evaluate((label) => {
+      const hint = document.querySelector("#demo-keys");
+      hint.textContent = label;
+      hint.classList.toggle("shown", Boolean(label));
+    }, label);
   const moveTo = async (locator, dx = 0.5, dy = 0.5) => {
     const box = await locator.boundingBox();
     await page.mouse.move(box.x + box.width * dx, box.y + box.height * dy, {
       steps: 24,
     });
   };
-  return { app, page, temp, started, keys, moveTo };
+  return { app, page, temp, notes, started, keys, caption, moveTo };
 }
 
 // Record one scene and convert it to a looping GIF (palette per clip).
@@ -312,6 +366,40 @@ await scene("find", "light", async ({ page, keys }) => {
   for (let i = 0; i < 3; i++) await keys("Enter", "Enter");
   await keys("Esc", "Escape");
 });
+
+// An AI agent writes a note into the library (simulated: the scene writes the
+// file in steps, as an agent's edits would land on disk). The tree shows the
+// new file; once opened, each step re-renders.
+await scene(
+  "agent",
+  "light",
+  async ({ page, notes, caption, moveTo, mark }) => {
+    const file = path.join(notes, L.agent.file);
+    let text = "";
+    const write = async ({ label, text: chunk }, wait) => {
+      await caption(label);
+      text += chunk;
+      await fs.writeFile(file, text);
+      await page.waitForTimeout(wait);
+    };
+    await mark();
+    const [first, ...rest] = L.agent.steps;
+    await write(first, 400);
+    const entry = page
+      .locator("#tree")
+      .getByText(L.agent.file, { exact: true });
+    await entry.waitFor();
+    await page.waitForTimeout(900);
+    await moveTo(entry);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.locator("#content h1", { hasText: L.agent.title }).waitFor();
+    await page.waitForTimeout(1200);
+    for (const step of rest) await write(step, 1900);
+    await caption("");
+    await page.waitForTimeout(600);
+  },
+);
 
 await scene("edit", "light", async ({ page, mark }) => {
   await page.keyboard.press("Control+2");

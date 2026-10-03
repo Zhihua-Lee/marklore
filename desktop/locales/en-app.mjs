@@ -356,6 +356,7 @@ export default {
     "Definitions, theorems and other anchored places, with how often they are linked",
   // Links to places: copy a link here, pick a link target
   复制指向这里的链接: "Copy link to here",
+  复制链接: "Copy link",
   锚点名称: "Anchor name",
   "将在这一段上方加入锚点，保存本笔记后，其他笔记中的链接即可跳到这里。":
     "An anchor is added above this paragraph; once this note is saved, links from other notes lead here.",

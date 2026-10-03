@@ -30,6 +30,9 @@ function eligible(href) {
 }
 
 // Independent transient surface: never changes the active tab, editor or progress.
+// Long enough not to open while the pointer only passes over a link.
+const HOVER_DELAY = 220;
+
 export function createLinkPreview({
   host,
   load,
@@ -80,6 +83,8 @@ export function createLinkPreview({
     positioned = false,
     alignment = null;
   function hide({ focus = false } = {}) {
+    shown?.hydrate?.deactivate?.();
+    shown = null;
     generation++;
     clearTimeout(timer);
     clearTimeout(leaveTimer);
@@ -128,6 +133,27 @@ export function createLinkPreview({
   function align() {
     if (!positioned && alignment && !card.hidden) alignment();
   }
+  const rendered = new Map(); // note + text -> { html, hydrate }, newest last
+  let shown = null;
+  // The card shows a small part of a note: formulas are typeset as they come
+  // near its view, the rest when idle (typesetting and laying out every
+  // formula of a long note first took over a second). The same note,
+  // unchanged, is not rendered twice.
+  function renderedPreview(doc) {
+    const key = (doc.fileId || doc.id) + "|" + doc.text;
+    let entry = rendered.get(key);
+    if (!entry) {
+      const result = renderMarkdown(doc.text, doc.fileId, {
+        deferMath: true,
+        progressive: true,
+      });
+      entry = { html: result.html, hydrate: result.hydrate };
+    }
+    rendered.delete(key);
+    rendered.set(key, entry);
+    while (rendered.size > 8) rendered.delete(rendered.keys().next().value);
+    return entry;
+  }
   async function show(link, token) {
     if (origin !== link || token !== generation || !link.isConnected) return;
     href = link.getAttribute("href") || "";
@@ -162,7 +188,10 @@ export function createLinkPreview({
         if (token !== generation || origin !== link) return;
         if (!link.isConnected) return hide();
       }
-      article.innerHTML = renderMarkdown(doc.text, doc.fileId).html;
+      shown?.hydrate?.deactivate?.();
+      shown = renderedPreview(doc);
+      article.innerHTML = shown.html;
+      shown.hydrate?.activate?.(article);
       const { anchor } = splitLink(href);
       // Leave room to align targets near EOF to the same top inset as other anchors.
       article.style.paddingBottom = anchor
@@ -228,7 +257,7 @@ export function createLinkPreview({
     hide();
     origin = link;
     const token = ++generation;
-    timer = setTimeout(() => show(link, token), 350);
+    timer = setTimeout(() => show(link, token), HOVER_DELAY);
   }
   function leave(event) {
     if (
@@ -280,6 +309,9 @@ export function createLinkPreview({
     }
   });
   scroller.addEventListener("load", align, true);
+  // Formulas above the target are typeset after it was aligned: align again
+  // until the reader scrolls the card themselves.
+  article.addEventListener("folio:math-rendered", align);
   for (const event of ["wheel", "pointerdown", "keydown"])
     scroller.addEventListener(
       event,

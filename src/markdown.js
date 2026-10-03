@@ -624,7 +624,13 @@ export function parseHeadings(source) {
 export function renderMarkdown(
   source,
   fileId = null,
-  { deferMath = false, interactiveTasks = false } = {},
+  {
+    deferMath = false,
+    interactiveTasks = false,
+    // Typeset deferred formulas as they come near the view (always for small
+    // views such as the link preview; by size for the reader).
+    progressive = null,
+  } = {},
 ) {
   const env = { mathFragments: [], deferMath };
   let raw = parser.render(source, env);
@@ -824,7 +830,8 @@ export function renderMarkdown(
           (formula) => formulaFragment(math(formula.source, formula.display)),
           {
             progressive:
-              source.length > 80000 || env.mathFragments.length > 200,
+              progressive ??
+              (source.length > 80000 || env.mathFragments.length > 200),
             ready: mathReady,
             load: loadMath,
           },

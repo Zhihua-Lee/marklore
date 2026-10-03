@@ -158,13 +158,17 @@ test("links that lead nowhere are marked in place", async ({ page }) => {
 test("outline: anchored blocks and counts by setting", async ({ page }) => {
   await boot(page);
   const outline = page.locator("#outline");
-  await expect(outline.locator(".outline-anchor")).toHaveCount(0);
-  await expect(outline.locator(".outline-count")).toHaveCount(0);
+  // By default the outline lists the linked places.
+  const labels = outline.locator(".outline-anchor .outline-label");
+  await expect(labels).toHaveText(["Definition（Fourier transform）"]);
 
   await page.getByRole("button", { name: "设置", exact: true }).click();
   const choice = page.getByRole("combobox", { name: "目录中的引用点" });
+  await expect(choice).toHaveValue("referenced");
+  await choice.selectOption("off");
+  await expect(outline.locator(".outline-anchor")).toHaveCount(0);
+  await expect(outline.locator(".outline-count")).toHaveCount(0);
   await choice.selectOption("referenced");
-  const labels = outline.locator(".outline-anchor .outline-label");
   await expect(labels).toHaveText(["Definition（Fourier transform）"]);
   await expect(outline.locator(".outline-anchor .outline-count")).toHaveText([
     "2",
@@ -192,4 +196,65 @@ test("outline: anchored blocks and counts by setting", async ({ page }) => {
   await expect(
     page.locator("#content p", { hasText: "Lemma（Unused）" }),
   ).toBeInViewport();
+});
+
+test("formulas in the card are typeset even when this note has none", async ({
+  page,
+}) => {
+  await installFolio(page);
+  await page.addInitScript(() => {
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        roots: [],
+        restored: [],
+        incoming: [
+          {
+            id: "n",
+            name: "Plain.md",
+            path: "C:/kb/Plain.md",
+            text: "# Plain\n\nNo formulas here.\n",
+            version: "1",
+          },
+        ],
+        settings: { sidebar: false },
+      }),
+      backlinks: async () => [
+        {
+          source: "C:/kb/A.md",
+          name: "A.md",
+          href: "A.md#L1C1",
+          fragment: "",
+          section: "",
+          snippet: 'See <mark class="backlink-hit">Plain</mark> for $x^2+1$.',
+        },
+      ],
+      linkStatus: async (_id, hrefs) => hrefs.map(() => "ok"),
+    });
+  });
+  await page.goto("/");
+  await page.locator("#content h1 .backlink-badge").click();
+  await expect(
+    page.locator("#backlinks-card .backlink-snippet .katex"),
+  ).toBeVisible();
+});
+
+// Opening a card can coincide with a re-render (KaTeX arriving, the link
+// index finishing): the card must stay open on its block.
+test("an open card survives the note re-rendering and the index updating", async ({
+  page,
+}) => {
+  await boot(page);
+  const definition = page.locator("#content p", {
+    hasText: "Definition（Fourier transform）",
+  });
+  await badge(page, definition).hover();
+  const card = page.locator("#backlinks-card");
+  await expect(card).toBeVisible();
+  await page.evaluate(() => window.mock.handlers?.links?.());
+  await page.waitForTimeout(600);
+  await expect(card).toBeVisible();
+  await expect(card.locator(".backlink-source")).toHaveText([
+    "Convolution",
+    "Sampling",
+  ]);
 });

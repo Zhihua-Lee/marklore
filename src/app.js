@@ -28,7 +28,11 @@ import {
   mathReady,
   mayContainMath,
 } from "./markdown.js";
-import { onHighlighterReady, mayContainCode } from "./highlighting.js";
+import {
+  onHighlighterReady,
+  mayContainCode,
+  loadHighlighter,
+} from "./highlighting.js";
 import {
   atPoint,
   visibleAnchor,
@@ -1335,6 +1339,16 @@ const { showContext, dismiss: dismissMenus } = createMenus({
     [t("导出 HTML…"), "", commands.exportHTML, !active || exporting],
   ],
 });
+// Right-click a note in the library: open it, or copy a link to it.
+$("#tree").addEventListener("contextmenu", (event) => {
+  const file = event.target.closest("button.file");
+  if (!file) return;
+  event.preventDefault();
+  showContext(event, [
+    [t("打开"), () => file.click()],
+    [t("复制链接"), () => linkHere.copyNote(file.title)],
+  ]);
+});
 // Right-click in the note: copy, and copy a link to the place under the
 // pointer (adding an anchor there if it has none).
 $("#content").addEventListener("contextmenu", (event) => {
@@ -1664,6 +1678,26 @@ onHighlighterReady(() => {
   for (const t of tabs) if (mayContainCode(t.text)) t.htmlText = null;
   if (active && mayContainCode(active.text)) render(true);
 });
+// Warm the preview path while the app is idle: the first link preview or
+// backlink card otherwise waited for KaTeX, the highlighter and a cold first
+// render (about 0.5 s together on a long note with formulas).
+(window.requestIdleCallback || ((fn) => setTimeout(fn, 1500)))(
+  () =>
+    Promise.all([loadMath(), loadHighlighter()])
+      .then(() =>
+        renderMarkdown(
+          [
+            "$x^2$ and **b** [c](d.md)",
+            "",
+            "```js",
+            "const e = 1;",
+            "```",
+          ].join("\n"),
+        ),
+      )
+      .catch(() => {}),
+  { timeout: 4000 },
+);
 if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());

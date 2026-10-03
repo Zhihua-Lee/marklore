@@ -238,3 +238,39 @@ test("the format bar's link field picks an anchor and links at once", async ({
     .click();
   await expect.poll(() => source(page)).toContain("- [first](<#ft-def>) item");
 });
+
+test("a note in the library copies a link to the whole note", async ({
+  page,
+}) => {
+  await installFolio(page);
+  await page.addInitScript(() => {
+    window.mock = { copied: [] };
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        roots: [{ id: "root", name: "kb", path: "C:/kb" }],
+        restored: [],
+        incoming: [],
+        settings: { sidebar: true },
+      }),
+      list: async () => [
+        {
+          name: "Sampling theorem.md",
+          path: "C:/kb/Sampling theorem.md",
+          directory: false,
+        },
+      ],
+      copyText: async (value) => {
+        window.mock.copied.push(value);
+      },
+    });
+  });
+  await page.goto("/");
+  const file = page.locator("#tree button.file", {
+    hasText: "Sampling theorem.md",
+  });
+  await file.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "复制链接" }).click();
+  await expect
+    .poll(() => page.evaluate(() => window.mock.copied.at(-1)))
+    .toBe("[Sampling theorem](file:///C:/kb/Sampling%20theorem.md)");
+});

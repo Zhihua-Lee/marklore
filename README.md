@@ -68,11 +68,11 @@ Select text on the rendered page and a small format bar appears: bold, italic, s
 
 Beside each section, definition or theorem that other notes link to, a small count shows how often. Hover it to see the citing notes, their section and the sentence with the link; click one to jump there, and `Alt+←` to come back. Links in the note that lead nowhere get a dashed underline.
 
-Definitions and theorems marked with an anchor (`<a id="erm"></a>` above a bold lead such as **Definition (ERM).**) can also be listed in the outline, under their section, with their counts: choose `Settings → Layout & sidebars → Anchors in the outline`.
+Definitions and theorems marked with an anchor (`<a id="erm"></a>` above a bold lead such as **Definition (ERM).**) are listed in the outline under their section, with their counts, once something links to them. `Settings → Layout & sidebars → Anchors in the outline` can list every anchor instead, or none.
 
 Linking without typing paths:
 
-- **Copy link to here:** right-click a heading, definition or paragraph. A paragraph without an anchor gets one, named after its bold lead (you can change it). Paste the link into another note and Marklore makes the path relative to that note.
+- **Copy link to here:** right-click a heading, definition or paragraph (or a note in the library, for the whole note). A paragraph without an anchor gets one, named after its bold lead (you can change it). Paste the link into another note and Marklore makes the path relative to that note.
 - **Pick a target:** in a link field (`Ctrl+K`, or Link in the format bar), type part of a note's name; choosing it lists its headings and anchors.
 
 Both write ordinary Markdown links and `<a id>` anchors, which other Markdown tools read too.

@@ -13,12 +13,12 @@ const LINE_BLOCKS = "blockquote,table,pre,.math-block,figure,dl,p";
 const ID = /^[\p{L}\p{N}_-]+$/u;
 const FILE_LINK = /^\[([^\]\n]*)\]\((file:\/\/\/[^)\s]+)\)$/;
 
+// A whole note when there is no anchor id.
 function fileUrl(path, id) {
   const url = "file:///" + path.replace(/\\/g, "/").replace(/^\/+/, "");
   return (
     encodeURI(url).replace(/[()]/g, (c) => encodeURIComponent(c)) +
-    "#" +
-    encodeURIComponent(id)
+    (id ? "#" + encodeURIComponent(id) : "")
   );
 }
 
@@ -195,5 +195,15 @@ export function createLinkHere({
     );
   }
 
-  return { copy };
+  // From the library: a link to a whole note.
+  async function copyNote(path) {
+    const label = path
+      .replace(/^.*[\\/]/, "")
+      .replace(/\.(md|markdown|mdown|mkd|txt)$/i, "")
+      .replace(/[[\]]/g, "");
+    await copyText(`[${label}](${fileUrl(path)})`);
+    report(t("已复制指向“{label}”的链接", { label }));
+  }
+
+  return { copy, copyNote };
 }

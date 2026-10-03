@@ -2,7 +2,7 @@
 // block that other notes link to, a card listing those notes (hover or click
 // the count), the same counts in the outline, and broken links marked in
 // place. Nothing is shown where nothing links in.
-import { renderMarkdown } from "./markdown.js";
+import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import "./backlinks.css";
@@ -80,6 +80,9 @@ export function createBacklinks({
   run,
 }) {
   const cache = new Map(); // fileId -> Promise<incoming[]>
+  // fileId + href -> link status; cleared when the library changes.
+  const statuses = new Map();
+  let lastIncoming = null;
   let epoch = 0,
     targets = []; // { element, entries, title, label }
   const card = document.createElement("div");
@@ -163,10 +166,30 @@ export function createBacklinks({
       mine = ++epoch;
     const incoming = await load(doc);
     if (mine !== epoch || doc !== getActive()) return;
-    hide();
+    const { groups, title, missing } = resolve(incoming);
+    // Re-rendering the note often keeps the linked blocks: then the counts
+    // (and an open card) stay as they are. Rebuilding them every time closed
+    // a card that had just opened.
+    const unchanged =
+      incoming === lastIncoming &&
+      targets.length ===
+        groups.size +
+          (!groups.has(title) && title && incoming.length ? 1 : 0) &&
+      targets.every(
+        (target) =>
+          target.button.isConnected &&
+          target.element.contains(target.button) &&
+          (groups.has(target.element) || target.element === title),
+      );
+    if (unchanged) {
+      decorateOutline();
+      markBrokenLinks(doc);
+      return;
+    }
+    lastIncoming = incoming;
+    const open = card.hidden ? null : openFor;
     clearMarks();
     targets = [];
-    const { groups, title, missing } = resolve(incoming);
     for (const [element, entries] of groups) {
       const isTitle = element === title;
       // The title's count covers the whole note.
@@ -195,6 +218,14 @@ export function createBacklinks({
       targets
         .find((target) => target.title)
         ?.button.classList.add("has-missing");
+    // An open card follows its block's new count, or closes if it has none.
+    if (open) {
+      const again = targets.find((target) => target.element === open.element);
+      if (again) {
+        openFor = again;
+        place(again.button);
+      } else hide();
+    }
     decorateOutline();
     markBrokenLinks(doc);
   }
@@ -297,15 +328,23 @@ export function createBacklinks({
       );
     }
     if (!remote.length || !api?.linkStatus || !doc?.fileId) return;
+    // Ask only about links not checked since the library last changed.
+    const key = (a) => doc.fileId + "|" + a.getAttribute("href");
+    const known = remote.filter((a) => statuses.has(key(a)));
+    for (const a of known) mark(a, statuses.get(key(a)));
+    const unknown = remote.filter((a) => !statuses.has(key(a)));
+    if (!unknown.length) return;
     const mine = epoch;
-    const statuses = await api
+    const results = await api
       .linkStatus(
         doc.fileId,
-        remote.map((a) => a.getAttribute("href")),
+        unknown.map((a) => a.getAttribute("href")),
       )
-      .catch(() => []);
+      .catch(() => null);
+    if (!results) return;
+    unknown.forEach((a, i) => statuses.set(key(a), results[i] || "ok"));
     if (mine !== epoch || doc !== getActive()) return;
-    remote.forEach((a, i) => mark(a, statuses[i] || "ok"));
+    unknown.forEach((a, i) => mark(a, results[i] || "ok"));
   }
 
   // The card: which notes link here, in which sentence.
@@ -349,10 +388,9 @@ export function createBacklinks({
         button.querySelector(".backlink-section").textContent = entry.section
           ? "› " + entry.section
           : "";
-        button.querySelector(".backlink-snippet").innerHTML = renderMarkdown(
-          entry.snippet,
-          doc?.fileId,
-        ).html;
+        const snippet = button.querySelector(".backlink-snippet");
+        snippet.dataset.source = entry.snippet;
+        snippet.innerHTML = renderMarkdown(entry.snippet, doc?.fileId).html;
         button.onclick = run(async () => {
           hide();
           await navigate(entry.href);
@@ -362,6 +400,16 @@ export function createBacklinks({
     }
     card.hidden = false;
     place(target.button);
+    // Formulas typeset once KaTeX is loaded (the note itself may have none),
+    // as the link preview does.
+    const snippets = [...card.querySelectorAll(".backlink-snippet")];
+    if (snippets.some((el) => mayContainMath(el.dataset.source)))
+      loadMath().then(() => {
+        if (openFor !== target) return;
+        for (const el of snippets)
+          el.innerHTML = renderMarkdown(el.dataset.source, doc?.fileId).html;
+        place(target.button);
+      });
   }
   function place(anchor) {
     const box = anchor.getBoundingClientRect(),
@@ -416,7 +464,7 @@ export function createBacklinks({
     const target = targetOf(button);
     if (!target || openFor === target) return;
     clearTimeout(openTimer);
-    openTimer = setTimeout(() => show(target), 280);
+    openTimer = setTimeout(() => show(target), 200);
   });
   const leave = () => {
     clearTimeout(openTimer);
@@ -458,6 +506,7 @@ export function createBacklinks({
     // Another note changed: links into this one may have too.
     invalidate() {
       cache.clear();
+      statuses.clear();
       run(refresh)();
     },
     decorateOutline,

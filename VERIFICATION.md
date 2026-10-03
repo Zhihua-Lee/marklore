@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                              | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | -------------------------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.2.3  | Windows installer; no portable mode when installed                   | 79                | 186 (default + reduced-motion) | 13 suites (packaged); installer check 31/31                     | [v0.2.3](docs/verification/v0.2.3.md)   |
 | v0.2.2  | Backlinks in place; anchors in the outline; link tools; format bar   | 78                | 186 (default + reduced-motion) | 13 suites (packaged)                                            | [v0.2.2](docs/verification/v0.2.2.md)   |
 | v0.2.1  | Library follows the disk; Read-mode annotation option; new README    | 74                | 170 (default + reduced-motion) | 12 suites (packaged)                                            | [v0.2.1](docs/verification/v0.2.1.md)   |
 | v0.2.0  | Renamed to Marklore; MIT; profile migration; background tests        | 71                | 168 (default + reduced-motion) | 11 suites (packaged; native-editing passed on rerun)            | [v0.2.0](docs/verification/v0.2.0.md)   |

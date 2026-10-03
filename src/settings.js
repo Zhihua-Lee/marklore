@@ -17,6 +17,7 @@ export function defaultSettings() {
     navigationScope: "all",
     showHistoryButtons: false,
     smoothScroll: "off",
+    readingFormat: false,
     language: "auto",
     outline: true,
     librarySide: "left",
@@ -49,6 +50,7 @@ export function normalizeSettings(saved = {}) {
   settings.navigationScope =
     settings.navigationScope === "current" ? "current" : "all";
   settings.showHistoryButtons = settings.showHistoryButtons === true;
+  settings.readingFormat = settings.readingFormat === true;
   // Unreleased 0.1.35 builds stored touchpadScroll: "smooth".
   // The app merges stored values over defaults, so "off" here may be a default.
   if (

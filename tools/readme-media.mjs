@@ -128,7 +128,14 @@ async function session({ scale, theme = "light", record = false }) {
     path.join(profile, "session.json"),
     JSON.stringify({
       roots: [notes],
-      settings: { theme, sidebar: true, outline: true, language: L.language },
+      settings: {
+        theme,
+        sidebar: true,
+        outline: true,
+        language: L.language,
+        // Settings → Annotation: the format bar also works in Read mode.
+        readingFormat: true,
+      },
     }),
   );
   const app = await electron.launch({
@@ -411,10 +418,9 @@ await scene(
   },
 );
 
-// Mark up the rendered page like a notebook: select text in the preview and
-// highlight or color it; the source on the left shows what is written.
-await scene("annotate", "light", async ({ page, moveTo, mark }) => {
-  await page.keyboard.press("Control+2");
+// Mark up the page like a notebook, in Read mode: select text and highlight
+// or color it; Edit mode then shows what was written into the Markdown.
+await scene("annotate", "light", async ({ page, keys, moveTo, mark }) => {
   await page
     .locator("#outline")
     .getByRole("button", { name: L.editHeading, exact: true })
@@ -467,10 +473,12 @@ await scene("annotate", "light", async ({ page, moveTo, mark }) => {
   await apply("color");
   await select(L.annotate.highlight2);
   await apply("highlight");
-  // Put the format bar away so the last frames show the marked-up page.
+  // Put the format bar away, then show the source beside the page.
   await page.keyboard.press("Escape");
   await page.mouse.move(40, 560, { steps: 12 });
-  await page.waitForTimeout(1200);
+  await page.waitForTimeout(900);
+  await keys("Ctrl + 2", "Control+2");
+  await page.waitForTimeout(1800);
 });
 
 await scene("edit", "light", async ({ page, mark }) => {

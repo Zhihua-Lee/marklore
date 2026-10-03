@@ -21,7 +21,7 @@ More and more notes start as an AI draft. That is where the work begins: you che
 
 **AI drafts, you refine.** Let Claude Code, Codex or any agent that edits files write first drafts and reorganize notes in the folder. Marklore shows each change as it lands: an open note re-renders within a fraction of a second, and new notes appear in the library. Then the note is yours to correct, in the editor or right in the rendered preview. The agent never overwrites your unsaved edits; Marklore shows a conflict instead.
 
-**Mark it up like a notebook.** Select text on the rendered page and highlight it or change its color, as you would in OneNote. The marks are saved in the Markdown file itself, as standard inline HTML, so they travel with the note.
+**Mark it up like a notebook.** Select text on the rendered page and highlight it, color it or make it bold, as you would in OneNote. Turn this on for Read mode too, if you like, in `Settings → Annotation`; it is off by default, so reading stays undisturbed. The marks are saved in the Markdown file itself, as standard inline HTML, so they travel with the note.
 
 **Reading comes first.** Most Markdown tools are editors with a preview pane. Marklore is a reader that you can also edit in:
 
@@ -56,11 +56,11 @@ Notes here are plain Markdown, read in Marklore.
 
 ## Features
 
-### Highlight and color, right on the rendered page
+### Highlight and color, right on the page
 
-In Edit mode, select text in the preview and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. The source on the left shows what is written into the Markdown. The highlight and color buttons apply your last color; right-click either for the palette.
+Select text on the rendered page and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. It is always there in Edit mode's preview; turn on `Settings → Annotation → Format bar in Read mode` to mark up while reading, where double-clicking a word selects it and `Alt`+double-click opens its source. The highlight and color buttons apply your last color; right-click either for the palette.
 
-![Selecting phrases in the rendered preview and highlighting or coloring them; the Markdown source updates alongside](docs/images/en/annotate.gif)
+![In Read mode, phrases are highlighted and colored on the page; Edit mode then shows the marks written into the Markdown](docs/images/en/annotate.gif)
 
 ### Live preview while you edit
 

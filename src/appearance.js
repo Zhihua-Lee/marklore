@@ -21,6 +21,7 @@ const sections = [
   ["settings-tables", t("表格")],
   ["settings-layout", t("布局与侧栏")],
   ["settings-navigation", t("导航与滚动")],
+  ["settings-annotation", t("批注")],
   ["desktop-settings", t("后台与系统")],
 ];
 export const appearanceMarkup = `
@@ -54,6 +55,9 @@ export const appearanceMarkup = `
     ${row("navigation-scope", t("导航范围"), `<select id="navigation-scope"><option value="all">${t("全部笔记")}</option><option value="current">${t("仅当前笔记")}</option></select>`)}
     ${row("history-buttons", t("前进 / 后退按钮"), `<select id="history-buttons"><option value="hidden">${t("隐藏")}</option><option value="visible">${t("显示")}</option></select>`, t("隐藏后仍可用鼠标侧键或 Alt+← / →"))}
     ${row("smooth-scroll", t("平滑滚动"), `<select id="smooth-scroll"><option value="off">${t("关")}</option><option value="touchpad">${t("仅触控板")}</option><option value="all">${t("触控板、滚轮与滚动条")}</option></select>`, t("速度更均匀，跟手稍慢"))}
+  </fieldset>
+  <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
+    ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}
   </fieldset>
 ${desktopSettingsMarkup}
   </div>
@@ -118,6 +122,7 @@ export function applyAppearance(settings) {
     ? "visible"
     : "hidden";
   $("#smooth-scroll").value = settings.smoothScroll;
+  $("#reading-format").checked = settings.readingFormat;
   $("#interface-language").value = settings.language;
   $("#text-weight").value = String(settings.weight);
   $("#navigation-size").value = String(settings.navigationSize);
@@ -139,6 +144,10 @@ export function wireAppearance(change) {
     pane = dialog.querySelector(".settings-pane"),
     links = [...dialog.querySelectorAll(".settings-nav button")];
   const target = (link) => document.getElementById(link.dataset.section);
+  // A link the reader clicked stays current while its section is in view,
+  // although short sections near the end cannot scroll to the top; the
+  // reader's own scrolling hands the choice back to the position.
+  let chosen = null;
   // The link of the section at the top of the pane is marked current.
   function mark() {
     const top = pane.getBoundingClientRect().top + 24;
@@ -149,6 +158,11 @@ export function wireAppearance(change) {
     // At the very end, the last section is current even if it is short.
     if (pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2)
       current = links.filter((link) => !link.hidden).at(-1);
+    if (chosen) {
+      const box = target(chosen).getBoundingClientRect(),
+        view = pane.getBoundingClientRect();
+      if (box.top < view.bottom && box.bottom > view.top) current = chosen;
+    }
     for (const link of links)
       link.setAttribute("aria-current", String(link === current));
   }
@@ -160,11 +174,15 @@ export function wireAppearance(change) {
   }
   for (const link of links)
     link.onclick = () => {
+      chosen = link;
       pane.scrollTo({ top: target(link).offsetTop - 12 });
       mark();
     };
   pane.addEventListener("scroll", mark, { passive: true });
+  for (const event of ["wheel", "keydown", "pointerdown", "touchstart"])
+    pane.addEventListener(event, () => (chosen = null), { passive: true });
   $("#weight").onclick = () => {
+    chosen = null;
     open();
     pane.scrollTop = 0;
     mark();
@@ -187,6 +205,8 @@ export function wireAppearance(change) {
     change({ navigationScope: event.target.value });
   $("#history-buttons").onchange = (event) =>
     change({ showHistoryButtons: event.target.value === "visible" });
+  $("#reading-format").onchange = (event) =>
+    change({ readingFormat: event.target.checked });
   $("#smooth-scroll").onchange = (event) =>
     change({ smoothScroll: event.target.value });
   $("#text-weight").onchange = (event) =>

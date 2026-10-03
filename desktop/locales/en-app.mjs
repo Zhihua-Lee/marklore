@@ -336,4 +336,8 @@ export default {
   "隐藏后仍可用鼠标侧键或 Alt+← / →":
     "Mouse side buttons and Alt+← / → still work when hidden",
   "默认应用…": "Default app…",
+  批注: "Annotation",
+  阅读模式中的格式栏: "Format bar in Read mode",
+  "划选文字即可高亮、标色和加粗；Alt+双击跳到源码":
+    "Select text to highlight, color or bold it; Alt+double-click opens the source",
 };

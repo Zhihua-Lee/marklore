@@ -440,6 +440,9 @@ selectionTools = createSelectionTools({
   getDocument: () => active,
   blocked: () => blockEditor.active,
   report: toast,
+  // Read mode formats from the page only when the reader turned it on.
+  editable: (doc) =>
+    doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat),
   render: () => {
     clearTimeout(renderingTimer);
     render(true);
@@ -1087,8 +1090,16 @@ $("#content").addEventListener("dblclick", (event) => {
   if (!hit) return;
   constrainWordSelection($("#content"), hit);
   const selected = selectionSource($("#content"));
-  // In split editing, a word selection belongs to the preview formatting tools.
+  // A word selection belongs to the formatting tools: in split editing, and in
+  // Read mode with its format bar on (it stays in Read mode).
   // Alt-double-click retains the explicit source-location gesture.
+  if (
+    active.mode === "read" &&
+    settings.readingFormat &&
+    selected &&
+    !event.altKey
+  )
+    return;
   if (active.mode === "edit" && selected && !event.altKey) {
     view.dispatch({
       selection: { anchor: selected.from, head: selected.to },

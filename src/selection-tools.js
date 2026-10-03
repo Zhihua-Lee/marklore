@@ -28,11 +28,17 @@ function boundary(node, offset, end) {
   }
   return null;
 }
-export function previewTextSelection(content, doc) {
+// editable(doc): the mode allows formatting from the page (Edit mode, or Read
+// mode once the reader turns on its format bar).
+export function previewTextSelection(
+  content,
+  doc,
+  editable = (d) => d.mode === "edit",
+) {
   const selected = window.getSelection();
   if (
     !doc ||
-    doc.mode !== "edit" ||
+    !editable(doc) ||
     doc.previewText !== doc.text ||
     !selected?.rangeCount ||
     selected.isCollapsed
@@ -107,6 +113,7 @@ export function createSelectionTools({
   blocked,
   render,
   report,
+  editable = (doc) => doc.mode === "edit",
 }) {
   const bar = document.createElement("div");
   bar.className = "selection-tools";
@@ -140,7 +147,7 @@ export function createSelectionTools({
     return (
       s &&
       s.doc === getDocument() &&
-      s.doc.mode === "edit" &&
+      editable(s.doc) &&
       s.text === s.doc.text &&
       s.text === view.state.doc.toString() &&
       !blocked() &&
@@ -179,7 +186,7 @@ export function createSelectionTools({
     )
       return;
     if (blocked() || document.querySelector("dialog[open]")) return hide();
-    snapshot = previewTextSelection(content, getDocument());
+    snapshot = previewTextSelection(content, getDocument(), editable);
     if (!snapshot) return hide();
     for (const action of ["inline", "link"]) {
       const button = bar.querySelector(`[data-selection-action="${action}"]`);
@@ -313,7 +320,8 @@ export function createSelectionTools({
     if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
     const key = event.key.toLowerCase();
     if (
-      getDocument()?.mode === "edit" &&
+      getDocument() &&
+      editable(getDocument()) &&
       !blocked() &&
       ["z", "y"].includes(key)
     ) {

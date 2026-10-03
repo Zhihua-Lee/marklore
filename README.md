@@ -28,7 +28,7 @@ More and more notes start as an AI draft. That is where the work begins: you che
 - typeset formulas, diagrams and sortable tables;
 - an outline that glides to each section;
 - link previews, so a reference never costs you your place;
-- typography and, optionally, frame-paced smooth scrolling for long sessions.
+- typography tuned for long sessions, and optional smooth scrolling.
 
 **Links are how knowledge connects.** Relative links and heading anchors are ordinary Markdown, so they work in any viewer and any agent can write them. Marklore makes them navigable: hover to preview, click to open, and `Alt+←` to return to the exact spot.
 
@@ -70,7 +70,7 @@ In Edit mode the source is on the left and the preview on the right; formulas, t
 
 ### Long documents: outline jumps glide
 
-Click an outline entry and the note scrolls smoothly to the heading. Formulas and tables along the way are laid out in advance, so nothing jumps while the page moves. Mouse side buttons or `Alt+←` / `Alt+→` go back and forth through the jump history.
+Click an outline entry and the note scrolls smoothly to the heading. Mouse side buttons or `Alt+←` / `Alt+→` go back and forth through the jump history.
 
 ![Clicking the outline: the note glides to each section](docs/images/en/outline.gif)
 

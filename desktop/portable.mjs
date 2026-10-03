@@ -24,7 +24,15 @@ export const DISABLED_MARK = "DISABLED";
 export const portableDir = (executable) =>
   path.join(path.dirname(executable), PORTABLE_FOLDER);
 
+// The installer puts its uninstaller beside the program. Upgrading or
+// uninstalling replaces that whole folder, so an installed copy never keeps
+// its data there and is never portable.
+export const UNINSTALLER = "Uninstall Marklore.exe";
+export const isInstalled = (executable, exists = existsSync) =>
+  exists(path.join(path.dirname(executable), UNINSTALLER));
+
 export const isPortable = (executable, exists = existsSync) => {
+  if (isInstalled(executable, exists)) return false;
   const dir = portableDir(executable);
   return exists(dir) && !exists(path.join(dir, DISABLED_MARK));
 };
@@ -45,6 +53,7 @@ export async function copyOwnData(from, to) {
 // Built beside the program under a temporary name, then renamed: a failed
 // copy never leaves a half-filled "data" folder that would switch modes.
 export async function enablePortable({ executable, current }) {
+  if (isInstalled(executable)) throw Error(t("安装版不支持便携模式"));
   const target = portableDir(executable);
   if (existsSync(target)) throw Error(t("程序目录中已有 data 文件夹"));
   const staging = `${target}.partial-${process.pid}`;

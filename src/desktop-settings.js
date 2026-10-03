@@ -75,13 +75,15 @@ export function wireDesktopSettings({ api, close, report, flush }) {
     const portable = status.portable || {};
     if (!busy) q("#portable-mode").checked = Boolean(portable.on);
     q("#portable-mode").disabled = busy || !portable.available;
-    q("#portable-status").textContent = !portable.available
-      ? t("仅打包版可用")
-      : status.restarting
-        ? t("正在重启 Marklore…")
-        : portable.on
-          ? t("数据在 {folder}", { folder: portable.folder })
-          : t("数据存到程序旁的 data 文件夹，可随 U 盘携带");
+    q("#portable-status").textContent = portable.installed
+      ? t("安装版不支持；需要随身携带请使用 zip 版")
+      : !portable.available
+        ? t("仅打包版可用")
+        : status.restarting
+          ? t("正在重启 Marklore…")
+          : portable.on
+            ? t("数据在 {folder}", { folder: portable.folder })
+            : t("数据存到程序旁的 data 文件夹，可随 U 盘携带");
   }
   async function refresh() {
     if (busy) return;

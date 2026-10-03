@@ -9,6 +9,8 @@ import {
   enablePortable,
   disablePortable,
   retireDisabled,
+  isInstalled,
+  UNINSTALLER,
 } from "../desktop/portable.mjs";
 
 async function fixture() {
@@ -89,4 +91,19 @@ test("disabling copies the data back and the next start keeps the folder renamed
   );
   assert.equal(await exists(kept), true);
   await fs.rm(root, { recursive: true, force: true });
+});
+
+test("an installed copy is never portable", async () => {
+  const { executable, profile } = await fixture();
+  await fs.mkdir(portableDir(executable));
+  assert.equal(isPortable(executable), true);
+  await fs.writeFile(
+    path.join(path.dirname(executable), UNINSTALLER),
+    "uninstaller",
+  );
+  assert.equal(isInstalled(executable), true);
+  assert.equal(isPortable(executable), false);
+  await fs.rm(portableDir(executable), { recursive: true });
+  await assert.rejects(enablePortable({ executable, current: profile }));
+  assert.equal(await exists(portableDir(executable)), false);
 });

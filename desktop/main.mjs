@@ -26,6 +26,7 @@ import { createRecentFiles } from "./recent.mjs";
 import {
   portableDir,
   isPortable,
+  isInstalled,
   enablePortable,
   disablePortable,
   retireDisabled,
@@ -705,7 +706,9 @@ else {
         ...(await integration.status()),
         trayAvailable: Boolean(tray),
         portable: {
-          available: app.isPackaged && !profile,
+          available:
+            app.isPackaged && !profile && !isInstalled(process.execPath),
+          installed: app.isPackaged && isInstalled(process.execPath),
           on: portable,
           folder: portableDir(process.execPath),
         },

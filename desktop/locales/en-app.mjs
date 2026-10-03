@@ -316,6 +316,8 @@ export default {
   书页排版: "Book typography",
   "仅 Windows 打包版可用": "Only in the packaged Windows app",
   仅打包版可用: "Only in the packaged app",
+  "安装版不支持；需要随身携带请使用 zip 版":
+    "Not in the installed version; use the zip version to carry it with you",
   便携模式: "Portable mode",
   后台保留标签与草稿: "Tabs and drafts stay open in the background",
   启动管理: "Startup apps",

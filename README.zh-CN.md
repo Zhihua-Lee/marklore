@@ -124,23 +124,24 @@
 
 ## 安装
 
-Marklore 是便携程序，不需要管理员权限。
+从[最新版本](https://github.com/Zhihua-Lee/marklore/releases/latest)下载，两种方式都不需要管理员权限：
 
-1. 从[最新版本](https://github.com/Zhihua-Lee/marklore/releases/latest)下载 `Marklore-vX.Y.Z-win-x64.zip`。
-2. （可选）用同一页面上 `SHA256SUMS-vX.Y.Z.txt` 中对应的一行校验下载文件：
-   ```powershell
-   Get-FileHash .\Marklore-vX.Y.Z-win-x64.zip -Algorithm SHA256
-   ```
-3. **解压整个压缩包**到任意文件夹，例如 `D:\Apps\Marklore`。DLL、`resources` 和 `locales` 要和 EXE 放在一起，不要只复制 EXE。
-4. 运行 `Marklore.exe`。程序没有代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”，选择**更多信息 → 仍要运行**。
+- **安装包**（`Marklore-Setup-vX.Y.Z-x64.exe`）：创建开始菜单和桌面快捷方式，可在 `设置 → 应用` 中卸载。安装位置可以自选，例如放在 `D:` 盘。
+- **压缩包**（`Marklore-vX.Y.Z-win-x64.zip`）：免安装。**解压整个压缩包**到任意文件夹，运行其中的 `Marklore.exe`。DLL、`resources` 和 `locales` 要和 EXE 放在一起，不要只复制 EXE。
+
+程序没有代码签名，首次运行时 Windows SmartScreen 可能提示“未知发布者”，选择**更多信息 → 仍要运行**。如需校验下载文件，可与同一页面上 `SHA256SUMS-vX.Y.Z.txt` 中对应的一行比对：
+
+```powershell
+Get-FileHash .\Marklore-Setup-vX.Y.Z-x64.exe -Algorithm SHA256
+```
 
 想先试试？[示例笔记库](docs/sample-notebook)包含公式、表格、代码、图表和互相链接的笔记，用“打开文件夹”选择它即可。
 
-**便携模式**：在 `设置 → 后台与系统 → 便携模式` 中开启后，标签、草稿、最近文件和设置都保存在程序旁的 `data` 文件夹，适合放在 U 盘中随身使用。
+**便携模式**（仅压缩包版）：在 `设置 → 后台与系统 → 便携模式` 中开启后，标签、草稿、最近文件和设置都保存在程序旁的 `data` 文件夹，适合放在 U 盘中随身使用。
 
-**升级**：把新版本解压到新目录并从新目录启动；设置和草稿保存在用户数据目录中（便携模式下在 `data` 文件夹），不随程序目录走。若启用过开机启动或 Markdown 文件关联，请在新版本的 `设置 → 后台与系统` 中重新注册。从 Folio Notes（v0.2.0 之前的名字）升级时，请先完全退出它（包括托盘图标），Marklore 首次启动时会自动迁移数据。
+**升级**：安装版直接运行新的安装包，原地替换程序，设置、草稿、快捷方式、开机启动和文件关联都会保留。压缩包版把新版本解压到新目录并从新目录启动；若启用过开机启动或 Markdown 文件关联，请在新版本的 `设置 → 后台与系统` 中重新注册。设置和草稿保存在用户数据目录中（便携模式下在 `data` 文件夹），不在程序目录里。从 Folio Notes（v0.2.0 之前的名字）升级时，请先完全退出它（包括托盘图标），Marklore 首次启动时会自动迁移数据。
 
-**卸载**：删除程序目录；如需同时清除设置与恢复数据，再删除 `%APPDATA%\Marklore`（Folio Notes 为 `%APPDATA%\folio-notes`）。其中包含明文草稿，请勿公开上传。
+**卸载**：安装版在 `设置 → 应用` 中卸载（或运行程序目录中的 `Uninstall Marklore.exe`），指向它的开机启动和文件关联会一并移除。压缩包版直接删除程序目录。两种方式都会保留 `%APPDATA%\Marklore`（Folio Notes 为 `%APPDATA%\folio-notes`）中的设置与恢复数据，如需清除请手动删除。其中包含明文草稿，请勿公开上传。
 
 ## 快速上手
 

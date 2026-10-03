@@ -91,7 +91,7 @@ pnpm run notices
 pnpm dist
 ```
 
-`pnpm run notices` 生成第三方依赖声明；`pnpm dist` 构建前端并生成 Windows 目录包，输出为 `release/win-unpacked/`。当前构建不做代码签名，也不自动发布到 GitHub Releases。
+`pnpm run notices` 生成第三方依赖声明；`pnpm dist` 构建前端并生成 Windows 目录包和安装包，分别输出为 `release/win-unpacked/` 和 `release/Marklore-Setup-vX.Y.Z-x64.exe`。安装包默认为当前用户安装（不需要管理员权限），可选安装目录；卸载时的注册清理见 `build/installer.nsh`。当前构建不做代码签名，也不自动发布到 GitHub Releases。
 
 分发时保留整个目录，以及 Electron／Chromium 随附的许可文件。不要只复制 `Marklore.exe`。
 

@@ -1,6 +1,6 @@
 {
   "name": "marklore",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
@@ -30,7 +30,7 @@
     "icons": "node tools/build-icons.mjs",
     "format": "prettier --write src desktop tests tools docs *.mjs *.json *.md",
     "format:check": "prettier --check src desktop tests tools docs *.mjs *.json *.md",
-    "dist": "pnpm run notices && pnpm build && electron-builder --win dir --publish never",
+    "dist": "pnpm run notices && pnpm build && electron-builder --win --publish never",
     "notices": "node tools/licenses.mjs",
     "prune-releases": "node tools/prune-releases.mjs"
   },
@@ -65,7 +65,8 @@
     "appId": "io.marklore.desktop",
     "productName": "Marklore",
     "directories": {
-      "output": "release"
+      "output": "release",
+      "buildResources": "build"
     },
     "files": [
       "dist/**",
@@ -88,11 +89,29 @@
     ],
     "win": {
       "target": [
-        "dir"
+        "dir",
+        "nsis"
       ],
       "icon": "desktop/icons/folio.ico",
       "signAndEditExecutable": true,
       "signExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Marklore",
+      "uninstallDisplayName": "Marklore",
+      "multiLanguageInstaller": true,
+      "installerLanguages": [
+        "zh_CN",
+        "en_US"
+      ],
+      "deleteAppDataOnUninstall": false,
+      "include": "build/installer.nsh",
+      "artifactName": "Marklore-Setup-v${version}-x64.${ext}"
     }
   }
 }

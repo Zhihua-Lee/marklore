@@ -124,23 +124,24 @@ Hover a link to a local note to read the target in a popup, where you can scroll
 
 ## Install
 
-Marklore is portable and needs no administrator rights.
+Download from the [latest release](https://github.com/Zhihua-Lee/marklore/releases/latest). Neither option needs administrator rights.
 
-1. Download `Marklore-vX.Y.Z-win-x64.zip` from the [latest release](https://github.com/Zhihua-Lee/marklore/releases/latest).
-2. (Optional) Verify the download against the matching line in `SHA256SUMS-vX.Y.Z.txt` on the same page:
-   ```powershell
-   Get-FileHash .\Marklore-vX.Y.Z-win-x64.zip -Algorithm SHA256
-   ```
-3. **Extract the whole archive** to any folder, for example `D:\Apps\Marklore`. Keep the DLLs, `resources` and `locales` next to the EXE; do not copy the EXE alone.
-4. Run `Marklore.exe`. The build is not code-signed, so on first launch Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**.
+- **Installer** (`Marklore-Setup-vX.Y.Z-x64.exe`): adds Start menu and desktop shortcuts and an entry in `Settings → Apps` for uninstalling. You can choose the folder, for example on `D:`.
+- **Zip** (`Marklore-vX.Y.Z-win-x64.zip`): no installation. **Extract the whole archive** to any folder and run `Marklore.exe` there. Keep the DLLs, `resources` and `locales` next to the EXE; do not copy the EXE alone.
+
+The program is not code-signed, so on first launch Windows SmartScreen may warn about an unknown publisher: choose **More info → Run anyway**. To verify a download, compare it with the matching line in `SHA256SUMS-vX.Y.Z.txt` on the same page:
+
+```powershell
+Get-FileHash .\Marklore-Setup-vX.Y.Z-x64.exe -Algorithm SHA256
+```
 
 Want to try it first? The [sample notebook](docs/sample-notebook-en) has formulas, tables, code, a diagram and linked notes: choose it with **Open folder**.
 
-**Portable mode:** turn on `Settings → Background & system → Portable mode` to keep your tabs, drafts, recent files and settings in a `data` folder next to the program, for example on a USB stick.
+**Portable mode** (zip version only): turn on `Settings → Background & system → Portable mode` to keep your tabs, drafts, recent files and settings in a `data` folder next to the program, for example on a USB stick.
 
-**Update:** extract the new version to a new folder and start it from there; your settings and drafts live in your user profile (or in `data` in portable mode), not in the program folder. If you enabled start at login or Markdown file registration, register again from the new version in `Settings → Background & system`. Coming from Folio Notes (before v0.2.0)? Quit it first, including the tray icon: Marklore moves its profile over on the first start.
+**Update:** run the new installer; it replaces the program in place and keeps your settings, drafts, shortcuts, start at login and file registration. With the zip version, extract the new version to a new folder and start it from there, then register again in `Settings → Background & system` if you had enabled start at login or Markdown file registration. Settings and drafts live in your user profile (or in `data` in portable mode), never in the program folder. Coming from Folio Notes (before v0.2.0)? Quit it first, including the tray icon: Marklore moves its profile over on the first start.
 
-**Uninstall:** delete the program folder. To also remove settings and recovery data, delete `%APPDATA%\Marklore` (`%APPDATA%\folio-notes` for Folio Notes). It contains drafts in plain text, so do not share it.
+**Uninstall:** for the installed version, use `Settings → Apps` (or `Uninstall Marklore.exe` in the program folder); it also removes the start at login and file registration that point to it. For the zip version, delete the program folder. Either way your settings and recovery data stay in `%APPDATA%\Marklore` (`%APPDATA%\folio-notes` for Folio Notes); delete it to remove them too. It contains drafts in plain text, so do not share it.
 
 ## Getting started
 

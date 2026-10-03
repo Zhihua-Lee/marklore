@@ -73,6 +73,8 @@ try {
   Check 'Apps & features entry' ($null -ne $entry)
   if ($entry) { Check 'entry uninstalls this folder' ("$(RegValue $entry.PSPath 'UninstallString')".Contains("$dir\Uninstall Marklore.exe")) }
   Check 'no portable data folder created' (-not (Test-Path (Join-Path $dir 'data')))
+  # A debug.log left in Electron's own folder would ship with local paths.
+  Check 'no debug.log shipped' (-not (Test-Path (Join-Path $dir 'debug.log')))
 
   # Smoke launch with an isolated profile, window inactive.
   $env:FOLIO_DATA_DIR = $profileDir; $env:FOLIO_TEST_INACTIVE = '1'

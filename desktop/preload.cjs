@@ -51,7 +51,16 @@ for (const name of [
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {
-  if (!["open", "disk", "command", "desktop-settings", "window"].includes(name))
+  if (
+    ![
+      "open",
+      "disk",
+      "command",
+      "desktop-settings",
+      "window",
+      "library",
+    ].includes(name)
+  )
     throw Error("Invalid event");
   const handler = (_event, payload) => callback(payload);
   ipcRenderer.on("folio:" + name, handler);

@@ -19,6 +19,7 @@ import { FileStore, within, markdownPath } from "./files.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
 import { profileFolder } from "./profile-folder.mjs";
+import { createLibraryWatch } from "./library-watch.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
 import {
@@ -249,6 +250,11 @@ const allowedImage = {
   ".bmp": "image/bmp",
   ".svg": "image/svg+xml",
 };
+// The folder tree follows notes and folders created, renamed or deleted by
+// other programs, such as an AI agent writing into the library.
+const libraryWatch = createLibraryWatch({
+  notify: () => send("library", null),
+});
 // One watcher per folder, reacting only to the open notes it contains. Unrelated
 // files (Downloads, our own .folio-*.tmp saves) no longer trigger disk re-reads.
 function watchFile(id) {
@@ -1003,6 +1009,7 @@ else {
         const roots = (value.roots || [])
           .map((id) => files.directories.get(id))
           .filter(Boolean);
+        libraryWatch.follow(roots);
         savedSession = {
           ...value,
           tabs,
@@ -1107,6 +1114,7 @@ else {
             roots.push(await files.directory(p));
           } catch {}
         }
+        libraryWatch.follow(roots.map((root) => root.path));
         ready = true;
         const incoming = pending;
         pending = [];
@@ -1122,6 +1130,7 @@ else {
       await win.loadURL("folio://app/");
       app.on("window-all-closed", () => app.quit());
       app.on("will-quit", () => {
+        libraryWatch.close();
         tray?.destroy();
         for (const entry of watchers.values()) entry.watcher.close();
         watchers.clear();

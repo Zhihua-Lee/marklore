@@ -60,7 +60,8 @@ export function createLibrary({
       .querySelector('[aria-current="page"]')
       ?.scrollIntoView({ block: "nearest" });
   }
-  async function branch(entry) {
+  // open: folder paths to reopen, so a rebuild keeps what the reader expanded.
+  async function branch(entry, open = null) {
     const details = document.createElement("details");
     details.className = "folder";
     details.dataset.path = entry.path;
@@ -76,7 +77,7 @@ export function createLibrary({
         loaded = true;
         try {
           for (const child of await api.list(entry.id)) {
-            if (child.directory) details.append(await branch(child));
+            if (child.directory) details.append(await branch(child, open));
             else {
               const b = document.createElement("button");
               b.className = "file";
@@ -98,9 +99,10 @@ export function createLibrary({
         }
       }),
     );
+    if (open?.has(entry.path)) details.open = true;
     return details;
   }
-  async function renderTree() {
+  async function renderTree(open = null) {
     const tree = $("#tree");
     const fragment = document.createDocumentFragment(),
       epoch = ++treeEpoch;
@@ -113,7 +115,7 @@ export function createLibrary({
       fragment.append(empty);
     }
     for (const root of displayedRoots) {
-      const el = await branch(root);
+      const el = await branch(root, open);
       fragment.append(el);
       el.open = true;
     }
@@ -162,10 +164,28 @@ export function createLibrary({
       250,
     );
   };
+  // A change on disk (another program added, renamed or removed notes): rebuild
+  // with the same folders open and the same scroll position; a filter in use
+  // is searched again instead.
+  async function refresh() {
+    const filter = $("#file-filter"),
+      tree = $("#tree");
+    if (filter.value.trim()) return filter.oninput({ target: filter });
+    const open = new Set(
+      [...tree.querySelectorAll("details.folder[open]")].map(
+        (el) => el.dataset.path,
+      ),
+    );
+    const top = tree.scrollTop;
+    await renderTree(open);
+    tree.scrollTop = top;
+    // Reopened folders load their entries a moment later.
+    setTimeout(() => (tree.scrollTop = top), 150);
+  }
   $("#tree-refresh").onclick = run(async () => {
     $("#file-filter").value = "";
     searchEpoch++;
     await renderTree();
   });
-  return { openFolder, renderTree, followCurrentFolder };
+  return { openFolder, renderTree, followCurrentFolder, refresh };
 }

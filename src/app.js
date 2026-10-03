@@ -1246,7 +1246,12 @@ async function openFiles() {
   if (!api) return toast(t("请运行桌面版以访问本地文件"));
   for (const file of await api.pickFiles()) add(file);
 }
-const { openFolder, renderTree, followCurrentFolder } = createLibrary({
+const {
+  openFolder,
+  renderTree,
+  followCurrentFolder,
+  refresh: refreshLibrary,
+} = createLibrary({
   api,
   roots,
   getActive: () => active,
@@ -1587,6 +1592,7 @@ onHighlighterReady(() => {
 if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());
+  api.on("library", () => run(refreshLibrary)());
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
   api.on("window", showWindowState);
   api.windowState?.().then(showWindowState, () => {});

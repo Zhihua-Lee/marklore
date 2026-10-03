@@ -35,6 +35,11 @@ const L = english
       editText:
         " In the discrete case, $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$ as well.",
       darkHeading: "Discrete implementation",
+      annotate: {
+        highlight: "Energy is the same in both domains",
+        color: "the fast Fourier transform (FFT)",
+        highlight2: "a quick check",
+      },
       agent: {
         file: "Laplace-transform.md",
         title: "Laplace transform",
@@ -72,6 +77,11 @@ const L = english
       editText:
         "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
       darkHeading: "离散实现",
+      annotate: {
+        highlight: "能量在两个域中守恒",
+        color: "快速傅里叶变换（FFT）",
+        highlight2: "检查 FFT 的归一化",
+      },
       agent: {
         file: "拉普拉斯变换.md",
         title: "拉普拉斯变换",
@@ -400,6 +410,68 @@ await scene(
     await page.waitForTimeout(600);
   },
 );
+
+// Mark up the rendered page like a notebook: select text in the preview and
+// highlight or color it; the source on the left shows what is written.
+await scene("annotate", "light", async ({ page, moveTo, mark }) => {
+  await page.keyboard.press("Control+2");
+  await page
+    .locator("#outline")
+    .getByRole("button", { name: L.editHeading, exact: true })
+    .click();
+  await page.waitForTimeout(1200);
+  // Drag across a phrase of the preview, as a reader would.
+  const select = async (phrase) => {
+    const box = await page.evaluate((phrase) => {
+      const walker = document.createTreeWalker(
+        document.querySelector("#content"),
+        NodeFilter.SHOW_TEXT,
+      );
+      for (let node; (node = walker.nextNode());) {
+        const at = node.nodeValue.indexOf(phrase);
+        if (at < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + phrase.length);
+        const rects = range.getClientRects();
+        const first = rects[0],
+          last = rects[rects.length - 1];
+        return {
+          x1: first.left + 1,
+          y1: first.top + first.height / 2,
+          x2: last.right - 1,
+          y2: last.top + last.height / 2,
+        };
+      }
+      return null;
+    }, phrase);
+    if (!box) throw Error("Phrase not found: " + phrase);
+    await page.mouse.move(box.x1, box.y1, { steps: 18 });
+    await page.mouse.down();
+    await page.mouse.move(box.x2, box.y2, { steps: 22 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+  };
+  const apply = async (action) => {
+    const button = page.locator(`[data-selection-action="${action}"]`);
+    await button.waitFor();
+    await moveTo(button);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(1100);
+  };
+  await mark();
+  await select(L.annotate.highlight);
+  await apply("highlight");
+  await select(L.annotate.color);
+  await apply("color");
+  await select(L.annotate.highlight2);
+  await apply("highlight");
+  // Put the format bar away so the last frames show the marked-up page.
+  await page.keyboard.press("Escape");
+  await page.mouse.move(40, 560, { steps: 12 });
+  await page.waitForTimeout(1200);
+});
 
 await scene("edit", "light", async ({ page, mark }) => {
   await page.keyboard.press("Control+2");

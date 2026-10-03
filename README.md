@@ -2,7 +2,7 @@
 
 English · [简体中文](README.zh-CN.md)
 
-**A Markdown knowledge base for Windows, built for notes that you and your AI write together: plain files on your disk, a reader worth spending hours in.**
+**A Markdown knowledge base for Windows: AI drafts your notes, you refine and mark them up. Plain files on your disk, and a reader worth spending hours in.**
 
 [![CI](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Zhihua-Lee/marklore?label=release)](https://github.com/Zhihua-Lee/marklore/releases/latest)
@@ -15,11 +15,13 @@ English · [简体中文](README.zh-CN.md)
 
 ## Why Marklore
 
-More and more knowledge is written by two authors: you, and an AI assistant working directly in your files. Marklore is designed around that.
+More and more notes start as an AI draft. That is where the work begins: you check the draft, rewrite it and mark it up until it is yours. Marklore is built for that loop.
 
 **Your notes are the database.** A knowledge base in Marklore is a folder of ordinary `.md` files. Nothing is imported, there is no vault format, and Marklore keeps nothing of its own in your folders: drafts, backups and settings stay in your user profile. Git, a sync folder, any text editor, a script and any AI agent all work on the same files.
 
-**AI writes, you read.** Let Claude Code, Codex or any agent that edits files create and reorganize notes in the folder. A note open in Marklore updates within a fraction of a second when it changes on disk, and new notes appear in the library as they are written. If you have unsaved edits, Marklore shows a conflict instead of overwriting them.
+**AI drafts, you refine.** Let Claude Code, Codex or any agent that edits files write first drafts and reorganize notes in the folder. Marklore shows each change as it lands: an open note re-renders within a fraction of a second, and new notes appear in the library. Then the note is yours to correct, in the editor or right in the rendered preview. The agent never overwrites your unsaved edits; Marklore shows a conflict instead.
+
+**Mark it up like a notebook.** Select text on the rendered page and highlight it or change its color, as you would in OneNote. The marks are saved in the Markdown file itself, as standard inline HTML, so they travel with the note.
 
 **Reading comes first.** Most Markdown tools are editors with a preview pane. Marklore is a reader that you can also edit in:
 
@@ -38,7 +40,7 @@ More and more knowledge is written by two authors: you, and an AI assistant work
 
 1. Open your knowledge-base folder in Marklore (**Open folder**).
 2. Run your agent in the same folder, for example `claude` in a terminal there, and ask it to write, split, link or tidy notes.
-3. Read along: new files appear in the library, and open notes re-render as they change. Edit by hand whenever you like; nothing is saved until you press `Ctrl+S`.
+3. Read and refine: new files appear in the library, and open notes re-render as they change. Rewrite, correct and highlight by hand whenever you like; nothing is saved until you press `Ctrl+S`.
 
 To keep what the agent writes rendering correctly, you can put a few conventions in the folder's `AGENTS.md` or `CLAUDE.md`:
 
@@ -53,6 +55,12 @@ Notes here are plain Markdown, read in Marklore.
 ```
 
 ## Features
+
+### Highlight and color, right on the rendered page
+
+In Edit mode, select text in the preview and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. The source on the left shows what is written into the Markdown. The highlight and color buttons apply your last color; right-click either for the palette.
+
+![Selecting phrases in the rendered preview and highlighting or coloring them; the Markdown source updates alongside](docs/images/en/annotate.gif)
 
 ### Live preview while you edit
 

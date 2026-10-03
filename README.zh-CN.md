@@ -1,3 +1,7 @@
+<div align="center">
+
+<img src="docs/images/logo.svg" width="112" alt="Marklore 图标：一本翻开成 M 形的书和一只杯子">
+
 # Marklore
 
 [English](README.md) · 简体中文
@@ -10,6 +14,8 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-285e50)](LICENSE)
 
 [理念](#为什么是-marklore) · [和 AI 一起用](#和-ai-一起用) · [功能](#功能一览) · [安装](#安装) · [快速上手](#快速上手) · [使用指南](docs/user-guide.md)
+
+</div>
 
 ![Marklore 阅读界面：左侧笔记库，中间渲染后的公式与表格，右侧本文目录](docs/images/overview.png)
 

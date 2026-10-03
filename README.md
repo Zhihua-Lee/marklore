@@ -1,3 +1,7 @@
+<div align="center">
+
+<img src="docs/images/logo.svg" width="112" alt="Marklore logo: an open book shaped like an M, with a mug">
+
 # Marklore
 
 English · [简体中文](README.zh-CN.md)
@@ -10,6 +14,8 @@ English · [简体中文](README.zh-CN.md)
 [![License: MIT](https://img.shields.io/badge/license-MIT-285e50)](LICENSE)
 
 [Why Marklore](#why-marklore) · [With an AI agent](#working-with-an-ai-agent) · [Features](#features) · [Install](#install) · [Getting started](#getting-started) · [User guide (Chinese)](docs/user-guide.md)
+
+</div>
 
 ![Marklore reading view: the library on the left, rendered formulas and tables in the middle, the outline on the right](docs/images/en/overview.png)
 

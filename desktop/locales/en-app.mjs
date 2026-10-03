@@ -340,4 +340,18 @@ export default {
   阅读模式中的格式栏: "Format bar in Read mode",
   "划选文字即可高亮、标色和加粗；Alt+双击跳到源码":
     "Select text to highlight, color or bold it; Alt+double-click opens the source",
+  // Backlinks and broken links
+  "{label}：被 {count} 处引用": "{label}: linked from {count} places",
+  "被 {count} 处引用": "Linked from {count} places",
+  "不存在的位置 #{id}": "Missing place #{id}",
+  "引用了这里（{count}）": "Linked here ({count})",
+  "链接到本笔记（{count}）": "Linking to this note ({count})",
+  整篇笔记: "The whole note",
+  链接的笔记不存在: "The linked note does not exist",
+  链接的标题或锚点不存在: "The linked heading or anchor does not exist",
+  目录中的引用点: "Anchors in the outline",
+  被引用的位置: "Linked places",
+  所有锚点: "All anchors",
+  "定义、定理等用锚点标出的位置，以及被引用的次数":
+    "Definitions, theorems and other anchored places, with how often they are linked",
 };

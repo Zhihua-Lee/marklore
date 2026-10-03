@@ -46,6 +46,8 @@ for (const name of [
   "recentFiles",
   "openRecent",
   "clearRecent",
+  "backlinks",
+  "linkStatus",
   "windowState",
   "windowAction",
 ])
@@ -59,6 +61,7 @@ api.on = (name, callback) => {
       "desktop-settings",
       "window",
       "library",
+      "links",
     ].includes(name)
   )
     throw Error("Invalid event");

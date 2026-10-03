@@ -34,6 +34,8 @@ const paths = {
     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M5.7 8h.6m-.6 4h.6m-.6 4h.6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
   minus: '<path d="M5 12h14"/>',
+  // Links coming in from elsewhere: an arrow into a margin.
+  backlink: '<path d="M20 12H9m4-5-5 5 5 5M4 5v14"/>',
   close: '<path d="m6.5 6.5 11 11m0-11-11 11"/>',
   folder:
     '<path d="M3 8V5.5A1.5 1.5 0 0 1 4.5 4H9l2 3h8.5A1.5 1.5 0 0 1 21 8.5v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5V8Z"/><path d="M3 10h18"/>',

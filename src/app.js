@@ -49,6 +49,7 @@ import {
 import { createPreviewCache } from "./render-cache.js";
 import { renderDiagrams } from "./diagrams.js";
 import { createLinkPreview, splitLink } from "./link-preview.js";
+import { createBacklinks } from "./backlinks.js";
 import { wireDesktopSettings } from "./desktop-settings.js";
 import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
@@ -109,7 +110,7 @@ configureColorTools(
   },
 );
 let editingKeys = [];
-let blockEditor, imageInsertion;
+let blockEditor, imageInsertion, backlinks;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("筛选文件")}" title="${t("搜索文件名，包含子文件夹")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
@@ -718,6 +719,7 @@ function render(preserve) {
       restoreAnchor(host, currentAnchor.anchor);
   });
   scheduleTableLayout();
+  backlinks?.refresh();
 }
 let outlineSignature = "";
 function updateOutline(headings) {
@@ -725,7 +727,10 @@ function updateOutline(headings) {
     headings.map(({ label, id, level }) => ({ label, id, level })),
   );
   if (outlineSignature === signature) {
-    [...$("#outline").children].forEach((button, i) => {
+    // Heading entries only: anchored blocks may be listed between them.
+    [
+      ...$("#outline").querySelectorAll(":scope > button:not(.outline-anchor)"),
+    ].forEach((button, i) => {
       button.dataset.from = String(headings[i].from);
     });
     return;
@@ -742,6 +747,7 @@ function updateOutline(headings) {
       return b;
     }),
   );
+  backlinks?.decorateOutline();
   // Math in headings renders as TeX until KaTeX loads; then redraw this outline.
   if (!mathReady() && headings.some((h) => mayContainMath(h.label)))
     loadMath().then(() => {
@@ -994,6 +1000,17 @@ async function navigateLink(href, source = active) {
     scheduleSession();
   } else toast(t("没有找到锚点：{anchor}", { anchor }));
 }
+backlinks = createBacklinks({
+  api,
+  content: $("#content"),
+  reader: $("#reader"),
+  outline: $("#outline"),
+  getActive: () => active,
+  getHeadings: () => active?.headings || [],
+  getSettings: () => settings,
+  navigate: (href) => navigateLink(href),
+  run,
+});
 const linkPreview = createLinkPreview({
   host: $("#content"),
   report: toast,
@@ -1316,6 +1333,7 @@ function applySettings() {
   $("#zoom-reset").textContent = settings.zoom + "%";
   document.documentElement.dataset.wide = String(settings.wide);
   smoothScroll.set(settings.smoothScroll);
+  backlinks?.decorateOutline();
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? t("切换为窄版") : t("切换为宽版");
   applyAppearance(settings);
@@ -1604,6 +1622,7 @@ if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());
   api.on("library", () => run(refreshLibrary)());
+  api.on("links", () => backlinks?.invalidate());
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
   api.on("window", showWindowState);
   api.windowState?.().then(showWindowState, () => {});

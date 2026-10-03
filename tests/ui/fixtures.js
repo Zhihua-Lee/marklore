@@ -35,6 +35,8 @@ export const FOLIO_API = [
   "recentFiles",
   "openRecent",
   "clearRecent",
+  "backlinks",
+  "linkStatus",
   "windowState",
   "windowAction",
   "language",

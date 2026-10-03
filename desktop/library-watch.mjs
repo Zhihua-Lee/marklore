@@ -18,7 +18,14 @@ export function treeChange(name) {
   return markdownPath(last) || !/\.[a-z0-9]{1,5}$/i.test(last);
 }
 
-export function createLibraryWatch({ notify, delay = 400, watch = fsWatch }) {
+// notify(): the tree changed. noteChanged(path): a note was written, created,
+// renamed or deleted (the link index follows its content).
+export function createLibraryWatch({
+  notify,
+  noteChanged = () => {},
+  delay = 400,
+  watch = fsWatch,
+}) {
   const watchers = new Map();
   let timer;
   return {
@@ -35,6 +42,8 @@ export function createLibraryWatch({ notify, delay = 400, watch = fsWatch }) {
         try {
           // "change" events are edits to existing files: the tree is unchanged.
           const watcher = watch(folder, { recursive: true }, (type, name) => {
+            if (name && treeChange(name) && markdownPath(String(name)))
+              noteChanged(path.join(folder, String(name)));
             if (type !== "rename" || !treeChange(name)) return;
             clearTimeout(timer);
             timer = setTimeout(notify, delay);

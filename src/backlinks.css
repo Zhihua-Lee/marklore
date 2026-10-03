@@ -1,0 +1,154 @@
+/* A quiet count at the right of a block that other notes link to. The number
+   is drawn by CSS, so it is never copied, found or mapped to the source. */
+#content .backlink-badge {
+  float: right;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 0;
+  height: 1.55em;
+  margin: 0.05em 0 0 0.6em;
+  padding: 0 7px 0 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--muted));
+  font: 600 11.5px/1 var(--font-ui);
+  letter-spacing: 0;
+  vertical-align: middle;
+  user-select: none;
+  cursor: pointer;
+}
+#content .backlink-badge::after {
+  content: attr(data-count);
+}
+#content .backlink-badge .ui-icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2;
+}
+#content .backlink-badge:hover,
+#content .backlink-badge:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: var(--accent);
+}
+/* Some links into this note point at places it no longer has. */
+#content .backlink-badge.has-missing {
+  border-style: dashed;
+}
+#content h1 > .backlink-badge,
+#content h2 > .backlink-badge,
+#content h3 > .backlink-badge {
+  margin-top: 0.35em;
+}
+
+/* A link that leads nowhere. */
+#content a.link-broken {
+  text-decoration: underline dashed
+    color-mix(in srgb, var(--danger) 70%, transparent);
+  text-underline-offset: 0.2em;
+  color: color-mix(in srgb, var(--danger) 55%, var(--ink));
+}
+
+#backlinks-card {
+  position: fixed;
+  z-index: 50;
+  width: min(460px, calc(100vw - 24px));
+  max-height: min(60vh, 520px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 12px 36px #0003;
+  overflow: hidden;
+  font: 400 13px/1.5 var(--font-ui);
+}
+#backlinks-card[hidden] {
+  display: none;
+}
+#backlinks-card header {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+}
+#backlinks-card header strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+#backlinks-card header .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+#backlinks-card .backlinks-list {
+  overflow: auto;
+  padding: 4px;
+}
+#backlinks-card .backlinks-target {
+  margin: 8px 8px 2px;
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+#backlinks-card .backlink-entry {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 7px 9px;
+  border-radius: 7px;
+  text-align: left;
+  white-space: normal;
+}
+#backlinks-card .backlink-entry:hover,
+#backlinks-card .backlink-entry:focus-visible {
+  background: var(--hover);
+}
+#backlinks-card .backlink-source {
+  font-weight: 600;
+}
+#backlinks-card .backlink-section {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+#backlinks-card .backlink-snippet {
+  margin-top: 2px;
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+  font: 400 13px/1.55 var(--font-note);
+}
+#backlinks-card .backlink-snippet p {
+  margin: 0;
+}
+#backlinks-card .backlink-hit {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: inherit;
+}
+
+/* Outline: how often a section is linked, and anchored blocks by setting. */
+/* The count floats at the right of the entry's first line. */
+#outline .outline-count {
+  float: right;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: color-mix(in srgb, var(--accent) 80%, var(--muted));
+  font-size: 0.85em;
+  font-variant-numeric: tabular-nums;
+}
+#outline .outline-anchor {
+  color: var(--muted);
+  font-size: 0.95em;
+}
+#outline .outline-anchor .outline-label::before {
+  content: "◇";
+  margin-right: 5px;
+  font-size: 0.8em;
+  opacity: 0.75;
+}

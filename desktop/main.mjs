@@ -20,6 +20,7 @@ import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
 import { profileFolder } from "./profile-folder.mjs";
 import { createLibraryWatch } from "./library-watch.mjs";
+import { createLinkIndex } from "./link-index.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
 import {
@@ -252,9 +253,26 @@ const allowedImage = {
 };
 // The folder tree follows notes and folders created, renamed or deleted by
 // other programs, such as an AI agent writing into the library.
+// Which notes link to which, for backlinks and broken links; it follows the
+// same folders and changes as the tree.
+const linkIndex = createLinkIndex();
+let linksTimer;
 const libraryWatch = createLibraryWatch({
   notify: () => send("library", null),
+  noteChanged: (file) =>
+    linkIndex.changed(file).then((indexed) => {
+      if (!indexed) return;
+      clearTimeout(linksTimer);
+      linksTimer = setTimeout(() => send("links", null), 300);
+    }),
 });
+function followLibrary(folders) {
+  libraryWatch.follow(folders);
+  linkIndex.follow(folders).then(
+    () => send("links", null),
+    () => {},
+  );
+}
 // One watcher per folder, reacting only to the open notes it contains. Unrelated
 // files (Downloads, our own .folio-*.tmp saves) no longer trigger disk re-reads.
 function watchFile(id) {
@@ -880,6 +898,37 @@ else {
       });
       api("read", (id, version) => files.read(id, version));
       api("preview", (id, href) => files.preview(id, href));
+      // Links from other notes in the library to this one: where each comes
+      // from, in what sentence, and an href (relative to this note) that
+      // opens the source at the link (#L12C5).
+      api("backlinks", async (id) => {
+        const file = files.file(id).path,
+          base = path.dirname(file);
+        return (await linkIndex.backlinks(file)).map((link) => ({
+          source: link.source,
+          name: path.basename(link.source),
+          href:
+            encodeURI(
+              path.relative(base, link.source).split(path.sep).join("/"),
+            ) + `#L${link.line}C${link.column}`,
+          fragment: link.fragment,
+          section: link.section,
+          snippet: link.snippet,
+        }));
+      });
+      // For each href in this note: "ok", "missing-file" or "missing-anchor".
+      api("linkStatus", async (id, hrefs) => {
+        if (!Array.isArray(hrefs) || hrefs.length > 2000)
+          throw Error(t("无效链接"));
+        const file = files.file(id).path;
+        return Promise.all(
+          hrefs.map((href) =>
+            typeof href === "string" && href.length <= 8192
+              ? linkIndex.status(file, href).catch(() => "ok")
+              : "ok",
+          ),
+        );
+      });
       api("save", (id, text, version) => files.save(id, text, version));
       api("saveAs", async (text, name, excludedIds = []) => {
         if (
@@ -1009,7 +1058,7 @@ else {
         const roots = (value.roots || [])
           .map((id) => files.directories.get(id))
           .filter(Boolean);
-        libraryWatch.follow(roots);
+        followLibrary(roots);
         savedSession = {
           ...value,
           tabs,
@@ -1114,7 +1163,7 @@ else {
             roots.push(await files.directory(p));
           } catch {}
         }
-        libraryWatch.follow(roots.map((root) => root.path));
+        followLibrary(roots.map((root) => root.path));
         ready = true;
         const incoming = pending;
         pending = [];

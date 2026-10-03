@@ -47,6 +47,7 @@ export const appearanceMarkup = `
   <fieldset id="settings-layout"><legend>${t("布局与侧栏")}</legend>
     ${row("library-placement", t("文件夹浏览"), `<select id="library-placement"><option value="left">${t("左侧")}</option><option value="right">${t("右侧")}</option><option value="hidden">${t("隐藏")}</option></select>`)}
     ${row("outline-placement", t("本文目录"), `<select id="outline-placement"><option value="right">${t("右侧")}</option><option value="left">${t("左侧")}</option><option value="hidden">${t("隐藏")}</option></select>`)}
+    ${row("outline-anchors", t("目录中的引用点"), `<select id="outline-anchors"><option value="off">${t("关")}</option><option value="referenced">${t("被引用的位置")}</option><option value="all">${t("所有锚点")}</option></select>`, t("定义、定理等用锚点标出的位置，以及被引用的次数"))}
     <div class="layout-sample" aria-hidden="true"><span data-panel="library">${t("文件夹")}</span><span class="layout-page">${t("笔记")}</span><span data-panel="outline">${t("目录")}</span></div>
     ${row("navigation-size", t("文件夹与目录字号"), `<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select>`)}
     ${row("tab-size", t("标签页字号"), `<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select>`)}
@@ -123,6 +124,7 @@ export function applyAppearance(settings) {
     : "hidden";
   $("#smooth-scroll").value = settings.smoothScroll;
   $("#reading-format").checked = settings.readingFormat;
+  $("#outline-anchors").value = settings.outlineAnchors;
   $("#interface-language").value = settings.language;
   $("#text-weight").value = String(settings.weight);
   $("#navigation-size").value = String(settings.navigationSize);
@@ -219,6 +221,8 @@ export function wireAppearance(change) {
   $("#color-theme").onchange = (event) => change({ theme: event.target.value });
   $("#interface-language").onchange = (event) =>
     change({ language: event.target.value });
+  $("#outline-anchors").onchange = (event) =>
+    change({ outlineAnchors: event.target.value });
   $("#navigation-size").onchange = (event) =>
     change({ navigationSize: Number(event.target.value) });
   $("#tab-size").onchange = (event) =>

@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                              | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | -------------------------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.2.1  | Library follows the disk; Read-mode annotation option; new README    | 74                | 170 (default + reduced-motion) | 12 suites (packaged)                                            | [v0.2.1](docs/verification/v0.2.1.md)   |
 | v0.2.0  | Renamed to Marklore; MIT; profile migration; background tests        | 71                | 168 (default + reduced-motion) | 11 suites (packaged; native-editing passed on rerun)            | [v0.2.0](docs/verification/v0.2.0.md)   |
 | v0.1.42 | Live edit preview, editor find bar, reliable tab highlight           | 67                | 168 (default + reduced-motion) | 11 suites (packaged)                                            | [v0.1.42](docs/verification/v0.1.42.md) |
 | v0.1.41 | English interface, portable mode, new Settings, clearer selected tab | 67                | 164 (default + reduced-motion) | 11 suites (packaged)                                            | [v0.1.41](docs/verification/v0.1.41.md) |

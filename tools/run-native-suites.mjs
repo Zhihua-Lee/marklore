@@ -12,7 +12,12 @@ for (const suite of suites) {
   // Suites assert Chinese interface text whatever the machine's language.
   const result = spawnSync(process.execPath, [`tests/${suite}`], {
     stdio: "inherit",
-    env: { ...process.env, FOLIO_LANG: process.env.FOLIO_LANG || "zh" },
+    env: {
+      ...process.env,
+      FOLIO_LANG: process.env.FOLIO_LANG || "zh",
+      // Windows open in the background instead of taking the foreground.
+      FOLIO_TEST_INACTIVE: "1",
+    },
   });
   if (result.status !== 0) failed.push(suite);
 }

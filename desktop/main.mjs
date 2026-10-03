@@ -114,9 +114,13 @@ const recent = createRecentFiles({
 let tray,
   desktopWrite = Promise.resolve(),
   pendingDisk = false;
+// Automated runs (FOLIO_TEST_INACTIVE) show windows without activating them,
+// so tests never take the foreground from whoever is using the computer.
+const inactive = Boolean(process.env.FOLIO_TEST_INACTIVE);
 function showWindow() {
   if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
+  if (inactive) return win.showInactive();
   win.show();
   win.focus();
 }
@@ -532,7 +536,9 @@ else {
         const backgroundOnly =
           process.argv.includes("--background") &&
           !process.argv.some(markdownPath);
-        if (!backgroundOnly || !tray) win.show();
+        if (backgroundOnly && tray) return;
+        if (inactive) win.showInactive();
+        else win.show();
       });
       win.webContents.on("render-process-gone", () => {
         allowClose = true;

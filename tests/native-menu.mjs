@@ -205,7 +205,7 @@ try {
   // bypasses this, which let tabs be taken as the title bar in v0.1.33-36.
   const hit = await instance.evaluate(({ BrowserWindow, screen }) => {
     const win = BrowserWindow.getAllWindows()[0];
-    win.show();
+    win.showInactive();
     return {
       hwnd: win.getNativeWindowHandle().readBigUInt64LE(0).toString(),
       content: win.getContentBounds(),

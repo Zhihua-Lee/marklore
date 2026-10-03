@@ -30,7 +30,7 @@ More and more notes start as an AI draft. That is where the work begins: you che
 - link previews, so a reference never costs you your place;
 - typography tuned for long sessions, and optional smooth scrolling.
 
-**Links are how knowledge connects.** Relative links and heading anchors are ordinary Markdown, so they work in any viewer and any agent can write them. Marklore makes them navigable: hover to preview, click to open, and `Alt+←` to return to the exact spot.
+**Links are how knowledge connects.** Relative links and heading anchors are ordinary Markdown, so they work in any viewer and any agent can write them. Marklore makes them navigable both ways: hover to preview, click to open, and `Alt+←` to return to the exact spot. A link you write once is also seen from the other end: a small count beside a section or definition shows which notes cite it, and in what sentence.
 
 **Local and quiet.** No account, no cloud, no telemetry, and no network requests from your notes. Remote images are not loaded.
 
@@ -49,6 +49,8 @@ Notes here are plain Markdown, read in Marklore.
 
 - One topic per file. Link related notes with relative links, including
   heading anchors: [Parseval's identity](Fourier-analysis.md#parsevals-identity).
+- Give definitions and theorems an anchor others can link to: a line
+  `<a id="erm"></a>` above a paragraph that starts `**Definition (ERM).**`.
 - Inline math in `$…$`. Display math in `$$` blocks, each `$$` on its own line.
 - Tables, fenced code and fenced `mermaid` diagrams render as usual.
 - Images go in an `assets` folder next to the note.
@@ -61,6 +63,14 @@ Notes here are plain Markdown, read in Marklore.
 Select text on the rendered page and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. It is always there in Edit mode's preview; turn on `Settings → Annotation → Format bar in Read mode` to mark up while reading, where double-clicking a word selects it and `Alt`+double-click opens its source. The highlight and color buttons apply your last color; right-click either for the palette.
 
 ![In Read mode, phrases are highlighted and colored on the page; Edit mode then shows the marks written into the Markdown](docs/images/en/annotate.gif)
+
+### Who links here, right where it is linked
+
+Beside each section, definition or theorem that other notes link to, a small count shows how often. Hover it to see the citing notes, their section and the sentence with the link; click one to jump there, and `Alt+←` to come back. Links in the note that lead nowhere get a dashed underline.
+
+Definitions and theorems marked with an anchor (`<a id="erm"></a>` above a bold lead such as **Definition (ERM).**) can also be listed in the outline, under their section, with their counts: choose `Settings → Layout & sidebars → Anchors in the outline`.
+
+![Hovering the count beside a definition lists the two notes that cite it; one opens at the citing sentence, Alt+← returns, and an anchored paragraph is reached from the outline](docs/images/en/backlinks.gif)
 
 ### Live preview while you edit
 

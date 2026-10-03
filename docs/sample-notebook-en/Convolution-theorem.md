@@ -4,13 +4,17 @@ Convolution turns a sliding weighted sum into a pointwise product in the frequen
 
 ## Definition
 
+The convolution of two functions is defined below; its behaviour in the frequency domain rests on the [definition of the Fourier transform](Fourier-analysis.md#ft-def):
+
 $$
 (f * g)(t) = \int_{-\infty}^{\infty} f(\tau)\, g(t - \tau)\, d\tau .
 $$
 
 ## Theorem
 
-If $f$ and $g$ are integrable, then
+<a id="theorem"></a>
+
+**Theorem (convolution theorem).** If $f$ and $g$ are integrable, then
 
 $$
 \widehat{f * g}(\omega) = \hat f(\omega)\, \hat g(\omega) .

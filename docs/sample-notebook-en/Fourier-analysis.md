@@ -4,7 +4,9 @@ Splitting a signal into sinusoids of different frequencies is the common startin
 
 ## Definition
 
-For an integrable function $f(t)$, the Fourier transform and its inverse are
+<a id="ft-def"></a>
+
+**Definition (Fourier transform).** For an integrable function $f(t)$, the Fourier transform and its inverse are
 
 $$
 \hat f(\omega) = \int_{-\infty}^{\infty} f(t)\, e^{-i\omega t}\, dt,
@@ -27,6 +29,8 @@ Intuitively, $\hat f(\omega)$ measures how much $f$ resembles the complex expone
 Convolution is the one used most; see the [convolution theorem](Convolution-theorem.md#proof-sketch).
 
 ## Parseval's identity
+
+<a id="parseval"></a>
 
 Energy is the same in both domains:
 

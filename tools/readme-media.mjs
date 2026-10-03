@@ -35,6 +35,11 @@ const L = english
       editText:
         " In the discrete case, $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$ as well.",
       darkHeading: "Discrete implementation",
+      backlinks: {
+        definition: "Definition (Fourier transform)",
+        source: "Sampling-theorem",
+        outline: "Energy is the same in both domains",
+      },
       annotate: {
         highlight: "Energy is the same in both domains",
         color: "the fast Fourier transform (FFT)",
@@ -77,6 +82,11 @@ const L = english
       editText:
         "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
       darkHeading: "离散实现",
+      backlinks: {
+        definition: "定义（傅里叶变换）",
+        source: "采样定理",
+        outline: "能量在两个域中守恒",
+      },
       annotate: {
         highlight: "能量在两个域中守恒",
         color: "快速傅里叶变换（FFT）",
@@ -114,7 +124,7 @@ const recordSize = { width: 1360, height: 920 };
 const only = new Set(args.filter((a) => !a.startsWith("--")));
 await fs.mkdir(out, { recursive: true });
 
-async function session({ scale, theme = "light", record = false }) {
+async function session({ scale, theme = "light", record = false, extra = {} }) {
   const temp = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "folio-media-")),
   );
@@ -135,6 +145,7 @@ async function session({ scale, theme = "light", record = false }) {
         language: L.language,
         // Settings → Annotation: the format bar also works in Read mode.
         readingFormat: true,
+        ...extra,
       },
     }),
   );
@@ -238,9 +249,9 @@ async function session({ scale, theme = "light", record = false }) {
 }
 
 // Record one scene and convert it to a looping GIF (palette per clip).
-async function scene(name, theme, play) {
+async function scene(name, theme, play, extra = {}) {
   if (only.size && !only.has(name)) return;
-  const s = await session({ scale: 1, theme, record: true });
+  const s = await session({ scale: 1, theme, record: true, extra });
   await s.page.waitForTimeout(600);
   // A scene may call mark() after its setup to start the clip there.
   let from = (Date.now() - s.started) / 1000;
@@ -383,6 +394,42 @@ await scene("find", "light", async ({ page, keys }) => {
   for (let i = 0; i < 3; i++) await keys("Enter", "Enter");
   await keys("Esc", "Escape");
 });
+
+// Backlinks: the count beside a definition, the card of notes that link to
+// it, a jump to one of them and back, then an anchored block from the outline.
+await scene(
+  "backlinks",
+  "light",
+  async ({ page, keys, moveTo, mark }) => {
+    const badge = page
+      .locator("#content p", { hasText: L.backlinks.definition })
+      .locator(".backlink-badge");
+    await badge.waitFor({ timeout: 15000 });
+    await mark();
+    await moveTo(badge);
+    const card = page.locator("#backlinks-card");
+    await card.waitFor();
+    await page.waitForTimeout(1800);
+    const entry = card.locator(".backlink-entry", {
+      hasText: L.backlinks.source,
+    });
+    await moveTo(entry);
+    await page.waitForTimeout(400);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(1600);
+    await keys("Alt + ←", "Alt+ArrowLeft");
+    await page.waitForTimeout(900);
+    const anchor = page
+      .locator("#outline .outline-anchor")
+      .filter({ hasText: L.backlinks.outline });
+    await moveTo(anchor);
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.waitForTimeout(1500);
+  },
+  { outlineAnchors: "all" },
+);
 
 // An AI agent writes a note into the library (simulated: the scene writes the
 // file in steps, as an agent's edits would land on disk). The tree shows the

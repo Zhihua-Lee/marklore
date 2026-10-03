@@ -142,9 +142,9 @@
   font-size: 0.85em;
   font-variant-numeric: tabular-nums;
 }
+/* Same size as the headings it is listed with (Settings: navigation size). */
 #outline .outline-anchor {
   color: var(--muted);
-  font-size: 0.95em;
 }
 #outline .outline-anchor .outline-label::before {
   content: "◇";

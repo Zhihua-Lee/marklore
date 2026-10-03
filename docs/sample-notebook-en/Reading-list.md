@@ -4,7 +4,8 @@
 
 - [x] Stein, _Fourier Analysis_, chapter 2
 - [ ] Oppenheim, _Discrete-Time Signal Processing_, chapter 8
-- [ ] Review the [convolution theorem](Convolution-theorem.md)
+- [ ] Review the [convolution theorem](Convolution-theorem.md#theorem)
+- [ ] Check [Parseval's identity](Fourier-analysis.md#parseval) on a numerical example
 
 ## Later
 

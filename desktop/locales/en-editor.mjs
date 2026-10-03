@@ -164,4 +164,8 @@ export default {
   全部替换: "Replace all",
   "全部替换（Ctrl+Alt+Enter）": "Replace all (Ctrl+Alt+Enter)",
   正则有误: "Invalid regex",
+  跨段落的选区不能加链接: "A link cannot span several paragraphs",
+  选区中已有链接: "The selection already contains a link",
+  跨段落的选区不能转为行内代码: "Inline code cannot span several paragraphs",
+  含格式的选区不能转为行内代码: "Formatted text cannot become inline code",
 };

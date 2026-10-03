@@ -8,6 +8,7 @@ import DOMPurify from "dompurify";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
 import { t } from "../desktop/i18n.mjs";
+import { createSlugger } from "../desktop/slug.mjs";
 
 export function lineOffsets(source) {
   const offsets = [0];
@@ -302,7 +303,7 @@ export function createParser() {
   md.core.ruler.after("inline", "folio_locations", (state) => {
     const offsets = lineOffsets(state.src);
     let headingIndex = 0;
-    const slugs = new Map();
+    const slugFor = createSlugger();
     const inlineCursors = new Map();
     state.env.headings = [];
     state.env.editNonce = crypto.randomUUID();
@@ -341,7 +342,52 @@ export function createParser() {
           const range = `${from}:${to}`;
           const inlineSource = state.src.slice(from, to);
           let cursor = inlineCursors.get(range) ?? from;
+          // Text is located by searching forward, so step over what is not
+          // text first: a word in a tag attribute or a link's URL must not be
+          // taken for the text that follows it.
+          const links = [];
+          const skipTo = (end) => {
+            if (end > cursor && end <= to) cursor = end;
+          };
           for (const child of token.children || []) {
+            if (child.type === "html_inline") {
+              const relative = inlineSource.indexOf(
+                child.content,
+                cursor - from,
+              );
+              if (relative >= 0) skipTo(from + relative + child.content.length);
+              continue;
+            }
+            if (child.type === "link_open") {
+              const marker = child.markup === "autolink" ? "<" : "[";
+              const at =
+                child.markup === "linkify"
+                  ? -1
+                  : state.src.indexOf(marker, cursor);
+              links.push(at >= cursor && at < to ? at : -1);
+              if (links.at(-1) >= 0) skipTo(at + 1);
+              continue;
+            }
+            if (child.type === "link_close") {
+              const open = links.pop();
+              if (open < 0 || open === undefined) continue;
+              if (child.markup === "autolink") {
+                const end = state.src.indexOf(">", cursor);
+                if (end >= 0) skipTo(end + 1);
+              } else {
+                const close = closingBracket(state.src, open, to),
+                  end = close < 0 ? -1 : linkEnd(state.src, close, to);
+                if (end > 0) skipTo(end);
+              }
+              continue;
+            }
+            if (child.type === "image") {
+              const at = state.src.indexOf("![", cursor),
+                close = at < 0 ? -1 : closingBracket(state.src, at + 1, to),
+                end = close < 0 ? -1 : linkEnd(state.src, close, to);
+              if (end > 0) skipTo(end);
+              continue;
+            }
             if (child.type === "text" || child.type === "code_inline") {
               const relative = inlineSource.indexOf(
                 child.content,
@@ -385,20 +431,14 @@ export function createParser() {
             (child) => child.content || (child.type === "softbreak" ? " " : ""),
           )
           .join("");
-        let slug =
-          ((state.tokens[i + 1]?.children || []).some(
+        // Shared with the main process's link index (desktop/slug.mjs).
+        const slug = slugFor(
+          (state.tokens[i + 1]?.children || []).some(
             (child) => child.type === "html_inline",
           )
             ? plain
-            : label
-          )
-            .toLowerCase()
-            .replace(/[^\p{L}\p{N}\s_-]/gu, "")
-            .trim()
-            .replace(/\s+/g, "-") || "section";
-        const count = slugs.get(slug) || 0;
-        slugs.set(slug, count + 1);
-        if (count) slug += "-" + count;
+            : label,
+        );
         token.attrSet("id", slug);
         token.attrSet("data-heading", String(headingIndex++));
         state.env.headings.push({

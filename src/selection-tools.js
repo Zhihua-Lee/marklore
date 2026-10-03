@@ -6,28 +6,157 @@ import { icon } from "./icons.js";
 import { t } from "../desktop/i18n.mjs";
 import "./selection-tools.css";
 
-// Inline formulas are atomic source spans, never reverse-converted from glyphs.
-function boundary(node, offset, end) {
-  let element = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
-  const formula = element?.closest(".formula[data-from][data-to]");
-  if (formula)
-    return { position: Number(formula.dataset[end ? "to" : "from"]), formula };
+// Blocks whose text can be formatted, and inline elements that come from
+// Markdown (strong, em, links, code...) or from inline HTML in the source.
+const BLOCKS = "p,h1,h2,h3,h4,h5,h6,td,th,li,dt,dd";
+const INLINE =
+  "strong,em,s,del,a,code,mark,span,u,sub,sup,kbd,ins,small,b,i,.formula";
+const OFF_LIMITS = "pre,button,summary,input,.block-editor,.math-block";
+// What each action would nest inside itself: wrapping again is a toggle.
+const SAME_KIND = {
+  bold: "strong,b",
+  italic: "em,i",
+  strike: "s,del",
+  highlight: "mark",
+  color: "span[style*='color']",
+};
+
+// A mapped run of plain text. An inline code element carries a text map too,
+// but it is an element with markers: it is always handled whole.
+const isLeaf = (el) => el.hasAttribute("data-text-from") && !el.matches("code");
+const inFormula = (el) => {
+  const formula = el.closest(".formula");
+  return formula && formula !== el;
+};
+function inlineElement(el) {
+  return el.matches(INLINE) && !isLeaf(el) && !inFormula(el);
+}
+
+// Source span of the mapped text inside an element.
+function innerSpan(el) {
+  if (el.dataset.srcInnerFrom != null && el.dataset.srcInnerTo != null)
+    return [Number(el.dataset.srcInnerFrom), Number(el.dataset.srcInnerTo)];
+  let from = Infinity,
+    to = -Infinity;
+  // Plain text runs, and elements with known markers (code, emphasis,
+  // formulas) by their outer edges.
+  for (const part of el.querySelectorAll(`[data-text-from], ${INLINE}`)) {
+    if (inFormula(part)) continue;
+    const span = isLeaf(part)
+      ? [Number(part.dataset.textFrom), Number(part.dataset.textTo)]
+      : part.matches(".formula") || part.dataset.srcFrom != null
+        ? outerSpan(part, "")
+        : null;
+    if (!span) continue;
+    from = Math.min(from, span[0]);
+    to = Math.max(to, span[1]);
+  }
+  return from < to ? [from, to] : null;
+}
+// Source span of an inline element, including its markers or tags.
+function outerSpan(el, text) {
+  if (el.matches(".formula[data-from][data-to]"))
+    return [Number(el.dataset.from), Number(el.dataset.to)];
+  if (el.dataset.srcFrom != null && el.dataset.srcTo != null)
+    return [Number(el.dataset.srcFrom), Number(el.dataset.srcTo)];
+  // Inline HTML written by the author (<mark>, <span style>, <sub>...).
+  const inner = innerSpan(el);
+  if (!inner) return null;
+  const tag = el.tagName.toLowerCase();
+  const open = text.lastIndexOf("<" + tag, inner[0]);
+  const opening =
+    open < 0
+      ? null
+      : text.slice(open).match(new RegExp(`^<${tag}\\b[^>]*>`, "i"));
+  const close = text.indexOf("</" + tag, inner[1]);
+  const end = close < 0 ? -1 : text.indexOf(">", close);
+  if (!opening || open + opening[0].length > inner[0] || end < 0) return null;
+  return [open, end + 1];
+}
+
+// The source position of a DOM point between pieces of mapped text.
+function pointPosition(node, offset, end, text) {
+  const element =
+    node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
   const leaf = element?.closest("[data-text-from]");
   if (leaf)
-    return {
-      position: Number(leaf.dataset.textFrom) + textOffset(leaf, node, offset),
-    };
+    return Number(leaf.dataset.textFrom) + textOffset(leaf, node, offset);
   if (node.nodeType !== Node.ELEMENT_NODE) return null;
   let child = node.childNodes[end ? offset - 1 : offset];
   while (child) {
     if (child.nodeType === Node.TEXT_NODE)
-      return boundary(child, end ? child.length : 0, end);
-    if (child.matches?.(".formula,[data-text-from]"))
-      return boundary(child, end ? child.childNodes.length : 0, end);
+      return pointPosition(child, end ? child.length : 0, end, text);
+    if (child.nodeType === Node.ELEMENT_NODE) {
+      if (inlineElement(child)) {
+        const span = outerSpan(child, text);
+        if (span) return span[end ? 1 : 0];
+      }
+      if (isLeaf(child))
+        return pointPosition(
+          child,
+          end ? child.childNodes.length : 0,
+          end,
+          text,
+        );
+    }
     child = end ? child.lastChild : child.firstChild;
   }
   return null;
 }
+
+// One end of the selection in the source. A point inside a link, code span,
+// formula or emphasis that does not also hold the other end moves to that
+// element's outer edge, so formatting never cuts through Markdown syntax.
+// Formulas and code spans are always whole.
+function selectionEnd(range, end, other, block, text) {
+  const node = end ? range.endContainer : range.startContainer,
+    offset = end ? range.endOffset : range.startOffset;
+  let target = null;
+  for (
+    let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    el && el !== block && block.contains(el);
+    el = el.parentElement
+  ) {
+    if (!inlineElement(el)) continue;
+    if (el.matches(".formula,code") || !el.contains(other)) target = el;
+  }
+  if (target) {
+    const span = outerSpan(target, text);
+    if (!span) return null;
+    if (end) range.setEndAfter(target);
+    else range.setStartBefore(target);
+    return span[end ? 1 : 0];
+  }
+  return pointPosition(node, offset, end, text);
+}
+
+// The source span of a block's own text (not that of blocks nested in it).
+function blockSpan(block, text) {
+  let from = Infinity,
+    to = -Infinity;
+  for (const part of block.querySelectorAll(`[data-text-from], ${INLINE}`)) {
+    if (part.closest(BLOCKS) !== block || inFormula(part)) continue;
+    const span = isLeaf(part)
+      ? [Number(part.dataset.textFrom), Number(part.dataset.textTo)]
+      : outerSpan(part, text);
+    if (!span) continue;
+    from = Math.min(from, span[0]);
+    to = Math.max(to, span[1]);
+  }
+  return from < to ? [from, to] : null;
+}
+
+// Inside an author HTML attribute, a source map is not trustworthy.
+function insideTag(text, block, from) {
+  const blockFrom = Number(block.closest("[data-from]")?.dataset.from) || 0;
+  const prefix = text.slice(blockFrom, from);
+  const opening = prefix.lastIndexOf("<");
+  return (
+    opening > prefix.lastIndexOf(">") &&
+    /^<\/?[A-Za-z][\w:-]*(?:\s|$)/.test(prefix.slice(opening))
+  );
+}
+
 // editable(doc): the mode allows formatting from the page (Edit mode, or Read
 // mode once the reader turns on its format bar).
 export function previewTextSelection(
@@ -41,68 +170,137 @@ export function previewTextSelection(
     !editable(doc) ||
     doc.previewText !== doc.text ||
     !selected?.rangeCount ||
-    selected.isCollapsed
+    selected.isCollapsed ||
+    !selected.toString().trim()
   )
     return null;
+  const text = doc.text;
   const range = selected.getRangeAt(0).cloneRange();
-  const start =
-    range.startContainer.nodeType === 1
-      ? range.startContainer
-      : range.startContainer.parentElement;
-  const end =
-    range.endContainer.nodeType === 1
-      ? range.endContainer
-      : range.endContainer.parentElement;
-  const blocked = "code,pre,a,button,summary,.block-editor";
-  const block = start?.closest("p,h1,h2,h3,h4,h5,h6,td,th,li");
+  const element = (node) =>
+    node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  const startNode = range.startContainer,
+    endNode = range.endContainer;
+  const startBlock = element(startNode)?.closest(BLOCKS),
+    endBlock = element(endNode)?.closest(BLOCKS);
   if (
-    !block ||
-    !content.contains(block) ||
-    !block.contains(end) ||
-    start.closest(blocked) ||
-    end.closest(blocked)
+    !startBlock ||
+    !endBlock ||
+    !content.contains(startBlock) ||
+    !content.contains(endBlock) ||
+    element(startNode).closest(OFF_LIMITS) ||
+    element(endNode).closest(OFF_LIMITS)
   )
     return null;
-  const first = boundary(range.startContainer, range.startOffset, false);
-  const last = boundary(range.endContainer, range.endOffset, true);
-  const source = first && last && { from: first.position, to: last.position };
-  if (!source || source.to <= source.from || !selected.toString().trim())
-    return null;
-  if (first.formula) range.setStartBefore(first.formula);
-  if (last.formula) range.setEndAfter(last.formula);
-  let cursor = source.from,
-    expected = "",
-    hasMath = false;
-  for (const formula of block.querySelectorAll(
-    ".formula[data-from][data-to]",
-  )) {
-    if (!range.intersectsNode(formula)) continue;
-    const from = Number(formula.dataset.from),
-      to = Number(formula.dataset.to);
-    if (to <= source.from || from >= source.to) continue;
-    const raw = doc.text.slice(from, to);
+  const from = selectionEnd(range, false, endNode, startBlock, text),
+    to = selectionEnd(range, true, startNode, endBlock, text);
+  if (from == null || to == null || to <= from) return null;
+
+  // One segment per block: inline formatting cannot span paragraphs.
+  let segments;
+  if (startBlock === endBlock) segments = [{ from, to, block: startBlock }];
+  else {
+    segments = [];
+    for (const block of content.querySelectorAll(BLOCKS)) {
+      if (!range.intersectsNode(block) || block.closest(OFF_LIMITS)) continue;
+      const span = blockSpan(block, text);
+      if (!span) continue;
+      const a = block === startBlock ? from : span[0],
+        b = block === endBlock ? to : span[1];
+      if (b > a) segments.push({ from: a, to: b, block });
+    }
+    segments.sort((x, y) => x.from - y.from);
+  }
+  if (!segments.length) return null;
+  for (let i = 0; i < segments.length; i++) {
+    const { from: a, to: b, block } = segments[i];
     if (
-      from < cursor ||
-      to > source.to ||
-      !/^(?:\$[\s\S]+\$|\\\([\s\S]+\\\))$/.test(raw)
+      text.slice(a, b).includes("\n\n") ||
+      insideTag(text, block, a) ||
+      (i && a < segments[i - 1].to)
     )
       return null;
-    expected += doc.text.slice(cursor, from) + formula.textContent;
-    cursor = to;
-    hasMath = true;
   }
-  expected += doc.text.slice(cursor, source.to);
-  if (expected !== range.toString()) return null;
-  // Legacy source maps can be approximate around author HTML attributes.
-  const blockFrom = Number(block.closest("[data-from]")?.dataset.from) || 0;
-  const prefix = doc.text.slice(blockFrom, source.from);
-  const opening = prefix.lastIndexOf("<");
-  if (
-    opening > prefix.lastIndexOf(">") &&
-    /^<\/?[A-Za-z][\w:-]*(?:\s|$)/.test(prefix.slice(opening))
+
+  // What the selection holds, and the formatting around both of its ends.
+  const whole = (el) => {
+    const span = document.createRange();
+    span.selectNode(el);
+    return (
+      range.compareBoundaryPoints(Range.START_TO_START, span) <= 0 &&
+      range.compareBoundaryPoints(Range.END_TO_END, span) >= 0
+    );
+  };
+  const inside = [...content.querySelectorAll(INLINE)].filter(
+    (el) => !inFormula(el) && range.intersectsNode(el) && whole(el),
+  );
+  const around = [];
+  for (
+    let el = range.commonAncestorContainer;
+    el && el !== content;
+    el = el.parentNode
   )
-    return null;
-  return { ...source, range, hasMath, doc, text: doc.text };
+    if (el.nodeType === Node.ELEMENT_NODE && inlineElement(el)) around.push(el);
+  return {
+    from: segments[0].from,
+    to: segments.at(-1).to,
+    segments,
+    range,
+    inside,
+    around,
+    multi: segments.length > 1,
+    hasMath: inside.some((el) => el.matches(".formula")),
+    hasLink:
+      inside.some((el) => el.matches("a")) ||
+      around.some((el) => el.matches("a")),
+    hasMarkup: inside.length > 0,
+    doc,
+    text,
+  };
+}
+
+// The change for one segment. Wrapping in a formatting the text already has
+// in part removes the inner copies first; a selection inside an element of
+// the same kind (part of a bold run, then Bold) acts on that whole element.
+function segmentEdit(s, segment, action, options) {
+  const { text } = s;
+  let { from, to } = segment;
+  const kind = SAME_KIND[action];
+  if (kind && !s.multi) {
+    const own = s.around.find((el) => el.matches(kind));
+    const span = own && innerSpan(own);
+    if (span) [from, to] = span;
+  }
+  let body = text.slice(from, to);
+  if (kind && action !== "highlight" && action !== "color") {
+    const cuts = [];
+    for (const el of s.inside) {
+      if (!el.matches(kind) || el.dataset.srcFrom == null) continue;
+      const outer = [Number(el.dataset.srcFrom), Number(el.dataset.srcTo)],
+        inner = innerSpan(el);
+      if (!inner || outer[0] < from || outer[1] > to) continue;
+      if (outer[0] === from && outer[1] === to) continue; // whole: toggles off
+      cuts.push([outer[0], inner[0]], [inner[1], outer[1]]);
+    }
+    if (cuts.length)
+      body = [...body]
+        .filter((_, i) => !cuts.some(([a, b]) => from + i >= a && from + i < b))
+        .join("");
+  }
+  const virtual = text.slice(0, from) + body + text.slice(to);
+  const result = markdownEdit(virtual, from, from + body.length, action, {
+    ...options,
+    inlineRange: true,
+  });
+  const shift = to - from - body.length,
+    change = result.changes;
+  return {
+    change: {
+      from: change.from,
+      to: change.to >= from + body.length ? change.to + shift : change.to,
+      insert: change.insert,
+    },
+    selection: result.selection,
+  };
 }
 
 export function createSelectionTools({
@@ -178,6 +376,19 @@ export function createSelectionTools({
         ),
       ) + "px";
   }
+  // Why a link or code span cannot wrap this selection, if it cannot.
+  function unavailable(action, s) {
+    if (action === "link") {
+      if (s.multi) return t("跨段落的选区不能加链接");
+      if (s.hasLink) return t("选区中已有链接");
+      if (s.hasMath) return t("含公式的选区请使用文字样式或颜色工具");
+    }
+    if (action === "inline") {
+      if (s.multi) return t("跨段落的选区不能转为行内代码");
+      if (s.hasMarkup) return t("含格式的选区不能转为行内代码");
+    }
+    return "";
+  }
   function refresh() {
     if (
       dragging ||
@@ -190,10 +401,9 @@ export function createSelectionTools({
     if (!snapshot) return hide();
     for (const action of ["inline", "link"]) {
       const button = bar.querySelector(`[data-selection-action="${action}"]`);
-      button.disabled = snapshot.hasMath;
-      button.title = snapshot.hasMath
-        ? t("含公式的选区请使用文字样式或颜色工具")
-        : button.getAttribute("aria-label");
+      const reason = unavailable(action, snapshot);
+      button.disabled = Boolean(reason);
+      button.title = reason || button.getAttribute("aria-label");
     }
     position();
   }
@@ -226,26 +436,34 @@ export function createSelectionTools({
       hide();
       return;
     }
+    if (unavailable(action, s)) return;
     try {
-      const change = markdownEdit(s.text, s.from, s.to, action, {
-        ...options,
-        inlineRange: true,
-      });
+      // Every block's change from the same text: one step to undo.
+      const edits = s.segments.map((segment) =>
+        segmentEdit(s, segment, action, options),
+      );
+      let shift = 0;
+      for (const edit of edits.slice(0, -1))
+        shift +=
+          edit.change.insert.length - (edit.change.to - edit.change.from);
+      const anchor = edits[0].selection.anchor,
+        head = edits.at(-1).selection.head + shift;
       hide();
       view.dispatch({
-        ...change,
+        changes: edits.map((edit) => edit.change),
+        selection: { anchor, head },
         annotations: isolateHistory.of("full"),
         userEvent: "input.format",
       });
       s.doc.pane = "preview";
       render();
-      reselect(change.selection.anchor, change.selection.head);
+      reselect(anchor, head);
     } catch (error) {
       report(error.message);
     }
   }
   function execute(action) {
-    if (snapshot?.hasMath && ["inline", "link"].includes(action)) return;
+    if (snapshot && unavailable(action, snapshot)) return;
     if (action === "link") {
       form.hidden = !form.hidden;
       form.reset();

@@ -127,7 +127,7 @@ test("floating colors remember choices, link input stays local, Escape dismisses
   expect(await page.evaluate(() => window.getSelection().toString())).toBe("");
 });
 
-test("unsafe code and partial rich ranges do not become source edits; mode and tab changes dismiss", async ({
+test("code and colored text are formatted whole and in place; mode and tab changes dismiss", async ({
   page,
 }) => {
   await boot(
@@ -135,10 +135,20 @@ test("unsafe code and partial rich ranges do not become source edits; mode and t
     '# Note\n\nHello **bold** world. `code` $x^2$\n\n<span style="color: #123456">color</span>',
   );
   await page.getByRole("button", { name: "编辑", exact: true }).click();
+  // A code span is formatted as a whole, never from inside its backticks.
   await select(page, "code");
-  await expect(tools(page)).toBeHidden();
+  await expect(tools(page)).toBeVisible();
+  await expect(
+    tools(page).getByRole("button", { name: "行内代码" }),
+  ).toBeDisabled();
+  // Text inside a colored span maps to the text, not to the tag's
+  // "color: ..." attribute that reads the same.
   await select(page, "color");
-  await expect(tools(page)).toBeHidden(); // old renderer mapping hits the HTML attribute; never edit it
+  await expect(tools(page)).toBeVisible();
+  await tools(page).getByRole("button", { name: "加粗", exact: true }).click();
+  expect(await save(page)).toContain(
+    '<span style="color: #123456">**color**</span>',
+  );
   await select(page, "bold");
   await expect(tools(page)).toBeVisible();
   await page.getByRole("button", { name: "阅读", exact: true }).click();

@@ -97,9 +97,15 @@ test("code blocks are searched; headings and names rank first", () => {
   assert.equal(ranked[0].hits[0].heading, true);
 });
 
-test("a word only in a link target shows the raw line", () => {
+test("a word only in a link target shows the link with its target", () => {
   const hit = searchNotes([fourier], "卷积定理.md").results[0].hits[0];
-  assert.match(shown(hit), /\(卷积定理\.md#定义\)/);
+  assert.equal(shown(hit), "参见 卷积定理 (卷积定理.md#定义)。");
+  assert.deepEqual(marked(hit), ["卷积定理.md"]);
+});
+
+test("table rows read as their cells", () => {
+  assert.equal(readable("| 性质 | 时域 | 频域 |"), "性质 · 时域 · 频域");
+  assert.equal(readable("| $a \\| b$ | x |"), "$a \\| b$ · x");
 });
 
 test("the extension never matches; long lines are cut around the hit", () => {
@@ -112,11 +118,11 @@ test("the extension never matches; long lines are cut around the hit", () => {
   assert.deepEqual(marked(hit), ["needle"]);
 });
 
-test("at most five hits per note and fifty notes", () => {
+test("at most three hits per note and fifty notes", () => {
   const many = note("many.md", Array(20).fill("word").join("\n\n"));
   const result = searchNotes([many], "word").results[0];
   assert.equal(result.count, 20);
-  assert.equal(result.hits.length, 5);
+  assert.equal(result.hits.length, 3);
   const notes = Array.from({ length: 60 }, (_, i) => note(`n${i}.md`, "word"));
   const found = searchNotes(notes, "word");
   assert.equal(found.total, 60);

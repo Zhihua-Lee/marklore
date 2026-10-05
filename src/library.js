@@ -1,5 +1,5 @@
 import { t } from "../desktop/i18n.mjs";
-import { MATH } from "../desktop/note-search.mjs";
+import { MATH } from "../desktop/snippet.mjs";
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 // Folder browser: lazily loaded tree, current-folder following and search
 // (file names in the folders shown, and the text of the library's notes).
@@ -84,8 +84,11 @@ export function createLibrary({
       : roots;
   }
   function markCurrentFile() {
-    for (const button of $("#tree").querySelectorAll(".file")) {
-      if (button.title === getActive()?.path)
+    const current = getActive()?.path?.toLowerCase();
+    for (const button of $("#tree").querySelectorAll(
+      ".file, .text-note-name",
+    )) {
+      if (current && button.title.toLowerCase() === current)
         button.setAttribute("aria-current", "page");
       else button.removeAttribute("aria-current");
     }
@@ -97,7 +100,13 @@ export function createLibrary({
     const folder = await api.currentFolder(doc.fileId);
     if (epoch !== folderEpoch || getActive() !== doc || !getSettings().sidebar)
       return;
-    if (currentFolder?.path !== folder.path || $("#file-filter").value) {
+    // A search in progress stays: the reader is going through its results.
+    if ($("#file-filter").value.trim()) {
+      currentFolder = folder;
+      markCurrentFile();
+      return;
+    }
+    if (currentFolder?.path !== folder.path) {
       currentFolder = folder;
       $("#file-filter").value = "";
       ++searchEpoch;
@@ -181,122 +190,157 @@ export function createLibrary({
     return el;
   };
   const info = (text) => element("p", "search-info", text);
-  // Matches by file name, as before: the folders shown in the tree.
-  function fileResults(result) {
-    const group = document.createDocumentFragment();
-    for (const file of result.items) {
-      const b = element("button", "file", file.name);
-      b.title = file.path;
-      b.onclick = run(async () =>
-        add(await api.openChild(file.parent, file.name)),
-      );
-      group.append(b);
+  // The words in a name, marked (case-insensitive).
+  function markWords(text, terms) {
+    const lower = text.toLowerCase(),
+      ranges = [];
+    for (const term of terms)
+      for (
+        let at = lower.indexOf(term);
+        at !== -1;
+        at = lower.indexOf(term, at + term.length)
+      )
+        ranges.push([at, at + term.length]);
+    ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+    const out = document.createDocumentFragment();
+    let at = 0;
+    for (const [a, b] of ranges) {
+      if (a < at) continue;
+      if (a > at) out.append(text.slice(at, a));
+      out.append(element("mark", "", text.slice(a, b)));
+      at = b;
     }
-    group.append(
-      info(
-        result.items.length
-          ? result.truncated
-            ? t("结果较多，仅显示前 200 项")
-            : t("共 {count} 项", { count: result.items.length })
-          : t("没有匹配的文件名"),
-      ),
-    );
-    return group;
+    out.append(text.slice(at));
+    return out;
   }
-  // Matches in the notes' text (the library folders), grouped by note: the
-  // section and the line around each hit, the words marked.
-  function textResults(found) {
-    const list = element("div", "text-results"),
-      typeset = [];
-    for (const note of found.results) {
-      const item = element("div", "text-note");
-      const name = element("button", "text-note-name");
-      name.title = note.path;
-      name.append(element("span", "text-note-title", note.name));
-      if (note.count)
-        name.append(element("span", "text-note-count", String(note.count)));
-      name.onclick = run(() =>
-        openResult(note.path, note.hits[0] || null, found.terms),
+  // One result: the note's name (words marked), how many hits, and the
+  // section and line around its best hits. open(hit) opens it there.
+  function resultItem({ name, path, count, hits = [] }, terms, open, typeset) {
+    const item = element("div", "text-note");
+    const title = element("button", "text-note-name");
+    title.title = path;
+    const label = element("span", "text-note-title");
+    label.append(markWords(name, terms));
+    title.append(label);
+    if (count) title.append(element("span", "text-note-count", String(count)));
+    title.onclick = run(() => open(hits[0] || null));
+    item.append(title);
+    for (const hit of hits) {
+      const b = element("button", "text-hit");
+      b.title = t("第 {line} 行", { line: hit.line });
+      if (hit.section)
+        b.append(element("span", "text-hit-section", hit.section));
+      const line = element(
+        "span",
+        hit.heading ? "text-hit-line heading" : "text-hit-line",
       );
-      item.append(name);
-      for (const hit of note.hits) {
-        const b = element("button", "text-hit");
-        b.title = t("第 {line} 行", { line: hit.line });
-        if (hit.section)
-          b.append(element("span", "text-hit-section", hit.section));
-        const line = element(
-          "span",
-          hit.heading ? "text-hit-line heading" : "text-hit-line",
+      for (const [text, mark] of hit.snippet)
+        line.append(
+          mark ? element("mark", "", text) : document.createTextNode(text),
         );
-        for (const [text, mark] of hit.snippet)
-          line.append(
-            mark ? element("mark", "", text) : document.createTextNode(text),
-          );
-        // Formulas are typeset once KaTeX is loaded; until then, as written.
-        const source = hit.snippet.map(([text]) => text).join("");
-        if (mayContainMath(source)) {
-          line.dataset.markdown = snippetMarkdown(hit.snippet);
-          typeset.push(line);
-        }
-        b.append(line);
-        b.onclick = run(() => openResult(note.path, hit, found.terms));
-        item.append(b);
+      // Formulas are typeset once KaTeX is loaded; until then, as written.
+      if (mayContainMath(hit.snippet.map(([text]) => text).join(""))) {
+        line.dataset.markdown = snippetMarkdown(hit.snippet);
+        typeset.push(line);
       }
-      list.append(item);
+      b.append(line);
+      b.onclick = run(() => open(hit));
+      item.append(b);
     }
-    if (typeset.length)
-      loadMath()
-        .then(() => {
-          for (const line of typeset)
-            if (line.isConnected)
-              line.innerHTML = renderMarkdown(line.dataset.markdown).html;
-        })
-        .catch(() => {});
-    const group = document.createDocumentFragment();
-    group.append(list);
-    group.append(
-      info(
-        !found.total
-          ? t("没有内容匹配的笔记")
-          : found.total > found.results.length
-            ? t("共 {count} 篇笔记，仅显示前 {shown} 篇", {
-                count: found.total,
-                shown: found.results.length,
-              })
-            : t("共 {count} 篇笔记", { count: found.total }),
-      ),
-    );
-    return group;
+    return item;
   }
+  function typesetLater(lines) {
+    if (!lines.length) return;
+    loadMath()
+      .then(() => {
+        for (const line of lines)
+          if (line.isConnected)
+            line.innerHTML = renderMarkdown(line.dataset.markdown).html;
+      })
+      .catch(() => {});
+  }
+  // Folders shown in the tree that the library does not cover (the open
+  // note's folder elsewhere): searched by file name on disk, which is slower.
+  const within = (p, folder) => {
+    const a = p.toLowerCase().replace(/[\\/]+$/, ""),
+      b = folder.toLowerCase().replace(/[\\/]+$/, "");
+    return a === b || a.startsWith(b + "\\") || a.startsWith(b + "/");
+  };
+  const outsideLibrary = () =>
+    browsingRoots().filter(
+      (folder) => !roots.some((root) => within(folder.path, root.path)),
+    );
+  // One list, like a search engine's: every note once, its name and text
+  // searched together, best first. Results stay until the next ones arrive.
   async function search(q, epoch) {
     const tree = $("#tree");
     const top = tree.scrollTop;
-    const [names, found] = await Promise.all([
-      browsingRoots().length
-        ? api.search(
-            browsingRoots()
-              .slice(0, 10)
-              .map((r) => r.id),
-            q,
-          )
-        : null,
-      roots.length && api.searchText ? api.searchText(q) : null,
-    ]);
+    const found =
+      roots.length && api.searchText
+        ? await api.searchText(q)
+        : { terms: [], total: 0, results: [] };
     if (epoch !== searchEpoch) return;
+    const terms = found.terms.length ? found.terms : [q.toLowerCase()];
+    const list = element("div", "search-results"),
+      typeset = [];
+    for (const note of found.results)
+      list.append(
+        resultItem(
+          note,
+          terms,
+          (hit) => openResult(note.path, hit, found.terms),
+          typeset,
+        ),
+      );
     const fragment = document.createDocumentFragment();
-    fragment.append(element("p", "search-group", t("文件名")));
-    fragment.append(names ? fileResults(names) : info(t("没有匹配的文件名")));
-    fragment.append(element("p", "search-group", t("内容")));
-    fragment.append(
-      found
-        ? textResults(found)
-        : info(t("用“打开文件夹”加入笔记库后，可以搜索笔记内容")),
+    if (!roots.length)
+      fragment.append(info(t("用“打开文件夹”加入笔记库后，可以搜索笔记内容")));
+    fragment.append(list);
+    const summary = info(
+      found.total > found.results.length
+        ? t("共 {count} 篇笔记，仅显示前 {shown} 篇", {
+            count: found.total,
+            shown: found.results.length,
+          })
+        : found.total
+          ? t("共 {count} 篇笔记", { count: found.total })
+          : t("没有匹配的笔记"),
     );
+    fragment.append(summary);
     tree.replaceChildren(fragment);
+    markCurrentFile();
     if (keepScroll) tree.scrollTop = top;
+    typesetLater(typeset);
+    // File names in folders outside the library, appended when they come.
+    const outside = outsideLibrary();
+    if (!outside.length) return;
+    const names = await api.search(
+      outside.slice(0, 10).map((r) => r.id),
+      q,
+    );
+    if (epoch !== searchEpoch || !names.items.length) return;
+    const shown = new Set(found.results.map((note) => note.path.toLowerCase()));
+    let added = 0;
+    for (const file of names.items) {
+      if (shown.has(file.path.toLowerCase())) continue;
+      list.append(
+        resultItem(
+          file,
+          terms,
+          async () => add(await api.openChild(file.parent, file.name)),
+          [],
+        ),
+      );
+      added++;
+    }
+    if (added)
+      summary.textContent = t("共 {count} 篇笔记", {
+        count: found.total + added,
+      });
   }
   let keepScroll = false;
-  $("#file-filter").oninput = (e) => {
+  const filterBox = $("#file-filter");
+  filterBox.oninput = (e) => {
     clearTimeout(searchTimer);
     const q = e.target.value.trim(),
       epoch = ++searchEpoch;
@@ -305,17 +349,43 @@ export function createLibrary({
       return;
     }
     if (!api) return;
-    searchTimer = setTimeout(() => run(() => search(q, epoch))(), 250);
+    // The index answers from memory: results follow the typing.
+    searchTimer = setTimeout(() => run(() => search(q, epoch))(), 60);
   };
+  // ↓ moves into the results, ↑/↓ between them; Enter opens the first.
+  const resultButtons = () => [
+    ...$("#tree").querySelectorAll(".search-results button"),
+  ];
+  filterBox.addEventListener("keydown", (event) => {
+    if (!filterBox.value.trim()) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      resultButtons()[0]?.focus();
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      resultButtons()[0]?.click();
+    }
+  });
+  $("#tree").addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const buttons = resultButtons(),
+      at = buttons.indexOf(document.activeElement);
+    if (at < 0) return;
+    event.preventDefault();
+    if (event.key === "ArrowUp" && at === 0) filterBox.focus();
+    else
+      buttons[
+        Math.min(buttons.length - 1, at + (event.key === "ArrowDown" ? 1 : -1))
+      ].focus();
+  });
   // Ctrl+Shift+F: the search box, with a short selection as the query.
   function focusSearch(text = "") {
-    const filter = $("#file-filter");
-    filter.focus();
-    if (text && text !== filter.value) {
-      filter.value = text;
-      filter.oninput({ target: filter });
+    filterBox.focus();
+    if (text && text !== filterBox.value) {
+      filterBox.value = text;
+      filterBox.oninput({ target: filterBox });
     }
-    filter.select();
+    filterBox.select();
   }
   // Notes changed on disk: search again, keeping the list where it was.
   function researchText() {

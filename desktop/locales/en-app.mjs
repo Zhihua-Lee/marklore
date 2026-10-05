@@ -375,10 +375,6 @@ export default {
   搜索笔记: "Search notes",
   "搜索文件名和笔记内容（Ctrl+Shift+F）":
     "Search file names and note text (Ctrl+Shift+F)",
-  文件名: "File names",
-  内容: "In notes",
-  没有匹配的文件名: "No matching file names",
-  没有内容匹配的笔记: "No note contains this",
   "共 {count} 篇笔记": "{count} notes",
   "共 {count} 篇笔记，仅显示前 {shown} 篇":
     "{count} notes; showing the first {shown}",

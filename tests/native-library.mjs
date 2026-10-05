@@ -109,6 +109,17 @@ try {
     "identity",
   ]);
   assert.equal(await hit.locator(".text-hit-section").textContent(), "Energy");
+  // Results follow the typing: from a new query to the list on screen.
+  await filter.fill("");
+  const typed = Date.now();
+  await filter.fill("energy");
+  await tree
+    .locator(".text-note-title", { hasText: "Deep.md" })
+    .waitFor({ timeout: 2000 });
+  const latency = Date.now() - typed;
+  assert.ok(latency < 1000, `search took ${latency} ms`);
+  await filter.fill("parseval identity");
+  await hit.waitFor();
   await hit.click();
   await page.locator(".tab.active", { hasText: "Deep.md" }).waitFor();
   await page.locator("#find-bar").waitFor({ state: "visible" });
@@ -128,6 +139,7 @@ try {
   console.log(
     "Native library passed: notes written and renamed by another program appear in the tree with folders kept open; an open note re-renders as it is extended; full-text search finds a note written twice quickly and opens it at the hit, marked.",
   );
+  console.log(`[library] search results on screen ${latency} ms after typing`);
 } finally {
   if (instance) {
     await instance

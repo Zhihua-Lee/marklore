@@ -105,7 +105,7 @@ Hover a link to a local note to read the target in a popup, where you can scroll
 
 ### Search all notes, find in this one
 
-Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above the library) searches every note in the library, by file name and by text. Results are grouped by note, with the section and the line around each match, formulas typeset; all the words you type must occur. Click a result to open the note there, the word marked.
+Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above the library) searches every note in the library as you type, by file name and by text at once. Each note is listed once with the section and the line around its matches, the words marked and formulas typeset; all the words you type must occur. Click a result to open the note there, the word marked, and the list stays for the next one.
 
 `Ctrl+F` highlights every match in the rendered text of the open note, and `Enter` steps through them. In the editor, `Ctrl+F` opens a compact find bar with match case, whole word, regular expressions and replace.
 

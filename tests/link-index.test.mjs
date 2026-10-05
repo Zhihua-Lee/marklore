@@ -141,3 +141,26 @@ test("the index finds backlinks, follows changes and checks links", async () => 
     await fs.rm(root, { recursive: true, force: true });
   }
 });
+
+test("backlink snippets and anchor labels never cut a formula, code or emphasis", () => {
+  const formula = "$" + "\\sum_{k=0}^{N-1} a_k x^k + ".repeat(6) + "c$";
+  const text = [
+    "# T",
+    "",
+    `Before ${formula} with \`code_span\` and **bold words** then [the link](B.md#x) and after ${formula} **more bold** \`tail\` end of a long paragraph that keeps going.`,
+    "",
+    `<a id="lab"></a>`,
+    `**Definition ${formula} label.** Text.`,
+  ].join("\n");
+  const { links, anchors } = parseNote(text, path.resolve("A.md"));
+  const snippet = links[0].snippet.replace(
+    /<mark class="backlink-hit">|<\/mark>/g,
+    "",
+  );
+  assert.match(links[0].snippet, /<mark class="backlink-hit">the link<\/mark>/);
+  assert.equal((snippet.match(/(?<!\\)\$/g) || []).length % 2, 0, snippet);
+  assert.equal((snippet.match(/`/g) || []).length % 2, 0, snippet);
+  assert.equal((snippet.match(/\*\*/g) || []).length % 2, 0, snippet);
+  const label = anchors.find((a) => a.id === "lab").label;
+  assert.equal((label.match(/(?<!\\)\$/g) || []).length % 2, 0, label);
+});

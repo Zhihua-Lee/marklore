@@ -5,12 +5,12 @@
 // without segmentation. Results come back as plain data: the renderer builds
 // the snippets from text segments, never from HTML.
 
+import { MATH, safeWindow } from "./snippet.mjs";
+
 const MAX_TERMS = 8,
   MAX_TERM = 100,
   BEFORE = 24,
   WIDTH = 96;
-// Inline or display formulas within one line.
-export const MATH = /\$\$?(?:[^$\\]|\\.)+\$\$?/g;
 const ATX = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
@@ -26,12 +26,33 @@ export function parseQuery(query) {
 
 // What a line reads as once rendered, near enough for a snippet: markers,
 // link targets and tags go; formulas stay as written.
-export function readable(line) {
+// targets: show where links lead, "text (target)", for a word found only there.
+export function readable(line, { targets = false } = {}) {
+  // A table row reads as its cells.
+  if (/^\s*\|.*\|\s*$/.test(line))
+    line = line
+      .trim()
+      .slice(1, -1)
+      .split(/(?<!\\)\|/)
+      .map((cell) => cell.trim())
+      .filter(Boolean)
+      .join(" · ");
+  const target = (href) => {
+    href = href.replace(/^<|>$/g, "");
+    try {
+      return decodeURI(href);
+    } catch {
+      return href;
+    }
+  };
   const text = line
     .replace(/^\s{0,3}(?:#{1,6}\s+|>\s?)+/, "")
     .replace(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?/, "")
     .replace(/!\[([^\]\n]*)\]\([^)\n]*\)/g, "$1")
-    .replace(/\[([^\]\n]*)\]\((?:<[^>\n]*>|[^)\s]*)(?:\s+"[^"\n]*")?\)/g, "$1")
+    .replace(
+      /\[([^\]\n]*)\]\((<[^>\n]*>|[^)\s]*)(?:\s+"[^"\n]*")?\)/g,
+      (m, label, href) => (targets ? `${label} (${target(href)})` : label),
+    )
     .replace(/<\/?[a-z][^>\n]*>/gi, "");
   // Emphasis markers go outside formulas only ($a_i^*$ keeps its * and _).
   return text
@@ -76,12 +97,7 @@ function snippet(text, ranges) {
     start = Math.max(0, ranges[0][0] - BEFORE);
     end = Math.min(text.length, start + WIDTH);
     start = Math.max(0, Math.min(start, end - WIDTH));
-    for (const m of text.matchAll(MATH)) {
-      const a = m.index,
-        b = a + m[0].length;
-      if (a < start && start < b) start = a;
-      if (a < end && end < b) end = b;
-    }
+    [start, end] = safeWindow(text, start, end, { keep: ranges[0] });
   }
   const parts = [];
   let at = start;
@@ -130,7 +146,7 @@ export function rank(note, terms) {
 }
 
 // One note's lines: null when a term is missing, otherwise its best lines.
-export function searchNote(note, terms, { maxHits = 5 } = {}) {
+export function searchNote(note, terms, { maxHits = 3 } = {}) {
   const name = bareName(note.name),
     text = note.text,
     lowerText = note.lower ?? text.toLowerCase();
@@ -168,6 +184,10 @@ export function searchNote(note, terms, { maxHits = 5 } = {}) {
     let ranges = occurrences(shown.toLowerCase(), terms),
       display = shown;
     if (!ranges.length) {
+      display = readable(line, { targets: true });
+      ranges = occurrences(display.toLowerCase(), terms);
+    }
+    if (!ranges.length) {
       display = line.trim();
       ranges = occurrences(display.toLowerCase(), terms);
     }
@@ -198,7 +218,7 @@ export function searchNote(note, terms, { maxHits = 5 } = {}) {
 }
 
 // Every note is ranked; only the notes shown get their lines and snippets.
-export function searchNotes(notes, query, { maxNotes = 50, maxHits = 5 } = {}) {
+export function searchNotes(notes, query, { maxNotes = 50, maxHits = 3 } = {}) {
   const terms = parseQuery(query);
   const ranked = [];
   if (terms.length)

@@ -7,6 +7,7 @@ import path from "node:path";
 import { markdownPath } from "./files.mjs";
 import { createSlugger } from "./slug.mjs";
 import { searchNotes } from "./note-search.mjs";
+import { safeWindow, safeTruncate } from "./snippet.mjs";
 
 const MAX_FILES = 5000,
   MAX_BYTES = 2 * 1024 * 1024,
@@ -53,41 +54,37 @@ function anchorLabel(line) {
     /[。．.:：，,；;]+$/,
     "",
   );
-  return text.length > 40 ? text.slice(0, 38) + "…" : text;
+  return safeTruncate(text, 40);
 }
 
+// The paragraph around a link, as Markdown for the card: other links become
+// their text, and the cut never splits a formula, code, tag or emphasis.
 function snippetAround(paragraph, start, end, hit) {
-  let before = linkText(paragraph.slice(0, start)),
-    after = linkText(paragraph.slice(end));
-  const strip = (s) => s.replace(/<a\b[^>]*>\s*<\/a>/gi, "");
-  before = strip(before);
-  after = strip(after);
-  let cutBefore = false,
-    cutAfter = false;
-  if (before.length > SNIPPET_BEFORE) {
-    before = before.slice(-SNIPPET_BEFORE);
-    const space = before.search(/[\s，。；,.;]/);
-    if (space >= 0 && space < 30) before = before.slice(space + 1);
-    cutBefore = true;
+  const clean = (s) => linkText(s).replace(/<a\b[^>]*>\s*<\/a>/gi, "");
+  const before = clean(paragraph.slice(0, start)),
+    text = before + hit + clean(paragraph.slice(end)),
+    from = before.length,
+    to = from + hit.length;
+  let first = 0,
+    last = text.length;
+  if (from > SNIPPET_BEFORE) {
+    first = from - SNIPPET_BEFORE;
+    const space = text.slice(first, first + 30).search(/[\s，。；,.;]/);
+    if (space >= 0) first += space + 1;
   }
-  if (after.length > SNIPPET_AFTER) {
-    after = after.slice(0, SNIPPET_AFTER);
-    const stop = Math.max(after.lastIndexOf("。"), after.lastIndexOf(". "));
-    if (stop > 60) after = after.slice(0, stop + 1);
-    else cutAfter = true;
+  if (text.length - to > SNIPPET_AFTER) {
+    last = to + SNIPPET_AFTER;
+    const tail = text.slice(to, last);
+    const stop = Math.max(tail.lastIndexOf("。"), tail.lastIndexOf(". "));
+    if (stop > 60) last = to + stop + 1;
   }
-  // Never leave half a formula: drop to the nearest balanced "$".
-  const dollars = (s) => (s.match(/(?<!\\)\$/g) || []).length;
-  if (dollars(before) % 2)
-    before = before.slice(before.search(/(?<!\\)\$/) + 1);
-  if (dollars(after) % 2)
-    after = after.slice(0, after.search(/(?<!\\)\$(?![\s\S]*(?<!\\)\$)/));
+  [first, last] = safeWindow(text, first, last, { keep: [from, to] });
   return (
-    (cutBefore ? "…" : "") +
-    before.trimStart() +
+    (first > 0 ? "…" : "") +
+    text.slice(first, from).trimStart() +
     `<mark class="backlink-hit">${hit}</mark>` +
-    after.trimEnd() +
-    (cutAfter ? "…" : "")
+    text.slice(to, last).trimEnd() +
+    (last < text.length && !/[。.]$/.test(text.slice(0, last)) ? "…" : "")
   );
 }
 

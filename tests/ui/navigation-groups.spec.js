@@ -96,7 +96,7 @@ test("mouse/keyboard history restores linked reading locations without closing o
   await expect(page.locator(".history-controls")).toBeHidden();
   const a = await section(page, 8);
   await page
-    .locator("#section-8")
+    .locator("#content #section-8")
     .locator("..")
     .getByRole("link", { name: "Next note" })
     .click();
@@ -104,7 +104,7 @@ test("mouse/keyboard history restores linked reading locations without closing o
   await expect.poll(() => scroll(page)).toBeGreaterThan(a);
   const b = await settled(page);
   await page
-    .locator("#section-12")
+    .locator("#content #section-12")
     .locator("..")
     .getByRole("link", { name: "Next note" })
     .click();

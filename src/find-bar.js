@@ -1,5 +1,5 @@
 import { t } from "../desktop/i18n.mjs";
-import { unfold } from "./positions.js";
+import { unfold, findPosition } from "./positions.js";
 
 // Find in the rendered note (Ctrl+F while reading). The editor keeps
 // CodeMirror's own search panel. Matches are shown with the CSS Custom
@@ -184,6 +184,27 @@ export function createFindBar({ panes, content, reader, openInSource }) {
       go(1);
     }
   }
+  // A library search result was opened: highlight its term in the note and
+  // make the occurrence at that source position current. The caller has
+  // already scrolled there, so this does not scroll.
+  function reveal(query, from) {
+    input.value = query;
+    bar.hidden = false;
+    input.focus({ preventScroll: true });
+    input.select();
+    search();
+    const target = from == null ? null : findPosition(content, from)?.element;
+    current = target
+      ? matches.findIndex(
+          (range) =>
+            target.contains(range.startContainer) ||
+            target.compareDocumentPosition(range.startContainer) &
+              Node.DOCUMENT_POSITION_FOLLOWING,
+        )
+      : 0;
+    if (current < 0) current = matches.length ? 0 : -1;
+    paint();
+  }
   function close() {
     bar.hidden = true;
     clearTimeout(refreshTimer);
@@ -192,6 +213,7 @@ export function createFindBar({ panes, content, reader, openInSource }) {
   }
   return {
     open,
+    reveal,
     close,
     next: () => (bar.hidden ? open() : go(1)),
     previous: () => (bar.hidden ? open() : go(-1)),

@@ -1,0 +1,82 @@
+/* Library search results: matches by file name, then in the notes' text. */
+#tree .search-group {
+  margin: 10px 0 2px;
+  padding: 0 8px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+#tree .search-group:first-child {
+  margin-top: 4px;
+}
+#tree .text-note {
+  margin-bottom: 6px;
+}
+#tree .text-note-name,
+#tree .text-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-ui);
+  font-weight: 400;
+}
+#tree .text-note-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 8px;
+  font-size: var(--navigation-size, 12px);
+  font-weight: 600;
+}
+#tree .text-note-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#tree .text-note-count {
+  flex: none;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+#tree .text-hit {
+  padding: 4px 8px 5px 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+#tree .text-hit-section {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#tree .text-hit-line.heading {
+  font-weight: 600;
+}
+/* Lines with formulas are rendered Markdown: one inline paragraph. */
+#tree .text-hit-line p {
+  display: inline;
+  margin: 0;
+}
+#tree .text-hit .katex {
+  font-size: 1.05em;
+}
+#tree .text-hit .katex-display {
+  margin: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+#tree .text-hit mark {
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: inherit;
+}

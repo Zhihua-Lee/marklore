@@ -30,6 +30,8 @@ for (const name of [
   "currentFolder",
   "list",
   "search",
+  "searchText",
+  "openFromLibrary",
   "openChild",
   "read",
   "preview",

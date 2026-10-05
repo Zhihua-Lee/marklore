@@ -80,8 +80,53 @@ try {
     timeout: 5000,
   });
   await page.locator("#content .katex-display").waitFor();
+
+  // Full-text search: the agent writes a note twice in quick succession (the
+  // second write can keep the first one's modification time); the search box
+  // finds the final text, and a hit opens the note there, marked.
+  const deep = path.join(library, "Topic", "Deep.md");
+  await fs.writeFile(deep, "# Deep\n\nDraft.\n");
+  const filler = Array.from({ length: 80 }, (_, i) => `Filler ${i}.`).join(
+    "\n\n",
+  );
+  await fs.writeFile(
+    deep,
+    `# Deep\n\nParseval appears early.\n\n${filler}\n\n## Energy\n\nThe Parseval identity holds here.\n`,
+  );
+  const filter = page.locator("#file-filter");
+  const hit = tree.locator(".text-hit", { hasText: "identity holds" });
+  for (let i = 0; i < 20 && !(await hit.count()); i++) {
+    await filter.fill("");
+    await filter.fill("parseval identity");
+    await hit
+      .first()
+      .waitFor({ timeout: 500 })
+      .catch(() => {});
+  }
+  await hit.waitFor();
+  assert.deepEqual(await hit.locator("mark").allTextContents(), [
+    "Parseval",
+    "identity",
+  ]);
+  assert.equal(await hit.locator(".text-hit-section").textContent(), "Energy");
+  await hit.click();
+  await page.locator(".tab.active", { hasText: "Deep.md" }).waitFor();
+  await page.locator("#find-bar").waitFor({ state: "visible" });
+  await page.waitForFunction(() => {
+    const range = [...(CSS.highlights.get("folio-find-current") || [])][0];
+    if (!range) return false;
+    const box = range.getBoundingClientRect(),
+      reader = document.querySelector("#reader").getBoundingClientRect();
+    return (
+      range.startContainer.parentElement.textContent.includes(
+        "identity holds",
+      ) &&
+      box.top >= reader.top &&
+      box.bottom <= reader.bottom
+    );
+  });
   console.log(
-    "Native library passed: notes written and renamed by another program appear in the tree with folders kept open; an open note re-renders as it is extended.",
+    "Native library passed: notes written and renamed by another program appear in the tree with folders kept open; an open note re-renders as it is extended; full-text search finds a note written twice quickly and opens it at the hit, marked.",
   );
 } finally {
   if (instance) {

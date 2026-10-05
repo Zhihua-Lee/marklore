@@ -61,6 +61,7 @@ export default {
     "The tray is unavailable, so the window can't be hidden",
   便携模式仅在打包版可用: "Portable mode is only available in the packaged app",
   安装版不支持便携模式: "The installed version can't use portable mode",
+  该笔记不在笔记库中: "This note is not in the library",
   "每次可插入 1–20 张图片": "You can insert 1–20 images at a time",
   "图片合计超过 64 MB": "The images exceed 64 MB in total",
   "剪贴板图片无效或超过 32 MB":

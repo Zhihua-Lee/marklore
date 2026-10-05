@@ -372,4 +372,17 @@ export default {
     "Save this note first: a link needs its location",
   这里无法加入锚点: "An anchor cannot be added here",
   本笔记: "This note",
+  搜索笔记: "Search notes",
+  "搜索文件名和笔记内容（Ctrl+Shift+F）":
+    "Search file names and note text (Ctrl+Shift+F)",
+  文件名: "File names",
+  内容: "In notes",
+  没有匹配的文件名: "No matching file names",
+  没有内容匹配的笔记: "No note contains this",
+  "共 {count} 篇笔记": "{count} notes",
+  "共 {count} 篇笔记，仅显示前 {shown} 篇":
+    "{count} notes; showing the first {shown}",
+  "第 {line} 行": "Line {line}",
+  "用“打开文件夹”加入笔记库后，可以搜索笔记内容":
+    "Add a folder with Open folder to search inside your notes",
 };

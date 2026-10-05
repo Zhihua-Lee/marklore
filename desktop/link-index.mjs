@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { markdownPath } from "./files.mjs";
 import { createSlugger } from "./slug.mjs";
+import { searchNotes } from "./note-search.mjs";
 
 const MAX_FILES = 5000,
   MAX_BYTES = 2 * 1024 * 1024,
@@ -228,14 +229,23 @@ export function createLinkIndex({
       const rel = path.relative(folder, file);
       return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
     });
-  async function load(file) {
+  // fresh: the watcher reported a write. Two quick writes can leave the same
+  // modification time on Windows, so only a walk trusts it to skip a read.
+  async function load(file, fresh = false) {
     const key = pathKey(file);
     try {
       const info = await stat(file);
       if (!info.isFile() || info.size > MAX_BYTES) return notes.delete(key);
-      if (notes.get(key)?.mtime === info.mtimeMs) return;
-      const parsed = parseNote(await read(file, "utf8"), file);
-      notes.set(key, { path: file, mtime: info.mtimeMs, ...parsed });
+      if (!fresh && notes.get(key)?.mtime === info.mtimeMs) return;
+      const text = await read(file, "utf8");
+      // The text stays for full-text search (at most 5000 notes of 2 MB), with a lower-cased copy.
+      notes.set(key, {
+        path: file,
+        mtime: info.mtimeMs,
+        text,
+        lower: text.toLowerCase(),
+        ...parseNote(text, file),
+      });
     } catch {
       notes.delete(key);
     }
@@ -274,7 +284,7 @@ export function createLinkIndex({
     async changed(file) {
       if (!markdownPath(file) || !inLibrary(file)) return false;
       await ready;
-      await load(file);
+      await load(file, true);
       return true;
     },
     // Links from other notes into this one, with where they come from.
@@ -329,6 +339,21 @@ export function createLinkIndex({
         path: note.path,
         anchors: note.anchors,
       }));
+    },
+    // Notes whose name or text holds every word of the query (note-search.mjs).
+    async search(query, options) {
+      await ready;
+      const list = [...notes.values()].map((note) => ({
+        path: note.path,
+        name: path.basename(note.path),
+        text: note.text,
+        lower: note.lower,
+      }));
+      return searchNotes(list, query, options);
+    },
+    // Is this file one of the indexed library notes?
+    has(file) {
+      return notes.has(pathKey(file));
     },
     get size() {
       return notes.size;

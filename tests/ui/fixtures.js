@@ -16,6 +16,8 @@ export const FOLIO_API = [
   "currentFolder",
   "list",
   "search",
+  "searchText",
+  "openFromLibrary",
   "openChild",
   "read",
   "preview",

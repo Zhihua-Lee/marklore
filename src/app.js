@@ -70,6 +70,7 @@ import {
 } from "./color-picker.js";
 import "./tables.css";
 import "./find-bar.css";
+import "./library-search.css";
 import { createFindBar } from "./find-bar.js";
 import { wireSourceCopy } from "./copy-source.js";
 import { createSmoothScroll } from "./smooth-scroll.js";
@@ -118,7 +119,7 @@ let editingKeys = [];
 let blockEditor, imageInsertion, backlinks, linkHere;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
-<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("筛选文件")}" title="${t("搜索文件名，包含子文件夹")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
+<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
 <div id="conflict" role="alert" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div></div>
@@ -1314,6 +1315,8 @@ const {
   renderTree,
   followCurrentFolder,
   refresh: refreshLibrary,
+  focusSearch,
+  researchText,
 } = createLibrary({
   api,
   roots,
@@ -1323,7 +1326,30 @@ const {
   run,
   report: toast,
   changed: scheduleSession,
+  openResult: openSearchResult,
 });
+// A library search result: open the note at the hit's line and mark the word
+// there with the find bar (Enter steps to the next occurrence).
+async function openSearchResult(path, hit, terms) {
+  const file = await api.openFromLibrary(path);
+  if (!add(file)) return;
+  if (!hit) return;
+  const n = Math.max(1, Math.min(hit.line, view.state.doc.lines)),
+    line = view.state.doc.line(n);
+  const from = Math.min(line.to, line.from + Math.max(0, hit.column - 1));
+  jump(from);
+  if (active.mode === "source") return;
+  const text = hit.snippet
+    .map(([part]) => part)
+    .join("")
+    .toLowerCase();
+  const term = terms.find((word) => text.includes(word)) || terms[0];
+  // After the jump has rendered and placed the note.
+  setTimeout(
+    () => requestAnimationFrame(() => findBar.reveal(term, from)),
+    120,
+  );
+}
 function contextMenu(e, doc) {
   showContext(e, [
     [t("在文件夹中显示"), () => api.reveal(doc.fileId), !doc.fileId],
@@ -1602,6 +1628,18 @@ document.addEventListener("keydown", (e) => {
   }
   if (!(e.ctrlKey || e.metaKey)) return;
   const key = e.key.toLowerCase();
+  // Ctrl+Shift+F: search the library, file names and note text.
+  if (key === "f" && e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    if (!settings.sidebar) changeSettings({ sidebar: true });
+    const selected = window.getSelection()?.toString().trim();
+    focusSearch(
+      selected && !selected.includes("\n") && selected.length <= 100
+        ? selected
+        : "",
+    );
+    return;
+  }
   // Ctrl+F in the editor opens CodeMirror's search (it handles the key first);
   // anywhere else it searches the rendered note.
   if (key === "f" && !e.shiftKey && !e.altKey) {
@@ -1702,7 +1740,10 @@ if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());
   api.on("library", () => run(refreshLibrary)());
-  api.on("links", () => backlinks?.invalidate());
+  api.on("links", () => {
+    backlinks?.invalidate();
+    researchText();
+  });
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
   api.on("window", showWindowState);
   api.windowState?.().then(showWindowState, () => {});

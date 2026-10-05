@@ -103,22 +103,24 @@ Hover a link to a local note to read the target in a popup, where you can scroll
 
 ![Hovering a link shows the linked note in a preview; clicking opens it; Alt+← returns](docs/images/en/preview.gif)
 
-### Find in the rendered note
+### Search all notes, find in this one
 
-`Ctrl+F` highlights every match in the rendered text, and `Enter` steps through them. In the editor, `Ctrl+F` opens a compact find bar with match case, whole word, regular expressions and replace.
+Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above the library) searches every note in the library, by file name and by text. Results are grouped by note, with the section and the line around each match, formulas typeset; all the words you type must occur. Click a result to open the note there, the word marked.
+
+`Ctrl+F` highlights every match in the rendered text of the open note, and `Enter` steps through them. In the editor, `Ctrl+F` opens a compact find bar with match case, whole word, regular expressions and replace.
 
 ![Ctrl+F finds "convolution" and steps through the matches](docs/images/en/find.gif)
 
 ### More
 
-| Capability                 | Details                                                                                                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Math and technical writing | KaTeX formulas, Mermaid diagrams, syntax highlighting, sortable tables, clickable task lists and footnotes.                                                                     |
-| Copy as Markdown           | Copying from the reading view gives the matching Markdown: formulas as `$…$`, links with their targets. `Ctrl+Shift+C` copies the rendered result.                              |
-| Multi-document workspace   | Draggable tabs and colored groups; a folder library that follows the disk, with a filter that searches subfolders; recent files on the start page and in the taskbar jump list. |
-| Reading appearance         | Light and dark themes, bundled fonts, text size and weight, table styles, adjustable sidebars, full screen. Optional smooth scrolling for touchpad, wheel and scrollbar.        |
-| Safe saving and export     | Explicit saves, disk version checks, backups and draft recovery; export to PDF or a standalone offline HTML file.                                                               |
-| Portable and bilingual     | Portable mode keeps everything in a `data` folder beside the program; English and Chinese interface.                                                                            |
+| Capability                 | Details                                                                                                                                                                       |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Math and technical writing | KaTeX formulas, Mermaid diagrams, syntax highlighting, sortable tables, clickable task lists and footnotes.                                                                   |
+| Copy as Markdown           | Copying from the reading view gives the matching Markdown: formulas as `$…$`, links with their targets. `Ctrl+Shift+C` copies the rendered result.                            |
+| Multi-document workspace   | Draggable tabs and colored groups; a folder library that follows the disk, with search by file name and by text; recent files on the start page and in the taskbar jump list. |
+| Reading appearance         | Light and dark themes, bundled fonts, text size and weight, table styles, adjustable sidebars, full screen. Optional smooth scrolling for touchpad, wheel and scrollbar.      |
+| Safe saving and export     | Explicit saves, disk version checks, backups and draft recovery; export to PDF or a standalone offline HTML file.                                                             |
+| Portable and bilingual     | Portable mode keeps everything in a `data` folder beside the program; English and Chinese interface.                                                                          |
 
 ![Edit mode in the dark theme: Markdown source on the left, rendered preview on the right](docs/images/en/edit-dark.png)
 
@@ -156,6 +158,7 @@ Use **Open file** to open Markdown files, or **Open folder** to add a folder to 
 | Action                      | Shortcut                                      |
 | --------------------------- | --------------------------------------------- |
 | Find / next match           | `Ctrl+F` / `Enter` or `F3`                    |
+| Search all notes            | `Ctrl+Shift+F`                                |
 | Back / forward              | `Alt+←` / `Alt+→` (or the mouse side buttons) |
 | Copy as Markdown / rendered | `Ctrl+C` / `Ctrl+Shift+C`                     |
 | Text size                   | `Ctrl+wheel` / `Ctrl++` / `Ctrl+-`            |

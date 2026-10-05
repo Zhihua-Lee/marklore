@@ -894,6 +894,18 @@ else {
           throw Error(t("无效搜索"));
         return files.search(ids, query);
       });
+      // Full-text search in the library's notes (the link index holds them).
+      api("searchText", (query) => {
+        if (typeof query !== "string" || query.length > 200)
+          throw Error(t("无效搜索"));
+        return linkIndex.search(query);
+      });
+      // Open a note found by searchText; only notes in the library index.
+      api("openFromLibrary", (p) => {
+        if (typeof p !== "string" || !linkIndex.has(p))
+          throw Error(t("该笔记不在笔记库中"));
+        return openFile(p);
+      });
       api("openChild", async (id, name) => {
         const doc = await files.openChild(id, name);
         watchFile(doc.id);

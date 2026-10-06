@@ -1,3 +1,5 @@
+import { normalizeExcluded } from "../desktop/excluded.mjs";
+
 // A fresh object each call: tab groups are mutated in place by the tab bar.
 export function defaultSettings() {
   return {
@@ -23,6 +25,7 @@ export function defaultSettings() {
     outline: true,
     librarySide: "left",
     outlineSide: "right",
+    searchExclude: [],
   };
 }
 
@@ -81,5 +84,6 @@ export function normalizeSettings(saved = {}) {
   settings.librarySide = settings.librarySide === "right" ? "right" : "left";
   settings.outlineSide = settings.outlineSide === "left" ? "left" : "right";
   settings.theme = settings.theme === "dark" ? "dark" : "light";
+  settings.searchExclude = normalizeExcluded(settings.searchExclude);
   return settings;
 }

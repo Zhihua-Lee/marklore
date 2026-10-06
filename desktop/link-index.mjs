@@ -8,6 +8,7 @@ import { markdownPath } from "./files.mjs";
 import { createSlugger } from "./slug.mjs";
 import { searchNotes } from "./note-search.mjs";
 import { safeWindow, safeTruncate } from "./snippet.mjs";
+import { normalizeExcluded, excludedBy } from "./excluded.mjs";
 
 const MAX_FILES = 5000,
   MAX_DIRS = 20000,
@@ -232,7 +233,9 @@ export function createLinkIndex({
   let folders = [],
     ready = Promise.resolve(),
     scanGeneration = 0,
-    indexing = false;
+    indexing = false,
+    followed = null,
+    isExcluded = () => false;
   const inLibrary = (file) =>
     folders.some((folder) => {
       const rel = path.relative(folder, file);
@@ -281,6 +284,7 @@ export function createLinkIndex({
       for (const entry of entries) {
         if (entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
         const full = path.join(folder, entry.name);
+        if (isExcluded(full)) continue;
         if (entry.isDirectory()) queue.push({ folder: full, root: false });
         else if (NOTE.test(entry.name) && notesFound < MAX_FILES) {
           notesFound++;
@@ -292,10 +296,20 @@ export function createLinkIndex({
   }
   return {
     // Index exactly these library folders.
-    follow(list) {
+    // excluded: folders the reader left out of search and backlinks.
+    follow(list, excluded = []) {
       const next = [...new Set(list.map((folder) => path.resolve(folder)))];
-      if (next.join("\n") === folders.join("\n")) return ready;
+      const without = normalizeExcluded(excluded);
+      const signature = next.join("\n") + "\0" + without.join("\n");
+      if (signature === followed) return ready;
+      followed = signature;
       folders = next;
+      isExcluded = excludedBy(without);
+      // Notes in a newly excluded folder go at once, before the rescan.
+      let dropped = false;
+      for (const [k, note] of notes)
+        if (isExcluded(note.path)) dropped = notes.delete(k);
+      if (dropped) onProgress?.();
       const generation = ++scanGeneration;
       indexing = true;
       ready = (async () => {
@@ -318,7 +332,8 @@ export function createLinkIndex({
     },
     // A file in the library was written, created, renamed or deleted.
     async changed(file) {
-      if (!NOTE.test(file) || !inLibrary(file)) return false;
+      if (!NOTE.test(file) || !inLibrary(file) || isExcluded(file))
+        return false;
       await load(file, true);
       return true;
     },

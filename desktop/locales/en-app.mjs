@@ -379,6 +379,15 @@ export default {
   "共 {count} 篇笔记，仅显示前 {shown} 篇":
     "{count} notes; showing the first {shown}",
   "第 {line} 行": "Line {line}",
+  不参与搜索的文件夹: "Folders left out of search",
+  "在笔记库中右键文件夹即可排除，适合实验输出、数据等不放笔记的文件夹":
+    "Right-click a folder in the library to leave it out; useful for experiment output, data and other folders without notes",
+  "恢复 {folder} 参与搜索": "Include {folder} in search again",
+  没有排除的文件夹: "No folders left out",
+  不参与搜索: "not searched",
+  恢复参与搜索和反向链接: "Include in search and backlinks again",
+  上级文件夹已不参与搜索: "A parent folder is left out of search",
+  不参与搜索和反向链接: "Leave out of search and backlinks",
   "正在读取笔记库（已读 {count} 篇），结果会继续更新":
     "Still reading the library ({count} notes so far); results will update",
   "用“打开文件夹”加入笔记库后，可以搜索笔记内容":

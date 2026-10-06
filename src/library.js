@@ -1,5 +1,6 @@
 import { t } from "../desktop/i18n.mjs";
 import { MATH } from "../desktop/snippet.mjs";
+import { excludedBy } from "../desktop/excluded.mjs";
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 // Folder browser: lazily loaded tree, current-folder following and search
 // (file names in the folders shown, and the text of the library's notes).
@@ -123,6 +124,21 @@ export function createLibrary({
       ?.scrollIntoView({ block: "nearest" });
   }
   // open: folder paths to reopen, so a rebuild keeps what the reader expanded.
+  // Folders left out of search and backlinks (Settings; right-click a folder).
+  const excludedNow = () => excludedBy(getSettings().searchExclude || []);
+  function markExcluded(details, isExcluded) {
+    const summary = details.querySelector(":scope > summary");
+    const on = isExcluded(details.dataset.path);
+    details.classList.toggle("excluded", on);
+    if (on) summary.dataset.excluded = t("不参与搜索");
+    else delete summary.dataset.excluded;
+  }
+  // The settings changed: mark the folders shown again.
+  function showExcluded() {
+    const isExcluded = excludedNow();
+    for (const details of $("#tree").querySelectorAll("details.folder"))
+      markExcluded(details, isExcluded);
+  }
   async function branch(entry, open = null) {
     const details = document.createElement("details");
     details.className = "folder";
@@ -131,6 +147,7 @@ export function createLibrary({
     summary.textContent = entry.name;
     summary.title = entry.path;
     details.append(summary);
+    markExcluded(details, excludedNow());
     let loaded = false;
     details.addEventListener(
       "toggle",
@@ -434,5 +451,6 @@ export function createLibrary({
     refresh,
     focusSearch,
     researchText,
+    showExcluded,
   };
 }

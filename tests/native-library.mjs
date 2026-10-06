@@ -20,9 +20,19 @@ const library = path.join(temp, "kb"),
 await fs.mkdir(path.join(library, "Topic"), { recursive: true });
 await fs.mkdir(profile);
 await fs.writeFile(path.join(library, "Index.md"), "# Index\n");
+// A folder left out of search (experiment output): its notes never show.
+const runs = path.join(library, "Runs");
+await fs.mkdir(runs);
+await fs.writeFile(
+  path.join(runs, "Hidden.md"),
+  "# Hidden\n\nThe Parseval identity holds here too.\n",
+);
 await fs.writeFile(
   path.join(profile, "session.json"),
-  JSON.stringify({ roots: [library], settings: { sidebar: true } }),
+  JSON.stringify({
+    roots: [library],
+    settings: { sidebar: true, searchExclude: [runs] },
+  }),
 );
 const exe = process.env.FOLIO_TEST_EXE;
 let instance;
@@ -109,6 +119,10 @@ try {
     "identity",
   ]);
   assert.equal(await hit.locator(".text-hit-section").textContent(), "Energy");
+  assert.equal(
+    await tree.locator(".text-note-title", { hasText: "Hidden.md" }).count(),
+    0,
+  );
   // Results follow the typing: from a new query to the list on screen.
   await filter.fill("");
   const typed = Date.now();

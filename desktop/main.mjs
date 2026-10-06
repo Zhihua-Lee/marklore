@@ -271,9 +271,10 @@ const libraryWatch = createLibraryWatch({
       linksTimer = setTimeout(() => send("links", null), 300);
     }),
 });
-function followLibrary(folders) {
+// excluded: folders left out of search and backlinks (in the settings).
+function followLibrary(folders, excluded = []) {
   libraryWatch.follow(folders);
-  linkIndex.follow(folders).then(
+  linkIndex.follow(folders, excluded).then(
     () => send("links", null),
     () => {},
   );
@@ -1095,7 +1096,7 @@ else {
         const roots = (value.roots || [])
           .map((id) => files.directories.get(id))
           .filter(Boolean);
-        followLibrary(roots);
+        followLibrary(roots, value.settings?.searchExclude);
         savedSession = {
           ...value,
           tabs,
@@ -1200,7 +1201,10 @@ else {
             roots.push(await files.directory(p));
           } catch {}
         }
-        followLibrary(roots.map((root) => root.path));
+        followLibrary(
+          roots.map((root) => root.path),
+          old.settings?.searchExclude,
+        );
         ready = true;
         const incoming = pending;
         pending = [];

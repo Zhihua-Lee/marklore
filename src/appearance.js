@@ -48,6 +48,8 @@ export const appearanceMarkup = `
     ${row("library-placement", t("文件夹浏览"), `<select id="library-placement"><option value="left">${t("左侧")}</option><option value="right">${t("右侧")}</option><option value="hidden">${t("隐藏")}</option></select>`)}
     ${row("outline-placement", t("本文目录"), `<select id="outline-placement"><option value="right">${t("右侧")}</option><option value="left">${t("左侧")}</option><option value="hidden">${t("隐藏")}</option></select>`)}
     ${row("outline-anchors", t("目录中的引用点"), `<select id="outline-anchors"><option value="off">${t("关")}</option><option value="referenced">${t("被引用的位置")}</option><option value="all">${t("所有锚点")}</option></select>`, t("定义、定理等用锚点标出的位置，以及被引用的次数"))}
+    <div class="setting setting-list"><span class="setting-text"><span id="excluded-label">${t("不参与搜索的文件夹")}</span><small>${t("在笔记库中右键文件夹即可排除，适合实验输出、数据等不放笔记的文件夹")}</small></span></div>
+    <ul id="excluded-folders" class="excluded-folders" aria-labelledby="excluded-label"></ul>
     <div class="layout-sample" aria-hidden="true"><span data-panel="library">${t("文件夹")}</span><span class="layout-page">${t("笔记")}</span><span data-panel="outline">${t("目录")}</span></div>
     ${row("navigation-size", t("文件夹与目录字号"), `<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select>`)}
     ${row("tab-size", t("标签页字号"), `<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select>`)}
@@ -125,6 +127,33 @@ export function applyAppearance(settings) {
   $("#smooth-scroll").value = settings.smoothScroll;
   $("#reading-format").checked = settings.readingFormat;
   $("#outline-anchors").value = settings.outlineAnchors;
+  // Folders left out of search and backlinks, each with a way back.
+  const excluded = $("#excluded-folders");
+  excluded.replaceChildren(
+    ...(settings.searchExclude.length
+      ? settings.searchExclude.map((folder) => {
+          const item = document.createElement("li");
+          item.dataset.path = folder;
+          const name = document.createElement("span");
+          name.textContent = folder;
+          name.title = folder;
+          const restore = document.createElement("button");
+          restore.type = "button";
+          restore.textContent = t("恢复");
+          restore.setAttribute(
+            "aria-label",
+            t("恢复 {folder} 参与搜索", { folder }),
+          );
+          item.append(name, restore);
+          return item;
+        })
+      : [
+          Object.assign(document.createElement("li"), {
+            className: "empty",
+            textContent: t("没有排除的文件夹"),
+          }),
+        ]),
+  );
   $("#interface-language").value = settings.language;
   $("#text-weight").value = String(settings.weight);
   $("#navigation-size").value = String(settings.navigationSize);
@@ -223,6 +252,14 @@ export function wireAppearance(change) {
     change({ language: event.target.value });
   $("#outline-anchors").onchange = (event) =>
     change({ outlineAnchors: event.target.value });
+  $("#excluded-folders").onclick = (event) => {
+    const item = event.target.closest("button")?.closest("li[data-path]");
+    if (!item) return;
+    const remaining = [...item.parentElement.querySelectorAll("li[data-path]")]
+      .filter((li) => li !== item)
+      .map((li) => li.dataset.path);
+    change({ searchExclude: remaining });
+  };
   $("#navigation-size").onchange = (event) =>
     change({ navigationSize: Number(event.target.value) });
   $("#tab-size").onchange = (event) =>

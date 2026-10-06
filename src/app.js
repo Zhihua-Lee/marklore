@@ -6,6 +6,7 @@ import { createTabBar } from "./tab-bar.js";
 import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
 import { defaultSettings, normalizeSettings } from "./settings.js";
+import { excludedBy } from "../desktop/excluded.mjs";
 import { createLibrary } from "./library.js";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
@@ -1317,6 +1318,7 @@ const {
   refresh: refreshLibrary,
   focusSearch,
   researchText,
+  showExcluded,
 } = createLibrary({
   api,
   roots,
@@ -1366,7 +1368,36 @@ const { showContext, dismiss: dismissMenus } = createMenus({
   ],
 });
 // Right-click a note in the library: open it, or copy a link to it.
+// Right-click a folder in it: leave it out of search and backlinks, or back.
 $("#tree").addEventListener("contextmenu", (event) => {
+  const summary = event.target.closest("details.folder > summary");
+  const folder = summary?.parentElement;
+  // A library folder itself is removed from the library instead.
+  if (folder && folder.parentElement !== $("#tree")) {
+    event.preventDefault();
+    const list = settings.searchExclude,
+      path = folder.dataset.path,
+      own = list.some((p) => p.toLowerCase() === path.toLowerCase());
+    showContext(event, [
+      own
+        ? [
+            t("恢复参与搜索和反向链接"),
+            () =>
+              changeSettings({
+                searchExclude: list.filter(
+                  (p) => p.toLowerCase() !== path.toLowerCase(),
+                ),
+              }),
+          ]
+        : excludedBy(list)(path)
+          ? [t("上级文件夹已不参与搜索"), () => {}, true]
+          : [
+              t("不参与搜索和反向链接"),
+              () => changeSettings({ searchExclude: [...list, path] }),
+            ],
+    ]);
+    return;
+  }
   const file = event.target.closest("button.file");
   if (!file) return;
   event.preventDefault();
@@ -1457,6 +1488,7 @@ function changeSettings(patch) {
   if (geometryChanged) capture();
   Object.assign(settings, patch);
   applySettings();
+  if ("searchExclude" in patch) showExcluded();
   if (patch.sidebar === true) run(followCurrentFolder)();
   const doc = active;
   if (doc && geometryChanged)

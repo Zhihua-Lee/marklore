@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
+import { realPath } from "./files.mjs";
 
 const limit = 96 * 1024 * 1024;
 const escape = (value) =>
@@ -120,7 +121,7 @@ async function destinationSnapshot(destination, files) {
   const extension = path.extname(destination).toLowerCase();
   if (![".pdf", ".html", ".htm"].includes(extension))
     throw Error(t("导出目标必须使用 .pdf 或 .html 扩展名"));
-  const parent = await fs.realpath(path.dirname(destination));
+  const parent = await realPath(path.dirname(destination));
   const actual = path.join(parent, path.basename(destination));
   for (const source of files.files.values())
     if (source.path.toLowerCase() === actual.toLowerCase())

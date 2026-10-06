@@ -15,7 +15,7 @@ import fs from "node:fs/promises";
 import { watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FileStore, within, markdownPath } from "./files.mjs";
+import { FileStore, within, markdownPath, realPath } from "./files.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
 import { profileFolder } from "./profile-folder.mjs";
@@ -979,7 +979,7 @@ else {
         if (!result.filePath) return null;
         let destination;
         try {
-          destination = await fs.realpath(result.filePath);
+          destination = await realPath(result.filePath);
         } catch (e) {
           if (e.code !== "ENOENT") throw e;
         }
@@ -1168,7 +1168,7 @@ else {
             if (
               typeof folder === "string" &&
               path.isAbsolute(folder) &&
-              (await fs.realpath(folder)) === folder &&
+              (await realPath(folder)) === folder &&
               (await fs.stat(folder)).isDirectory()
             )
               files.imageDirectories.add(folder);

@@ -9,7 +9,27 @@ import {
   decode,
   encode,
   within,
+  realPath,
 } from "../desktop/files.mjs";
+
+// SSHFS-Win (WinFsp) drives fail the native realpath with UNKNOWN while the
+// file itself reads fine.
+test("realPath falls back where the native call cannot answer", async () => {
+  const dir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-realpath-")),
+  );
+  const file = path.join(dir, "note.md");
+  await fs.writeFile(file, "# Note\n");
+  const unknown = async () => {
+    throw Object.assign(new Error("unknown error"), { code: "UNKNOWN" });
+  };
+  assert.equal(await realPath(file, unknown), file);
+  // A missing file stays missing, whichever way it is asked.
+  await assert.rejects(realPath(path.join(dir, "gone.md")), { code: "ENOENT" });
+  await assert.rejects(realPath(path.join(dir, "gone.md"), unknown), {
+    code: "ENOENT",
+  });
+});
 async function fixture(t) {
   const root = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "folio-test-")),

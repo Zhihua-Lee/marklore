@@ -1,7 +1,23 @@
 import fs from "node:fs/promises";
+import { realpath as walkRealpath } from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
+
+const walk = promisify(walkRealpath);
+// The canonical path (links resolved). Drives that cannot report a final
+// path, such as WinFsp mounts (SSHFS-Win, rclone), fail the native call with
+// UNKNOWN; resolving the path one step at a time still works there. A
+// missing file stays an error.
+export async function realPath(p, native = fs.realpath) {
+  try {
+    return await native(p);
+  } catch (error) {
+    if (error.code === "ENOENT" || error.code === "ENOTDIR") throw error;
+    return walk(p);
+  }
+}
 
 export const MAX_BYTES = 32 * 1024 * 1024;
 export const markdownPath = (p) => /\.(md|markdown|mdown|mkd|txt)$/i.test(p);
@@ -14,7 +30,7 @@ export function within(root, file) {
   );
 }
 async function unchangedPath(file) {
-  if ((await fs.realpath(file)) !== file)
+  if ((await realPath(file)) !== file)
     throw Error(t("文件或文件夹路径已改变，请重新打开"));
   return file;
 }
@@ -80,7 +96,7 @@ export class FileStore {
     }
   }
   async open(file) {
-    const real = await fs.realpath(file);
+    const real = await realPath(file);
     if (!markdownPath(real)) throw Error(t("仅支持 Markdown 或文本文件"));
     const existing = [...this.files].find(([, f]) => f.path === real);
     const id = existing?.[0] ?? randomUUID();
@@ -168,7 +184,7 @@ export class FileStore {
     return this.directory(path.dirname(file.path));
   }
   async directory(folder) {
-    const real = await fs.realpath(folder);
+    const real = await realPath(folder);
     const existing = [...this.directories].find(([, p]) => p === real);
     const id = existing?.[0] ?? randomUUID();
     this.directories.set(id, real);
@@ -191,7 +207,7 @@ export class FileStore {
       // A child may have changed since readdir; do not authorize a replaced link.
       let real;
       try {
-        real = await fs.realpath(p);
+        real = await realPath(p);
       } catch {
         continue;
       }
@@ -211,7 +227,7 @@ export class FileStore {
     const folder = this.directories.get(id);
     if (!folder || path.basename(name) !== name) throw Error(t("未授权的文件"));
     await unchangedPath(folder);
-    const real = await fs.realpath(path.join(folder, name));
+    const real = await realPath(path.join(folder, name));
     if (!within(folder, real)) throw Error(t("文件位于所选文件夹之外"));
     return this.open(real);
   }
@@ -261,7 +277,7 @@ export class FileStore {
     const base = this.file(id),
       target = this.resolve(id, href);
     await unchangedPath(base.path);
-    const real = await fs.realpath(target);
+    const real = await realPath(target);
     const existing = [...this.files].find(([, file]) => file.path === real);
     const roots = [path.dirname(base.path), ...this.directories.values()];
     return {
@@ -291,7 +307,7 @@ export class FileStore {
     if (typeof href !== "string" || href.length > 8192)
       throw Error(t("无效图片路径"));
     const file = this.file(id),
-      real = await fs.realpath(this.resolve(id, href));
+      real = await realPath(this.resolve(id, href));
     await unchangedPath(file.path);
     if (!/\.(png|jpe?g|gif|webp|bmp|avif|svg)$/i.test(real))
       throw Error(t("不支持的图片类型"));
@@ -317,7 +333,7 @@ export class FileStore {
   async importImage(id, source) {
     const file = this.file(id);
     await unchangedPath(file.path);
-    const real = await fs.realpath(source);
+    const real = await realPath(source);
     const extension = path.extname(real).toLowerCase();
     if (!/^\.(png|jpe?g|gif|webp|bmp|avif|svg)$/.test(extension))
       throw Error(t("请选择 PNG、JPEG、GIF、WebP、BMP、AVIF 或 SVG 图片"));
@@ -342,7 +358,7 @@ export class FileStore {
     const parent = path.dirname(file.path);
     const folder = path.join(parent, "assets");
     await fs.mkdir(folder, { recursive: true });
-    const resolved = await fs.realpath(folder);
+    const resolved = await realPath(folder);
     if (!within(parent, resolved)) throw Error(t("图片目录位于笔记文件夹之外"));
     const name = `image-${randomUUID()}${extension}`;
     // Exclusive creation never overwrites an existing attachment or source image.

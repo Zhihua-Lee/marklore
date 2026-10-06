@@ -1,6 +1,6 @@
 # Verification
 
-Last updated 2026-10-03.
+Last updated 2026-10-06.
 
 This index lists what was checked for each documented release; the full record of
 each pass lives in [docs/verification/](docs/verification/). A recorded pass covers
@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                              | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | -------------------------------------------------------------------- | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.2.4  | Full-text search; safe snippets; SSHFS drives; excluded folders      | 100               | 190 (default + reduced-motion) | 13 suites (packaged); installer check 32/32                     | [v0.2.4](docs/verification/v0.2.4.md)   |
 | v0.2.3  | Windows installer; no portable mode when installed                   | 79                | 186 (default + reduced-motion) | 13 suites (packaged); installer check 32/32                     | [v0.2.3](docs/verification/v0.2.3.md)   |
 | v0.2.2  | Backlinks in place; anchors in the outline; link tools; format bar   | 78                | 186 (default + reduced-motion) | 13 suites (packaged)                                            | [v0.2.2](docs/verification/v0.2.2.md)   |
 | v0.2.1  | Library follows the disk; Read-mode annotation option; new README    | 74                | 170 (default + reduced-motion) | 12 suites (packaged)                                            | [v0.2.1](docs/verification/v0.2.1.md)   |

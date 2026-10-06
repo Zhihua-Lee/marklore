@@ -347,7 +347,7 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
 test("long overflowing tabs keep every close glyph inside the compact bar", async ({
   page,
 }) => {
-  await boot(page, { count: 20 });
+  await boot(page, { count: 50 });
   await expect(page.locator(".topbar")).toHaveAttribute(
     "data-overflow",
     "true",
@@ -364,8 +364,10 @@ test("long overflowing tabs keep every close glyph inside the compact bar", asyn
         height: bar.height,
         overflowY: getComputedStyle(host).overflowY,
         scrollbar: getComputedStyle(host).scrollbarWidth,
-        boxes: [...host.querySelectorAll(".tab-close, .tab-close svg")].map(
-          (el) => {
+        // Narrow tabs drop their close button; every one shown must fit.
+        boxes: [...host.querySelectorAll(".tab-close, .tab-close svg")]
+          .filter((el) => el.closest(".tab-close").offsetParent !== null)
+          .map((el) => {
             const box = el.getBoundingClientRect();
             return {
               top: box.top - bar.top,
@@ -373,8 +375,7 @@ test("long overflowing tabs keep every close glyph inside the compact bar", asyn
               width: box.width,
               height: box.height,
             };
-          },
-        ),
+          }),
       };
     });
     expect(result.height).toBeCloseTo(43, 3);
@@ -392,7 +393,7 @@ test("long overflowing tabs keep every close glyph inside the compact bar", asyn
 test("arrow controls browse, dragging reorders and keyboard arrows select tabs", async ({
   page,
 }) => {
-  await boot(page, { count: 20 });
+  await boot(page, { count: 50 });
   const scroll = () => page.locator("#tabs").evaluate((el) => el.scrollLeft);
   const selected = await page
     .getByRole("tab", { selected: true })
@@ -424,8 +425,9 @@ test("arrow controls browse, dragging reorders and keyboard arrows select tabs",
       const box = label.getBoundingClientRect();
       const left = Math.max(box.left, viewport.left),
         right = Math.min(box.right, viewport.right);
-      if (right - left > 50)
-        return { x: left + 15, y: (box.top + box.bottom) / 2 };
+      // Inactive tabs may be shrunk to a circle: grab one in its middle.
+      if (right - left > 20 && label.getAttribute("aria-selected") !== "true")
+        return { x: (left + right) / 2, y: (box.top + box.bottom) / 2 };
     }
     throw Error("No visible tab label for drag gesture");
   });
@@ -455,7 +457,7 @@ test("arrow controls browse, dragging reorders and keyboard arrows select tabs",
 test("typing keeps tab DOM and does not snap the scrolled-away strip", async ({
   page,
 }) => {
-  await boot(page, { count: 18 });
+  await boot(page, { count: 50 });
   await page.getByRole("button", { name: "源码", exact: true }).click();
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+End");
@@ -467,7 +469,7 @@ test("typing keeps tab DOM and does not snap the scrolled-away strip", async ({
   });
   await page.keyboard.type("\nKeep the current DOM and strip position.");
   await expect(page.getByRole("tab", { selected: true })).toContainText(
-    "● Note 17 —",
+    "● Note 49 —",
   );
   expect(
     await page.evaluate(

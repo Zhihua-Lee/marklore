@@ -56,9 +56,14 @@ export function createTabBar({
         .filter((t) => t.groupId === group.id)
         .map((t) => nodes.get(t.id))
         .filter((n) => n && !n.hidden);
+      // The line runs along the tabs' foot, from under the pill to the last
+      // tab; a folded group shows only its pill.
+      if (!members.length) continue;
       const first = header.getBoundingClientRect(),
-        last = (members.at(-1) || header).getBoundingClientRect();
-      const y = snap(first.bottom - viewport.top - 0.5),
+        last = members.at(-1).getBoundingClientRect();
+      const y = snap(
+          members[0].getBoundingClientRect().bottom - viewport.top - 0.5,
+        ),
         start = snap(first.left - viewport.left),
         end = snap(last.right - viewport.left);
       const current = members.find((n) => n.dataset.id === active()?.id);
@@ -225,7 +230,11 @@ export function createTabBar({
         }
         const members = tabs.filter((t) => t.groupId === group.id),
           current = members.includes(active());
-        header.textContent = `${group.collapsed ? "▸" : "▾"} ${group.name} ${members.length}${members.some(dirty) ? " ●" : ""}`;
+        // Just the name, as wide as it is; a folded group also says how many.
+        header.textContent =
+          [group.name, group.collapsed ? members.length : ""]
+            .filter((part) => part !== "")
+            .join(" · ") + (members.some(dirty) ? " ●" : "");
         header.title =
           t("{name} · {count} 篇", {
             name: group.name,
@@ -255,6 +264,15 @@ export function createTabBar({
         x.innerHTML = icon("close");
         x.onclick = () => Promise.resolve(close(doc)).catch(report);
         node.append(label, x);
+        // Middle click closes, as in a browser (narrow tabs hide the ×).
+        node.onmousedown = (e) => {
+          if (e.button === 1) e.preventDefault();
+        };
+        node.onauxclick = (e) => {
+          if (e.button !== 1) return;
+          e.preventDefault();
+          Promise.resolve(close(doc)).catch(report);
+        };
         node.oncontextmenu = (e) => {
           e.preventDefault();
           context(e, null, doc);
@@ -274,6 +292,10 @@ export function createTabBar({
       const label = node.querySelector(".tab-label");
       const text = (dirty(doc) ? "● " : "") + doc.name;
       if (label.textContent !== text) label.textContent = text;
+      // A tab shrunk to a circle shows just the name's first character
+      // (a dot first when unsaved).
+      label.dataset.initial =
+        (dirty(doc) ? "●" : "") + (Array.from(doc.name.trim())[0] || "");
       label.title = doc.path || doc.name;
       label.tabIndex = active() === doc ? 0 : -1;
       label.setAttribute("aria-selected", String(active() === doc));

@@ -535,7 +535,7 @@ select:focus-visible {
     gap: 0;
   }
   .topbar .tab {
-    min-width: 76px;
+    min-width: 28px;
   }
 }
 #sidebar > .side-panel:nth-child(1 of :not([hidden])) .sidebar-top {

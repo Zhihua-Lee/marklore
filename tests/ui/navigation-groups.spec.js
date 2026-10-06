@@ -194,7 +194,8 @@ test("groups rename, collapse, persist, ungroup without closing and preserve dir
     name: "分组 Analysis 分析",
     exact: true,
   });
-  await expect(group).toContainText("2");
+  // The pill shows the name; how many tabs it holds is in its tooltip.
+  await expect(group).toHaveAttribute("title", /2 篇/);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   await page.locator("#editor .cm-content").click();
   await page.keyboard.press("Control+End");
@@ -254,7 +255,8 @@ test("dragging into/out of groups, whole-group reordering and escape work at nar
   }
   const group = page.getByRole("button", { name: "分组 Study", exact: true });
   await drag(page.getByRole("tab", { name: "B.md", exact: true }), group);
-  await expect(group).toContainText("2");
+  // The pill shows the name; how many tabs it holds is in its tooltip.
+  await expect(group).toHaveAttribute("title", /2 篇/);
   await drag(group, page.getByRole("tab", { name: "D.md", exact: true }));
   await expect
     .poll(() => page.getByRole("tab").allTextContents())
@@ -263,7 +265,7 @@ test("dragging into/out of groups, whole-group reordering and escape work at nar
     page.getByRole("tab", { name: "B.md", exact: true }),
     page.getByRole("tab", { name: "C.md", exact: true }),
   );
-  await expect(group).toContainText("1");
+  await expect(group).toHaveAttribute("title", /1 篇/);
   const order = await page.getByRole("tab").allTextContents();
   await drag(group, page.getByRole("tab", { name: "C.md", exact: true }), true);
   expect(await page.getByRole("tab").allTextContents()).toEqual(order);

@@ -22,27 +22,35 @@
   fill: none;
   stroke-width: 1;
 }
+/* A group's label is not a tab: a small pill in the group's colour, as wide
+   as its name, centred in the strip (as in Chrome). Dark text reads better
+   than white on every group colour (contrast 4.1–5.0 against 3.3–4.1). */
 .tab-group {
   position: relative;
   flex: none;
-  max-width: 140px;
-  height: 30px;
-  min-height: 30px;
-  padding: 3px 8px;
-  margin-inline: 4px 0;
-  border-radius: 8px 8px 0 0;
-  border: 1px solid transparent;
+  align-self: center;
+  max-width: 120px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0 8px;
+  margin-inline: 6px 2px;
+  border: 0;
+  border-radius: 6px;
   font-size: var(--tab-size, 11px);
-  font-weight: 400;
-  color: var(--ink);
-  background: color-mix(in srgb, var(--group-color) 18%, var(--bg));
+  font-weight: 600;
+  line-height: 20px;
+  color: #1b1f1e;
+  background: var(--group-color);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.tab-group:hover,
-.tab-group.contains-active {
-  background: color-mix(in srgb, var(--group-color) 23%, var(--bg));
+.tab-group:hover {
+  background: color-mix(in srgb, var(--group-color) 85%, #ffffff);
+}
+.tab-group:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 .tab.grouped {
   border-color: transparent;

@@ -307,6 +307,15 @@ export function createLibrary({
           : t("没有匹配的笔记"),
     );
     fragment.append(summary);
+    // A large library is still being read: say so; results follow.
+    if (found.indexing)
+      fragment.append(
+        info(
+          t("正在读取笔记库（已读 {count} 篇），结果会继续更新", {
+            count: found.indexed,
+          }),
+        ),
+      );
     tree.replaceChildren(fragment);
     markCurrentFile();
     if (keepScroll) tree.scrollTop = top;

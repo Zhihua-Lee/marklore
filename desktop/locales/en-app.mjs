@@ -379,6 +379,8 @@ export default {
   "共 {count} 篇笔记，仅显示前 {shown} 篇":
     "{count} notes; showing the first {shown}",
   "第 {line} 行": "Line {line}",
+  "正在读取笔记库（已读 {count} 篇），结果会继续更新":
+    "Still reading the library ({count} notes so far); results will update",
   "用“打开文件夹”加入笔记库后，可以搜索笔记内容":
     "Add a folder with Open folder to search inside your notes",
 };

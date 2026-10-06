@@ -10,9 +10,17 @@ import { searchNotes } from "./note-search.mjs";
 import { safeWindow, safeTruncate } from "./snippet.mjs";
 
 const MAX_FILES = 5000,
+  MAX_DIRS = 20000,
   MAX_BYTES = 2 * 1024 * 1024,
   SNIPPET_BEFORE = 90,
   SNIPPET_AFTER = 150;
+// Notes the index reads (plain .txt files are left out: in a home folder
+// they are mostly licenses and logs).
+const NOTE = /\.(md|markdown|mdown|mkd)$/i;
+// Folders that hold software, not notes.
+const SKIP = new Set(["node_modules", "__pycache__", "site-packages"]);
+// A folder holding one of these is a Python or conda environment.
+const ENVIRONMENT = new Set(["conda-meta", "pyvenv.cfg"]);
 
 // Paths compare case-insensitively on Windows.
 export const pathKey = (p) => path.resolve(p).toLowerCase();
@@ -213,14 +221,18 @@ export function parseNote(text, file) {
   return { links, anchors };
 }
 
+// onProgress: called about once a second while a library is being read.
 export function createLinkIndex({
   read = fs.readFile,
   stat = fs.stat,
   readdir = fs.readdir,
+  onProgress = null,
 } = {}) {
   const notes = new Map(); // pathKey -> { path, mtime, links, anchors }
   let folders = [],
-    ready = Promise.resolve();
+    ready = Promise.resolve(),
+    scanGeneration = 0,
+    indexing = false;
   const inLibrary = (file) =>
     folders.some((folder) => {
       const rel = path.relative(folder, file);
@@ -247,20 +259,36 @@ export function createLinkIndex({
       notes.delete(key);
     }
   }
-  async function walk(folder, found) {
-    let entries;
-    try {
-      entries = await readdir(folder, { withFileTypes: true });
-    } catch {
-      return;
+  // Breadth first, so the notes near the top of a large library (a whole
+  // home folder on a network drive) are indexed first; each note is loaded
+  // as it is found and is searchable at once. Software folders are skipped:
+  // Python and conda environments, packages and caches hold no notes.
+  async function scan(roots, generation, onNote) {
+    const queue = roots.map((folder) => ({ folder, root: true }));
+    let notesFound = 0,
+      visited = 0;
+    while (queue.length && notesFound < MAX_FILES && visited < MAX_DIRS) {
+      if (generation !== scanGeneration) return false;
+      const { folder, root } = queue.shift();
+      visited++;
+      let entries;
+      try {
+        entries = await readdir(folder, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      if (!root && entries.some((e) => ENVIRONMENT.has(e.name))) continue;
+      for (const entry of entries) {
+        if (entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
+        const full = path.join(folder, entry.name);
+        if (entry.isDirectory()) queue.push({ folder: full, root: false });
+        else if (NOTE.test(entry.name) && notesFound < MAX_FILES) {
+          notesFound++;
+          await onNote(full);
+        }
+      }
     }
-    for (const entry of entries) {
-      if (found.length >= MAX_FILES) return;
-      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
-      const full = path.join(folder, entry.name);
-      if (entry.isDirectory()) await walk(full, found);
-      else if (markdownPath(entry.name)) found.push(full);
-    }
+    return true;
   }
   return {
     // Index exactly these library folders.
@@ -268,25 +296,35 @@ export function createLinkIndex({
       const next = [...new Set(list.map((folder) => path.resolve(folder)))];
       if (next.join("\n") === folders.join("\n")) return ready;
       folders = next;
+      const generation = ++scanGeneration;
+      indexing = true;
       ready = (async () => {
-        const found = [];
-        for (const folder of folders) await walk(folder, found);
-        const keep = new Set(found.map(pathKey));
+        const keep = new Set();
+        let last = Date.now();
+        const complete = await scan(folders, generation, async (file) => {
+          keep.add(pathKey(file));
+          await load(file);
+          // While a large library is read, tell listeners now and then.
+          if (Date.now() - last > 1000) {
+            last = Date.now();
+            onProgress?.();
+          }
+        });
+        if (!complete) return;
         for (const key of notes.keys()) if (!keep.has(key)) notes.delete(key);
-        for (const file of found) await load(file);
+        indexing = false;
       })();
       return ready;
     },
     // A file in the library was written, created, renamed or deleted.
     async changed(file) {
-      if (!markdownPath(file) || !inLibrary(file)) return false;
-      await ready;
+      if (!NOTE.test(file) || !inLibrary(file)) return false;
       await load(file, true);
       return true;
     },
     // Links from other notes into this one, with where they come from.
+    // Answered from the notes read so far while a large library is read.
     async backlinks(file) {
-      await ready;
       const key = pathKey(file),
         result = [];
       for (const note of notes.values()) {
@@ -299,7 +337,6 @@ export function createLinkIndex({
     },
     // This note's anchors (headings and explicit ids), from the index or disk.
     async anchors(file) {
-      await ready;
       const note = notes.get(pathKey(file));
       if (note) return note.anchors;
       return parseNote(await read(file, "utf8"), file).anchors;
@@ -331,22 +368,25 @@ export function createLinkIndex({
     },
     // Every note in the library with its anchors, for the link picker.
     async notes() {
-      await ready;
       return [...notes.values()].map((note) => ({
         path: note.path,
         anchors: note.anchors,
       }));
     },
     // Notes whose name or text holds every word of the query (note-search.mjs).
+    // indexing: the library is still being read; more results may come.
     async search(query, options) {
-      await ready;
       const list = [...notes.values()].map((note) => ({
         path: note.path,
         name: path.basename(note.path),
         text: note.text,
         lower: note.lower,
       }));
-      return searchNotes(list, query, options);
+      return {
+        ...searchNotes(list, query, options),
+        indexing,
+        indexed: notes.size,
+      };
     },
     // Is this file one of the indexed library notes?
     has(file) {

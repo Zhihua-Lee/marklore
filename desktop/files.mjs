@@ -188,7 +188,8 @@ export class FileStore {
     const existing = [...this.directories].find(([, p]) => p === real);
     const id = existing?.[0] ?? randomUUID();
     this.directories.set(id, real);
-    return { id, name: path.basename(real), path: real };
+    // A drive's root has no last segment: show it as "Z:\".
+    return { id, name: path.basename(real) || real, path: real };
   }
   async list(id) {
     const folder = this.directories.get(id);

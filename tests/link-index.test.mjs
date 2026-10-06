@@ -164,3 +164,61 @@ test("backlink snippets and anchor labels never cut a formula, code or emphasis"
   const label = anchors.find((a) => a.id === "lab").label;
   assert.equal((label.match(/(?<!\\)\$/g) || []).length % 2, 0, label);
 });
+
+// A home folder as the library (SSHFS-Win mounts one): environments and
+// packages are skipped, notes near the top come first, and search answers
+// while the rest is still being read.
+test("a large library: software folders skipped, searchable while read", async () => {
+  const root = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-home-")),
+  );
+  const put = async (rel, text = "# Note\n\nneedle\n") => {
+    await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
+    await fs.writeFile(path.join(root, rel), text);
+  };
+  await put("top.md");
+  await put("deep/deeper/notes/far.md");
+  await put("notes.txt", "needle in a text file\n");
+  await put("miniconda3/conda-meta/history", "");
+  await put("miniconda3/pkgs/readme.md");
+  await put("envs/py311/conda-meta/history", "");
+  await put("envs/py311/doc.md");
+  await put("venv/pyvenv.cfg", "");
+  await put("venv/lib/readme.md");
+  await put("project/node_modules/pkg/README.md");
+  await put("project/src/__pycache__/cache.md");
+  await put("project/site-packages/x/README.md");
+  await put("project/README.md");
+
+  // Reading slows down below the top level, as over a network drive.
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const readdir = async (folder, options) => {
+    if (folder !== root) await gate;
+    return fs.readdir(folder, options);
+  };
+  let progress = 0;
+  const index = createLinkIndex({ readdir, onProgress: () => progress++ });
+  const done = index.follow([root]);
+  for (let i = 0; i < 50 && !index.has(path.join(root, "top.md")); i++)
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  const early = await index.search("needle");
+  assert.equal(early.indexing, true);
+  assert.deepEqual(
+    early.results.map((r) => path.relative(root, r.path)),
+    ["top.md"],
+  );
+  release();
+  await done;
+  const found = await index.search("needle");
+  assert.equal(found.indexing, false);
+  assert.deepEqual(
+    found.results.map((r) => path.relative(root, r.path)).sort(),
+    [
+      path.join("deep", "deeper", "notes", "far.md"),
+      path.join("project", "README.md"),
+      "top.md",
+    ],
+  );
+  assert.ok(progress >= 0);
+});

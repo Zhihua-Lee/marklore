@@ -256,7 +256,11 @@ const allowedImage = {
 // other programs, such as an AI agent writing into the library.
 // Which notes link to which, for backlinks and broken links; it follows the
 // same folders and changes as the tree.
-const linkIndex = createLinkIndex();
+const linkIndex = createLinkIndex({
+  // A large library (a home folder on a network drive) is read for a while:
+  // backlinks and search results refresh as it goes.
+  onProgress: () => send("links", null),
+});
 let linksTimer;
 const libraryWatch = createLibraryWatch({
   notify: () => send("library", null),

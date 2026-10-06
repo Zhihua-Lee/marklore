@@ -380,6 +380,8 @@ export default {
     "{count} notes; showing the first {shown}",
   "第 {line} 行": "Line {line}",
   不参与搜索的文件夹: "Folders left out of search",
+  "仍在查找 {folder} 中的文件名，结果会继续更新":
+    "Still looking through file names in {folder}; results will update",
   "在笔记库中右键文件夹即可排除，适合实验输出、数据等不放笔记的文件夹":
     "Right-click a folder in the library to leave it out; useful for experiment output, data and other folders without notes",
   "恢复 {folder} 参与搜索": "Include {folder} in search again",

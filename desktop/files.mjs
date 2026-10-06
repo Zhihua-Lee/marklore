@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
+import { createNameWalks } from "./name-walk.mjs";
 
 const walk = promisify(walkRealpath);
 // The canonical path (links resolved). Drives that cannot report a final
@@ -74,8 +75,10 @@ export class FileStore {
   imageDirectories = new Set();
   imageFiles = new Set();
   locks = new Set();
-  constructor({ backups } = {}) {
+  // onNames: a background walk of a folder outside the library found more.
+  constructor({ backups, onNames = null } = {}) {
     this.backups = backups;
+    this.names = createNameWalks({ onProgress: onNames });
   }
   file(id) {
     const entry = this.files.get(id);
@@ -232,34 +235,36 @@ export class FileStore {
     if (!within(folder, real)) throw Error(t("文件位于所选文件夹之外"));
     return this.open(real);
   }
-  async search(ids, query, limit = 200) {
-    const q = String(query).trim().toLocaleLowerCase();
-    if (!q) return { items: [], truncated: false };
-    const queue = [...new Set(ids)],
-      seen = new Set(),
-      items = [];
-    let visited = 0;
-    while (queue.length && visited < 10000) {
-      const id = queue.shift(),
-        folder = this.directories.get(id);
-      if (!folder || seen.has(folder)) continue;
-      seen.add(folder);
-      visited++;
-      let children;
+  // Notes whose names hold every word of the query, in these folders and
+  // below (desktop/name-walk.mjs: walked once in the background, by the
+  // library's rules). Only the folders of the notes returned are resolved
+  // and authorized; opening one checks its path again (openChild).
+  // scanning: a large folder is still being walked; more may come.
+  async search(ids, query, { limit = 200, excluded, excludedKey } = {}) {
+    const roots = [...new Set(ids)]
+      .map((id) => this.directories.get(id))
+      .filter(Boolean);
+    if (!roots.length) return { items: [], truncated: false, scanning: false };
+    const found = await this.names.search(roots, query, {
+      limit,
+      excluded,
+      excludedKey,
+    });
+    const items = [];
+    for (const note of found.items) {
       try {
-        children = await this.list(id);
+        note.parent ??= (await this.directory(note.folder)).id;
       } catch {
         continue;
       }
-      for (const child of children) {
-        if (child.directory) queue.push(child.id);
-        else if (child.name.toLocaleLowerCase().includes(q)) {
-          items.push({ ...child, parent: id });
-          if (items.length >= limit) return { items, truncated: true };
-        }
-      }
+      items.push({
+        name: note.name,
+        path: note.path,
+        parent: note.parent,
+        directory: false,
+      });
     }
-    return { items, truncated: queue.length > 0 };
+    return { items, truncated: found.truncated, scanning: found.scanning };
   }
   resolve(id, href) {
     const base = this.file(id).path;

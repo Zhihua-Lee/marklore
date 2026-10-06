@@ -344,7 +344,16 @@ export function createLibrary({
       outside.slice(0, 10).map((r) => r.id),
       q,
     );
-    if (epoch !== searchEpoch || !names.items.length) return;
+    if (epoch !== searchEpoch) return;
+    // A large folder is walked in the background; results follow.
+    if (names.scanning)
+      summary.after(
+        info(
+          t("仍在查找 {folder} 中的文件名，结果会继续更新", {
+            folder: outside.map((r) => r.name).join(", "),
+          }),
+        ),
+      );
     const shown = new Set(found.results.map((note) => note.path.toLowerCase()));
     let added = 0;
     for (const file of names.items) {

@@ -9,19 +9,13 @@ import { createSlugger } from "./slug.mjs";
 import { searchNotes } from "./note-search.mjs";
 import { safeWindow, safeTruncate } from "./snippet.mjs";
 import { normalizeExcluded, excludedBy } from "./excluded.mjs";
+import { NOTE, skippedName, isEnvironment } from "./scan-rules.mjs";
 
 const MAX_FILES = 5000,
   MAX_DIRS = 20000,
   MAX_BYTES = 2 * 1024 * 1024,
   SNIPPET_BEFORE = 90,
   SNIPPET_AFTER = 150;
-// Notes the index reads (plain .txt files are left out: in a home folder
-// they are mostly licenses and logs).
-const NOTE = /\.(md|markdown|mdown|mkd)$/i;
-// Folders that hold software, not notes.
-const SKIP = new Set(["node_modules", "__pycache__", "site-packages"]);
-// A folder holding one of these is a Python or conda environment.
-const ENVIRONMENT = new Set(["conda-meta", "pyvenv.cfg"]);
 
 // Paths compare case-insensitively on Windows.
 export const pathKey = (p) => path.resolve(p).toLowerCase();
@@ -280,9 +274,9 @@ export function createLinkIndex({
       } catch {
         continue;
       }
-      if (!root && entries.some((e) => ENVIRONMENT.has(e.name))) continue;
+      if (!root && isEnvironment(entries.map((e) => e.name))) continue;
       for (const entry of entries) {
-        if (entry.name.startsWith(".") || SKIP.has(entry.name)) continue;
+        if (skippedName(entry.name)) continue;
         const full = path.join(folder, entry.name);
         if (isExcluded(full)) continue;
         if (entry.isDirectory()) queue.push({ folder: full, root: false });

@@ -178,6 +178,36 @@ test("notebook search includes collapsed descendants and remains root-scoped", a
   assert.equal(doc.text, "# note");
   assert.deepEqual((await store.search(["forged"], "概率")).items, []);
 });
+// A folder outside the library (an SSHFS home): names are searched by the
+// library's rules, so environments, packages and excluded folders are not walked.
+test("name search skips environments, packages, excluded folders and .txt", async (t) => {
+  const { root, store } = await fixture(t);
+  const put = async (rel) => {
+    await fs.mkdir(path.dirname(path.join(root, rel)), { recursive: true });
+    await fs.writeFile(path.join(root, rel), "# x");
+  };
+  await put("project/Fourier notes.md");
+  await put("project/Fourier notes.txt");
+  await put("miniconda3/conda-meta/history");
+  await put("miniconda3/pkgs/Fourier notes.md");
+  await put("project/node_modules/pkg/Fourier notes.md");
+  await put("runs/seed0/Fourier notes.md");
+  await put("project/Fourier only.md");
+  const folder = await store.directory(root);
+  const runs = path.join(root, "runs");
+  const result = await store.search([folder.id], "fourier NOTES", {
+    excluded: (p) => p === runs || p.startsWith(runs + path.sep),
+  });
+  assert.deepEqual(
+    result.items.map((item) => path.relative(root, item.path)),
+    [path.join("project", "Fourier notes.md")],
+  );
+  const doc = await store.openChild(
+    result.items[0].parent,
+    result.items[0].name,
+  );
+  assert.equal(doc.text, "# x");
+});
 test("UTF-16 encoded size cannot exceed the readable limit or replace the original", async (t) => {
   const { root, store } = await fixture(t),
     p = path.join(root, "utf16.md"),

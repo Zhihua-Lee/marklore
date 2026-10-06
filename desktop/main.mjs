@@ -16,6 +16,7 @@ import { watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { FileStore, within, markdownPath, realPath } from "./files.mjs";
+import { normalizeExcluded, excludedBy } from "./excluded.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
 import { profileFolder } from "./profile-folder.mjs";
@@ -78,6 +79,8 @@ else {
 let switchingData = false;
 const files = new FileStore({
   backups: path.join(app.getPath("userData"), "backups"),
+  // Names found in a folder outside the library: search again.
+  onNames: () => send("names", null),
 });
 const integration = createIntegration({
   app,
@@ -272,7 +275,13 @@ const libraryWatch = createLibraryWatch({
     }),
 });
 // excluded: folders left out of search and backlinks (in the settings).
+// The file-name search of folders outside the library skips them too.
+let libraryExcluded = () => false,
+  libraryExcludedKey = "";
 function followLibrary(folders, excluded = []) {
+  const list = normalizeExcluded(excluded);
+  libraryExcluded = excludedBy(list);
+  libraryExcludedKey = list.join("\n");
   libraryWatch.follow(folders);
   linkIndex.follow(folders, excluded).then(
     () => send("links", null),
@@ -897,7 +906,10 @@ else {
           query.length > 200
         )
           throw Error(t("无效搜索"));
-        return files.search(ids, query);
+        return files.search(ids, query, {
+          excluded: libraryExcluded,
+          excludedKey: libraryExcludedKey,
+        });
       });
       // Full-text search in the library's notes (the link index holds them).
       api("searchText", (query) => {

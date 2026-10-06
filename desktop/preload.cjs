@@ -65,6 +65,7 @@ api.on = (name, callback) => {
       "window",
       "library",
       "links",
+      "names",
     ].includes(name)
   )
     throw Error("Invalid event");

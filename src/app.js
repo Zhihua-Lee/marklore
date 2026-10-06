@@ -1776,6 +1776,7 @@ if (api) {
     backlinks?.invalidate();
     researchText();
   });
+  api.on("names", () => researchText());
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
   api.on("window", showWindowState);
   api.windowState?.().then(showWindowState, () => {});

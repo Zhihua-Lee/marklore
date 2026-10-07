@@ -45,9 +45,25 @@ function Uninstall {
   Start-Sleep -Seconds 1
 }
 
+# A real installation shares the app's identity: installing and uninstalling
+# the test copy would replace and then remove it. Refuse instead.
+if (UninstallEntry) {
+  "Marklore is installed on this machine; uninstall it (or run this check elsewhere) first. Nothing changed."
+  exit 2
+}
 # Back up what is registered now.
 $backup = Join-Path $work 'backup'
 New-Item -ItemType Directory -Force $backup | Out-Null
+# The uninstaller deletes Marklore.lnk on the desktop and in the Start menu
+# by name, also one the user made for a zip copy: keep copies to put back.
+$shortcutBackup = @{}
+foreach ($link in @($desktopLink, $startMenu)) {
+  if (Test-Path $link) {
+    $copy = Join-Path $backup ("shortcut-" + [IO.Path]::GetFileName([IO.Path]::GetDirectoryName($link)) + ".lnk")
+    Copy-Item -LiteralPath $link -Destination $copy -Force
+    $shortcutBackup[$link] = $copy
+  }
+}
 Remove-Item (Join-Path $backup '*.reg') -ErrorAction SilentlyContinue
 Start-Process reg.exe -ArgumentList @('export', 'HKCU\Software\Classes\Marklore.Markdown', "`"$(Join-Path $backup 'progid.reg')`"", '/y') -Wait -WindowStyle Hidden
 Start-Process reg.exe -ArgumentList @('export', 'HKCU\Software\Marklore', "`"$(Join-Path $backup 'software.reg')`"", '/y') -Wait -WindowStyle Hidden
@@ -148,10 +164,17 @@ finally {
     Restore "Software\Classes\.$ext\OpenWithProgids" 'Marklore.Markdown' $(if ($before[$ext]) { [byte[]]@() } else { $null }) $none
   }
   Restore 'Software\Microsoft\Windows\CurrentVersion\Run' 'Marklore' $before.run $sz
+  # Put back the user's own shortcuts, which the uninstaller deleted by name.
+  foreach ($link in $shortcutBackup.Keys) {
+    Copy-Item -LiteralPath $shortcutBackup[$link] -Destination $link -Force
+  }
 }
 
 Check 'registrations restored' (((RegValue $cmdKey '(default)') -eq $before.command) -and ((RegValue 'HKCU:\Software\RegisteredApplications' 'Marklore') -eq $before.registered))
 Check 'shortcuts as before' (((Test-Path $desktopLink) -eq $desktopHad) -and ((Test-Path $startMenu) -eq $menuHad))
+foreach ($link in $shortcutBackup.Keys) {
+  Check "own shortcut restored: $([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($link)))" ((Get-FileHash -LiteralPath $link).Hash -eq (Get-FileHash -LiteralPath $shortcutBackup[$link]).Hash)
+}
 # The running copy keeps writing to its profile: check it is still there.
 Check '%APPDATA%\Marklore kept' ((-not $appDataBefore) -or (Test-Path (Join-Path $appData 'session.json')))
 $results

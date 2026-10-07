@@ -213,6 +213,69 @@ for (const [theme, fill, ink] of [
     await expect(pill).toHaveCSS("color", ink);
   });
 
+// The < > arrows show only when the tabs overflow. A fold slides tabs with
+// transforms; those must not count as overflow, or the arrows flash and the
+// strip jerks sideways while the tabs move.
+test("folding near the edge changes the arrows once, never back and forth", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 400 });
+  await installFolio(page);
+  await page.addInitScript(() => {
+    const doc = (id, groupId) => ({
+      id,
+      name: `Note number ${id}.md`,
+      fileId: id,
+      groupId,
+      mode: "read",
+      document: {
+        id,
+        name: `Note number ${id}.md`,
+        path: `C:/s/${id}.md`,
+        version: "1",
+        text: "# x\n",
+      },
+    });
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: [],
+        roots: [],
+        active: "d10",
+        restored: Array.from({ length: 24 }, (_, i) =>
+          doc("d" + i, i < 6 ? "g1" : null),
+        ),
+        settings: {
+          sidebar: false,
+          tabGroups: [{ id: "g1", name: "5980", color: "rose" }],
+        },
+      }),
+    });
+  });
+  await page.goto("/");
+  await page.locator(".tab-group").waitFor();
+  await expect(page.locator(".topbar")).toHaveAttribute(
+    "data-overflow",
+    "true",
+  );
+  const flips = () =>
+    page.evaluate(async () => {
+      const bar = document.querySelector(".topbar"),
+        log = [bar.dataset.overflow];
+      const watch = new MutationObserver(() => log.push(bar.dataset.overflow));
+      watch.observe(bar, {
+        attributes: true,
+        attributeFilter: ["data-overflow"],
+      });
+      document.querySelector(".tab-group").click();
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      watch.disconnect();
+      // Consecutive repeats are no visible change.
+      return log.filter((value, i) => i === 0 || value !== log[i - 1]);
+    });
+  expect(await flips()).toEqual(["true", "false"]);
+  expect(await flips()).toEqual(["false", "true"]);
+});
+
 test("a middle click closes a tab", async ({ page }) => {
   await boot(page, 8);
   await expect(page.locator("#tabs .tab")).toHaveCount(8);

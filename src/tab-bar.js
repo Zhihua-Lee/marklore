@@ -327,10 +327,24 @@ export function createTabBar({
     }
     overflow();
   }
-  function overflow() {
-    document.querySelector(".topbar").dataset.overflow = String(
-      host.scrollWidth > host.clientWidth + 1,
+  // Whether the tabs need the < > arrows, from their laid-out widths. Not
+  // scrollWidth: a fold slides tabs with transforms, which would count as
+  // overflow for a moment and flash the arrows (the strip then narrowed and
+  // widened again under the moving tabs).
+  function overflowing() {
+    const shown = [...host.children].filter(
+      (node) => !node.hidden && node.offsetWidth,
     );
+    if (!shown.length) return false;
+    const first = shown[0],
+      last = shown.at(-1);
+    return (
+      last.offsetLeft + last.offsetWidth - first.offsetLeft >
+      host.clientWidth + 1
+    );
+  }
+  function overflow() {
+    document.querySelector(".topbar").dataset.overflow = String(overflowing());
     document.querySelector("#tabs-back").disabled = host.scrollLeft < 1;
     document.querySelector("#tabs-forward").disabled =
       host.scrollLeft >= host.scrollWidth - host.clientWidth - 1;
@@ -412,8 +426,10 @@ export function createTabBar({
   new ResizeObserver(() => {
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => {
+      // A fold in progress measures again when it ends (settleMotion).
+      if (motion) return;
       overflow();
-      if (drag || motion) return;
+      if (drag) return;
       const node = nodes.get(active()?.id);
       (node?.hidden ? headers.get(active()?.groupId) : node)?.scrollIntoView({
         block: "nearest",

@@ -2,10 +2,10 @@ import { test, expect } from "@playwright/test";
 import { installFolio } from "./fixtures.js";
 
 // Many tabs in a strip narrower than a browser's: they shrink almost to a
-// circle showing their first character, the current one stays readable, and
-// a group is labelled by a small pill as wide as its name.
-async function boot(page, count = 22) {
-  await page.setViewportSize({ width: 1280, height: 400 });
+// circle, showing as much of their name as fits; the current one stays
+// readable, and a group is labelled by a small pill as wide as its name.
+async function boot(page, count = 22, width = 1280) {
+  await page.setViewportSize({ width, height: 400 });
   await installFolio(page);
   await page.addInitScript((count) => {
     const doc = (id, name, groupId) => ({
@@ -50,27 +50,47 @@ async function boot(page, count = 22) {
 const tab = (page, name) =>
   page.locator("#tabs .tab").filter({ has: page.getByRole("tab", { name }) });
 
-test("narrow tabs show their first character; all fit; the current one is readable", async ({
-  page,
-}) => {
-  await boot(page);
-  await expect(page.locator(".topbar")).not.toHaveAttribute(
-    "data-overflow",
-    "true",
-  );
-  const narrow = tab(page, "线性.md");
-  const look = await narrow.evaluate((el) => {
+const look = (locator) =>
+  locator.evaluate((el) => {
     const label = el.querySelector(".tab-label");
     return {
       width: el.getBoundingClientRect().width,
       initial: getComputedStyle(label, "::before").content,
       close: getComputedStyle(el.querySelector(".tab-close")).display,
+      ext: getComputedStyle(label.querySelector(".tab-ext")).display,
+      clip: getComputedStyle(label).textOverflow,
     };
   });
-  expect(look.width).toBeLessThanOrEqual(56);
-  expect(look.width).toBeGreaterThanOrEqual(28);
-  expect(look.initial).toBe('"线"');
-  expect(look.close).toBe("none");
+
+test("a narrow tab shows as much of its name as fits, without the extension", async ({
+  page,
+}) => {
+  await boot(page, 14);
+  const narrow = tab(page, "线性.md");
+  const seen = await look(narrow);
+  expect(seen.width).toBeLessThan(84);
+  expect(seen.width).toBeGreaterThan(40);
+  expect(seen.close).toBe("none");
+  expect(seen.ext).toBe("none");
+  expect(seen.clip).toBe("clip");
+  expect(seen.initial).toBe("none");
+  await expect(narrow.getByRole("tab")).toHaveText("线性.md");
+});
+
+test("crowded tabs shrink to their first character; all fit; the current one is readable", async ({
+  page,
+}) => {
+  await boot(page, 22);
+  await expect(page.locator(".topbar")).not.toHaveAttribute(
+    "data-overflow",
+    "true",
+  );
+  const narrow = tab(page, "线性.md");
+  const seen = await look(narrow);
+  expect(seen.width).toBeLessThanOrEqual(34);
+  expect(seen.width).toBeGreaterThanOrEqual(28);
+  expect(seen.initial).toBe('"线"');
+  expect(seen.close).toBe("none");
   // The full name is still what assistive technology and the tooltip get.
   await expect(narrow.getByRole("tab")).toHaveAttribute(
     "title",

@@ -281,7 +281,24 @@ export function createTabBar({
       );
       const label = node.querySelector(".tab-label");
       const text = (dirty(doc) ? "● " : "") + doc.name;
-      if (label.textContent !== text) label.textContent = text;
+      if (label.textContent !== text) {
+        // The extension is its own span, so a narrow tab can leave it out
+        // and spend its few characters on the name.
+        const ext = doc.name.match(/\.(md|markdown|mdown|mkd|txt)$/i)?.[0];
+        label.replaceChildren(
+          ext ? text.slice(0, -ext.length) : text,
+          ...(ext
+            ? [
+                Object.assign(document.createElement("span"), {
+                  className: "tab-ext",
+                  textContent: ext,
+                }),
+              ]
+            : []),
+        );
+      }
+      // The full name, also when a narrow tab hides the extension.
+      label.setAttribute("aria-label", text);
       // A tab shrunk to a circle shows just the name's first character
       // (a dot first when unsaved).
       label.dataset.initial =

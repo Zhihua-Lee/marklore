@@ -301,8 +301,9 @@ test("mouse drag reorders overflowing tabs without changing selected tab", async
         const box = label.getBoundingClientRect(),
           left = Math.max(box.left, viewport.left),
           right = Math.min(box.right, viewport.right);
-        if (right - left > 50)
-          return { x: left + 15, y: (box.top + box.bottom) / 2 };
+        // Inactive tabs may be shrunk near a circle: grab one in its middle.
+        if (right - left > 20 && label.getAttribute("aria-selected") !== "true")
+          return { x: (left + right) / 2, y: (box.top + box.bottom) / 2 };
       }
       throw Error("No visible tab label for drag gesture");
     }),

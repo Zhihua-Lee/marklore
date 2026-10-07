@@ -103,6 +103,87 @@ test("a group's label is a pill as wide as its name; folded it shows a count", a
   await expect(page.locator(".tab-group").nth(1)).toHaveText("TA · 2");
 });
 
+test("folding slides the tabs (transform only) and redraws the group line after", async ({
+  page,
+}) => {
+  test.skip(
+    test.info().project.name === "reduced-motion",
+    "no animation with reduced motion",
+  );
+  await boot(page, 12);
+  const pill = page.locator(".tab-group").first();
+  const line = () =>
+    page.evaluate(
+      () => document.querySelectorAll(".tab-group-lines path").length,
+    );
+  expect(await line()).toBe(1);
+  // The animations a fold starts animate positions, never widths.
+  const properties = await pill.evaluate((el) => {
+    el.click();
+    return [
+      ...new Set(
+        document
+          .getAnimations()
+          .filter((a) => a.effect.target?.closest?.("#tabs"))
+          .flatMap((a) => a.effect.getKeyframes())
+          .flatMap((frame) => Object.keys(frame))
+          .filter(
+            (key) =>
+              !["offset", "easing", "composite", "computedOffset"].includes(
+                key,
+              ),
+          ),
+      ),
+    ].sort();
+  });
+  expect(properties).toEqual(
+    ["opacity", "transform"].filter((p) => properties.includes(p)),
+  );
+  expect(properties).toContain("transform");
+  await expect(pill).toHaveText("信号处理 · 3");
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter((a) => a.effect.target?.closest?.("#tabs")).length,
+      ),
+    )
+    .toBe(0);
+  // Folded, the group has no line; unfolded, it has it again.
+  expect(await line()).toBe(0);
+  await pill.click();
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document
+            .getAnimations()
+            .filter((a) => a.effect.target?.closest?.("#tabs")).length,
+      ),
+    )
+    .toBe(0);
+  expect(await line()).toBe(1);
+  await expect(page.locator(".tab-group-lines")).toBeVisible();
+});
+
+for (const [theme, color] of [
+  ["light", "rgb(24, 128, 56)"],
+  ["dark", "rgb(129, 201, 149)"],
+])
+  test(`${theme}: group colours follow the theme`, async ({ page }) => {
+    await boot(page, 8);
+    if (theme === "dark")
+      await page.evaluate(
+        () => (document.documentElement.dataset.theme = "dark"),
+      );
+    await expect(page.locator(".tab-group").first()).toHaveCSS(
+      "background-color",
+      color,
+    );
+  });
+
 test("a middle click closes a tab", async ({ page }) => {
   await boot(page, 8);
   await expect(page.locator("#tabs .tab")).toHaveCount(8);

@@ -508,7 +508,7 @@ export const cases = {
       box.remove();
     }
   },
-  "ungrouped tabs have a distinct fill and active state in both themes"() {
+  "tabs have a neutral fill, grouped or not, and a distinct active state in both themes"() {
     const { box, host } = fixture();
     try {
       host.innerHTML =
@@ -527,10 +527,10 @@ export const cases = {
           fills.every((fill) => fill !== "rgba(0, 0, 0, 0)"),
           "a tab is transparent",
         );
-        check(
-          new Set(fills).size === 3,
-          "active/grouped/ungrouped fills not distinct",
-        );
+        // A grouped tab looks like any other (as in Chrome): its group shows
+        // by the pill and the line, not by a fill. The active tab stands out.
+        check(fills[0] === fills[2], "a grouped tab has its own fill");
+        check(fills[1] !== fills[0], "the active tab's fill is not distinct");
       }
     } finally {
       box.remove();

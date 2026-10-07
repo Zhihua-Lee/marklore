@@ -2,6 +2,7 @@ import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import {
   groupColors,
+  groupText,
   normalizeGroups,
   moveGroupedTab,
   moveGroup,
@@ -86,7 +87,8 @@ export function createTabBar({
         curves.append(path);
       }
       path.setAttribute("d", d);
-      path.setAttribute("stroke", groupColors[group.color]);
+      // A style, not the attribute: the colour is a theme variable.
+      path.style.stroke = groupColors[group.color];
       seen.add(group.id);
     }
     for (const [id, path] of paths)
@@ -95,78 +97,69 @@ export function createTabBar({
         paths.delete(id);
       }
   }
+  // A running fold: its animations, cancelled when anything else moves tabs.
   function settleMotion(refresh = true) {
     if (!motion) return;
     const old = motion;
     motion = null;
-    cancelAnimationFrame(old.frame);
     for (const animation of old.animations) animation.cancel();
+    curves.style.visibility = dragged ? "hidden" : "visible";
     if (refresh) update();
+    else overflow();
   }
+  // Folding moves tabs instead of resizing them: the new layout is applied at
+  // once and every tab slides from where it was (FLIP, a transform the
+  // compositor runs); tabs a fold reveals slide out from under the pill,
+  // fading in. Nothing is measured while it runs; the group lines are drawn
+  // again when it ends. (Animating widths relaid the whole strip each frame.)
   function toggleGroup(group) {
-    if (motion && motion.groupId !== group.id) settleMotion();
-    const closing = !group.collapsed;
-    const members = tabs
-      .filter((t) => t.groupId === group.id)
-      .map((t) => nodes.get(t.id));
-    const small = {
-      flexBasis: "0px",
-      minWidth: "0px",
-      maxWidth: "0px",
-      opacity: 0,
-      marginRight: "-3px",
-    };
-    const current = members.map((node) => {
-      if (node.hidden) return small;
-      const width = node.getBoundingClientRect().width + "px";
-      const style = getComputedStyle(node);
-      return {
-        flexBasis: width,
-        minWidth: width,
-        maxWidth: width,
-        opacity: style.opacity,
-        marginRight: style.marginRight,
-      };
-    });
-    // Sample rendered geometry before cancelling: reversal has no endpoint jump.
     settleMotion(false);
-    group.collapsed = closing;
-    if (reducedMotion.matches) {
-      changedOrder();
-      return;
-    }
-    const run = { groupId: group.id, animations: [], frame: 0 };
-    motion = run;
-    update();
-    const finalWidths = members.map((n) => n.getBoundingClientRect().width);
-    members.forEach((node, i) => {
-      const full = {
-        flexBasis: finalWidths[i] + "px",
-        minWidth: finalWidths[i] + "px",
-        maxWidth: finalWidths[i] + "px",
-        opacity: 1,
-        marginRight: "0px",
-      };
-      run.animations.push(
-        node.animate([current[i], closing ? small : full], {
-          duration: 280,
-          easing: "cubic-bezier(.22,1,.36,1)",
-          fill: "both",
-        }),
+    const shown = () =>
+      [...headers.values(), ...nodes.values()].filter(
+        (node) => node.isConnected && !node.hidden,
       );
-    });
-    const paint = () => {
-      if (motion !== run) return;
-      overflow();
-      run.frame = requestAnimationFrame(paint);
-    };
-    paint();
-    Promise.all(run.animations.map((a) => a.finished))
+    const before = new Map(
+      shown().map((node) => [node, node.getBoundingClientRect().left]),
+    );
+    group.collapsed = !group.collapsed;
+    update();
+    changed();
+    if (reducedMotion.matches) return;
+    const run = { groupId: group.id, animations: [] };
+    motion = run;
+    curves.style.visibility = "hidden";
+    const pill = headers.get(group.id)?.getBoundingClientRect();
+    const timing = { duration: 220, easing: "cubic-bezier(.22,1,.36,1)" };
+    for (const node of shown()) {
+      const left = node.getBoundingClientRect().left,
+        from = before.get(node);
+      if (from === undefined) {
+        const offset = Math.min(0, (pill?.right ?? left) - left);
+        run.animations.push(
+          node.animate(
+            [
+              { transform: `translateX(${offset}px)`, opacity: 0 },
+              { transform: "none", opacity: 1 },
+            ],
+            timing,
+          ),
+        );
+      } else if (Math.abs(from - left) >= 0.5)
+        run.animations.push(
+          node.animate(
+            [
+              { transform: `translateX(${from - left}px)` },
+              { transform: "none" },
+            ],
+            timing,
+          ),
+        );
+    }
+    Promise.all(run.animations.map((animation) => animation.finished))
       .then(() => {
-        if (motion === run) settleMotion();
+        if (motion === run) settleMotion(false);
       })
       .catch(() => {});
-    changed();
   }
   const changedOrder = () => {
     update();
@@ -247,6 +240,7 @@ export function createTabBar({
         header.setAttribute("aria-expanded", String(!group.collapsed));
         header.classList.toggle("contains-active", current);
         header.style.setProperty("--group-color", groupColors[group.color]);
+        header.style.setProperty("--group-ink", groupText(group.color));
         order.push(header);
       }
       let node = nodes.get(doc.id);
@@ -281,7 +275,7 @@ export function createTabBar({
       }
       node.className =
         "tab" + (active() === doc ? " active" : "") + (group ? " grouped" : "");
-      node.hidden = !!group?.collapsed && motion?.groupId !== group.id;
+      node.hidden = !!group?.collapsed;
       node.inert = !!group?.collapsed;
       if (group?.collapsed) node.setAttribute("aria-hidden", "true");
       else node.removeAttribute("aria-hidden");

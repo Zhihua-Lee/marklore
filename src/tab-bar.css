@@ -20,11 +20,32 @@
 }
 .tab-group-lines path {
   fill: none;
-  stroke-width: 1;
+  stroke-width: 2;
+}
+/* Group colours: Chrome's group palette, lighter in the dark theme. Pill
+   text is white on the light theme's colours and dark on amber and on all
+   dark-theme colours, for a contrast of at least 4.5. */
+:root {
+  --group-green: #188038;
+  --group-blue: #1a73e8;
+  --group-amber: #f9ab00;
+  --group-rose: #d01884;
+  --group-violet: #9334e6;
+  --group-gray: #5f6368;
+  --group-text: #ffffff;
+  --group-text-amber: #202124;
+}
+:root[data-theme="dark"] {
+  --group-green: #81c995;
+  --group-blue: #8ab4f8;
+  --group-amber: #fdd663;
+  --group-rose: #ff8bcb;
+  --group-violet: #c58af9;
+  --group-gray: #dadce0;
+  --group-text: #202124;
 }
 /* A group's label is not a tab: a small pill in the group's colour, as wide
-   as its name, centred in the strip (as in Chrome). Dark text reads better
-   than white on every group colour (contrast 4.1–5.0 against 3.3–4.1). */
+   as its name, centred in the strip (as in Chrome). */
 .tab-group {
   position: relative;
   flex: none;
@@ -39,31 +60,28 @@
   font-size: var(--tab-size, 11px);
   font-weight: 600;
   line-height: 20px;
-  color: #1b1f1e;
+  color: var(--group-ink, #ffffff);
   background: var(--group-color);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .tab-group:hover {
-  background: color-mix(in srgb, var(--group-color) 85%, #ffffff);
+  background: color-mix(
+    in srgb,
+    var(--group-color) 88%,
+    var(--group-ink, #ffffff)
+  );
 }
 .tab-group:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
+/* Tabs in a group look like any other tab, as in Chrome: the pill and the
+   coloured line along their foot say which group they are in. Their top
+   corners stay round, their foot square on the line. */
 .tab.grouped {
-  border-color: transparent;
-  border-radius: 8px 8px 0 0;
-  background: color-mix(in srgb, var(--group-color) 14%, var(--bg));
-  color: var(--ink);
-}
-.tab.grouped:hover {
-  background: color-mix(in srgb, var(--group-color) 22%, var(--bg));
-}
-.tab.grouped.active,
-.tab.grouped.active:hover {
-  background: color-mix(in srgb, var(--group-color) 29%, var(--bg));
+  border-radius: 6px 6px 0 0;
 }
 .tab.grouped::before,
 .tab.grouped::after {
@@ -111,16 +129,18 @@
   width: 26px;
 }
 
-/* Ungrouped tabs read as tabs on the panel without borrowing a hue: a quiet
-   neutral surface from the theme's own ink. */
-#tabs .tab:not(.grouped) {
+/* Tabs read as tabs on the panel without borrowing a hue: a quiet neutral
+   surface from the theme's own ink. */
+#tabs .tab {
   background: color-mix(in srgb, var(--ink) 5%, var(--panel));
   border-color: transparent;
-  border-radius: 6px;
   color: var(--muted);
 }
-#tabs .tab:not(.grouped, .active):hover,
-#tabs .tab:not(.grouped, .active):focus-within {
+#tabs .tab:not(.grouped) {
+  border-radius: 6px;
+}
+#tabs .tab:not(.active):hover,
+#tabs .tab:not(.active):focus-within {
   background: color-mix(in srgb, var(--ink) 9%, var(--panel));
   color: var(--ink);
 }

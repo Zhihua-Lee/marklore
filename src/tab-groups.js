@@ -1,6 +1,7 @@
 import { t } from "../desktop/i18n.mjs";
-// Each group colour is a theme variable (tab-bar.css: Chrome's group
-// palette, lighter in the dark theme), so a theme switch needs no redraw.
+// Each group colour is a set of theme variables (tab-bar.css): the hue for
+// the line along the group's tabs, and a soft fill with a deep ink of the
+// same hue for its pill. A theme switch needs no redraw.
 export const groupColors = {
   green: "var(--group-green)",
   blue: "var(--group-blue)",
@@ -9,10 +10,8 @@ export const groupColors = {
   violet: "var(--group-violet)",
   gray: "var(--group-gray)",
 };
-// The text on a group's pill: white on the light theme's colours, dark on
-// amber and on every dark-theme colour (contrast 4.5 or more each).
-export const groupText = (color) =>
-  `var(--group-text-${color}, var(--group-text))`;
+export const groupFill = (color) => `var(--group-${color}-fill)`;
+export const groupInk = (color) => `var(--group-${color}-ink)`;
 
 // Only newly created tabs inherit placement; callers deduplicate before this.
 export function insertDerivedTab(tabs, groups, doc, opener) {

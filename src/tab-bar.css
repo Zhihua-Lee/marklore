@@ -21,31 +21,69 @@
 .tab-group-lines path {
   fill: none;
   stroke-width: 2;
+  stroke-linecap: round;
 }
-/* Group colours: Chrome's group palette, lighter in the dark theme. Pill
-   text is white on the light theme's colours and dark on amber and on all
-   dark-theme colours, for a contrast of at least 4.5. */
+/* While tabs slide or are dragged the line waits, then fades back. */
+.tab-group-lines.moving,
+.tab-group-lines.hidden {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .tab-group-lines {
+    transition: opacity 140ms ease-out;
+  }
+  .tab-group-lines.moving,
+  .tab-group-lines.hidden {
+    transition: none;
+  }
+}
+/* Group colours, in the reading desk's own register (docs/design-principles:
+   warm neutrals, a restrained accent): each hue gives the line along the
+   group's tabs, and a soft fill with a deep ink of the same hue for its pill
+   (ink on fill 5.2–6.7 in either theme), like a coloured tab on a notebook
+   rather than a button. */
 :root {
-  --group-green: #188038;
-  --group-blue: #1a73e8;
-  --group-amber: #f9ab00;
-  --group-rose: #d01884;
-  --group-violet: #9334e6;
-  --group-gray: #5f6368;
-  --group-text: #ffffff;
-  --group-text-amber: #202124;
+  --group-green: #3f7d6c;
+  --group-green-fill: #cfe3d9;
+  --group-green-ink: #245847;
+  --group-blue: #5a7ea8;
+  --group-blue-fill: #d4dfee;
+  --group-blue-ink: #32527a;
+  --group-amber: #b08532;
+  --group-amber-fill: #ead9b2;
+  --group-amber-ink: #6e5216;
+  --group-rose: #b06a72;
+  --group-rose-fill: #ecd0d3;
+  --group-rose-ink: #7a3c45;
+  --group-violet: #8471a8;
+  --group-violet-fill: #dcd3ee;
+  --group-violet-ink: #554379;
+  --group-gray: #7d827f;
+  --group-gray-fill: #d9d9d3;
+  --group-gray-ink: #4a4f4c;
 }
 :root[data-theme="dark"] {
-  --group-green: #81c995;
-  --group-blue: #8ab4f8;
-  --group-amber: #fdd663;
-  --group-rose: #ff8bcb;
-  --group-violet: #c58af9;
-  --group-gray: #dadce0;
-  --group-text: #202124;
+  --group-green: #7fb8a5;
+  --group-green-fill: #2b3c36;
+  --group-green-ink: #94c8b6;
+  --group-blue: #8aa8cf;
+  --group-blue-fill: #2c3542;
+  --group-blue-ink: #a2bbdd;
+  --group-amber: #d4b06a;
+  --group-amber-fill: #3d3626;
+  --group-amber-ink: #d9bf86;
+  --group-rose: #d49aa1;
+  --group-rose-fill: #412f34;
+  --group-rose-ink: #deadb3;
+  --group-violet: #ab9ad0;
+  --group-violet-fill: #353044;
+  --group-violet-ink: #bdb0dd;
+  --group-gray: #a3a9a5;
+  --group-gray-fill: #343937;
+  --group-gray-ink: #bcc2be;
 }
-/* A group's label is not a tab: a small pill in the group's colour, as wide
-   as its name, centred in the strip (as in Chrome). */
+/* A group's label is not a tab: a small pill as wide as its name, centred in
+   the strip, with the same corner radius as the tabs beside it. */
 .tab-group {
   position: relative;
   flex: none;
@@ -60,29 +98,21 @@
   font-size: var(--tab-size, 11px);
   font-weight: 600;
   line-height: 20px;
-  color: var(--group-ink, #ffffff);
-  background: var(--group-color);
+  color: var(--group-ink);
+  background: var(--group-fill);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .tab-group:hover {
-  background: color-mix(
-    in srgb,
-    var(--group-color) 88%,
-    var(--group-ink, #ffffff)
-  );
+  background: color-mix(in srgb, var(--group-fill) 82%, var(--group-color));
 }
 .tab-group:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
 }
-/* Tabs in a group look like any other tab, as in Chrome: the pill and the
-   coloured line along their foot say which group they are in. Their top
-   corners stay round, their foot square on the line. */
-.tab.grouped {
-  border-radius: 6px 6px 0 0;
-}
+/* Tabs in a group look like any other tab: the pill and the line below them
+   say which group they are in. */
 .tab.grouped::before,
 .tab.grouped::after {
   content: none;
@@ -136,7 +166,7 @@
   border-color: transparent;
   color: var(--muted);
 }
-#tabs .tab:not(.grouped) {
+#tabs .tab {
   border-radius: 6px;
 }
 #tabs .tab:not(.active):hover,
@@ -147,8 +177,8 @@
 
 /* The selected tab carries no hue at all, so it can never be read as a group
    (groups are the only coloured tabs): it is the one bright card in the strip,
-   raised by a hairline edge and a soft shadow, with a bold label. Inside a
-   group the group's own outline (drawn by tab-bar.js) stands for the edge.
+   raised by a hairline edge and a soft shadow, with a bold label, in a group
+   or not.
    No transition: the change shows in the frame of the click. */
 :root {
   --tab-active: var(--paper);
@@ -164,10 +194,6 @@
   border-color: var(--line);
   color: var(--ink);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 18%, transparent);
-}
-#tabs .tab.grouped.active {
-  border-color: transparent;
-  box-shadow: none;
 }
 #tabs .tab.active .tab-label {
   font-weight: 600;

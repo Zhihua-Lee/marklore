@@ -52,6 +52,7 @@ export const appearanceMarkup = `
     <ul id="excluded-folders" class="excluded-folders" aria-labelledby="excluded-label"></ul>
     <div class="layout-sample" aria-hidden="true"><span data-panel="library">${t("文件夹")}</span><span class="layout-page">${t("笔记")}</span><span data-panel="outline">${t("目录")}</span></div>
     ${row("navigation-size", t("文件夹与目录字号"), `<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select>`)}
+    ${row("group-counts", t("折叠的分组显示标签数"), '<input id="group-counts" type="checkbox" class="switch">', t("关闭时只在悬停提示中显示"))}
     ${row("tab-size", t("标签页字号"), `<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select>`)}
   </fieldset>
   <fieldset id="settings-navigation"><legend>${t("导航与滚动")}</legend>
@@ -126,6 +127,7 @@ export function applyAppearance(settings) {
     : "hidden";
   $("#smooth-scroll").value = settings.smoothScroll;
   $("#reading-format").checked = settings.readingFormat;
+  $("#group-counts").checked = settings.groupCounts;
   $("#outline-anchors").value = settings.outlineAnchors;
   // Folders left out of search and backlinks, each with a way back.
   const excluded = $("#excluded-folders");
@@ -238,6 +240,8 @@ export function wireAppearance(change) {
     change({ showHistoryButtons: event.target.value === "visible" });
   $("#reading-format").onchange = (event) =>
     change({ readingFormat: event.target.checked });
+  $("#group-counts").onchange = (event) =>
+    change({ groupCounts: event.target.checked });
   $("#smooth-scroll").onchange = (event) =>
     change({ smoothScroll: event.target.value });
   $("#text-weight").onchange = (event) =>

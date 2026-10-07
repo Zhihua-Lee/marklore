@@ -2,7 +2,8 @@ import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import {
   groupColors,
-  groupText,
+  groupFill,
+  groupInk,
   normalizeGroups,
   moveGroupedTab,
   moveGroup,
@@ -19,6 +20,8 @@ export function createTabBar({
   context,
   changed,
   report,
+  // Whether a folded group's pill shows how many tabs it holds.
+  showCounts = () => false,
 }) {
   const host = document.querySelector("#tabs"),
     nodes = new Map(),
@@ -46,10 +49,11 @@ export function createTabBar({
     curves.style.width = viewport.width + "px";
     curves.style.height = viewport.height + "px";
     curves.setAttribute("viewBox", `0 0 ${viewport.width} ${viewport.height}`);
-    curves.style.visibility = dragged ? "hidden" : "visible";
+    curves.classList.toggle("hidden", dragged);
+    curves.classList.toggle("moving", !!motion);
     const seen = new Set(),
       ratio = devicePixelRatio || 1;
-    const snap = (n) => (Math.round(n * ratio - 0.5) + 0.5) / ratio;
+    const snap = (n) => Math.round(n * ratio) / ratio;
     for (const group of groups()) {
       const header = headers.get(group.id);
       if (!header?.isConnected) continue;
@@ -57,29 +61,18 @@ export function createTabBar({
         .filter((t) => t.groupId === group.id)
         .map((t) => nodes.get(t.id))
         .filter((n) => n && !n.hidden);
-      // The line runs along the tabs' foot, from under the pill to the last
-      // tab; a folded group shows only its pill.
+      // One straight line just below the group's tabs, from the pill to the
+      // last tab; a folded group shows only its pill. The current tab keeps
+      // the same card as anywhere else: nothing is drawn around it.
       if (!members.length) continue;
       const first = header.getBoundingClientRect(),
         last = members.at(-1).getBoundingClientRect();
       const y = snap(
-          members[0].getBoundingClientRect().bottom - viewport.top - 0.5,
+          members[0].getBoundingClientRect().bottom - viewport.top + 2,
         ),
-        start = snap(first.left - viewport.left),
-        end = snap(last.right - viewport.left);
-      const current = members.find((n) => n.dataset.id === active()?.id);
-      const currentRect = current?.getBoundingClientRect();
-      const outlined = currentRect?.width > 20;
-      let d = `M ${start} ${y}`;
-      if (outlined) {
-        const r = currentRect,
-          left = snap(r.left - viewport.left),
-          right = snap(r.right - viewport.left),
-          top = snap(r.top - viewport.top + 0.5);
-        // One continuous path: no CSS border/pseudo-element seams at either foot.
-        d += ` H ${left - 3} Q ${left} ${y} ${left} ${y - 3} V ${top + 8} Q ${left} ${top} ${left + 8} ${top} H ${right - 8} Q ${right} ${top} ${right} ${top + 8} V ${y - 3} Q ${right} ${y} ${right + 3} ${y}`;
-      }
-      d += ` H ${Math.max(end, outlined ? snap(currentRect.right - viewport.left) + 3 : end)}`;
+        start = snap(first.left - viewport.left + 3),
+        end = snap(last.right - viewport.left - 3);
+      const d = `M ${start} ${y} H ${end}`;
       let path = paths.get(group.id);
       if (!path) {
         path = document.createElementNS(svgNS, "path");
@@ -103,7 +96,8 @@ export function createTabBar({
     const old = motion;
     motion = null;
     for (const animation of old.animations) animation.cancel();
-    curves.style.visibility = dragged ? "hidden" : "visible";
+    curves.classList.remove("moving");
+    curves.classList.toggle("hidden", dragged);
     if (refresh) update();
     else overflow();
   }
@@ -127,7 +121,7 @@ export function createTabBar({
     if (reducedMotion.matches) return;
     const run = { groupId: group.id, animations: [] };
     motion = run;
-    curves.style.visibility = "hidden";
+    curves.classList.add("moving");
     const pill = headers.get(group.id)?.getBoundingClientRect();
     const timing = { duration: 220, easing: "cubic-bezier(.22,1,.36,1)" };
     for (const node of shown()) {
@@ -223,9 +217,10 @@ export function createTabBar({
         }
         const members = tabs.filter((t) => t.groupId === group.id),
           current = members.includes(active());
-        // Just the name, as wide as it is; a folded group also says how many.
+        // Just the name, as wide as it is; a folded group can also say how
+        // many tabs it holds (Settings), and always does in its tooltip.
         header.textContent =
-          [group.name, group.collapsed ? members.length : ""]
+          [group.name, group.collapsed && showCounts() ? members.length : ""]
             .filter((part) => part !== "")
             .join(" · ") + (members.some(dirty) ? " ●" : "");
         header.title =
@@ -240,7 +235,8 @@ export function createTabBar({
         header.setAttribute("aria-expanded", String(!group.collapsed));
         header.classList.toggle("contains-active", current);
         header.style.setProperty("--group-color", groupColors[group.color]);
-        header.style.setProperty("--group-ink", groupText(group.color));
+        header.style.setProperty("--group-fill", groupFill(group.color));
+        header.style.setProperty("--group-ink", groupInk(group.color));
         order.push(header);
       }
       let node = nodes.get(doc.id);
@@ -561,7 +557,7 @@ export function createTabBar({
   });
   function paint() {
     if (!drag || !dragged) return;
-    curves.style.visibility = "hidden";
+    curves.classList.add("hidden");
     const box = host.getBoundingClientRect();
     if (drag.current < box.left + 24) host.scrollLeft -= 8;
     else if (drag.current > box.right - 24) host.scrollLeft += 8;

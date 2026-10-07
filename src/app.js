@@ -214,6 +214,7 @@ const tabBar = createTabBar({
   close: closeTab,
   dirty,
   changed: scheduleSession,
+  showCounts: () => settings.groupCounts,
   report: (error) => toast(error.message || String(error)),
   context: (event, actions, doc) =>
     actions ? showContext(event, actions) : contextMenu(event, doc),
@@ -1489,6 +1490,7 @@ function changeSettings(patch) {
   Object.assign(settings, patch);
   applySettings();
   if ("searchExclude" in patch) showExcluded();
+  if ("groupCounts" in patch) updateTabs();
   if (patch.sidebar === true) run(followCurrentFolder)();
   const doc = active;
   if (doc && geometryChanged)

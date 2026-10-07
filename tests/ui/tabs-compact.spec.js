@@ -82,7 +82,7 @@ test("narrow tabs show their first character; all fit; the current one is readab
   expect(current).toBeGreaterThanOrEqual(100);
 });
 
-test("a group's label is a pill as wide as its name; folded it shows a count", async ({
+test("a group's label is a pill as wide as its name; a count only if chosen", async ({
   page,
 }) => {
   await boot(page, 8);
@@ -100,7 +100,16 @@ test("a group's label is a pill as wide as its name; folded it shows a count", a
   });
   expect(box.height).toBeLessThan(box.tab);
   expect(box.width).toBeLessThanOrEqual(box.text + 1);
-  await expect(page.locator(".tab-group").nth(1)).toHaveText("TA · 2");
+  // Folded, it shows just its name; the count is in the tooltip, and on
+  // the pill only when Settings asks for it.
+  const folded = page.locator(".tab-group").nth(1);
+  await expect(folded).toHaveText("TA");
+  await expect(folded).toHaveAttribute("title", /2 篇/);
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.locator("#group-counts").check();
+  await expect(folded).toHaveText("TA · 2");
+  await page.locator("#group-counts").uncheck();
+  await expect(folded).toHaveText("TA");
 });
 
 test("folding slides the tabs (transform only) and redraws the group line after", async ({
@@ -140,7 +149,7 @@ test("folding slides the tabs (transform only) and redraws the group line after"
     ["opacity", "transform"].filter((p) => properties.includes(p)),
   );
   expect(properties).toContain("transform");
-  await expect(pill).toHaveText("信号处理 · 3");
+  await expect(pill).toHaveAttribute("aria-expanded", "false");
   await expect
     .poll(() =>
       page.evaluate(
@@ -168,9 +177,10 @@ test("folding slides the tabs (transform only) and redraws the group line after"
   await expect(page.locator(".tab-group-lines")).toBeVisible();
 });
 
-for (const [theme, color] of [
-  ["light", "rgb(24, 128, 56)"],
-  ["dark", "rgb(129, 201, 149)"],
+for (const [theme, fill, ink] of [
+  // The green group: a soft fill with a deep ink of its hue, per theme.
+  ["light", "rgb(207, 227, 217)", "rgb(36, 88, 71)"],
+  ["dark", "rgb(43, 60, 54)", "rgb(148, 200, 182)"],
 ])
   test(`${theme}: group colours follow the theme`, async ({ page }) => {
     await boot(page, 8);
@@ -178,10 +188,9 @@ for (const [theme, color] of [
       await page.evaluate(
         () => (document.documentElement.dataset.theme = "dark"),
       );
-    await expect(page.locator(".tab-group").first()).toHaveCSS(
-      "background-color",
-      color,
-    );
+    const pill = page.locator(".tab-group").first();
+    await expect(pill).toHaveCSS("background-color", fill);
+    await expect(pill).toHaveCSS("color", ink);
   });
 
 test("a middle click closes a tab", async ({ page }) => {

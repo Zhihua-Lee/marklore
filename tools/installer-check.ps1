@@ -20,6 +20,14 @@ function Check($name, $ok) {
 function RegValue($key, $name) {
   try { (Get-ItemProperty -Path $key -Name $name -ErrorAction Stop).$name } catch { $null }
 }
+# Whether a value exists under HKCU\<sub>. "Open with" entries are empty
+# REG_NONE values, which Get-ItemProperty reads as missing: up to v0.2.6 this
+# script took them for absent and deleted the reader's own on restore.
+function HasValue($sub, $name) {
+  $k = [Microsoft.Win32.Registry]::CurrentUser.OpenSubKey($sub)
+  if (-not $k) { return $false }
+  try { return @($k.GetValueNames()) -contains $name } finally { $k.Close() }
+}
 $cmdKey = 'HKCU:\Software\Classes\Marklore.Markdown\shell\open\command'
 $runKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $uninstallRoot = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
@@ -66,13 +74,19 @@ foreach ($link in @($desktopLink, $startMenu)) {
 }
 Remove-Item (Join-Path $backup '*.reg') -ErrorAction SilentlyContinue
 Start-Process reg.exe -ArgumentList @('export', 'HKCU\Software\Classes\Marklore.Markdown', "`"$(Join-Path $backup 'progid.reg')`"", '/y') -Wait -WindowStyle Hidden
+Start-Process reg.exe -ArgumentList @('export', 'HKCU\Software\Classes\Marklore.Other', "`"$(Join-Path $backup 'other.reg')`"", '/y') -Wait -WindowStyle Hidden
 Start-Process reg.exe -ArgumentList @('export', 'HKCU\Software\Marklore', "`"$(Join-Path $backup 'software.reg')`"", '/y') -Wait -WindowStyle Hidden
 $before = @{
   command = RegValue $cmdKey '(default)'
   registered = RegValue 'HKCU:\Software\RegisteredApplications' 'Marklore'
-  md = $null -ne (RegValue 'HKCU:\Software\Classes\.md\OpenWithProgids' 'Marklore.Markdown')
-  markdown = $null -ne (RegValue 'HKCU:\Software\Classes\.markdown\OpenWithProgids' 'Marklore.Markdown')
+  md = HasValue 'Software\Classes\.md\OpenWithProgids' 'Marklore.Markdown'
+  markdown = HasValue 'Software\Classes\.markdown\OpenWithProgids' 'Marklore.Markdown'
   run = RegValue $runKey 'Marklore'
+  diff = HasValue 'Software\Classes\.diff\OpenWithProgids' 'Marklore.Other'
+  patch = HasValue 'Software\Classes\.patch\OpenWithProgids' 'Marklore.Other'
+  # Most machines have no .diff/.patch class keys; the test must not leave any.
+  diffKey = Test-Path 'HKCU:\Software\Classes\.diff'
+  patchKey = Test-Path 'HKCU:\Software\Classes\.patch'
 }
 $appDataBefore = Snapshot $appData
 $desktopHad = Test-Path $desktopLink
@@ -122,6 +136,10 @@ try {
   [Microsoft.Win32.Registry]::SetValue("$H\RegisteredApplications", 'Marklore', 'Software\Marklore\Capabilities')
   [Microsoft.Win32.Registry]::SetValue("$H\Classes\.md\OpenWithProgids", 'Marklore.Markdown', [byte[]]@(), $none)
   [Microsoft.Win32.Registry]::SetValue("$H\Classes\.markdown\OpenWithProgids", 'Marklore.Markdown', [byte[]]@(), $none)
+  # Other formats (.diff, .patch), when turned on.
+  [Microsoft.Win32.Registry]::SetValue("$H\Classes\Marklore.Other\shell\open\command", '', $ours)
+  [Microsoft.Win32.Registry]::SetValue("$H\Classes\.diff\OpenWithProgids", 'Marklore.Other', [byte[]]@(), $none)
+  [Microsoft.Win32.Registry]::SetValue("$H\Classes\.patch\OpenWithProgids", 'Marklore.Other', [byte[]]@(), $none)
   # The exact value Electron's setLoginItemSettings writes.
   [Microsoft.Win32.Registry]::SetValue("$H\Microsoft\Windows\CurrentVersion\Run", 'Marklore', '"' + $exe + '" --background')
   Check 'test registration written exactly' (((RegValue $cmdKey '(default)') -eq $ours) -and ((RegValue $runKey 'Marklore') -eq ('"' + $exe + '" --background')))
@@ -135,7 +153,9 @@ try {
   Check 'own file association removed' (-not (Test-Path 'HKCU:\Software\Classes\Marklore.Markdown'))
   Check 'own capabilities removed' (-not (Test-Path 'HKCU:\Software\Marklore'))
   Check 'own RegisteredApplications removed' ($null -eq (RegValue 'HKCU:\Software\RegisteredApplications' 'Marklore'))
-  Check 'own .md OpenWithProgids removed' ($null -eq (RegValue 'HKCU:\Software\Classes\.md\OpenWithProgids' 'Marklore.Markdown'))
+  Check 'own .md OpenWithProgids removed' (-not (HasValue 'Software\Classes\.md\OpenWithProgids' 'Marklore.Markdown'))
+  Check 'own other-format type removed' (-not (Test-Path 'HKCU:\Software\Classes\Marklore.Other'))
+  Check 'own .diff/.patch OpenWithProgids removed' ((-not (HasValue 'Software\Classes\.diff\OpenWithProgids' 'Marklore.Other')) -and (-not (HasValue 'Software\Classes\.patch\OpenWithProgids' 'Marklore.Other')))
   Check 'own startup entry removed' ($null -eq (RegValue $runKey 'Marklore'))
   Check 'program folder removed again' (-not (Test-Path $dir))
 }
@@ -145,10 +165,10 @@ finally {
   # Restore the registrations exactly as they were.
   $H = 'HKEY_CURRENT_USER\Software'
   $hkcu = [Microsoft.Win32.Registry]::CurrentUser
-  foreach ($k in @('Software\Classes\Marklore.Markdown', 'Software\Marklore')) {
+  foreach ($k in @('Software\Classes\Marklore.Markdown', 'Software\Classes\Marklore.Other', 'Software\Marklore')) {
     if ($hkcu.OpenSubKey($k)) { $hkcu.DeleteSubKeyTree($k) }
   }
-  foreach ($file in @('progid.reg', 'software.reg')) {
+  foreach ($file in @('progid.reg', 'other.reg', 'software.reg')) {
     $path = Join-Path $backup $file
     if (Test-Path $path) { Start-Process reg.exe -ArgumentList @('import', "`"$path`"") -Wait -WindowStyle Hidden }
   }
@@ -157,11 +177,35 @@ finally {
     if ($null -ne $value) { $key.SetValue($name, $value, $kind) } else { $key.DeleteValue($name, $false) }
     $key.Close()
   }
+  # An "Open with" entry: an empty REG_NONE value, put back or removed. (Not
+  # through Restore: $(...) unrolls an empty byte array to $null, so up to
+  # v0.2.6 every entry was removed.)
+  function RestoreOpenWith($sub, $name, $had) {
+    $key = $hkcu.CreateSubKey($sub)
+    if ($had) { $key.SetValue($name, [byte[]]@(), [Microsoft.Win32.RegistryValueKind]::None) }
+    else { $key.DeleteValue($name, $false) }
+    $key.Close()
+  }
   $sz = [Microsoft.Win32.RegistryValueKind]::String
-  $none = [Microsoft.Win32.RegistryValueKind]::None
   Restore 'Software\RegisteredApplications' 'Marklore' $before.registered $sz
   foreach ($ext in @('md', 'markdown')) {
-    Restore "Software\Classes\.$ext\OpenWithProgids" 'Marklore.Markdown' $(if ($before[$ext]) { [byte[]]@() } else { $null }) $none
+    RestoreOpenWith "Software\Classes\.$ext\OpenWithProgids" 'Marklore.Markdown' $before[$ext]
+  }
+  foreach ($ext in @('diff', 'patch')) {
+    RestoreOpenWith "Software\Classes\.$ext\OpenWithProgids" 'Marklore.Other' $before[$ext]
+    # A class key the test created, still empty: removed again.
+    $sub = "Software\Classes\.$ext"
+    if (-not $before[$ext + 'Key']) {
+      $key = $hkcu.OpenSubKey($sub)
+      $empty = $key -and $key.ValueCount -eq 0 -and (@($key.GetSubKeyNames()) -join ',') -in @('', 'OpenWithProgids')
+      if ($empty -and $key.SubKeyCount -eq 1) {
+        $child = $key.OpenSubKey('OpenWithProgids')
+        $empty = $child.ValueCount -eq 0 -and $child.SubKeyCount -eq 0
+        $child.Close()
+      }
+      if ($key) { $key.Close() }
+      if ($empty) { $hkcu.DeleteSubKeyTree($sub) }
+    }
   }
   Restore 'Software\Microsoft\Windows\CurrentVersion\Run' 'Marklore' $before.run $sz
   # Put back the user's own shortcuts, which the uninstaller deleted by name.
@@ -171,6 +215,8 @@ finally {
 }
 
 Check 'registrations restored' (((RegValue $cmdKey '(default)') -eq $before.command) -and ((RegValue 'HKCU:\Software\RegisteredApplications' 'Marklore') -eq $before.registered))
+Check '"Open with" entries as before' ((@('md', 'markdown') | Where-Object { (HasValue "Software\Classes\.$_\OpenWithProgids" 'Marklore.Markdown') -ne $before[$_] }).Count -eq 0 -and (@('diff', 'patch') | Where-Object { (HasValue "Software\Classes\.$_\OpenWithProgids" 'Marklore.Other') -ne $before[$_] }).Count -eq 0)
+Check 'no .diff/.patch keys left behind' (((Test-Path 'HKCU:\Software\Classes\.diff') -eq $before.diffKey) -and ((Test-Path 'HKCU:\Software\Classes\.patch') -eq $before.patchKey))
 Check 'shortcuts as before' (((Test-Path $desktopLink) -eq $desktopHad) -and ((Test-Path $startMenu) -eq $menuHad))
 foreach ($link in $shortcutBackup.Keys) {
   Check "own shortcut restored: $([IO.Path]::GetFileName([IO.Path]::GetDirectoryName($link)))" ((Get-FileHash -LiteralPath $link).Hash -eq (Get-FileHash -LiteralPath $shortcutBackup[$link]).Hash)

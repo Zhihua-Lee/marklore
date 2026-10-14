@@ -15,7 +15,7 @@ import fs from "node:fs/promises";
 import { watch } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FileStore, within, markdownPath, realPath } from "./files.mjs";
+import { FileStore, within, realPath } from "./files.mjs";
 import { normalizeExcluded, excludedBy } from "./excluded.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
@@ -355,7 +355,7 @@ async function openFile(p, { remember = true } = {}) {
 }
 async function acceptArgs(args) {
   for (const arg of args) {
-    if (!arg.startsWith("-") && markdownPath(arg)) {
+    if (!arg.startsWith("-") && files.openable(arg)) {
       try {
         const doc = await openFile(path.resolve(arg));
         if (ready) send("open", [doc]);
@@ -418,7 +418,11 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("second-instance", (_event, argv) => {
     acceptArgs(argv);
-    if (!argv.includes("--background") || argv.some(markdownPath)) showWindow();
+    if (
+      !argv.includes("--background") ||
+      argv.some((arg) => files.openable(arg))
+    )
+      showWindow();
   });
   app.on("before-quit", (event) => {
     if (!allowClose && ready && win && !win.isDestroyed()) {
@@ -431,6 +435,7 @@ else {
     .whenReady()
     .then(async () => {
       await integration.load();
+      files.otherFormats = integration.otherFormats;
       recent.refreshJumpList().catch(() => {});
       if (process.platform === "win32")
         app.setAppUserModelId("io.marklore.desktop");
@@ -574,7 +579,7 @@ else {
       win.once("ready-to-show", () => {
         const backgroundOnly =
           process.argv.includes("--background") &&
-          !process.argv.some(markdownPath);
+          !process.argv.some((arg) => files.openable(arg));
         if (backgroundOnly && tray) return;
         if (inactive) win.showInactive();
         else win.show();
@@ -678,7 +683,7 @@ else {
         const documents = [],
           errors = [];
         for (const file of new Set(paths)) {
-          if (!markdownPath(file)) {
+          if (!files.openable(file)) {
             errors.push(
               t("{name}：不支持的文件类型", { name: path.basename(file) }),
             );
@@ -744,6 +749,10 @@ else {
             case "register":
               await integration.register();
               break;
+            case "otherFormats":
+              await integration.setOtherFormats(action.value);
+              files.otherFormats = integration.otherFormats;
+              break;
             case "defaults":
               await integration.defaults();
               break;
@@ -807,10 +816,19 @@ else {
         const result = await dialog.showOpenDialog(win, {
           properties: ["openFile", "multiSelections"],
           filters: [
-            {
-              name: "Markdown / Text",
-              extensions: ["md", "markdown", "mdown", "mkd", "txt"],
-            },
+            // One filter, so turned-on other formats show without a switch.
+            files.otherFormats
+              ? {
+                  name: "Markdown / Text / Diff",
+                  extensions: [
+                    ...["md", "markdown", "mdown", "mkd", "txt"],
+                    ...["diff", "patch"],
+                  ],
+                }
+              : {
+                  name: "Markdown / Text",
+                  extensions: ["md", "markdown", "mdown", "mkd", "txt"],
+                },
           ],
         });
         return Promise.all(result.filePaths.map(openFile));

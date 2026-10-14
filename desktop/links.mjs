@@ -29,7 +29,7 @@ export function createLinkOpener({ files, dialog, shell, owner, openFile }) {
       );
     const stat = await fs.stat(target);
     if (!stat.isFile()) throw Error(t("链接目标不是普通文件"));
-    if (!markdownPath(target)) {
+    if (!(files.openable?.(target) ?? markdownPath(target))) {
       if (
         !/\.(pdf|docx?|xlsx?|pptx?|odt|ods|odp|rtf|csv|tsv|tex|bib|json|ya?ml|xml|log|ipynb|png|jpe?g|gif|webp|bmp|avif|svg|tiff?|ico|mp[34]|m4[av]|wav|flac|ogg|aac|opus|webm|mov|avi|mkv|zip|7z|rar|html?)$/i.test(
           target,

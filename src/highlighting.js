@@ -1,4 +1,5 @@
 import { createBoundedCache } from "./bounded-cache.js";
+import { diffMarkup } from "./diff-view.js";
 
 // highlight.js (~186 KB with the extra grammars) loads on first use. Until then
 // code renders as plain escaped text; onHighlighterReady lets the preview
@@ -71,6 +72,8 @@ export const MAX_HIGHLIGHT_CHARS = 100000;
 export function highlightCode(code, language = "") {
   const requested = language.trim().toLowerCase();
   const name = aliases.get(requested) || requested;
+  // Diffs colour whole lines, without the highlighter (diff-view.js).
+  if (name === "diff" || name === "patch") return diffMarkup(code);
   if (!name || code.length > MAX_HIGHLIGHT_CHARS) return "";
   if (!hljs) {
     loadHighlighter();

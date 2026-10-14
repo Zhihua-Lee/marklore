@@ -3,7 +3,7 @@
 // without a manual refresh. One recursive watcher per library folder.
 import { watch as fsWatch } from "node:fs";
 import path from "node:path";
-import { markdownPath } from "./files.mjs";
+import { markdownPath, otherPath } from "./files.mjs";
 
 // Does a change to this entry (relative to the library folder) affect the
 // tree? Notes and folders do; hidden folders (.git, .obsidian), node_modules
@@ -15,7 +15,9 @@ export function treeChange(name) {
   if (parts.some((part) => part.startsWith(".") || part === "node_modules"))
     return false;
   const last = parts.at(-1);
-  return markdownPath(last) || !/\.[a-z0-9]{1,5}$/i.test(last);
+  return (
+    markdownPath(last) || otherPath(last) || !/\.[a-z0-9]{1,5}$/i.test(last)
+  );
 }
 
 // notify(): the tree changed. noteChanged(path): a note was written, created,

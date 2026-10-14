@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { pdfOutline } from "../tools/pdf-outline.mjs";
 
 const project = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -96,6 +97,27 @@ try {
     /folio-asset:|folio-export-image:|class="fold"|id="toolbar"/,
   );
   assert.equal(await fs.readFile(note, "utf8"), source + tableSource);
+  // Headings beside the text (on by default), each link to a heading here.
+  assert.match(html, /<body class="with-toc"><nav class="export-toc"/);
+  const targets = [...html.matchAll(/<a href="#([^"]+)">/g)].map((m) => m[1]);
+  assert.equal(targets.length, 2);
+  for (const id of targets) assert.ok(html.includes(`id="${id}"`), id);
+  // Turned off in Settings: no list.
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("checkbox", { name: "HTML 附带目录" }).uncheck();
+  await page.getByRole("button", { name: "关闭设置" }).click();
+  const plainPath = path.join(temp, "plain.html");
+  await choose(plainPath);
+  await command("exportHTML");
+  await written(plainPath);
+  const plain = await fs.readFile(plainPath, "utf8");
+  // (The embedded CSS names the classes; the markup must not use them.)
+  assert.ok(!plain.includes('<nav class="export-toc"'));
+  assert.ok(plain.includes("<body><article>"));
+  assert.ok(plain.includes("UNSAVED DRAFT INCLUDED"));
+  await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page.getByRole("checkbox", { name: "HTML 附带目录" }).check();
+  await page.getByRole("button", { name: "关闭设置" }).click();
   await instance.evaluate(({ app }) => {
     globalThis.__exportLifecycle = {
       registered: 0,
@@ -132,6 +154,14 @@ try {
   const pdf = await fs.readFile(pdfPath);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.ok(pdf.length > 10000);
+  // Bookmarks from the headings, nested by level.
+  assert.deepEqual(
+    pdfOutline(pdf).map(({ level, title }) => [level, title.trim()]),
+    [
+      [1, "Export fixture"],
+      [2, "Folded section"],
+    ],
+  );
   assert.equal(await fs.readFile(note, "utf8"), source + tableSource);
   assert.deepEqual(
     await instance.evaluate(() => globalThis.__exportLifecycle),
@@ -195,6 +225,7 @@ try {
     ),
   );
   assert.equal(await standalone.locator(".katex").count(), 1);
+  assert.equal(await standalone.locator(".export-toc a").count(), 2);
   assert.equal(await standalone.locator(".diagram svg").count(), 1);
   assert.equal(
     await standalone.locator("details").evaluate((element) => element.open),

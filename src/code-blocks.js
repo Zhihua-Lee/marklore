@@ -11,7 +11,7 @@ function action(document, className, text, label) {
   return button;
 }
 // Decorate only sanitized code. Copy the code node, never toolbar text or HTML.
-export function decorateCodeBlocks(fragment) {
+export function decorateCodeBlocks(fragment, { fold = true } = {}) {
   for (const pre of fragment.querySelectorAll("pre")) {
     const code = pre.querySelector(":scope > code");
     if (!code || pre.parentElement?.classList.contains("code-block")) continue;
@@ -40,7 +40,7 @@ export function decorateCodeBlocks(fragment) {
       actions.append(wrap);
       const source = code.textContent;
       const lines = source.replace(/\r?\n$/, "").split("\n").length;
-      if (lines > 30 || source.length > 4000) {
+      if (fold && (lines > 30 || source.length > 4000)) {
         frame.classList.add("code-collapsed");
         const fold = action(
           document,

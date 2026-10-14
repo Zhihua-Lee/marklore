@@ -21,6 +21,8 @@ import {
   SearchQuery,
 } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
+import { renderDocument } from "./document-render.js";
+import { isDiffDocument } from "./diff-view.js";
 import {
   renderMarkdown,
   parseHeadings,
@@ -314,7 +316,8 @@ function stateFor(doc) {
       editorSearch,
       editingHighlight,
       editingKeys,
-      markdown(),
+      // A diff is plain text in the editor; only notes read as Markdown.
+      ...(isDiffDocument(doc) ? [] : [markdown()]),
       EditorView.lineWrapping,
       keymap.of([
         {
@@ -469,7 +472,8 @@ selectionTools = createSelectionTools({
     api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
   // Read mode formats from the page only when the reader turned it on.
   editable: (doc) =>
-    doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat),
+    !isDiffDocument(doc) &&
+    (doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat)),
   render: () => {
     clearTimeout(renderingTimer);
     render(true);
@@ -708,7 +712,7 @@ function render(preserve) {
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
   let fragment = null;
   if (doc.htmlText !== doc.text) {
-    const result = renderMarkdown(doc.text, doc.fileId, {
+    const result = renderDocument(doc, {
       deferMath: true,
       interactiveTasks: true,
     });
@@ -1595,7 +1599,10 @@ async function exportActive(format) {
   const doc = { text: active.text, fileId: active.fileId, name: active.name };
   try {
     const { exportNote } = await import("./export.js");
-    const result = await exportNote(format, { doc });
+    const result = await exportNote(format, {
+      doc,
+      toc: settings.exportToc,
+    });
     if (!result.canceled)
       toast(
         result.warnings?.length
@@ -1639,6 +1646,8 @@ const openDesktopSettings = wireDesktopSettings({
   flush: () => flushSession(),
   close: (intent) => commands.close(intent),
   report: toast,
+  // Other formats on or off: the folder list shows them or not.
+  formatsChanged: () => run(refreshLibrary)(),
 });
 wireSplitPane({
   handle: $("#split"),

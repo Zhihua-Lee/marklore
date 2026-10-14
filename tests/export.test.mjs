@@ -53,7 +53,27 @@ test("standalone export embeds licensed fonts/images, preserves notes and guards
       ],
       warnings: [],
     };
+    // Headings beside the text, for HTML only; anything but our list refused.
+    const nav =
+      '<nav class="export-toc" aria-label="目录"><ol><li class="toc-l1"><a href="#a">A</a></li></ol></nav>';
+    const listed = await buildExportDocument({ ...payload, nav }, files, dist);
+    assert.match(listed, /<body class="with-toc"><nav class="export-toc"/);
+    assert.ok(listed.indexOf("export-toc") < listed.indexOf("<article>"));
+    assert.doesNotMatch(
+      await buildExportDocument(
+        { ...payload, format: "pdf", nav },
+        files,
+        dist,
+      ),
+      /class="export-toc"|with-toc/,
+    );
+    for (const bad of ["<script>x</script>", 42, "x".repeat(10)])
+      await assert.rejects(
+        buildExportDocument({ ...payload, nav: bad }, files, dist),
+        /无效或过大/,
+      );
     const rendered = await buildExportDocument(payload, files, dist);
+    assert.doesNotMatch(rendered, /with-toc/);
     assert.match(rendered, /UNSAVED DRAFT/);
     assert.match(rendered, /data:font\/woff2;base64,/);
     assert.match(rendered, /data:image\/svg\+xml;base64,/);

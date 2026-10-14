@@ -182,3 +182,36 @@
     mask-image: none;
   }
 }
+
+/* Diffs (a `diff` block, or a .diff/.patch file): whole lines take a soft wash
+   of green or red on the dark code card, reaching the card's edges; headers
+   and hunk lines step back. The text keeps the card's ink, so a long review
+   reads calmly and the + and - columns still carry the meaning. */
+.code-block .diff-line {
+  display: block;
+  margin-inline: -16px;
+  padding-inline: 16px;
+}
+.code-block .diff-add {
+  background: rgb(87 171 90 / 17%);
+  color: #d7e8cf;
+}
+.code-block .diff-del {
+  background: rgb(240 98 86 / 16%);
+  color: #f0d2cd;
+}
+.code-block .diff-hunk {
+  margin-top: 0.35em;
+  background: #ffffff0a;
+  color: #8fb4c9;
+}
+.code-block .diff-hunk:first-child {
+  margin-top: 0;
+}
+.code-block .diff-meta {
+  color: #9a9a9a;
+}
+.code-block .diff-note {
+  color: #9a9a9a;
+  font-style: italic;
+}

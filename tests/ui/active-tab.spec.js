@@ -81,23 +81,36 @@ for (const theme of ["light", "dark"])
     await page.getByRole("tab", { name: "C.md" }).hover();
     expect((await look("C.md")).background).toBe(loose.expected);
 
-    // The highlight moves on press, before the click renders the note.
+    // The highlight shows on press, before the release renders the note,
+    // without resizing the tab under the pointer.
     const a = page.getByRole("tab", { name: "A.md" });
     await a.hover();
+    const width = (await tab("A.md").boundingBox()).width,
+      leftWidth = (await tab("C.md").boundingBox()).width;
     await page.mouse.down();
-    await expect(tab("A.md")).toHaveClass(/active/);
-    await expect(tab("C.md")).not.toHaveClass(/active/);
+    await expect(tab("A.md")).toHaveClass(/pressed/);
+    expect((await look("A.md")).background).toBe(loose.expected);
+    expect((await look("A.md")).weight).toBe("600");
+    expect((await tab("A.md").boundingBox()).width).toBe(width);
+    // The card leaves the current tab at once too, which keeps its width.
+    await expect(tab("C.md")).toHaveClass(/active/);
+    expect((await look("C.md")).background).not.toBe(loose.expected);
+    expect((await look("C.md")).weight).toBe("400");
+    expect((await tab("C.md").boundingBox()).width).toBe(leftWidth);
     await expect(a).toHaveAttribute("aria-selected", "false");
     await page.mouse.up();
     await expect(a).toHaveAttribute("aria-selected", "true");
     await expect(tab("A.md")).toHaveClass(/active/);
+    await expect(tab("A.md")).not.toHaveClass(/pressed/);
 
     // Dragged away instead of clicked: the highlight goes back.
     await page.getByRole("tab", { name: "C.md" }).hover();
     await page.mouse.down();
-    await expect(tab("C.md")).toHaveClass(/active/);
+    await expect(tab("C.md")).toHaveClass(/pressed/);
     await page.mouse.move(600, 400, { steps: 1 });
     await page.mouse.up();
     await expect(tab("A.md")).toHaveClass(/active/);
-    await expect(tab("C.md")).not.toHaveClass(/active/);
+    await expect(tab("A.md")).not.toHaveClass(/leaving/);
+    expect((await look("A.md")).background).toBe(loose.expected);
+    await expect(tab("C.md")).not.toHaveClass(/active|pressed/);
   });

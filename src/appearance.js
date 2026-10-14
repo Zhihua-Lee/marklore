@@ -21,6 +21,7 @@ const sections = [
   ["settings-tables", t("表格")],
   ["settings-layout", t("布局与侧栏")],
   ["settings-navigation", t("导航与滚动")],
+  ["settings-export", t("导出")],
   ["settings-annotation", t("批注")],
   ["desktop-settings", t("后台与系统")],
 ];
@@ -59,6 +60,9 @@ export const appearanceMarkup = `
     ${row("navigation-scope", t("导航范围"), `<select id="navigation-scope"><option value="all">${t("全部笔记")}</option><option value="current">${t("仅当前笔记")}</option></select>`)}
     ${row("history-buttons", t("前进 / 后退按钮"), `<select id="history-buttons"><option value="hidden">${t("隐藏")}</option><option value="visible">${t("显示")}</option></select>`, t("隐藏后仍可用鼠标侧键或 Alt+← / →"))}
     ${row("smooth-scroll", t("平滑滚动"), `<select id="smooth-scroll"><option value="off">${t("关")}</option><option value="touchpad">${t("仅触控板")}</option><option value="all">${t("触控板、滚轮与滚动条")}</option></select>`, t("速度更均匀，跟手稍慢"))}
+  </fieldset>
+  <fieldset id="settings-export"><legend>${t("导出")}</legend>
+    ${row("export-toc", t("HTML 附带目录"), '<input id="export-toc" type="checkbox" class="switch">', t("在页面一侧列出标题，点击跳转；PDF 总是带书签"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
     ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}
@@ -128,6 +132,7 @@ export function applyAppearance(settings) {
   $("#smooth-scroll").value = settings.smoothScroll;
   $("#reading-format").checked = settings.readingFormat;
   $("#group-counts").checked = settings.groupCounts;
+  $("#export-toc").checked = settings.exportToc;
   $("#outline-anchors").value = settings.outlineAnchors;
   // Folders left out of search and backlinks, each with a way back.
   const excluded = $("#excluded-folders");
@@ -242,6 +247,8 @@ export function wireAppearance(change) {
     change({ readingFormat: event.target.checked });
   $("#group-counts").onchange = (event) =>
     change({ groupCounts: event.target.checked });
+  $("#export-toc").onchange = (event) =>
+    change({ exportToc: event.target.checked });
   $("#smooth-scroll").onchange = (event) =>
     change({ smoothScroll: event.target.value });
   $("#text-weight").onchange = (event) =>

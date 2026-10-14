@@ -9,6 +9,8 @@ import {
   legacyCommands,
   legacy,
   progId,
+  otherProgId,
+  otherCommands,
 } from "../desktop/integration.mjs";
 
 const executable = "D:\\Portable Apps\\Marklore\\Marklore.exe";
@@ -84,7 +86,7 @@ test("default status and preference load do not mutate startup or registry", asy
     assert.equal(status.registered, false);
     assert.deepEqual(
       status.defaults.map((d) => d.known),
-      [false, false],
+      [false, false, false, false],
     );
     assert.ok(calls.every((c) => c[0] === "query"));
     assert.equal(writes.length, 0);
@@ -129,6 +131,8 @@ test("startup and application registration require explicit actions and keep a s
     oldLogin,
     oldLogin,
     ...registrationCommands(executable),
+    // Other formats are off: any earlier registration of them goes.
+    ...otherCommands(),
     ...legacyCommands(),
   ]);
   assert.ok(legacyCommands().every((c) => c[0] === "delete"));
@@ -164,7 +168,7 @@ test("status distinguishes another portable version and protected per-extension 
   assert.equal(status.startupOtherVersion, true);
   assert.deepEqual(
     status.defaults.map((d) => d.ours),
-    [true, false],
+    [true, false, false, false],
   );
 });
 
@@ -202,4 +206,72 @@ test("unsupported systems and unexpected registry errors are not reported as suc
     },
   }).integration;
   await assert.rejects(() => denied.status(), /access denied/);
+});
+
+test("other formats register as their own type only while turned on", async () => {
+  const plain = registrationCommands(executable).join("\n");
+  assert.doesNotMatch(plain, /\.diff|\.patch|Marklore\.Other/);
+  const other = registrationCommands(executable, { other: true });
+  assert.equal(other.length, 17);
+  for (const ext of [".diff", ".patch"]) {
+    assert.ok(
+      other.some(
+        (c) =>
+          c[1] === `HKCU\\Software\\Classes\\${ext}\\OpenWithProgids` &&
+          c.includes(otherProgId),
+      ),
+    );
+    assert.ok(other.some((c) => c.includes(ext) && c.includes(otherProgId)));
+  }
+  assert.ok(
+    other.some(
+      (c) =>
+        c[1].endsWith(`${otherProgId}\\shell\\open\\command`) &&
+        c.includes(`"${executable}" "%1"`),
+    ),
+  );
+  assert.doesNotMatch(other.join(" "), /UserChoice|HKLM/);
+  assert.ok(otherCommands().every((c) => c[0] === "delete"));
+  assert.ok(otherCommands().every((c) => !c.includes(progId)));
+});
+
+test("turning other formats on keeps other preferences and follows this copy's registration", async () => {
+  const temp = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "folio-integration-")),
+  );
+  try {
+    // Not registered: only the preference changes.
+    const first = fixture(temp);
+    await first.integration.load();
+    await first.integration.setBackground(true);
+    await first.integration.setOtherFormats(true);
+    assert.ok(first.calls.every((c) => c[0] === "query"));
+    const restored = fixture(temp).integration;
+    await restored.load();
+    assert.equal(restored.closeToTray, true);
+    assert.equal(restored.otherFormats, true);
+    await assert.rejects(() => restored.setOtherFormats("yes"));
+    // Registered here: turning on registers the other type, off removes it.
+    const calls = [];
+    const here = fixture(temp, {
+      run: async (_exe, args) => {
+        calls.push(args);
+        if (args[0] === "query" && args[1].endsWith("command"))
+          return {
+            stdout: `    (Default)    REG_SZ    "${executable}" "%1"\r\n`,
+          };
+        return { stdout: "" };
+      },
+    }).integration;
+    await here.load();
+    await here.setOtherFormats(true);
+    const added = calls.filter((c) => c[0] === "add");
+    assert.deepEqual(added, registrationCommands(executable, { other: true }));
+    calls.length = 0;
+    await here.setOtherFormats(false);
+    assert.deepEqual(calls, otherCommands());
+    assert.equal(here.otherFormats, false);
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
 });

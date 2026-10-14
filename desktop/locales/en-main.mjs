@@ -178,4 +178,7 @@ export default {
   请拖入磁盘上的真实文件: "Drop files that are on disk",
   "单张图片上限 32 MB，每次合计上限 64 MB":
     "Each image is limited to 32 MB, and 64 MB in total per insert",
+  // Other formats (diffs)
+  "Diff / Patch 文件": "Diff / Patch file",
+  无效设置: "Invalid setting",
 };

@@ -27,7 +27,9 @@ async function boot(page, state = {}) {
           m.actions.push(action);
           return new Promise((resolve, reject) => {
             m.finish = () => {
-              m.state.closeToTray = action.value;
+              if (action.type === "otherFormats")
+                m.state.otherFormats = action.value;
+              else m.state.closeToTray = action.value;
               resolve({ ...m.state });
             };
             m.fail = () => reject(Error("Write failed"));
@@ -36,6 +38,7 @@ async function boot(page, state = {}) {
       },
       close: async (intent) => m.actions.push({ intent }),
       report: (message) => m.errors.push(message),
+      formatsChanged: () => m.actions.push({ formatsChanged: true }),
     });
   }, state);
   await page.locator("#weight").click();
@@ -79,4 +82,35 @@ test("missing tray disables hide; an old startup registration offers an explicit
   expect(await page.evaluate(() => window.desktopMock.actions)).toEqual([
     { type: "startup", value: true },
   ]);
+});
+
+test("other formats are off by default; turning them on shows their associations apart from Markdown's", async ({
+  page,
+}) => {
+  await boot(page, {
+    registered: true,
+    registeredHere: true,
+    otherFormats: false,
+    defaults: [
+      { extension: ".md", ours: true, known: true },
+      { extension: ".markdown", ours: false, known: true },
+      { extension: ".diff", other: true, ours: false, known: false },
+      { extension: ".patch", other: true, ours: false, known: true },
+    ],
+  });
+  const toggle = page.getByRole("checkbox", { name: "其他格式：diff / patch" });
+  await expect(toggle).not.toBeChecked();
+  await expect(page.locator("#association-status")).not.toContainText(".diff");
+  await expect(page.locator("#other-formats-status")).toHaveText(
+    "打开 .diff / .patch（统一 diff），只读查看；不进笔记库",
+  );
+  await toggle.check();
+  await page.evaluate(() => window.desktopMock.finish());
+  await expect(toggle).toBeChecked();
+  await expect(page.locator("#other-formats-status")).toHaveText(
+    ".diff：未读取到用户默认项；.patch：其他应用",
+  );
+  await expect
+    .poll(() => page.evaluate(() => window.desktopMock.actions))
+    .toEqual([{ type: "otherFormats", value: true }, { formatsChanged: true }]);
 });

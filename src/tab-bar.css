@@ -179,23 +179,28 @@
    (groups are the only coloured tabs): it is the one bright card in the strip,
    raised by a hairline edge and a soft shadow, with a bold label, in a group
    or not.
-   No transition: the change shows in the frame of the click. */
+   No transition: the change shows in the frame of the press. The card moves
+   on press, before the note renders: the pressed tab takes it (.pressed) and
+   the current one gives it up (.leaving), each keeping its width until the
+   release, so nothing moves under the pointer. */
 :root {
   --tab-active: var(--paper);
 }
 :root[data-theme="dark"] {
   --tab-active: color-mix(in srgb, var(--ink) 20%, var(--paper));
 }
-#tabs .tab.active,
-#tabs .tab.active:hover,
-#tabs .tab.grouped.active,
-#tabs .tab.grouped.active:hover {
+#tabs .tab.active:not(.leaving),
+#tabs .tab.active:not(.leaving):hover,
+#tabs .tab.grouped.active:not(.leaving),
+#tabs .tab.grouped.active:not(.leaving):hover,
+#tabs .tab.pressed:not(.active) {
   background: var(--tab-active);
   border-color: var(--line);
   color: var(--ink);
   box-shadow: 0 1px 3px color-mix(in srgb, var(--ink) 18%, transparent);
 }
-#tabs .tab.active .tab-label {
+#tabs .tab.active:not(.leaving) .tab-label,
+#tabs .tab.pressed .tab-label {
   font-weight: 600;
 }
 #tabs .tab.active.drop-before {

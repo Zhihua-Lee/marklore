@@ -396,4 +396,16 @@ export default {
     "Still reading the library ({count} notes so far); results will update",
   "用“打开文件夹”加入笔记库后，可以搜索笔记内容":
     "Add a folder with Open folder to search inside your notes",
+  // Other formats (diffs)
+  "其他格式：diff / patch": "Other formats: diff / patch",
+  "打开 .diff / .patch（统一 diff），只读查看；不进笔记库":
+    "Open .diff / .patch files (unified diffs) to read; kept out of the library",
+  "已开启；可从“打开”、拖入或文件夹中打开":
+    "On; open them with Open, by dropping them, or from a folder",
+  // Export
+  "HTML 附带目录": "Contents in HTML",
+  "在页面一侧列出标题，点击跳转；PDF 总是带书签":
+    "Lists the headings beside the page, as links; a PDF always has bookmarks",
+  新文件: "new file",
+  已删除: "deleted",
 };

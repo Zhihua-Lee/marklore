@@ -25,6 +25,10 @@
       DeleteRegValue HKCU "Software\RegisteredApplications" "Marklore"
       DeleteRegValue HKCU "Software\Classes\.md\OpenWithProgids" "Marklore.Markdown"
       DeleteRegValue HKCU "Software\Classes\.markdown\OpenWithProgids" "Marklore.Markdown"
+      ; Other formats (.diff, .patch), registered with it when turned on.
+      DeleteRegKey HKCU "Software\Classes\Marklore.Other"
+      DeleteRegValue HKCU "Software\Classes\.diff\OpenWithProgids" "Marklore.Other"
+      DeleteRegValue HKCU "Software\Classes\.patch\OpenWithProgids" "Marklore.Other"
       System::Call 'shell32::SHChangeNotify(i 0x08000000, i 0, p 0, p 0)'
     ${endIf}
 

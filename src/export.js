@@ -1,5 +1,6 @@
 import { t } from "../desktop/i18n.mjs";
-import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
+import { loadMath, mayContainMath } from "./markdown.js";
+import { renderDocument } from "./document-render.js";
 import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
 import exportCSS from "./export.css?raw";
@@ -39,7 +40,42 @@ async function completeDiagrams(host) {
   });
 }
 
-export async function exportNote(format, { doc }) {
+// The headings of a standalone HTML page as links beside its text: each label
+// a copy of its heading (formulas included), without the heading's own links
+// or ids. Indented by level below the shallowest one. Fewer than two headings
+// need no list.
+export function headingList(host) {
+  const headings = [...host.querySelectorAll("h1,h2,h3,h4,h5,h6")].filter(
+    (heading) => heading.id && heading.textContent.trim(),
+  );
+  if (headings.length < 2) return "";
+  const top = Math.min(...headings.map((h) => Number(h.tagName[1])));
+  const nav = document.createElement("nav");
+  nav.className = "export-toc";
+  nav.setAttribute("aria-label", t("目录"));
+  const title = document.createElement("p");
+  title.className = "export-toc-title";
+  title.textContent = t("目录");
+  const list = document.createElement("ol");
+  for (const heading of headings) {
+    const item = document.createElement("li"),
+      link = document.createElement("a");
+    item.className = "toc-l" + (Number(heading.tagName[1]) - top + 1);
+    link.setAttribute("href", "#" + heading.id);
+    const label = heading.cloneNode(true);
+    for (const inner of label.querySelectorAll("a"))
+      inner.replaceWith(...inner.childNodes);
+    for (const element of label.querySelectorAll("[id]"))
+      element.removeAttribute("id");
+    link.append(...label.childNodes);
+    item.append(link);
+    list.append(item);
+  }
+  nav.append(title, list);
+  return nav.outerHTML;
+}
+
+export async function exportNote(format, { doc, toc = false }) {
   if (!window.folio?.exportNote) throw Error(t("请在桌面版中导出笔记"));
   if (!doc || !["pdf", "html"].includes(format))
     throw Error(t("没有可导出的笔记"));
@@ -51,7 +87,7 @@ export async function exportNote(format, { doc }) {
     mayContainMath(doc.text) && loadMath(),
     mayContainCode(doc.text) && loadHighlighter(),
   ]);
-  host.innerHTML = renderMarkdown(doc.text, doc.fileId).html;
+  host.innerHTML = renderDocument(doc).html;
   document.body.append(host);
   try {
     await completeDiagrams(host);
@@ -80,6 +116,19 @@ export async function exportNote(format, { doc }) {
         )
           element.removeAttribute(attribute.name);
     }
+    // PDF bookmarks take a heading's accessible text, in which a formula is
+    // empty (its MathML is clipped, its drawing aria-hidden): "1 傅里叶变换 "
+    // instead of "1 傅里叶变换 F{f}(ω)". In headings, the drawing is read
+    // instead (the tagged PDF carries no MathML either).
+    if (format === "pdf")
+      for (const drawing of host.querySelectorAll(
+        ":is(h1,h2,h3,h4,h5,h6) .katex-html",
+      )) {
+        drawing.removeAttribute("aria-hidden");
+        drawing.parentElement
+          ?.querySelector(":scope > .katex-mathml")
+          ?.setAttribute("aria-hidden", "true");
+      }
     const images = [],
       warnings = [];
     for (const image of host.querySelectorAll("img")) {
@@ -124,6 +173,7 @@ export async function exportNote(format, { doc }) {
       name: doc.name,
       fileId: doc.fileId || null,
       html: host.innerHTML,
+      nav: format === "html" && toc ? headingList(host) || null : null,
       css:
         katexCSS +
         "\n" +

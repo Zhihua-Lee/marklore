@@ -11,6 +11,10 @@ export const progId = "Marklore.Markdown";
 const classes = "HKCU\\Software\\Classes";
 const capabilities = "Software\\Marklore\\Capabilities";
 const extensions = [".md", ".markdown"];
+// Other formats (unified diffs) are their own file type, registered only while
+// the reader has them turned on.
+export const otherProgId = "Marklore.Other";
+export const otherExtensions = [".diff", ".patch"];
 const runKey = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 // What versions named Folio Notes registered; removed when registering again.
 export const legacy = {
@@ -41,8 +45,25 @@ export function legacyCommands() {
   ];
 }
 
+// Removes the other formats' registration (turned off, or never on).
+export function otherCommands() {
+  return [
+    ["delete", `${classes}\\${otherProgId}`, "/f"],
+    ...otherExtensions.flatMap((ext) => [
+      ["delete", `HKCU\\${capabilities}\\FileAssociations`, "/v", ext, "/f"],
+      [
+        "delete",
+        `${classes}\\${ext}\\OpenWithProgids`,
+        "/v",
+        otherProgId,
+        "/f",
+      ],
+    ]),
+  ];
+}
+
 // Register an opt-in candidate, never write UserChoice or extension defaults.
-export function registrationCommands(executable) {
+export function registrationCommands(executable, { other = false } = {}) {
   if (!path.win32.isAbsolute(executable) || /["\r\n]/.test(executable))
     throw Error(t("无效程序路径"));
   const add = (key, name, value, type = "REG_SZ") => [
@@ -75,6 +96,32 @@ export function registrationCommands(executable) {
     ...extensions.map((ext) =>
       add(`${classes}\\${ext}\\OpenWithProgids`, progId, "", "REG_NONE"),
     ),
+    ...(other
+      ? [
+          add(`${classes}\\${otherProgId}`, null, t("Diff / Patch 文件")),
+          add(
+            `${classes}\\${otherProgId}\\DefaultIcon`,
+            null,
+            `"${executable}",0`,
+          ),
+          add(
+            `${classes}\\${otherProgId}\\shell\\open\\command`,
+            null,
+            `"${executable}" "%1"`,
+          ),
+          ...otherExtensions.map((ext) =>
+            add(`HKCU\\${capabilities}\\FileAssociations`, ext, otherProgId),
+          ),
+          ...otherExtensions.map((ext) =>
+            add(
+              `${classes}\\${ext}\\OpenWithProgids`,
+              otherProgId,
+              "",
+              "REG_NONE",
+            ),
+          ),
+        ]
+      : []),
     add(
       "HKCU\\Software\\RegisteredApplications",
       applicationName,
@@ -98,7 +145,15 @@ export function createIntegration({
     "reg.exe",
   );
   const preferenceFile = path.join(profile, "desktop-settings.json");
-  let preferences = { closeToTray: false };
+  let preferences = { closeToTray: false, otherFormats: false };
+  async function store(change) {
+    await fs.mkdir(profile, { recursive: true });
+    const next = { ...preferences, ...change },
+      temp = preferenceFile + ".tmp";
+    await fs.writeFile(temp, JSON.stringify(next), "utf8");
+    await fs.rename(temp, preferenceFile);
+    preferences = next;
+  }
   const loginOptions = { path: executable, args: ["--background"] };
   const supported = platform === "win32" && app.isPackaged;
   const invoke = (args) =>
@@ -128,6 +183,7 @@ export function createIntegration({
       try {
         const stored = JSON.parse(await fs.readFile(preferenceFile, "utf8"));
         preferences.closeToTray = stored?.closeToTray === true;
+        preferences.otherFormats = stored?.otherFormats === true;
       } catch (error) {
         if (error.code !== "ENOENT" && !(error instanceof SyntaxError))
           throw error;
@@ -135,6 +191,9 @@ export function createIntegration({
     },
     get closeToTray() {
       return preferences.closeToTray;
+    },
+    get otherFormats() {
+      return preferences.otherFormats;
     },
     login() {
       return supported
@@ -156,7 +215,7 @@ export function createIntegration({
         query(`${classes}\\${progId}\\shell\\open\\command`, null),
         query(runKey, applicationName),
         query(runKey, legacy.name),
-        ...extensions.map((ext) =>
+        ...[...extensions, ...otherExtensions].map((ext) =>
           query(
             `HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Explorer\\FileExts\\${ext}\\UserChoice`,
             "ProgId",
@@ -173,21 +232,29 @@ export function createIntegration({
           Boolean(startupCommand || legacyStartup) && !startup.openAtLogin,
         registered: registration === capabilities,
         registeredHere: command === `"${executable}" "%1"`,
-        defaults: extensions.map((extension, i) => ({
+        defaults: [...extensions, ...otherExtensions].map((extension, i) => ({
           extension,
-          ours: defaults[i] === progId,
+          other: otherExtensions.includes(extension),
+          ours: defaults[i] === progId || defaults[i] === otherProgId,
           known: defaults[i] !== null,
         })),
       };
     },
     async setBackground(value) {
       if (typeof value !== "boolean") throw Error(t("无效后台设置"));
-      await fs.mkdir(profile, { recursive: true });
-      const next = { closeToTray: value },
-        temp = preferenceFile + ".tmp";
-      await fs.writeFile(temp, JSON.stringify(next), "utf8");
-      await fs.rename(temp, preferenceFile);
-      preferences = next;
+      await store({ closeToTray: value });
+    },
+    // Other formats on or off; an existing registration of this copy follows.
+    async setOtherFormats(value) {
+      if (typeof value !== "boolean") throw Error(t("无效设置"));
+      await store({ otherFormats: value });
+      if (!supported) return;
+      if (!value) await forget(otherCommands());
+      else if (
+        (await query(`${classes}\\${progId}\\shell\\open\\command`, null)) ===
+        `"${executable}" "%1"`
+      )
+        await this.register();
     },
     setStartup(value) {
       if (!supported || typeof value !== "boolean")
@@ -202,8 +269,11 @@ export function createIntegration({
     },
     async register() {
       if (!supported) throw Error(t("仅 Windows 打包版支持文件关联"));
-      for (const command of registrationCommands(executable))
+      for (const command of registrationCommands(executable, {
+        other: preferences.otherFormats,
+      }))
         await invoke(command);
+      if (!preferences.otherFormats) await forget(otherCommands());
       await forget(legacyCommands());
     },
     async defaults() {

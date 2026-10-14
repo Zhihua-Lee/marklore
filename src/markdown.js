@@ -602,7 +602,21 @@ const parser = createParser();
 const outlineParser = createParser().set({ html: true, linkify: false });
 outlineParser.renderer.rules.html_inline = () => "";
 outlineParser.renderer.rules.image = (tokens, i) => escape(tokens[i].content);
+// The outline is rebuilt on every tab switch; a long note's 100+ headings each
+// went through the parser and the sanitizer again (30–100 ms a switch). A
+// label renders the same until KaTeX arrives, so that is part of the key.
+const headingLabels = new Map();
 export function renderHeadingLabel(label) {
+  const key = (katex ? "1" : "0") + label;
+  let html = headingLabels.get(key);
+  if (html === undefined) {
+    html = renderHeadingLabelUncached(label);
+    if (headingLabels.size >= 4000) headingLabels.clear();
+    headingLabels.set(key, html);
+  }
+  return html;
+}
+function renderHeadingLabelUncached(label) {
   const env = {};
   const html = outlineParser
     .renderInline(label, env)
@@ -630,6 +644,11 @@ export function renderMarkdown(
     // Typeset deferred formulas as they come near the view (always for small
     // views such as the link preview; by size for the reader).
     progressive = null,
+    // A source that was generated from another text (a diff): its positions
+    // map back to that text, and nothing in it is edited in place.
+    mapPosition = null,
+    // Long code blocks show in full instead of folded.
+    expandCode = false,
   } = {},
 ) {
   const env = { mathFragments: [], deferMath };
@@ -730,7 +749,7 @@ export function renderMarkdown(
     a.removeAttribute("target");
     a.setAttribute("rel", "noreferrer");
   }
-  decorateCodeBlocks(template.content);
+  decorateCodeBlocks(template.content, { fold: !expandCode });
   // Only parser-authenticated markers become editing targets. Raw note HTML
   // cannot forge a source range or inject an editor control.
   for (const element of template.content.querySelectorAll(
@@ -816,6 +835,28 @@ export function renderMarkdown(
     summary.textContent = count === 1 ? t("1 块") : t("{count} 块", { count });
     summary.setAttribute("aria-hidden", "true");
     section.firstElementChild.append(summary);
+  }
+  if (mapPosition) {
+    for (const element of template.content.querySelectorAll(
+      "[data-edit-from],[data-edit-to],[data-edit-kind]",
+    ))
+      for (const name of ["data-edit-from", "data-edit-to", "data-edit-kind"])
+        element.removeAttribute(name);
+    for (const name of [
+      "data-from",
+      "data-to",
+      "data-text-from",
+      "data-text-to",
+      "data-block-from",
+      "data-block-to",
+    ])
+      for (const element of template.content.querySelectorAll(`[${name}]`))
+        element.setAttribute(
+          name,
+          String(mapPosition(Number(element.getAttribute(name)))),
+        );
+    for (const heading of env.headings || [])
+      heading.from = mapPosition(heading.from);
   }
   const html = template.innerHTML;
   return {

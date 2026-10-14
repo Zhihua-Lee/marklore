@@ -246,3 +246,96 @@ summary {
     color: inherit;
   }
 }
+
+/* Headings beside the text of a standalone HTML page (Settings → Export):
+   a quiet column that stays in view while the page scrolls, above the text
+   on a narrow screen, and left out of print (a PDF has bookmarks). Plain
+   links: the page runs no script. */
+body.with-toc {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+}
+/* Auto margins in a grid cell would shrink the text to its content. */
+body.with-toc > article {
+  width: 100%;
+}
+.export-toc {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow: auto;
+  padding: 40px 14px 40px 22px;
+  border-right: 1px solid #e4e6e1;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.export-toc-title {
+  margin: 0 0 10px 8px;
+  color: #68716e;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.export-toc ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.export-toc a {
+  display: block;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: #4b5552;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.export-toc a:hover,
+.export-toc a:focus-visible {
+  background: #eef1ec;
+  color: #202625;
+}
+.export-toc a:focus-visible {
+  outline: 2px solid #246d5d;
+  outline-offset: -2px;
+}
+.export-toc .toc-l1 > a {
+  color: #2f3836;
+  font-weight: 600;
+}
+.export-toc .toc-l2 > a {
+  padding-left: 18px;
+}
+.export-toc .toc-l3 > a {
+  padding-left: 30px;
+}
+.export-toc :is(.toc-l4, .toc-l5, .toc-l6) > a {
+  padding-left: 42px;
+  font-size: 12px;
+}
+.export-toc .katex {
+  font-size: 1em;
+}
+:target {
+  scroll-margin-top: 16px;
+}
+@media (max-width: 860px) {
+  body.with-toc {
+    display: block;
+  }
+  .export-toc {
+    position: static;
+    height: auto;
+    padding: 24px 20px 16px;
+    border-right: 0;
+    border-bottom: 1px solid #e4e6e1;
+  }
+}
+@media print {
+  body.with-toc {
+    display: block;
+  }
+  .export-toc {
+    display: none;
+  }
+}

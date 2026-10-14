@@ -7,6 +7,7 @@ import {
   normalizeGroups,
   moveGroupedTab,
   moveGroup,
+  dropTarget,
 } from "./tab-groups.js";
 import "./tab-bar.css";
 
@@ -246,8 +247,10 @@ export function createTabBar({
         const label = document.createElement("button");
         label.className = "tab-label";
         label.setAttribute("role", "tab");
-        label.onclick = () => {
-          if (!dragged) activate(doc);
+        // A press and release of the pointer activates in finish(); this
+        // click is the keyboard's (Enter, Space).
+        label.onclick = (e) => {
+          if (!e.detail && !dragged) activate(doc);
         };
         const x = document.createElement("button");
         x.className = "tab-close";
@@ -576,18 +579,34 @@ export function createTabBar({
       current: e.clientX,
       id: e.pointerId,
       left: host.scrollLeft,
+      slot: node.getBoundingClientRect(),
     };
     dragged = false;
-    // Show the selection on press: the click that activates the tab renders
-    // the note first, so a large note would hold the highlight back. A drag,
-    // or a release off the tab, puts it back (update() in finish).
+    // Move the selection on press: activating renders the note first (half a
+    // second for a large one), which would hold the highlight back. Only the
+    // looks move, not the classes: the current tab is wider, and resizing
+    // tabs under the pointer moved the ones after them, so the release could
+    // land on another tab and the click was lost. A drag, or a release
+    // elsewhere, puts the looks back.
     if (node.classList.contains("tab") && !node.classList.contains("active")) {
+      node.classList.add("pressed");
       for (const n of host.querySelectorAll(".tab.active"))
-        n.classList.remove("active");
-      node.classList.add("active");
-      drag.pressed = true;
+        n.classList.add("leaving");
     }
   });
+  // A release on the tab's own place is a click, also after the pointer
+  // wandered past the drag threshold and came back.
+  function releasedOnSlot(previous, e) {
+    if (!e) return false;
+    const r = previous.slot,
+      shift = host.scrollLeft - previous.left;
+    return (
+      e.clientX >= r.left - shift &&
+      e.clientX <= r.right - shift &&
+      e.clientY >= r.top - 4 &&
+      e.clientY <= r.bottom + 4
+    );
+  }
   function paint() {
     if (!drag || !dragged) return;
     curves.classList.add("hidden");
@@ -603,29 +622,51 @@ export function createTabBar({
         (!groupId ||
           tabs.find((t) => t.id === n.dataset.id)?.groupId !== groupId),
     );
-    const hovered = others.find((n) => {
-      const r = n.getBoundingClientRect();
-      return drag.current >= r.left && drag.current <= r.right;
-    });
-    const before = others.find((n) => {
-      const r = n.getBoundingClientRect();
-      return drag.current < r.left + r.width / 2;
-    });
-    drag.beforeId =
-      before?.dataset.id ||
-      tabs.find((t) => t.groupId === before?.dataset.groupId)?.id;
-    drag.into = !groupId
-      ? hovered?.dataset.groupId ||
-        tabs.find((t) => t.id === hovered?.dataset.id)?.groupId ||
-        null
-      : null;
-    // Dropping on the group name appends; dropping on a member chooses its position.
-    if (!groupId && hovered?.dataset.groupId) drag.beforeId = undefined;
     for (const n of host.children)
       n.classList.remove("drop-before", "drop-after", "drop-into");
-    if (drag.into) headers.get(drag.into)?.classList.add("drop-into");
-    else if (before) before.classList.add("drop-before");
-    else others.at(-1)?.classList.add("drop-after");
+    if (groupId) {
+      // A whole group moves between tabs and other groups.
+      const before = others.find((n) => {
+        const r = n.getBoundingClientRect();
+        return drag.current < r.left + r.width / 2;
+      });
+      drag.beforeId =
+        before?.dataset.id ||
+        tabs.find((t) => t.groupId === before?.dataset.groupId)?.id;
+      if (before) before.classList.add("drop-before");
+      else others.at(-1)?.classList.add("drop-after");
+    } else {
+      const items = others.map((n) => {
+        const r = n.getBoundingClientRect(),
+          header = !!n.dataset.groupId,
+          id = header ? n.dataset.groupId : n.dataset.id;
+        return {
+          node: n,
+          id: header ? undefined : id,
+          header,
+          groupId: header ? id : tabs.find((t) => t.id === id)?.groupId,
+          collapsed: header && groups().find((g) => g.id === id)?.collapsed,
+          first: header ? tabs.find((t) => t.groupId === id)?.id : undefined,
+          left: r.left,
+          right: r.right,
+        };
+      });
+      const own = tabs.find((t) => t.id === drag.node.dataset.id)?.groupId;
+      const target = dropTarget(items, drag.current, own || null);
+      drag.beforeId = target.beforeId;
+      drag.into = target.into;
+      // The pill of the group it joins, and where among its tabs.
+      if (target.into) {
+        headers.get(target.into)?.classList.add("drop-into");
+        const members = items.filter(
+          (i) => !i.header && i.groupId === target.into,
+        );
+        const at = members.find((i) => i.id === target.beforeId);
+        if (at) at.node.classList.add("drop-before");
+        else members.at(-1)?.node.classList.add("drop-after");
+      } else if (target.next) target.next.node.classList.add("drop-before");
+      else items.at(-1)?.node.classList.add("drop-after");
+    }
     frame = requestAnimationFrame(paint);
   }
   window.addEventListener("pointermove", (e) => {
@@ -634,7 +675,7 @@ export function createTabBar({
     if (!dragged && Math.abs(drag.current - drag.x) > 5) {
       settleMotion();
       dragged = true;
-      if (drag.pressed) update();
+      for (const n of host.children) n.classList.remove("pressed", "leaving");
       host.setPointerCapture(e.pointerId);
       host.classList.add("dragging");
       drag.node.classList.add("reordering");
@@ -642,7 +683,7 @@ export function createTabBar({
     }
     if (dragged) e.preventDefault();
   });
-  function finish(commit) {
+  function finish(commit, e) {
     if (!drag) return;
     cancelAnimationFrame(frame);
     const previous = drag;
@@ -650,6 +691,8 @@ export function createTabBar({
     previous.node.style.transform = "";
     for (const n of host.children)
       n.classList.remove(
+        "pressed",
+        "leaving",
         "reordering",
         "drop-before",
         "drop-after",
@@ -658,7 +701,14 @@ export function createTabBar({
     host.classList.remove("dragging");
     if (host.hasPointerCapture(previous.id))
       host.releasePointerCapture(previous.id);
-    if (commit && dragged) {
+    const click = commit && releasedOnSlot(previous, e);
+    if (click && previous.node.classList.contains("tab")) {
+      // Not left to the click event, which goes astray when the pointer
+      // left the tab on the way. At once, not in a later frame: a shortcut
+      // pressed right after the click must act on the new tab.
+      const doc = tabs.find((t) => t.id === previous.node.dataset.id);
+      if (doc) activate(doc);
+    } else if (commit && dragged) {
       if (previous.node.dataset.groupId)
         moveGroup(tabs, previous.node.dataset.groupId, previous.beforeId);
       else
@@ -670,14 +720,13 @@ export function createTabBar({
         );
       changedOrder();
     }
+    // After the click event, which a drag must not turn into a fold.
     setTimeout(() => {
       dragged = false;
-      // After the click (if any) has activated the pressed tab.
-      if (previous.pressed) update();
-      else overflow();
+      overflow();
     }, 0);
   }
-  window.addEventListener("pointerup", () => finish(true));
+  window.addEventListener("pointerup", (e) => finish(true, e));
   window.addEventListener("pointercancel", () => finish(false));
   window.addEventListener("blur", () => finish(false));
   window.addEventListener("keydown", (e) => {

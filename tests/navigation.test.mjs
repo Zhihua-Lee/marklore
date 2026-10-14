@@ -6,6 +6,7 @@ import {
   moveGroupedTab,
   moveGroup,
   insertDerivedTab,
+  dropTarget,
 } from "../src/tab-groups.js";
 const at = (id, from = 0) => ({ id, anchor: { from, y: 32 } });
 
@@ -108,4 +109,55 @@ test("groups normalize restored input, preserve contiguity and move whole groups
     ["c", "d", "a", "b"],
   );
   assert.equal(tabs[0].groupId, null);
+});
+
+test("a dragged tab lands in a group between or over its tabs, and keeps its group in a gap", () => {
+  // Strip: x [0,28] | pill G [32,72] | a [76,104] | (gap) b [116,144] | y [150,178]
+  // The dragged tab (a member of G) left a gap at [104,116].
+  const items = [
+    { id: "x", groupId: null, left: 0, right: 28 },
+    { header: true, groupId: "G", first: "a", left: 32, right: 72 },
+    { id: "a", groupId: "G", left: 76, right: 104 },
+    { id: "b", groupId: "G", left: 116, right: 144 },
+    { id: "y", groupId: null, left: 150, right: 178 },
+  ];
+  const drop = (x, own = null) => {
+    const { beforeId, into } = dropTarget(items, x, own);
+    return { beforeId, into };
+  };
+  // Over the pill: to the end of the group.
+  assert.deepEqual(drop(50), { beforeId: undefined, into: "G" });
+  // Between two tabs of the group, also in the gap its own place left.
+  assert.deepEqual(drop(95), { beforeId: "b", into: "G" });
+  assert.deepEqual(drop(110, "G"), { beforeId: "b", into: "G" });
+  assert.deepEqual(drop(110), { beforeId: "b", into: "G" });
+  // Over the right half of the last tab: still in the group, at its end.
+  assert.deepEqual(drop(140), { beforeId: "y", into: "G" });
+  // Over a tab after the group: out of it.
+  assert.deepEqual(drop(155, "G"), { beforeId: "y", into: null });
+  // In the gap at the group's end: a member stays, others stay out.
+  assert.deepEqual(drop(146, "G"), { beforeId: "y", into: "G" });
+  assert.deepEqual(drop(146), { beforeId: "y", into: null });
+  // Before the pill: before the whole group.
+  assert.deepEqual(drop(30), { beforeId: "a", into: null });
+  // Past the end.
+  assert.deepEqual(drop(400, "G"), { beforeId: undefined, into: null });
+  // Next to a folded group's pill, a tab does not join it unless dropped on it.
+  const folded = [
+    {
+      header: true,
+      groupId: "F",
+      collapsed: true,
+      first: "f",
+      left: 0,
+      right: 40,
+    },
+    { id: "z", groupId: null, left: 44, right: 72 },
+  ];
+  assert.deepEqual(
+    (({ beforeId, into }) => ({ beforeId, into }))(dropTarget(folded, 42)),
+    { beforeId: "z", into: null },
+  );
+  // A drop before a folded group goes before its (hidden) first tab.
+  assert.equal(dropTarget(folded, -5).beforeId, "f");
 });

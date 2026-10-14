@@ -75,6 +75,31 @@ export function moveGroupedTab(tabs, id, beforeId, groupId = null) {
   tabs.splice(target < 0 ? tabs.length : target, 0, tab);
 }
 
+// Where a dragged tab lands. `items` are the strip's other shown tabs and
+// pills in order ({ id, groupId, header, collapsed, first, left, right }; a
+// pill's `first` is its group's first tab), `x` the pointer and `own` the
+// dragged tab's group. Over a pill the tab goes to the end of that group;
+// between two tabs of a group, or over one of them, into the group at that
+// place. In a gap at a group's edge, or over its own old place, it keeps the
+// group it had: a tab moved a little does not fall out of its group.
+export function dropTarget(items, x, own = null) {
+  const hovered = items.find((i) => x >= i.left && x <= i.right);
+  const at = items.findIndex((i) => x < (i.left + i.right) / 2);
+  const next = at < 0 ? undefined : items[at],
+    prev = at < 0 ? items.at(-1) : items[at - 1];
+  if (hovered?.header)
+    return { beforeId: undefined, into: hovered.groupId, next: undefined };
+  const beforeId = next?.header ? next.first : next?.id;
+  const prevGroup =
+      prev && !(prev.header && prev.collapsed) ? prev.groupId : null,
+    nextGroup = next && !next.header ? next.groupId : null;
+  let into = null;
+  if (prevGroup && prevGroup === nextGroup) into = prevGroup;
+  else if (hovered) into = hovered.groupId || null;
+  else if (own && (own === prevGroup || own === nextGroup)) into = own;
+  return { beforeId, into, next };
+}
+
 export function moveGroup(tabs, groupId, beforeId) {
   const members = tabs.filter((t) => t.groupId === groupId);
   if (!members.length || members.some((t) => t.id === beforeId)) return;

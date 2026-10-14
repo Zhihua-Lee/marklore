@@ -55,7 +55,11 @@ export async function buildExportDocument(
     Buffer.byteLength(payload.html) > 32 * 1024 * 1024 ||
     Buffer.byteLength(payload.css) > 1024 * 1024 ||
     !Array.isArray(payload.images) ||
-    payload.images.length > 500
+    payload.images.length > 500 ||
+    (payload.nav != null &&
+      (typeof payload.nav !== "string" ||
+        !payload.nav.startsWith('<nav class="export-toc"') ||
+        Buffer.byteLength(payload.nav) > 4 * 1024 * 1024))
   )
     throw Error(t("无效或过大的导出内容"));
   if (payload.fileId) files.file(payload.fileId);
@@ -112,9 +116,13 @@ export async function buildExportDocument(
     throw Error(t("存在未嵌入的图片"));
   const title = String(payload.name || "Untitled").slice(0, 500);
   const notices = await fs.readFile(noticesPath, "utf8");
+  // A standalone HTML page may carry a list of its headings beside the text
+  // (Settings → Export); plain links, so the policy below still holds. A PDF
+  // has bookmarks instead.
+  const nav = payload.format === "html" && payload.nav ? payload.nav : "";
   // The first policy cannot be weakened by note markup. No scripts, connections,
   // frames, forms or filesystem resources exist in this standalone document.
-  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)}</title><style>${css}</style></head><body><article>${html}</article><template id="folio-resource-licenses">${escape(notices)}</template></body></html>`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escape(title)}</title><style>${css}</style></head><body${nav ? ' class="with-toc"' : ""}>${nav}<article>${html}</article><template id="folio-resource-licenses">${escape(notices)}</template></body></html>`;
 }
 
 async function destinationSnapshot(destination, files) {
@@ -235,6 +243,8 @@ export function createExporter({
             preferCSSPageSize: true,
             displayHeaderFooter: false,
             generateTaggedPDF: true,
+            // Bookmarks from the headings (needs the tagged PDF above).
+            generateDocumentOutline: true,
           });
         });
       }

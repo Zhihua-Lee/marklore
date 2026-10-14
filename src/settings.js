@@ -21,6 +21,7 @@ export function defaultSettings() {
     smoothScroll: "off",
     readingFormat: false,
     groupCounts: false,
+    exportToc: true,
     outlineAnchors: "referenced",
     language: "auto",
     outline: true,
@@ -57,6 +58,7 @@ export function normalizeSettings(saved = {}) {
   settings.showHistoryButtons = settings.showHistoryButtons === true;
   settings.readingFormat = settings.readingFormat === true;
   settings.groupCounts = settings.groupCounts === true;
+  settings.exportToc = settings.exportToc !== false;
   settings.outlineAnchors = ["off", "all"].includes(settings.outlineAnchors)
     ? settings.outlineAnchors
     : "referenced";

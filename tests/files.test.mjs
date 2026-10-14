@@ -362,3 +362,27 @@ test("replaced authorized directories cannot leak through read, list, child or p
     "outside secret",
   );
 });
+test("diff and patch files open and list only while other formats are on", async (t) => {
+  const { root, store } = await fixture(t);
+  await Promise.all(
+    ["a.md", "fix.diff", "0001-x.patch"].map((n) =>
+      fs.writeFile(path.join(root, n), "--- a/x\n+++ b/x\n"),
+    ),
+  );
+  const d = await store.directory(root);
+  assert.deepEqual(
+    (await store.list(d.id)).map((x) => x.name),
+    ["a.md"],
+  );
+  await assert.rejects(store.open(path.join(root, "fix.diff")), /仅支持/);
+  store.otherFormats = true;
+  assert.deepEqual((await store.list(d.id)).map((x) => x.name).sort(), [
+    "0001-x.patch",
+    "a.md",
+    "fix.diff",
+  ]);
+  const doc = await store.open(path.join(root, "fix.diff"));
+  assert.equal(doc.text, "--- a/x\n+++ b/x\n");
+  // Previews of links stay for notes.
+  await assert.rejects(store.preview(doc.id, "0001-x.patch"), /仅预览/);
+});

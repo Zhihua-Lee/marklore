@@ -283,3 +283,92 @@ test("a middle click closes a tab", async ({ page }) => {
   await expect(page.locator("#tabs .tab")).toHaveCount(7);
   await expect(page.getByRole("tab", { name: "实验.md" })).toHaveCount(0);
 });
+
+// v0.2.5 widened a pressed tab to the current tab's 100 px at once, so a
+// narrow tab after the current one grew under the pointer, its close button
+// came under it, and the release was not a click on the tab.
+test("clicking a narrow tab after the current one switches to it", async ({
+  page,
+}) => {
+  await boot(page);
+  const target = tab(page, "论文.md");
+  expect((await target.boundingBox()).width).toBeLessThan(60);
+  const box = await target.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  expect((await target.boundingBox()).width).toBe(box.width);
+  await page.mouse.up();
+  await expect(target).toHaveClass(/active/);
+  await expect(page.getByRole("tab", { name: "论文.md" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+});
+
+test("a pointer that wanders while clicking still switches; a tab moved a little keeps its group", async ({
+  page,
+}) => {
+  await boot(page);
+  const names = () =>
+    page
+      .locator("#tabs .tab-label")
+      .evaluateAll((all) => all.map((l) => l.getAttribute("aria-label")));
+  const grouped = (name) =>
+    tab(page, name).evaluate((el) => el.classList.contains("grouped"));
+  const order = await names();
+  // Press, move past the drag threshold and back, release: a click.
+  const conv = tab(page, "卷积.md");
+  let box = await conv.boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + 9, y, { steps: 3 });
+  await page.waitForTimeout(50);
+  await page.mouse.move(box.x + box.width / 2 + 2, y, { steps: 2 });
+  await page.mouse.up();
+  await expect(conv).toHaveClass(/active/);
+  expect(await grouped("卷积.md")).toBe(true);
+  expect(await names()).toEqual(order);
+  // The current (wide) grouped tab dragged within its own place: the gap it
+  // left is not "outside the group".
+  box = await conv.boundingBox();
+  await page.mouse.move(box.x + 12, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 6, y, { steps: 6 });
+  await page.waitForTimeout(50);
+  await page.mouse.up();
+  expect(await grouped("卷积.md")).toBe(true);
+  expect(await names()).toEqual(order);
+});
+
+test("a tab dropped between two tabs of a group joins the group there", async ({
+  page,
+}) => {
+  await boot(page, 14);
+  const label = (name) => page.getByRole("tab", { name, exact: true });
+  const a = await tab(page, "傅里叶.md").boundingBox(),
+    b = await tab(page, "卷积.md").boundingBox(),
+    from = await tab(page, "论文.md").boundingBox();
+  const y = from.y + from.height / 2;
+  await page.mouse.move(from.x + from.width / 2, y);
+  await page.mouse.down();
+  // To the boundary between the group's first two tabs.
+  await page.mouse.move((a.x + a.width + b.x) / 2, y, { steps: 12 });
+  await page.waitForTimeout(60);
+  await expect(tab(page, "卷积.md")).toHaveClass(/drop-before/);
+  await expect(
+    page.getByRole("button", { name: "分组 信号处理", exact: true }),
+  ).toHaveClass(/drop-into/);
+  await page.mouse.up();
+  await expect(tab(page, "论文.md")).toHaveClass(/grouped/);
+  const order = await page
+    .locator("#tabs .tab-label")
+    .evaluateAll((all) => all.map((l) => l.getAttribute("aria-label")));
+  expect(order.slice(0, 4)).toEqual([
+    "傅里叶.md",
+    "论文.md",
+    "卷积.md",
+    "采样.md",
+  ]);
+  await expect(label("论文.md")).toHaveAttribute("aria-selected", "false");
+});

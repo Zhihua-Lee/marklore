@@ -22,6 +22,9 @@ export async function realPath(p, native = fs.realpath) {
 
 export const MAX_BYTES = 32 * 1024 * 1024;
 export const markdownPath = (p) => /\.(md|markdown|mdown|mkd|txt)$/i.test(p);
+// Other formats, opened only when the reader turns them on (Settings → System):
+// unified diffs, shown read-only and kept out of the library's index.
+export const otherPath = (p) => /\.(diff|patch)$/i.test(p);
 export const hash = (data) => createHash("sha256").update(data).digest("hex");
 export function within(root, file) {
   const rel = path.relative(root, file);
@@ -78,7 +81,12 @@ export class FileStore {
   // onNames: a background walk of a folder outside the library found more.
   constructor({ backups, onNames = null } = {}) {
     this.backups = backups;
+    this.otherFormats = false;
     this.names = createNameWalks({ onProgress: onNames });
+  }
+  // Whether a file opens in a tab: a note, or an other format when on.
+  openable(p) {
+    return markdownPath(p) || (this.otherFormats && otherPath(p));
   }
   file(id) {
     const entry = this.files.get(id);
@@ -100,7 +108,7 @@ export class FileStore {
   }
   async open(file) {
     const real = await realPath(file);
-    if (!markdownPath(real)) throw Error(t("仅支持 Markdown 或文本文件"));
+    if (!this.openable(real)) throw Error(t("仅支持 Markdown 或文本文件"));
     const existing = [...this.files].find(([, f]) => f.path === real);
     const id = existing?.[0] ?? randomUUID();
     const bytes = await this.readBytes(real),
@@ -206,7 +214,7 @@ export class FileStore {
         item.isSymbolicLink()
       )
         continue;
-      if (!item.isDirectory() && !markdownPath(item.name)) continue;
+      if (!item.isDirectory() && !this.openable(item.name)) continue;
       const p = path.join(folder, item.name);
       // A child may have changed since readdir; do not authorize a replaced link.
       let real;

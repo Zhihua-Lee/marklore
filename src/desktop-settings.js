@@ -8,12 +8,19 @@ export const desktopSettingsMarkup = `
   ${setting(`<label for="close-to-tray">${t("关闭窗口后留在托盘")}</label>`, `<small>${t("后台保留标签与草稿")}</small>`, '<input id="close-to-tray" type="checkbox" class="switch">')}
   ${setting(`<label for="start-at-login">${t("开机启动到托盘")}</label>`, '<small id="startup-status"></small>', `<span class="setting-actions"><button id="update-startup" hidden>${t("更新路径")}</button><button id="startup-settings">${t("启动管理")}</button><input id="start-at-login" type="checkbox" class="switch"></span>`)}
   ${setting(`<span>${t("Markdown 文件关联")}</span>`, '<small id="association-status" role="status"></small>', `<span class="setting-actions"><button id="register-markdown">${t("注册")}</button><button id="manage-defaults">${t("默认应用…")}</button></span>`)}
+  ${setting(`<label for="other-formats">${t("其他格式：diff / patch")}</label>`, '<small id="other-formats-status"></small>', '<input id="other-formats" type="checkbox" class="switch">')}
   ${setting(`<label for="portable-mode">${t("便携模式")}</label>`, '<small id="portable-status"></small>', '<input id="portable-mode" type="checkbox" class="switch">')}
   ${setting(`<span>${t("托盘")}</span>`, "", `<span class="setting-actions"><button id="hide-to-tray">${t("隐藏到托盘")}</button><button id="quit-app">${t("完全退出")}</button></span>`)}
   <p id="desktop-executable" class="setting-footnote"></p>
 </fieldset>`;
 
-export function wireDesktopSettings({ api, close, report, flush }) {
+export function wireDesktopSettings({
+  api,
+  close,
+  report,
+  flush,
+  formatsChanged = () => {},
+}) {
   if (!api?.desktopStatus) return () => {};
   const q = (s) => document.querySelector(s),
     section = q("#desktop-settings");
@@ -27,6 +34,7 @@ export function wireDesktopSettings({ api, close, report, flush }) {
       q("#close-to-tray").checked = status.closeToTray;
       q("#start-at-login").checked =
         status.startup || status.startupOtherVersion;
+      q("#other-formats").checked = status.otherFormats === true;
     }
     q("#update-startup").hidden = !status.startupOtherVersion;
     for (const node of section.querySelectorAll("button,input"))
@@ -41,17 +49,18 @@ export function wireDesktopSettings({ api, close, report, flush }) {
       "update-startup",
     ])
       q("#" + id).disabled = busy || !status.supported;
+    const owner = (item) =>
+      t("{extension}：{owner}", {
+        extension: item.extension,
+        owner: item.ours
+          ? "Marklore"
+          : item.known
+            ? t("其他应用")
+            : t("未读取到用户默认项"),
+      });
     const associations = (status.defaults || [])
-      .map((item) =>
-        t("{extension}：{owner}", {
-          extension: item.extension,
-          owner: item.ours
-            ? "Marklore"
-            : item.known
-              ? t("其他应用")
-              : t("未读取到用户默认项"),
-        }),
-      )
+      .filter((item) => !item.other)
+      .map(owner)
       .join(t("；"));
     const registration = status.registered
       ? status.registeredHere
@@ -64,6 +73,16 @@ export function wireDesktopSettings({ api, close, report, flush }) {
     q("#association-status").textContent = !status.supported
       ? t("仅 Windows 打包版可用")
       : `${registration} · ${associations}`;
+    // Off: what turning it on does. On: the same association status as
+    // Markdown's, once Marklore is registered.
+    q("#other-formats-status").textContent = !status.otherFormats
+      ? t("打开 .diff / .patch（统一 diff），只读查看；不进笔记库")
+      : status.supported && status.registered
+        ? (status.defaults || [])
+            .filter((item) => item.other)
+            .map(owner)
+            .join(t("；"))
+        : t("已开启；可从“打开”、拖入或文件夹中打开");
     q("#startup-status").textContent = status.startupOtherVersion
       ? t("指向其他版本，请更新路径")
       : status.startup && !status.startupEnabled
@@ -119,6 +138,10 @@ export function wireDesktopSettings({ api, close, report, flush }) {
   q("#start-at-login").onchange = (event) =>
     change({ type: "startup", value: event.target.checked });
   q("#update-startup").onclick = () => change({ type: "startup", value: true });
+  q("#other-formats").onchange = async (event) => {
+    await change({ type: "otherFormats", value: event.target.checked });
+    formatsChanged();
+  };
   q("#portable-mode").onchange = (event) =>
     change({ type: "portable", value: event.target.checked });
   for (const [id, type] of [

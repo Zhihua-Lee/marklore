@@ -81,18 +81,18 @@
       "zh-CN",
       "en-US"
     ],
-    "extraFiles": [
-      "README.md",
-      "README.zh-CN.md",
-      "LICENSE",
-      "THIRD-PARTY-NOTICES.txt"
-    ],
     "win": {
       "target": [
         "dir",
         "nsis"
       ],
       "icon": "desktop/icons/folio.ico",
+      "extraFiles": [
+        "README.md",
+        "README.zh-CN.md",
+        "LICENSE",
+        "THIRD-PARTY-NOTICES.txt"
+      ],
       "signAndEditExecutable": true,
       "signExecutable": false
     },
@@ -124,6 +124,12 @@
         }
       ],
       "icon": "desktop/icons/folio.icns",
+      "extraResources": [
+        "README.md",
+        "README.zh-CN.md",
+        "LICENSE",
+        "THIRD-PARTY-NOTICES.txt"
+      ],
       "category": "public.app-category.productivity",
       "identity": "-",
       "hardenedRuntime": false,

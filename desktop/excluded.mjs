@@ -3,7 +3,8 @@
 // JavaScript, shared by the renderer (settings) and the main process (index).
 
 export const MAX_EXCLUDED = 200;
-const ABSOLUTE = /^(?:[a-z]:[\\/]|[\\/]{2}[^\\/])/i;
+// A drive (C:\), a network share (\\server) or, on macOS, a POSIX root (/Users).
+const ABSOLUTE = /^(?:[a-z]:[\\/]|[\\/]{2}[^\\/]|\/(?![\\/]))/i;
 const key = (p) =>
   p
     .replace(/[\\/]+/g, "\\")

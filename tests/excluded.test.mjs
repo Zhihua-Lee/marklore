@@ -19,6 +19,15 @@ test("excluded folders: absolute paths, once each, at most 200", () => {
     ["Z:\\DeepONet\\runs", "\\\\server\\share\\out"],
   );
   assert.deepEqual(normalizeExcluded("Z:\\x"), []);
+  // macOS paths.
+  assert.deepEqual(
+    normalizeExcluded(["/Users/me/notes/runs", "/users/me/notes/runs/", "//"]),
+    ["/Users/me/notes/runs"],
+  );
+  assert.equal(
+    excludedBy(["/Users/me/runs"])("/Users/me/runs/seed0/a.md"),
+    true,
+  );
   const many = Array.from({ length: 300 }, (_, i) => `C:\\f${i}`);
   assert.equal(normalizeExcluded(many).length, 200);
   assert.deepEqual(normalizeSettings({}).searchExclude, []);

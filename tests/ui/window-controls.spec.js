@@ -92,3 +92,48 @@ test("without the desktop app's own controls the group stays hidden", async ({
   await expect(page.locator(".topbar")).toBeVisible();
   await expect(page.locator(".window-controls")).toBeHidden();
 });
+
+test("on macOS the toolbar leaves room for the traffic lights, except in full screen", async ({
+  page,
+}) => {
+  await installFolio(page);
+  await page.addInitScript(() => {
+    window.folio = folioTest.mock({
+      platform: "darwin",
+      windowState: async () => ({
+        own: false,
+        fullScreen: false,
+        maximized: false,
+      }),
+    });
+  });
+  await page.goto("/");
+  await expect(page.locator(".window-controls")).toBeHidden();
+  const inset = () =>
+    page.evaluate(() => {
+      const bar = document.querySelector(".topbar"),
+        lefts = [...bar.querySelectorAll("button")]
+          .map((b) => b.getBoundingClientRect())
+          .filter((r) => r.width)
+          .map((r) => r.left);
+      return {
+        room: Math.min(...lefts),
+        drag: getComputedStyle(bar, "::before").getPropertyValue(
+          "-webkit-app-region",
+        ),
+      };
+    });
+  // Three 12 px buttons from x = 14 end at about 68 px.
+  const shown = await inset();
+  expect(shown.room).toBeGreaterThanOrEqual(72);
+  expect(shown.room).toBeLessThan(90);
+  expect(shown.drag).toBe("drag");
+  await page.evaluate(() =>
+    window.mock.handlers.window({
+      own: false,
+      maximized: false,
+      fullScreen: true,
+    }),
+  );
+  expect((await inset()).room).toBeLessThan(20);
+});

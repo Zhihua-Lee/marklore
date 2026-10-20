@@ -240,6 +240,10 @@ const send = (name, data) => {
 // the page draws its own compact window controls (see app.js). The frame
 // keeps resizing, snapping by drag and double-click maximise.
 const ownWindowControls = process.platform === "win32";
+// macOS keeps its own traffic lights, inset into the toolbar (the page leaves
+// room for them, see layout.css). Closing the window hides it, as Mac apps
+// do; the app quits from the menu or Cmd+Q.
+const mac = process.platform === "darwin";
 const windowState = () => ({
   fullScreen: win.isFullScreen(),
   maximized: win.isMaximized(),
@@ -414,8 +418,18 @@ async function persist(value) {
     }
   }
 }
+// macOS hands files over by event (Finder, Dock, "Open With"), also at
+// launch before the app is ready; those wait until the settings are loaded.
+let launching = true;
+const early = [];
+app.on("open-file", (event, file) => {
+  event.preventDefault();
+  if (launching) early.push(file);
+  else acceptArgs([file]).then(showWindow);
+});
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
+  app.on("activate", showWindow);
   app.on("second-instance", (_event, argv) => {
     acceptArgs(argv);
     if (
@@ -525,6 +539,10 @@ else {
         title: "Marklore",
         icon: path.join(here, "icons/folio.png"),
         ...(ownWindowControls && { titleBarStyle: "hidden" }),
+        ...(mac && {
+          titleBarStyle: "hiddenInset",
+          trafficLightPosition: { x: 14, y: 15 },
+        }),
         webPreferences: {
           preload: path.join(here, "preload.cjs"),
           nodeIntegration: false,
@@ -575,7 +593,8 @@ else {
         event.preventDefault();
         send("command", "close");
       });
-      createTray();
+      // The menu bar has no place for a coloured tray icon; the Dock serves.
+      if (!mac) createTray();
       win.once("ready-to-show", () => {
         const backgroundOnly =
           process.argv.includes("--background") &&
@@ -591,6 +610,7 @@ else {
       const buildMenu = () =>
         Menu.setApplicationMenu(
           Menu.buildFromTemplate([
+            ...(mac ? [{ role: "appMenu" }] : []),
             {
               label: t("文件"),
               submenu: [
@@ -619,8 +639,7 @@ else {
                   accelerator: "CmdOrCtrl+Shift+S",
                   click: command("saveAs"),
                 },
-                { type: "separator" },
-                { role: "quit" },
+                ...(mac ? [] : [{ type: "separator" }, { role: "quit" }]),
               ],
             },
             {
@@ -661,6 +680,7 @@ else {
                 { role: "togglefullscreen" },
               ],
             },
+            ...(mac ? [{ role: "windowMenu" }] : []),
           ]),
         );
       buildMenu();
@@ -725,8 +745,12 @@ else {
         ...(await integration.status()),
         trayAvailable: Boolean(tray),
         portable: {
+          // A Mac app is a signed-or-not bundle: nothing is written inside it.
           available:
-            app.isPackaged && !profile && !isInstalled(process.execPath),
+            !mac &&
+            app.isPackaged &&
+            !profile &&
+            !isInstalled(process.execPath),
           installed: app.isPackaged && isInstalled(process.execPath),
           on: portable,
           folder: portableDir(process.execPath),
@@ -1151,8 +1175,10 @@ else {
           failure ??= error.message;
         }
         if (
-          tray &&
-          (intent === "hide" || (intent === "close" && integration.closeToTray))
+          (mac && intent === "close") ||
+          (tray &&
+            (intent === "hide" ||
+              (intent === "close" && integration.closeToTray)))
         ) {
           win.hide();
           return;
@@ -1247,8 +1273,12 @@ else {
         };
       });
       await acceptArgs(process.argv.slice(app.isPackaged ? 1 : 2));
+      launching = false;
+      await acceptArgs(early.splice(0));
       await win.loadURL("folio://app/");
-      app.on("window-all-closed", () => app.quit());
+      app.on("window-all-closed", () => {
+        if (!mac) app.quit();
+      });
       app.on("will-quit", () => {
         libraryWatch.close();
         tray?.destroy();

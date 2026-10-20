@@ -103,4 +103,6 @@ api.insertImages = async (id, files) => {
 };
 // The interface language main resolved (src/language.js reads it at load).
 api.language = language === "en" ? "en" : "zh";
+// macOS insets its window buttons into the toolbar (src/app.js leaves room).
+api.platform = process.platform;
 contextBridge.exposeInMainWorld("folio", api);

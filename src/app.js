@@ -164,6 +164,9 @@ historyControls.setAttribute("role", "group");
 historyControls.setAttribute("aria-label", t("阅读历史"));
 historyControls.innerHTML = `<button id="history-back" class="icon" aria-label="${t("后退")}" title="${t("后退 · Alt+←")}">${icon("chevronLeft")}</button><button id="history-forward" class="icon" aria-label="${t("前进")}" title="${t("前进 · Alt+→")}">${icon("chevronRight")}</button>`;
 $(".topbar").insertBefore(historyControls, $(".document-tools"));
+// macOS: the system's traffic lights sit at the toolbar's left end.
+if (api?.platform === "darwin")
+  document.documentElement.dataset.platform = "mac";
 // Desktop (Windows): compact window controls drawn by the page, set apart at
 // the toolbar's right end. main.mjs removes the system title bar.
 const windowControls = document.createElement("div");

@@ -43,6 +43,7 @@ export const FOLIO_API = [
   "windowState",
   "windowAction",
   "language",
+  "platform",
 ];
 
 function harness(api) {

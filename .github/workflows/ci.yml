@@ -45,6 +45,30 @@ jobs:
             test-results/
           retention-days: 7
 
+  mac:
+    # Unsigned macOS build (ad-hoc signed, not notarised): a dmg per
+    # architecture, kept as a workflow artifact. The unit tests run here too,
+    # but do not fail the job yet: the app is still checked on Windows only.
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+        continue-on-error: true
+      - run: pnpm build
+      - run: pnpm exec electron-builder --mac --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: marklore-mac
+          path: release/*.dmg
+          retention-days: 14
+
   native:
     # Launches real Electron windows from source; opt-in because it is slower.
     if: github.event_name == 'workflow_dispatch' && inputs.native

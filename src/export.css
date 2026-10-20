@@ -16,6 +16,7 @@ body {
     400 16px/1.7 "Literata Variable",
     "Noto Sans SC",
     "Microsoft YaHei",
+    "PingFang SC",
     serif;
   letter-spacing: normal;
 }
@@ -112,7 +113,8 @@ pre {
 }
 code {
   font-family:
-    "JetBrains Mono Variable", Consolas, "Microsoft YaHei", monospace;
+    "JetBrains Mono Variable", Consolas, Menlo, "Microsoft YaHei",
+    "PingFang SC", monospace;
 }
 :not(pre) > code {
   background: #f3f4f2;
@@ -170,7 +172,7 @@ summary {
   font-size: 1.1616em;
 }
 .katex .cjk_fallback {
-  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
   font-size: 1em;
 }
 .katex-display .cjk_fallback {

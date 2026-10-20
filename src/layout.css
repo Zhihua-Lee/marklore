@@ -26,7 +26,8 @@
   --font-note: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 :root[data-typeface="literata"] {
-  --font-note: "Literata Variable", "Noto Sans SC", "Microsoft YaHei", serif;
+  --font-note:
+    "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
 }
 :root[data-typeface="literata"] .prose {
   line-height: 1.7;
@@ -63,7 +64,7 @@
   max-width: none;
 }
 :root[data-typeface="book"] {
-  --font-note: Cambria, "Songti SC", SimSun, serif;
+  --font-note: Cambria, Georgia, "Songti SC", SimSun, serif;
 }
 .prose strong,
 .prose b {
@@ -222,7 +223,7 @@ main {
   text-align: left;
 }
 #outline .katex .cjk_fallback {
-  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 #outline code {
   font-family: var(--font-code);
@@ -587,6 +588,15 @@ body.file-drop::after {
   flex: 1 1 0;
   align-self: stretch;
   min-width: 16px;
+  -webkit-app-region: drag;
+}
+/* macOS: room for the traffic lights (main.mjs places them), which also
+   moves the window; full screen hides them. */
+:root[data-platform="mac"]:not([data-full-screen="true"]) .topbar::before {
+  content: "";
+  flex: none;
+  align-self: stretch;
+  width: 64px;
   -webkit-app-region: drag;
 }
 .topbar:has(> .window-controls:not([hidden])) {

@@ -35,9 +35,11 @@
   --danger: #a63b31;
   --note-size: 16px;
   --font-ui:
-    "Inter Variable", "Noto Sans SC", "Segoe UI", "Microsoft YaHei", sans-serif;
+    "Inter Variable", "Noto Sans SC", "Segoe UI", "Microsoft YaHei",
+    "PingFang SC", sans-serif;
   --font-code:
-    "JetBrains Mono Variable", "Noto Sans SC", "Microsoft YaHei", monospace;
+    "JetBrains Mono Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
+    monospace;
   --font-note: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
   --heading-weight: 600;
   --motion: 140ms;
@@ -496,6 +498,7 @@ main[data-empty="true"] > #panes {
 .start-actions kbd {
   font:
     11px "Segoe UI",
+    system-ui,
     sans-serif;
   color: var(--muted);
   white-space: nowrap;
@@ -540,6 +543,7 @@ main[data-empty="true"] > #panes {
 .pane-caption {
   font:
     10px "Segoe UI",
+    system-ui,
     sans-serif;
   letter-spacing: 0.12em;
   color: var(--muted);
@@ -831,7 +835,7 @@ main[data-empty="true"] > #panes {
   background: color-mix(in srgb, var(--danger) 6%, transparent);
   padding: 8px;
   white-space: pre-wrap;
-  font-family: Consolas, monospace;
+  font-family: Consolas, Menlo, monospace;
 }
 .prose .fold {
   position: absolute;

@@ -506,7 +506,7 @@ export function createTabBar({
     const header = e.target.closest(".tab-group");
     if (
       header &&
-      e.ctrlKey &&
+      (e.ctrlKey || e.metaKey) &&
       e.shiftKey &&
       ["ArrowLeft", "ArrowRight"].includes(e.key)
     ) {
@@ -535,7 +535,7 @@ export function createTabBar({
     const doc = tabs.find((t) => t.id === e.target.parentElement.dataset.id),
       index = tabs.indexOf(doc);
     if (
-      e.ctrlKey &&
+      (e.ctrlKey || e.metaKey) &&
       e.shiftKey &&
       ["ArrowLeft", "ArrowRight"].includes(e.key)
     ) {

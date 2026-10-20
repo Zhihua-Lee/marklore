@@ -196,7 +196,7 @@ export function wireSourceCopy({ host, source, skip = () => false }) {
   });
   host.ownerDocument.addEventListener("keydown", (event) => {
     if (
-      event.ctrlKey &&
+      (event.ctrlKey || event.metaKey) &&
       event.shiftKey &&
       !event.altKey &&
       event.code === "KeyC" &&

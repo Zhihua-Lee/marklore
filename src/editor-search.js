@@ -134,7 +134,7 @@ function createPanel(view) {
     if (e.key !== "Enter") return;
     e.preventDefault();
     if (e.target === replace) {
-      if (e.ctrlKey && e.altKey) replaceAll(view);
+      if ((e.ctrlKey || e.metaKey) && e.altKey) replaceAll(view);
       else replaceNext(view);
     } else if (e.target === find || e.target.type === "checkbox")
       (e.shiftKey ? findPrevious : findNext)(view);

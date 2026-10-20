@@ -167,12 +167,12 @@ export async function exportNote(format, { doc, toc = false }) {
     const typeface = document.documentElement.dataset.typeface;
     const family =
       typeface === "literata"
-        ? '"Literata Variable","Noto Sans SC","Microsoft YaHei",serif'
+        ? '"Literata Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
         : typeface === "classic"
-          ? 'Arial,"Microsoft YaHei",sans-serif'
+          ? 'Arial,"Microsoft YaHei","PingFang SC",sans-serif'
           : typeface === "book"
-            ? "Cambria,SimSun,serif"
-            : '"Noto Sans SC","Microsoft YaHei",sans-serif';
+            ? 'Cambria,Georgia,"Songti SC",SimSun,serif'
+            : '"Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif';
     const weight = Number(
       document.documentElement.style.getPropertyValue("--note-weight"),
     );

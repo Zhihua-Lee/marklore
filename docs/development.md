@@ -80,7 +80,7 @@ pnpm dev
 
 ### 持续集成
 
-[.github/workflows/ci.yml](../.github/workflows/ci.yml) 在 `windows-latest` 上对每次推送到 `main` 和每个 PR 运行格式检查、单元测试、第三方声明一致性检查、构建和浏览器测试。原生套件较慢，只在手动触发（`workflow_dispatch` 勾选 native）时运行。
+[.github/workflows/ci.yml](../.github/workflows/ci.yml) 在 `windows-latest` 上对每次推送到 `main` 和每个 PR 运行格式检查、单元测试、第三方声明一致性检查、构建和浏览器测试。原生套件较慢，只在手动触发（`workflow_dispatch` 勾选 native）时运行。另有 `mac` 任务生成未签名的 macOS dmg，见下文“macOS 构建”。
 
 具体版本执行了哪些测试，以 [VERIFICATION.md](../VERIFICATION.md) 为准。历史通过记录不代表后续提交已自动验证，也不代表所有个人笔记已通过人工验收。
 
@@ -102,6 +102,15 @@ $env:FOLIO_TEST_EXE = (Resolve-Path ".\release\win-unpacked\Marklore.exe").Path
 pnpm test:native
 Remove-Item Env:FOLIO_TEST_EXE
 ```
+
+## macOS 构建（试验）
+
+CI 的 `mac` 任务在 `macos-latest` 上运行 `pnpm exec electron-builder --mac --publish never`，为 Apple 芯片（arm64）和 Intel（x64）各生成一个 dmg，作为工作流产物 `marklore-mac` 保留 14 天。在 Mac 上也可以本地运行同一命令。
+
+- 只做临时签名（ad-hoc），未经 Apple 公证。第一次打开时 macOS 会拦截：先把 Marklore 拖进“应用程序”，再在“系统设置 → 隐私与安全性”中点“仍要打开”；也可以在终端运行 `xattr -dr com.apple.quarantine /Applications/Marklore.app`。
+- 窗口保留系统的红绿灯按钮，嵌在工具栏左端；关闭窗口只是隐藏，程序留在程序坞里，用 ⌘Q 退出（未保存的笔记仍会先询问）。
+- 文件关联来自 dmg 中的 Info.plist：`.md`/`.markdown` 由 Marklore 打开；`.diff`/`.patch` 只登记为备选，并且需要在设置里打开“其他格式”。
+- Windows 专属的功能（托盘、开机启动、默认应用设置、便携模式）在 Mac 上不提供。原生测试套件目前只在 Windows 上运行。
 
 ### 发布与清理本地产物
 

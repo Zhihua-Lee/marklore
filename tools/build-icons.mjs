@@ -15,19 +15,29 @@ try {
   const sizes = [16, 20, 24, 32, 48, 64, 128, 256],
     images = [];
   const page = await browser.newPage({
-    viewport: { width: 512, height: 512 },
+    viewport: { width: 1024, height: 1024 },
     deviceScaleFactor: 1,
   });
-  const draw = (svg, size) =>
+  // inset: the margin left around the image, as a fraction of the canvas.
+  const draw = (svg, size, inset = 0) =>
     page.evaluate(
-      async ({ svg, size }) => {
+      async ({ svg, size, inset }) => {
         const image = new Image();
         image.src =
           "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
         await image.decode();
         const canvas = document.createElement("canvas");
         canvas.width = canvas.height = size;
-        canvas.getContext("2d").drawImage(image, 0, 0, size, size);
+        const margin = size * inset;
+        canvas
+          .getContext("2d")
+          .drawImage(
+            image,
+            margin,
+            margin,
+            size - 2 * margin,
+            size - 2 * margin,
+          );
         return {
           png: canvas.toDataURL("image/png").split(",")[1],
           rgba: Array.from(
@@ -35,7 +45,7 @@ try {
           ),
         };
       },
-      { svg, size },
+      { svg, size, inset },
     );
   // The tray shows 16 px (32 px on high-DPI), so it always uses the book alone.
   const tray = await draw(small, 32);
@@ -93,8 +103,41 @@ try {
     path.join(out, "folio.ico"),
     Buffer.concat([header, ...images]),
   );
+  // macOS: Apple's grid puts the 824 px tile in a 1024 px canvas, so the
+  // mark's tile (60 of its 64 units) is drawn at that size. PNG entries only;
+  // the book alone below 64 px, as on Windows.
+  const inset = (1 - (824 / 1024) * (64 / 60)) / 2;
+  const entries = [
+    ["icp4", 16],
+    ["icp5", 32],
+    ["ic11", 32],
+    ["ic12", 64],
+    ["ic07", 128],
+    ["ic08", 256],
+    ["ic13", 256],
+    ["ic09", 512],
+    ["ic14", 512],
+    ["ic10", 1024],
+  ];
+  const chunks = [];
+  for (const [type, size] of entries) {
+    const data = await draw(size < 64 ? small : full, size, inset);
+    const png = Buffer.from(data.png, "base64"),
+      head = Buffer.alloc(8);
+    head.write(type, 0, "latin1");
+    head.writeUInt32BE(png.length + 8, 4);
+    chunks.push(head, png);
+  }
+  const icns = Buffer.concat(chunks),
+    icnsHead = Buffer.alloc(8);
+  icnsHead.write("icns", 0, "latin1");
+  icnsHead.writeUInt32BE(icns.length + 8, 4);
+  await fs.writeFile(
+    path.join(out, "folio.icns"),
+    Buffer.concat([icnsHead, icns]),
+  );
   console.log(
-    "Built Folio mark: PNG, tray and 8-resolution Windows ICO (book-only below 32 px).",
+    "Built Folio mark: PNG, tray, 8-resolution Windows ICO (book-only below 32 px) and macOS ICNS.",
   );
 } finally {
   await browser.close();

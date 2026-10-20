@@ -112,6 +112,50 @@
       "deleteAppDataOnUninstall": false,
       "include": "build/installer.nsh",
       "artifactName": "Marklore-Setup-v${version}-x64.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "icon": "desktop/icons/folio.icns",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "notarize": false,
+      "electronLanguages": [
+        "zh_CN",
+        "en"
+      ],
+      "fileAssociations": [
+        {
+          "ext": [
+            "md",
+            "markdown"
+          ],
+          "name": "Markdown",
+          "role": "Editor",
+          "rank": "Default"
+        },
+        {
+          "ext": [
+            "diff",
+            "patch"
+          ],
+          "name": "Diff",
+          "role": "Viewer",
+          "rank": "Alternate"
+        }
+      ],
+      "artifactName": "Marklore-v${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "Marklore-v${version}-mac-${arch}.${ext}"
     }
   }
 }

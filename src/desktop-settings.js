@@ -5,6 +5,8 @@ const setting = (name, note, control) =>
   `<div class="setting"><span class="setting-text">${name}${note}</span>${control}</div>`;
 export const desktopSettingsMarkup = `
 <fieldset id="desktop-settings" hidden><legend>${t("后台与系统")}</legend>
+  ${setting(`<span>${t("版本")}</span>`, '<small id="update-status" role="status"></small>', `<span class="setting-actions"><button id="update-notes" hidden>${t("更新说明")}</button><button id="update-action">${t("检查更新")}</button></span>`)}
+  ${setting(`<label for="check-updates">${t("启动时检查更新")}</label>`, `<small>${t("访问 GitHub 查看有没有新版本")}</small>`, '<input id="check-updates" type="checkbox" class="switch">')}
   ${setting(`<label for="close-to-tray">${t("关闭窗口后留在托盘")}</label>`, `<small>${t("后台保留标签与草稿")}</small>`, '<input id="close-to-tray" type="checkbox" class="switch">')}
   ${setting(`<label for="start-at-login">${t("开机启动到托盘")}</label>`, '<small id="startup-status"></small>', `<span class="setting-actions"><button id="update-startup" hidden>${t("更新路径")}</button><button id="startup-settings">${t("启动管理")}</button><input id="start-at-login" type="checkbox" class="switch"></span>`)}
   ${setting(`<span>${t("Markdown 文件关联")}</span>`, '<small id="association-status" role="status"></small>', `<span class="setting-actions"><button id="register-markdown">${t("注册")}</button><button id="manage-defaults">${t("默认应用…")}</button></span>`)}
@@ -35,6 +37,7 @@ export function wireDesktopSettings({
       q("#start-at-login").checked =
         status.startup || status.startupOtherVersion;
       q("#other-formats").checked = status.otherFormats === true;
+      q("#check-updates").checked = status.checkUpdates === true;
     }
     q("#update-startup").hidden = !status.startupOtherVersion;
     for (const node of section.querySelectorAll("button,input"))
@@ -91,6 +94,44 @@ export function wireDesktopSettings({
     q("#desktop-executable").textContent = t("当前程序：{path}", {
       path: status.executable,
     });
+    // Updates: the installer or the zip copy is replaced in place, so the
+    // program path, file association and startup entry stay the same.
+    const update = status.update || {},
+      current = update.current || "";
+    // Shown by the packaged app only (the browser preview has no updates).
+    for (const id of ["update-action", "check-updates"])
+      q("#" + id).closest(".setting").hidden = !status.update;
+    q("#update-status").textContent =
+      status.restarting && update.ready
+        ? t("正在更新，完成后自动重新打开…")
+        : update.downloading
+          ? t("正在下载 v{version}… {progress}%", {
+              version: update.latest,
+              progress: update.progress || 0,
+            })
+          : update.checking
+            ? t("正在检查…")
+            : update.error
+              ? `v${current} · ${update.error}`
+              : update.available
+                ? update.kind === "page"
+                  ? t("v{version}，有新版本 v{latest}，请从发布页下载", {
+                      version: current,
+                      latest: update.latest,
+                    })
+                  : t("v{version}，有新版本 v{latest}；更新后自动重新打开", {
+                      version: current,
+                      latest: update.latest,
+                    })
+                : update.latest
+                  ? t("v{version}，已是最新版本", { version: current })
+                  : `v${current}`;
+    q("#update-action").textContent = update.available
+      ? update.kind === "page"
+        ? t("前往下载")
+        : t("更新到 v{version}", { version: update.latest })
+      : t("检查更新");
+    q("#update-notes").hidden = !update.latest;
     const portable = status.portable || {};
     if (!busy) q("#portable-mode").checked = Boolean(portable.on);
     q("#portable-mode").disabled = busy || !portable.available;
@@ -124,7 +165,8 @@ export function wireDesktopSettings({
     paint();
     try {
       // Switching data folders restarts Folio: save tabs and drafts first.
-      if (action.type === "portable") await flush?.();
+      if (action.type === "portable" || action.type === "updateApply")
+        await flush?.();
       status = await api.desktopAction(action);
     } catch (error) {
       report(error.message);
@@ -142,6 +184,17 @@ export function wireDesktopSettings({
     await change({ type: "otherFormats", value: event.target.checked });
     formatsChanged();
   };
+  q("#check-updates").onchange = (event) =>
+    change({ type: "updateAuto", value: event.target.checked });
+  q("#update-notes").onclick = () => change({ type: "updatePage" });
+  // One click downloads, checks and installs, then Marklore restarts.
+  q("#update-action").onclick = async () => {
+    const update = status?.update || {};
+    if (!update.available) return change({ type: "updateCheck" });
+    if (update.kind === "page") return change({ type: "updatePage" });
+    await change({ type: "updateDownload" });
+    if (status?.update?.ready) await change({ type: "updateApply" });
+  };
   q("#portable-mode").onchange = (event) =>
     change({ type: "portable", value: event.target.checked });
   for (const [id, type] of [
@@ -157,6 +210,24 @@ export function wireDesktopSettings({
   q("#weight").addEventListener("click", refresh);
   window.addEventListener("focus", () => {
     if (q("#appearance").open) refresh();
+  });
+  api.on("update", ({ state, result, found } = {}) => {
+    if (state && status) {
+      status = { ...status, update: state };
+      paint();
+    }
+    if (result)
+      report(
+        result.updated
+          ? t("已更新到 v{version}", { version: result.version })
+          : t("未能更新到 v{version}；可从发布页下载安装", {
+              version: result.version,
+            }),
+      );
+    if (found)
+      report(
+        t("有新版本 v{version}：设置 → 后台与系统 → 版本", { version: found }),
+      );
   });
   api.on("desktop-settings", () => {
     if (q("#appearance").open) refresh();

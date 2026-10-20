@@ -3,8 +3,10 @@
 # a smoke start with an isolated profile, upgrade over itself and uninstall.
 # It writes Marklore registrations under HKCU to test their cleanup, after
 # backing up the ones already there, and restores them at the end.
-#   powershell -ExecutionPolicy Bypass -File tools\installer-check.ps1 -Setup <path to Marklore-Setup-*.exe>
-param([string]$Setup)
+#   powershell -ExecutionPolicy Bypass -File tools\installer-check.ps1 -Setup <path to Marklore-Setup-*.exe> [-Newer <later setup>]
+# -Newer also updates the installed copy from the app (tests/native-update.mjs
+# with a local feed offering that setup) and checks that it stays in place.
+param([string]$Setup, [string]$Newer)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $work = Join-Path $root '.local\install-test'
@@ -148,6 +150,24 @@ try {
   Check 'upgrade keeps file association' ((RegValue $cmdKey '(default)') -eq $ours)
   Check 'upgrade keeps startup entry' ($null -ne (RegValue $runKey 'Marklore'))
   Check 'upgrade keeps shortcuts' ((Test-Path $startMenu) -and (Test-Path $desktopLink))
+
+  if ($Newer) {
+    # 3. The in-app update: the newer setup installed over this copy.
+    $newVersion = [regex]::Match([IO.Path]::GetFileName($Newer), 'v(\d+\.\d+\.\d+)').Groups[1].Value
+    $env:FOLIO_TEST_EXE = $exe; $env:FOLIO_UPDATE_SETUP = $Newer; $env:FOLIO_UPDATE_VERSION = $newVersion
+    $env:FOLIO_TEST_INACTIVE = '1'; $env:FOLIO_LANG = 'zh'; $env:ELECTRON_RUN_AS_NODE = '1'
+    Push-Location $root
+    & (Join-Path $root 'node_modules\electron\dist\electron.exe') tests/native-update.mjs | Out-Host
+    $updated = $LASTEXITCODE -eq 0
+    Pop-Location
+    Remove-Item Env:FOLIO_TEST_EXE, Env:FOLIO_UPDATE_SETUP, Env:FOLIO_UPDATE_VERSION, Env:FOLIO_TEST_INACTIVE, Env:FOLIO_LANG, Env:ELECTRON_RUN_AS_NODE
+    Check "in-app update to v$newVersion" $updated
+    $entry = UninstallEntry
+    Check 'update installed in the same folder' ($entry -and "$(RegValue $entry.PSPath 'UninstallString')".Contains("$dir\Uninstall Marklore.exe") -and (Test-Path $exe))
+    Check 'update keeps file association' ((RegValue $cmdKey '(default)') -eq $ours)
+    Check 'update keeps startup entry' ((RegValue $runKey 'Marklore') -eq ('"' + $exe + '" --background'))
+    Start-Sleep -Seconds 1
+  }
 
   Uninstall
   Check 'own file association removed' (-not (Test-Path 'HKCU:\Software\Classes\Marklore.Markdown'))

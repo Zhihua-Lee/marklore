@@ -181,4 +181,17 @@ export default {
   // Other formats (diffs)
   "Diff / Patch 文件": "Diff / Patch file",
   无效设置: "Invalid setting",
+  // Updates
+  "更新服务器返回 {status}": "The update server answered {status}",
+  无效更新信息: "Invalid update information",
+  此版本请从发布页下载: "Download this version from the release page",
+  没有可用的更新: "No update is available",
+  "程序所在文件夹不可写入，请从发布页下载":
+    "The program's folder can't be written to; download from the release page",
+  "发布中缺少 {name}": "The release has no {name}",
+  "校验文件中没有 {name}": "The checksum file doesn't list {name}",
+  "下载的文件校验不符，已放弃更新":
+    "The download doesn't match its checksum; the update was cancelled",
+  更新尚未下载: "The update hasn't been downloaded",
+  无法启动更新: "Couldn't start the update",
 };

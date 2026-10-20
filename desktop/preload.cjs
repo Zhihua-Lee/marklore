@@ -66,6 +66,7 @@ api.on = (name, callback) => {
       "library",
       "links",
       "names",
+      "update",
     ].includes(name)
   )
     throw Error("Invalid event");

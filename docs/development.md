@@ -112,6 +112,12 @@ CI 的 `mac` 任务在 `macos-latest` 上运行 `pnpm exec electron-builder --ma
 - 文件关联来自 dmg 中的 Info.plist：`.md`/`.markdown` 由 Marklore 打开；`.diff`/`.patch` 只登记为备选，并且需要在设置里打开“其他格式”。
 - Windows 专属的功能（托盘、开机启动、默认应用设置、便携模式）在 Mac 上不提供。原生测试套件目前只在 Windows 上运行。
 
+### 应用内更新
+
+`desktop/updater.mjs` 读取 `https://api.github.com/repos/Zhihua-Lee/marklore/releases/latest`，按固定的资产名下载：`Marklore-Setup-vX.Y.Z-x64.exe`（安装版）或 `Marklore-vX.Y.Z-win-x64.zip`（压缩包版，内含一个 `Marklore-vX.Y.Z-win-x64` 文件夹），并用 `SHA256SUMS-vX.Y.Z.txt` 校验。发布时这些名字不能变。下载在单独的会话中进行，默认会话仍拦截所有网络请求。
+
+校验通过后写入一个 PowerShell 辅助脚本并退出：脚本等旧进程结束，安装版运行 `Setup /S /currentuser --updated /D=<原目录>`，压缩包版用 `robocopy /E` 覆盖程序目录（不删除文件，便携 `data` 保留），然后重新启动 Marklore。下次启动时读取 `pending.json` 报告结果并删除下载。`FOLIO_UPDATE_FEED` 可把查询指向本地测试服务；`tests/native-update.mjs` 用它端到端测试压缩包版的更新。
+
 ### 发布与清理本地产物
 
 版本发布到 GitHub Releases（win-x64 zip、source zip、`SHA256SUMS-vX.Y.Z.txt`）后，本地只需保留最近几个版本：

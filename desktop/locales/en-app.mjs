@@ -414,4 +414,25 @@ export default {
     "Lists the headings beside the page, as links; a PDF always has bookmarks",
   新文件: "new file",
   已删除: "deleted",
+  // Updates (Settings → Background & system)
+  版本: "Version",
+  更新说明: "Release notes",
+  检查更新: "Check for updates",
+  启动时检查更新: "Check for updates at startup",
+  "访问 GitHub 查看有没有新版本": "Asks GitHub whether there is a new version",
+  "正在更新，完成后自动重新打开…": "Updating; Marklore opens again when done…",
+  "正在下载 v{version}… {progress}%": "Downloading v{version}… {progress}%",
+  "正在检查…": "Checking…",
+  "v{version}，有新版本 v{latest}，请从发布页下载":
+    "v{version}; v{latest} is out, download it from the release page",
+  "v{version}，有新版本 v{latest}；更新后自动重新打开":
+    "v{version}; v{latest} is out, and Marklore reopens after updating",
+  "v{version}，已是最新版本": "v{version}, up to date",
+  前往下载: "Download",
+  "更新到 v{version}": "Update to v{version}",
+  "已更新到 v{version}": "Updated to v{version}",
+  "未能更新到 v{version}；可从发布页下载安装":
+    "Couldn't update to v{version}; you can download it from the release page",
+  "有新版本 v{version}：设置 → 后台与系统 → 版本":
+    "v{version} is out: Settings → Background & system → Version",
 };

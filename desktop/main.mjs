@@ -19,6 +19,7 @@ import { FileStore, within, realPath } from "./files.mjs";
 import { normalizeExcluded, excludedBy } from "./excluded.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
+import { createUpdater } from "./updater.mjs";
 import { profileFolder } from "./profile-folder.mjs";
 import { createLibraryWatch } from "./library-watch.mjs";
 import { createLinkIndex } from "./link-index.mjs";
@@ -87,6 +88,34 @@ const integration = createIntegration({
   shell,
   profile: app.getPath("userData"),
 });
+// Windows packaged copies update themselves (desktop/updater.mjs); others
+// are pointed at the release page. Its own session: the default one refuses
+// every web request, which keeps notes offline. Tests keep the downloads in
+// their stand-in profile.
+const updater = createUpdater({
+  version: app.getVersion(),
+  executable: process.execPath,
+  installed: app.isPackaged && isInstalled(process.execPath),
+  available: process.platform === "win32" && app.isPackaged,
+  temp: stand || profile ? profileData : app.getPath("temp"),
+  fetch: (url, options) =>
+    session.fromPartition("marklore-update").fetch(url, options),
+  onChange: (state) => send("update", { state }),
+});
+let updatesStarted = false;
+async function startUpdates() {
+  const result = await updater.settle().catch(() => null);
+  if (result) send("update", { result });
+  if (integration.checkUpdates)
+    setTimeout(
+      () =>
+        updater.check().then(
+          (state) => state.available && send("update", { found: state.latest }),
+          () => {},
+        ),
+      5000,
+    );
+}
 const recent = createRecentFiles({
   file: path.join(app.getPath("userData"), "recent.json"),
   // Tests and isolated profiles (FOLIO_DATA_DIR) never touch the user's real
@@ -744,6 +773,7 @@ else {
       const desktopState = async () => ({
         ...(await integration.status()),
         trayAvailable: Boolean(tray),
+        update: updater.status(),
         portable: {
           // A Mac app is a signed-or-not bundle: nothing is written inside it.
           available:
@@ -783,6 +813,31 @@ else {
             case "startupSettings":
               await integration.startupSettings();
               break;
+            case "updateAuto":
+              await integration.setCheckUpdates(action.value);
+              break;
+            case "updateCheck":
+              await updater.check();
+              break;
+            case "updateDownload":
+              await updater.prepare();
+              break;
+            case "updatePage":
+              await shell.openExternal(
+                updater.status().page ||
+                  "https://github.com/Zhihua-Lee/marklore/releases/latest",
+              );
+              break;
+            case "updateApply": {
+              // The renderer flushed tabs and drafts first; let them land.
+              await sessionWrite.catch(() => {});
+              await updater.apply();
+              setTimeout(() => {
+                allowClose = true;
+                app.exit(0);
+              }, 150);
+              return { ...(await desktopState()), restarting: true };
+            }
             case "portable": {
               if (!app.isPackaged || profile)
                 throw Error(t("便携模式仅在打包版可用"));
@@ -1262,6 +1317,10 @@ else {
           old.settings?.searchExclude,
         );
         ready = true;
+        if (!updatesStarted) {
+          updatesStarted = true;
+          startUpdates();
+        }
         const incoming = pending;
         pending = [];
         return {

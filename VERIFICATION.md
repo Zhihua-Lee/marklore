@@ -1,6 +1,6 @@
 # Verification
 
-Last updated 2026-10-09.
+Last updated 2026-10-20.
 
 This index lists what was checked for each documented release; the full record of
 each pass lives in [docs/verification/](docs/verification/). A recorded pass covers
@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                                  | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ------------------------------------------------------------------------ | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.3.0  | Updates from inside the app (installed and zip copies)                   | 122               | 220 (default + reduced-motion) | 15 suites (packaged); installer check 40/40                     | [v0.3.0](docs/verification/v0.3.0.md)   |
 | v0.2.9  | Direct editing keeps the caret after the pause render                    | 114               | 219 (default + reduced-motion) | 14 suites (packaged); installer check 36/36                     | [v0.2.9](docs/verification/v0.2.9.md)   |
 | v0.2.8  | Typing directly in the preview; Edit without source pane; macOS CI build | 114               | 218 (default + reduced-motion) | 14 suites (packaged); installer check 36/36                     | [v0.2.8](docs/verification/v0.2.8.md)   |
 | v0.2.7  | Nothing jumps while editing; foldable export contents; PDF links         | 114               | 209 (default + reduced-motion) | 14 suites (packaged); installer check passed                    | [v0.2.7](docs/verification/v0.2.7.md)   |

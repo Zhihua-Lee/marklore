@@ -114,3 +114,56 @@ test("other formats are off by default; turning them on shows their associations
     .poll(() => page.evaluate(() => window.desktopMock.actions))
     .toEqual([{ type: "otherFormats", value: true }, { formatsChanged: true }]);
 });
+
+test("the version row checks, then downloads and installs in one click", async ({
+  page,
+}) => {
+  await boot(page);
+  // The browser preview has no updater: the rows stay hidden.
+  await expect(page.locator("#update-action")).toBeHidden();
+  await boot(page, {
+    checkUpdates: false,
+    update: {
+      current: "0.3.0",
+      kind: "folder",
+      latest: "0.3.1",
+      available: true,
+    },
+  });
+  await expect(page.locator("#update-status")).toHaveText(
+    "v0.3.0，有新版本 v0.3.1；更新后自动重新打开",
+  );
+  await expect(page.locator("#update-notes")).toBeVisible();
+  await page.locator("#update-action").click();
+  await page.evaluate(() =>
+    window.desktopMock.handlers.update({
+      state: {
+        current: "0.3.0",
+        kind: "folder",
+        latest: "0.3.1",
+        available: true,
+        downloading: true,
+        progress: 42,
+      },
+    }),
+  );
+  await expect(page.locator("#update-status")).toHaveText(
+    "正在下载 v0.3.1… 42%",
+  );
+  await page.evaluate(() => {
+    const m = window.desktopMock;
+    m.state.update = { ...m.state.update, ready: "0.3.1", progress: 100 };
+    m.finish();
+  });
+  await expect
+    .poll(() => page.evaluate(() => window.desktopMock.actions))
+    .toEqual([{ type: "updateDownload" }, { type: "updateApply" }]);
+  await page.evaluate(() =>
+    window.desktopMock.handlers.update({
+      result: { updated: true, version: "0.3.1" },
+    }),
+  );
+  expect(await page.evaluate(() => window.desktopMock.errors)).toEqual([
+    "已更新到 v0.3.1",
+  ]);
+});

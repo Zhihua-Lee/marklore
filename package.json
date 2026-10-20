@@ -1,6 +1,6 @@
 {
   "name": "marklore",
-  "version": "0.2.9",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
@@ -26,6 +26,7 @@
     "test:native-editing": "node tests/native-editing.mjs",
     "test:native-navigation": "node tests/native-navigation.mjs",
     "test:native-image-access": "node tests/native-image-access.mjs",
+    "test:native-update": "node tests/native-update.mjs",
     "test:native:all": "node tools/run-native-suites.mjs",
     "icons": "node tools/build-icons.mjs",
     "format": "prettier --write src desktop tests tools docs *.mjs *.json *.md",

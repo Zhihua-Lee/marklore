@@ -145,7 +145,11 @@ export function createIntegration({
     "reg.exe",
   );
   const preferenceFile = path.join(profile, "desktop-settings.json");
-  let preferences = { closeToTray: false, otherFormats: false };
+  let preferences = {
+    closeToTray: false,
+    otherFormats: false,
+    checkUpdates: false,
+  };
   async function store(change) {
     await fs.mkdir(profile, { recursive: true });
     const next = { ...preferences, ...change },
@@ -184,6 +188,7 @@ export function createIntegration({
         const stored = JSON.parse(await fs.readFile(preferenceFile, "utf8"));
         preferences.closeToTray = stored?.closeToTray === true;
         preferences.otherFormats = stored?.otherFormats === true;
+        preferences.checkUpdates = stored?.checkUpdates === true;
       } catch (error) {
         if (error.code !== "ENOENT" && !(error instanceof SyntaxError))
           throw error;
@@ -194,6 +199,9 @@ export function createIntegration({
     },
     get otherFormats() {
       return preferences.otherFormats;
+    },
+    get checkUpdates() {
+      return preferences.checkUpdates;
     },
     login() {
       return supported
@@ -243,6 +251,10 @@ export function createIntegration({
     async setBackground(value) {
       if (typeof value !== "boolean") throw Error(t("无效后台设置"));
       await store({ closeToTray: value });
+    },
+    async setCheckUpdates(value) {
+      if (typeof value !== "boolean") throw Error(t("无效设置"));
+      await store({ checkUpdates: value });
     },
     // Other formats on or off; an existing registration of this copy follows.
     async setOtherFormats(value) {

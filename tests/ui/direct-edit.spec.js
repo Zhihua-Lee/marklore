@@ -12,7 +12,10 @@ const note = [
   "",
 ].join("\n\n");
 
-async function boot(page, { directEdit = true, editSplit = true } = {}) {
+async function boot(
+  page,
+  { directEdit = true, editSplit = true, text = note } = {},
+) {
   await installFolio(page);
   await page.addInitScript(
     ({ text, directEdit, editSplit }) => {
@@ -35,7 +38,7 @@ async function boot(page, { directEdit = true, editSplit = true } = {}) {
         }),
       });
     },
-    { text: note, directEdit, editSplit },
+    { text, directEdit, editSplit },
   );
   await page.goto("/");
   await page.locator("#content h1").waitFor();
@@ -127,6 +130,29 @@ test("Enter starts a paragraph or list item; Backspace undoes the marker, then j
   await page.keyboard.press("Home");
   await page.keyboard.press("Backspace");
   expect(await source(page)).toContain("Second paragraph.Third");
+});
+
+test("Enter in a quote types into a new line of that quote, not elsewhere", async ({
+  page,
+}) => {
+  // A display formula before the quote: the new line once showed up above it,
+  // after the last paragraph, until the next render.
+  await boot(page, {
+    text: "# Title\n\nEnergy:\n\n$$\nx^2\n$$\n\n> Tip: check it.\n\n## Next\n",
+  });
+  await caretAtEnd(page, "Tip");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Note");
+  expect(await source(page)).toContain("> Tip: check it.\n>\n> Note\n");
+  // At once, before the render after the pause: the typed text is already
+  // inside the quote.
+  expect(
+    await page.evaluate(() =>
+      [...document.querySelectorAll("#content p")]
+        .filter((p) => p.textContent.includes("Note"))
+        .map((p) => p.parentElement.tagName),
+    ),
+  ).toEqual(["BLOCKQUOTE"]);
 });
 
 test("deleting a selection across bold keeps the markup around what is left", async ({

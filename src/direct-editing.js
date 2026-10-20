@@ -658,9 +658,22 @@ export function createDirectEditor({
       item.append(run);
       return { node: run.firstChild, offset: 0 };
     }
+    // Inside the quote that holds the position (a new quote line), else at
+    // the top level; after the last block before it, a formula included.
+    let host = null;
+    for (const quote of content.querySelectorAll("blockquote[data-from]"))
+      if (
+        Number(quote.dataset.from) <= pos &&
+        pos <= Number(quote.dataset.to) &&
+        !quote.parentElement.closest(ISLANDS)
+      )
+        host = quote;
     let before = null;
-    for (const block of content.querySelectorAll("[data-from]")) {
-      if (block.closest(ISLANDS) || block.parentElement.closest("[data-from]"))
+    for (const block of (host || content).querySelectorAll("[data-from]")) {
+      if (
+        block.parentElement.closest(ISLANDS) ||
+        block.parentElement.closest("[data-from]") !== host
+      )
         continue;
       if (Number(block.dataset.to) <= pos) before = block;
     }
@@ -668,7 +681,7 @@ export function createDirectEditor({
     paragraph.className = "direct-empty-block";
     paragraph.append(run);
     if (before) before.after(paragraph);
-    else content.prepend(paragraph);
+    else (host || content).prepend(paragraph);
     return { node: run.firstChild, offset: 0 };
   }
 }

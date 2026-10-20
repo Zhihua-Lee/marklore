@@ -38,7 +38,7 @@ More and more notes start as an AI draft. That is where the work begins: you che
 
 **Links are how knowledge connects.** Relative links and heading anchors are ordinary Markdown, so they work in any viewer and any agent can write them. Marklore makes them navigable both ways: hover to preview, click to open, and `Alt+←` to return to the exact spot. A link you write once is also seen from the other end: a small count beside a section or definition shows which notes cite it, and in what sentence.
 
-**Local and quiet.** No account, no cloud, no telemetry, and no network requests from your notes. Remote images are not loaded.
+**Local and quiet.** No account, no cloud, no telemetry, and no network requests from your notes. Remote images are not loaded. Marklore goes online only to check for and download updates: when you click **Check for updates**, or at startup if you turn that on.
 
 ## Working with an AI agent
 
@@ -87,9 +87,15 @@ Both write ordinary Markdown links and `<a id>` anchors, which other Markdown to
 
 ### Live preview while you edit
 
-In Edit mode the source is on the left and the preview on the right; formulas, tables and code render while you type. You can also edit a single block right in the preview. Double-clicking text in the reading view jumps to its source.
+In Edit mode the source is on the left and the preview on the right; formulas, tables and code render while you type. You can also edit a single block right in the preview: its source takes the block's place, and nothing around it moves. Double-clicking text in the reading view opens its source in Edit mode, with the clicked text staying where it was on screen.
 
 ![Typing a sentence with a formula in Edit mode: the preview renders it as it is typed](docs/images/en/edit.gif)
+
+### Type right in the rendered note
+
+Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. Formulas, code and tables keep the pencil for editing in place. Turn off `Show the source pane in Edit mode` too, and Edit mode is the rendered note alone.
+
+![Typing on the rendered page: a sentence with a formula typesets after a pause, Enter adds a line to the tip with a bold lead, and Source mode shows the Markdown that was written](docs/images/en/direct.gif)
 
 ### Long documents: outline jumps glide
 
@@ -113,14 +119,17 @@ Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above th
 
 ### More
 
-| Capability                 | Details                                                                                                                                                                       |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Math and technical writing | KaTeX formulas, Mermaid diagrams, syntax highlighting, sortable tables, clickable task lists and footnotes.                                                                   |
-| Copy as Markdown           | Copying from the reading view gives the matching Markdown: formulas as `$…$`, links with their targets. `Ctrl+Shift+C` copies the rendered result.                            |
-| Multi-document workspace   | Draggable tabs and colored groups; a folder library that follows the disk, with search by file name and by text; recent files on the start page and in the taskbar jump list. |
-| Reading appearance         | Light and dark themes, bundled fonts, text size and weight, table styles, adjustable sidebars, full screen. Optional smooth scrolling for touchpad, wheel and scrollbar.      |
-| Safe saving and export     | Explicit saves, disk version checks, backups and draft recovery; export to PDF or a standalone offline HTML file.                                                             |
-| Portable and bilingual     | Portable mode keeps everything in a `data` folder beside the program; English and Chinese interface.                                                                          |
+| Capability                 | Details                                                                                                                                                                                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Math and technical writing | KaTeX formulas, Mermaid diagrams, syntax highlighting, sortable tables, clickable task lists and footnotes.                                                                                                                                                                                                               |
+| Copy as Markdown           | Copying from the reading view gives the matching Markdown: formulas as `$…$`, links with their targets. `Ctrl+Shift+C` copies the rendered result.                                                                                                                                                                        |
+| Many notes open            | Tabs shrink to fit over twenty notes in a 1280 px window, each showing as much of its name as fits; colored tab groups fold away with a click; drag a tab into or out of a group; middle-click closes. Recent files on the start page and in the taskbar jump list.                                                       |
+| Large and remote libraries | A folder library that follows the disk. Search stays instant with thousands of notes and works while a large folder is still being read; `node_modules`, Python environments and other tool folders are skipped, and you can leave any folder out of search and backlinks. Notes on SSHFS-Win and rclone drives open too. |
+| Reading appearance         | Light and dark themes, bundled fonts, text size and weight, table styles, adjustable sidebars, full screen. Optional smooth scrolling for touchpad, wheel and scrollbar.                                                                                                                                                  |
+| Safe saving and export     | Explicit saves, disk version checks, backups and draft recovery. Export to PDF with bookmarks for every heading and clickable web links, or to a standalone offline HTML page with a foldable table of contents.                                                                                                          |
+| Updates in one click       | `Settings → Background & system → Version`: Marklore downloads the new version, checks it against the release's SHA256 sums and restarts on it, installed or zip, so file association and start at login keep working.                                                                                                    |
+| Diffs, if you want them    | Turn on `Settings → Background & system → Other formats` to open `.diff` and `.patch` files to read, one foldable section per changed file, listed in the outline.                                                                                                                                                        |
+| Portable and bilingual     | Portable mode keeps everything in a `data` folder beside the program; English and Chinese interface.                                                                                                                                                                                                                      |
 
 ![Edit mode in the dark theme: Markdown source on the left, rendered preview on the right](docs/images/en/edit-dark.png)
 
@@ -172,7 +181,7 @@ All three modes share one draft, and switching modes or tabs keeps your reading 
 
 ## Compatibility
 
-Marklore is a **Windows desktop preview** (Windows 10 / 11, x64); macOS and Linux builds are not planned yet. Formulas render within KaTeX's supported syntax. The first open of a very long note, or one with many formulas or diagrams, can take noticeable time. The tests run for each version, and their limits, are in [VERIFICATION.md](VERIFICATION.md).
+Marklore is a **Windows desktop preview** (Windows 10 / 11, x64). A macOS build is in progress: CI already builds unsigned dmgs, but they have not been tried on a Mac yet and are not attached to releases. Linux is not planned. Formulas render within KaTeX's supported syntax. The first open of a very long note, or one with many formulas or diagrams, can take noticeable time. The tests run for each version, and their limits, are in [VERIFICATION.md](VERIFICATION.md).
 
 ## Run from source
 
@@ -192,7 +201,7 @@ pnpm start
 
 | Document                                           | Contents                                                                                                 |
 | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| [User guide](docs/user-guide.md) (Chinese)         | Editing, find, copy, tabs and groups, links, images, export, shortcuts and troubleshooting.              |
+| [User guide](docs/user-guide.md) (Chinese)         | Editing, find, copy, tabs and groups, links, images, export, updates, shortcuts and troubleshooting.     |
 | [Development guide](docs/development.md) (Chinese) | Setup, workflow, tests, Windows packaging and source layout.                                             |
 | [Verification](VERIFICATION.md)                    | Regression checks, results and their limits for each version.                                            |
 | [Sample notebook](docs/sample-notebook-en)         | Notes for trying the features, also used to generate the README media ([Chinese](docs/sample-notebook)). |

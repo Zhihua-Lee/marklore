@@ -35,6 +35,11 @@ const L = english
       editText:
         " In the discrete case, $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$ as well.",
       darkHeading: "Discrete implementation",
+      direct: {
+        block: "is a quick check",
+        text: " For the DFT: $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$.",
+        next: "**Note.** Use the same convention in code and in notes.",
+      },
       backlinks: {
         definition: "Definition (Fourier transform)",
         source: "Sampling-theorem",
@@ -82,6 +87,11 @@ const L = english
       editText:
         "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
       darkHeading: "离散实现",
+      direct: {
+        block: "检查 FFT 的归一化",
+        text: "离散情形下同样有 $\\sum_n |x_n|^2 = \\frac{1}{N} \\sum_k |X_k|^2$。",
+        next: "**注意**：代码和笔记里要用同一种约定。",
+      },
       backlinks: {
         definition: "定义（傅里叶变换）",
         source: "采样定理",
@@ -527,6 +537,48 @@ await scene("annotate", "light", async ({ page, keys, moveTo, mark }) => {
   await keys("Ctrl + 2", "Control+2");
   await page.waitForTimeout(1800);
 });
+
+// Settings → Edit: type directly in the preview, without the source pane.
+// Typing goes into the Markdown at its place; after a pause the formula and
+// the bold lead render. Source mode then shows what was written.
+await scene(
+  "direct",
+  "light",
+  async ({ page, keys, mark }) => {
+    await page.keyboard.press("Control+2");
+    await page
+      .locator("#outline")
+      .getByRole("button", { name: L.editHeading, exact: true })
+      .click();
+    await page.waitForTimeout(1200);
+    await mark();
+    // Click just after the block's last character, as a writer would.
+    const end = await page
+      .locator("#content blockquote p", { hasText: L.direct.block })
+      .evaluate((p) => {
+        const range = document.createRange();
+        range.selectNodeContents(p);
+        const rects = range.getClientRects(),
+          last = rects[rects.length - 1];
+        return { x: last.right - 2, y: last.top + last.height / 2 };
+      });
+    await page.mouse.move(end.x, end.y, { steps: 24 });
+    await page.mouse.down();
+    await page.mouse.up();
+    await page.keyboard.press("End");
+    // Out of the way of the text being typed.
+    await page.mouse.move(end.x + 120, end.y + 150, { steps: 12 });
+    await page.waitForTimeout(400);
+    await page.keyboard.type(L.direct.text, { delay: 60 });
+    await page.waitForTimeout(1800);
+    await keys("Enter", "Enter");
+    await page.keyboard.type(L.direct.next, { delay: 60 });
+    await page.waitForTimeout(1800);
+    await keys("Ctrl + 3", "Control+3");
+    await page.waitForTimeout(2200);
+  },
+  { directEdit: true, editSplit: false },
+);
 
 await scene("edit", "light", async ({ page, mark }) => {
   await page.keyboard.press("Control+2");

@@ -12,10 +12,10 @@ const note = [
   "",
 ].join("\n\n");
 
-async function boot(page, { directEdit = true } = {}) {
+async function boot(page, { directEdit = true, editSplit = true } = {}) {
   await installFolio(page);
   await page.addInitScript(
-    ({ text, directEdit }) => {
+    ({ text, directEdit, editSplit }) => {
       const file = {
         id: "one",
         path: "C:/notes/One.md",
@@ -24,15 +24,18 @@ async function boot(page, { directEdit = true } = {}) {
         version: "v1",
       };
       window.folio = folioTest.mock({
+        session: async (state) => {
+          window.lastDraft = state.tabs?.[0]?.draft ?? window.lastDraft;
+        },
         ready: async () => ({
           incoming: [file],
           roots: [],
           restored: [],
-          settings: { sidebar: false, outline: false, directEdit },
+          settings: { sidebar: false, outline: false, directEdit, editSplit },
         }),
       });
     },
-    { text: note, directEdit },
+    { text: note, directEdit, editSplit },
   );
   await page.goto("/");
   await page.locator("#content h1").waitFor();
@@ -165,4 +168,81 @@ test("an input method composes in place; the result lands in the source once", a
   expect(await source(page)).toContain("Second paragraph.中文\n\n- one");
   await page.keyboard.type("!");
   expect(await source(page)).toContain("Second paragraph.中文!\n\n- one");
+});
+
+test("Backspace after a formula, or Delete before one, takes the whole formula", async ({
+  page,
+}) => {
+  await boot(page);
+  const formula = page.locator("#content .formula").first();
+  // Caret right after the formula: Backspace.
+  await formula.evaluate((el) => {
+    const next = el.nextSibling;
+    const node = next.nodeType === 3 ? next : next.firstChild;
+    document.querySelector("#content").focus();
+    getSelection().collapse(node, 0);
+  });
+  await page.keyboard.press("Backspace");
+  expect(await source(page)).toContain("First **bold** text and  here.");
+  await page.keyboard.press("Control+z");
+  await expect(page.locator("#content .formula")).toHaveCount(1);
+  // Caret right before it: Delete.
+  await page
+    .locator("#content .formula")
+    .first()
+    .evaluate((el) => {
+      const previous = el.previousSibling;
+      const node = previous.nodeType === 3 ? previous : previous.lastChild;
+      const text = node.nodeType === 3 ? node : node.firstChild;
+      document.querySelector("#content").focus();
+      getSelection().collapse(text, text.length);
+    });
+  await page.keyboard.press("Delete");
+  expect(await source(page)).toContain("First **bold** text and  here.");
+});
+
+test("an input method at the edge of bold text lands next to it, never inside its markers", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.locator("#content strong").first().click();
+  // The caret at the boundary just after the bold element.
+  await page.evaluate(() => {
+    const strong = document.querySelector("#content strong");
+    const at = [...strong.parentNode.childNodes].indexOf(strong) + 1;
+    getSelection().collapse(strong.parentNode, at);
+  });
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", {
+    text: "ci",
+    selectionStart: 2,
+    selectionEnd: 2,
+  });
+  await cdp.send("Input.insertText", { text: "词" });
+  await page.waitForTimeout(900);
+  const line = (await source(page))
+    .split("\n")
+    .find((l) => l.startsWith("First"));
+  expect([
+    "First **bold词** text and $x^2$ here.",
+    "First **bold**词 text and $x^2$ here.",
+  ]).toContainEqual(line);
+  // What shows is what the source says.
+  await expect(paragraph(page, "First")).toContainText("词");
+});
+
+test("without the source pane, Edit mode is the rendered note alone, still editable", async ({
+  page,
+}) => {
+  await boot(page, { editSplit: false });
+  await expect(page.locator("#editor-pane")).toBeHidden();
+  await expect(page.locator("#split")).toBeHidden();
+  const reader = await page.locator("#reader").boundingBox(),
+    panes = await page.locator("#panes").boundingBox();
+  expect(reader.width).toBeGreaterThan(panes.width - 2);
+  await caretAtEnd(page, "Second");
+  await page.keyboard.type(" more");
+  await expect
+    .poll(() => page.evaluate(() => window.lastDraft))
+    .toContain("Second paragraph. more\n\n- one");
 });

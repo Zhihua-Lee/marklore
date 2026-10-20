@@ -360,6 +360,43 @@ export function createDirectEditor({
     return at >= 0 && at + 1 < all.length ? leaves(all[at + 1])[0] : null;
   }
 
+  // The inline formula touching the caret on one side, with nothing typed
+  // in between; its source span is the change.
+  function formulaNextTo(range, forward) {
+    const node = range.startContainer,
+      block = (node.nodeType === 1 ? node : node.parentElement)?.closest(
+        BLOCKS,
+      );
+    if (!block) return null;
+    const formulas = [
+      ...block.querySelectorAll(".formula[data-from][data-to]"),
+    ].filter((el) => el.closest(BLOCKS) === block);
+    const caret = document.createRange();
+    caret.setStart(node, range.startOffset);
+    for (const el of forward ? formulas : formulas.reverse()) {
+      const at = [...el.parentNode.childNodes].indexOf(el);
+      // Only a formula on the right side of the caret.
+      if (
+        forward
+          ? caret.comparePoint(el.parentNode, at) < 0
+          : caret.comparePoint(el.parentNode, at + 1) > 0
+      )
+        continue;
+      const between = document.createRange();
+      if (forward) {
+        between.setStart(node, range.startOffset);
+        between.setEndBefore(el);
+      } else {
+        between.setStartAfter(el);
+        between.setEnd(node, range.startOffset);
+      }
+      if (between.toString() !== "") return null;
+      const from = mapped(Number(el.dataset.from)),
+        to = mapped(Number(el.dataset.to));
+      return { change: { from, to }, caret: from };
+    }
+    return null;
+  }
   function structural({ change, caret }, userEvent) {
     commit(change, caret, userEvent);
     refresh();
@@ -426,6 +463,15 @@ export function createDirectEditor({
       if (!text) return;
       if (range.startContainer.nodeType === 3 || empty(leaf))
         return typeInto(leaf, range.startContainer, range.startOffset, text);
+    }
+    // Backspace right after a formula, or Delete right before one, takes the
+    // whole formula (it is one thing on the page, like a character).
+    if (
+      collapsed &&
+      (type === "deleteContentBackward" || type === "deleteContentForward")
+    ) {
+      const formula = formulaNextTo(range, type === "deleteContentForward");
+      if (formula) return structural(formula, "delete");
     }
     if (collapsed && type === "deleteContentBackward" && usable(leaf)) {
       const join = joinBackward(leaf);

@@ -541,7 +541,7 @@ function capture() {
   active.anchor =
     blockEditor?.anchor() ||
     (active.mode === "source" ||
-    (active.mode === "edit" && active.pane === "editor")
+    (active.mode === "edit" && active.pane === "editor" && settings.editSplit)
       ? editorAnchor()
       : visibleAnchor($("#reader")));
   active.folds = [
@@ -1195,6 +1195,8 @@ $("#content").addEventListener("change", (event) => {
 $("#content").addEventListener("dblclick", (event) => {
   if (blockEditor?.active || event.target.closest(".block-editor")) return;
   if (directEditor?.active && !event.altKey) return;
+  // Without the source pane, a double click has no source to show.
+  if (active.mode === "edit" && !settings.editSplit) return;
   if (event.target.closest("button,a,summary,input")) return;
   const hit = atPoint($("#content"), event.clientX, event.clientY);
   if (!hit) return;
@@ -1506,6 +1508,8 @@ function applySettings() {
     ((settings.typeface === "literata" ? 16 : 18) * settings.zoom) / 100 + "px",
   );
   document.documentElement.style.setProperty("--split", settings.split + "%");
+  // Edit mode with or without the source pane (Settings → Editing).
+  $("#panes").dataset.split = settings.editSplit ? "on" : "off";
   $("#split").setAttribute("aria-valuenow", String(settings.split));
   $("#zoom-reset").textContent = settings.zoom + "%";
   document.documentElement.dataset.wide = String(settings.wide);
@@ -1543,6 +1547,7 @@ function changeSettings(patch) {
       "librarySide",
       "outlineSide",
       "split",
+      "editSplit",
     ].includes(key),
   );
   if (geometryChanged) capture();

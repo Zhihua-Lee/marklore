@@ -66,6 +66,7 @@ export const appearanceMarkup = `
     ${row("export-toc", t("HTML 附带目录"), '<input id="export-toc" type="checkbox" class="switch">', t("在页面一侧列出标题，点击跳转；PDF 总是带书签"))}
   </fieldset>
   <fieldset id="settings-editing"><legend>${t("编辑")}</legend>
+    ${row("edit-split", t("编辑模式显示源码栏"), '<input id="edit-split" type="checkbox" class="switch">', t("关闭后编辑模式只显示渲染后的正文，可配合下面的直接编辑使用"))}
     ${row("direct-edit", t("在预览中直接编辑（试验）"), '<input id="direct-edit" type="checkbox" class="switch">', t("编辑模式下在渲染后的正文里直接打字；公式、代码和表格仍用铅笔就地编辑"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
@@ -136,6 +137,7 @@ export function applyAppearance(settings) {
   $("#smooth-scroll").value = settings.smoothScroll;
   $("#reading-format").checked = settings.readingFormat;
   $("#direct-edit").checked = settings.directEdit;
+  $("#edit-split").checked = settings.editSplit;
   $("#group-counts").checked = settings.groupCounts;
   $("#export-toc").checked = settings.exportToc;
   $("#outline-anchors").value = settings.outlineAnchors;
@@ -248,6 +250,8 @@ export function wireAppearance(change) {
     change({ navigationScope: event.target.value });
   $("#history-buttons").onchange = (event) =>
     change({ showHistoryButtons: event.target.value === "visible" });
+  $("#edit-split").onchange = (event) =>
+    change({ editSplit: event.target.checked });
   $("#direct-edit").onchange = (event) =>
     change({ directEdit: event.target.checked });
   $("#reading-format").onchange = (event) =>

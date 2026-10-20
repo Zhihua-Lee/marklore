@@ -13,7 +13,9 @@
 #split:focus-visible {
   background: var(--accent);
 }
-#panes:not([data-mode="edit"]) #split {
+#panes:not([data-mode="edit"]) #split,
+#panes[data-mode="edit"][data-split="off"] #split,
+#panes[data-mode="edit"][data-split="off"] #editor-pane {
   display: none;
 }
 .search-info {

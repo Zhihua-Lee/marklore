@@ -339,6 +339,9 @@ export default {
     "Mouse side buttons and Alt+← / → still work when hidden",
   "默认应用…": "Default app…",
   批注: "Annotation",
+  编辑模式显示源码栏: "Show the source pane in Edit mode",
+  "关闭后编辑模式只显示渲染后的正文，可配合下面的直接编辑使用":
+    "When off, Edit mode shows only the rendered note; pair it with typing directly in the preview below",
   "在预览中直接编辑（试验）": "Type directly in the preview (experimental)",
   "编辑模式下在渲染后的正文里直接打字；公式、代码和表格仍用铅笔就地编辑":
     "In Edit mode, type into the rendered note itself; formulas, code and tables still open with the pencil",

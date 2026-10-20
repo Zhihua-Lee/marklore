@@ -246,3 +246,35 @@ test("without the source pane, Edit mode is the rendered note alone, still edita
     .poll(() => page.evaluate(() => window.lastDraft))
     .toContain("Second paragraph. more\n\n- one");
 });
+
+test("after a pause the preview re-renders and the caret stays where typing goes on", async ({
+  page,
+}) => {
+  await boot(page);
+  await paragraph(page, "Second").click({ position: { x: 20, y: 8 } });
+  const cdp = await page.context().newCDPSession(page);
+  for (const chunk of ["AB", "CD"]) {
+    await page.keyboard.type(chunk);
+    // Typing has stopped long enough for the preview to render again.
+    await page.waitForTimeout(1000);
+  }
+  for (const word of ["中", "文"]) {
+    await cdp.send("Input.imeSetComposition", {
+      text: "x",
+      selectionStart: 1,
+      selectionEnd: 1,
+    });
+    await cdp.send("Input.insertText", { text: word });
+    await page.waitForTimeout(1000);
+  }
+  const text = await paragraph(page, "paragraph").textContent();
+  expect(text).toMatch(/^Se?c?o?n?d?.*ABCD中文/);
+  expect(await source(page)).toContain("ABCD中文");
+  // The caret is on text, not left between blocks.
+  expect(
+    await page.evaluate(
+      () =>
+        !!getSelection().anchorNode?.parentElement?.closest("[data-text-from]"),
+    ),
+  ).toBe(true);
+});

@@ -613,13 +613,21 @@ export function createDirectEditor({
         document.activeElement === content ||
         content.contains(document.activeElement);
       const selection = window.getSelection(),
+        main = view.state.selection.main;
+      // When the run holding the caret is replaced, the browser leaves the
+      // caret between blocks (it looked like the start of the paragraph, and
+      // typing went astray). The caret stays only if it is still on text at
+      // the place the source editor has.
+      const node = selection.anchorNode,
         kept =
-          selection.anchorNode?.isConnected &&
-          content.contains(selection.anchorNode);
+          node?.isConnected &&
+          content.contains(node) &&
+          usable(leafOf(node)) &&
+          sourceAt(node, selection.anchorOffset) === main.anchor &&
+          sourceAt(selection.focusNode, selection.focusOffset) === main.head;
       const forced = restore;
       restore = false;
       if (!focused || (kept && !forced)) return;
-      const main = view.state.selection.main;
       const anchor = pointAt(main.anchor) || placeholder(main.anchor),
         head = main.head === main.anchor ? anchor : pointAt(main.head);
       if (!anchor || !head) return;

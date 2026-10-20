@@ -54,6 +54,8 @@ export default {
   源码块: "Source block",
   "就地编辑此块 · Alt+Enter": "Edit this block in place · Alt+Enter",
   就地编辑此块: "Edit this block in place",
+  "这里不能直接编辑：公式、代码和表格请用铅笔就地编辑":
+    "This part can't be typed into directly: use the pencil for formulas, code and tables",
   "预览正在更新，请稍后再试。":
     "The preview is updating. Try again in a moment.",
   "就地编辑{block}": "Editing in place: {block}",

@@ -169,6 +169,8 @@ export function createBlockEditor({
     const offset = Math.max(0, Math.min(original.length, point - from));
     const panel = document.createElement("section");
     panel.className = "block-editor";
+    // Its own island when the note itself takes typing (direct editing).
+    panel.contentEditable = "false";
     panel.dataset.kind = kind;
     panel.dataset.from = String(from);
     panel.dataset.to = String(to);

@@ -428,7 +428,9 @@ export function createSelectionTools({
     if (last.range) range.setEnd(last.range.endContainer, last.range.endOffset);
     else range.setEndAfter(last.element);
     const selected = window.getSelection();
-    reader.focus({ preventScroll: true });
+    (content.isContentEditable ? content : reader).focus({
+      preventScroll: true,
+    });
     selected.removeAllRanges();
     selected.addRange(range);
     refresh();
@@ -532,7 +534,10 @@ export function createSelectionTools({
       const focused = bar.contains(document.activeElement);
       hide();
       window.getSelection()?.removeAllRanges();
-      if (focused) reader.focus({ preventScroll: true });
+      if (focused)
+        (content.isContentEditable ? content : reader).focus({
+          preventScroll: true,
+        });
       return;
     }
     if (
@@ -557,7 +562,9 @@ export function createSelectionTools({
       hide();
       (key === "y" || event.shiftKey ? redo : undo)(view);
       render();
-      reader.focus({ preventScroll: true });
+      (content.isContentEditable ? content : reader).focus({
+        preventScroll: true,
+      });
       return;
     }
     const action = { b: "bold", i: "italic", e: "inline", k: "link" }[key];

@@ -22,6 +22,7 @@ const sections = [
   ["settings-layout", t("布局与侧栏")],
   ["settings-navigation", t("导航与滚动")],
   ["settings-export", t("导出")],
+  ["settings-editing", t("编辑")],
   ["settings-annotation", t("批注")],
   ["desktop-settings", t("后台与系统")],
 ];
@@ -63,6 +64,9 @@ export const appearanceMarkup = `
   </fieldset>
   <fieldset id="settings-export"><legend>${t("导出")}</legend>
     ${row("export-toc", t("HTML 附带目录"), '<input id="export-toc" type="checkbox" class="switch">', t("在页面一侧列出标题，点击跳转；PDF 总是带书签"))}
+  </fieldset>
+  <fieldset id="settings-editing"><legend>${t("编辑")}</legend>
+    ${row("direct-edit", t("在预览中直接编辑（试验）"), '<input id="direct-edit" type="checkbox" class="switch">', t("编辑模式下在渲染后的正文里直接打字；公式、代码和表格仍用铅笔就地编辑"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
     ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}
@@ -131,6 +135,7 @@ export function applyAppearance(settings) {
     : "hidden";
   $("#smooth-scroll").value = settings.smoothScroll;
   $("#reading-format").checked = settings.readingFormat;
+  $("#direct-edit").checked = settings.directEdit;
   $("#group-counts").checked = settings.groupCounts;
   $("#export-toc").checked = settings.exportToc;
   $("#outline-anchors").value = settings.outlineAnchors;
@@ -243,6 +248,8 @@ export function wireAppearance(change) {
     change({ navigationScope: event.target.value });
   $("#history-buttons").onchange = (event) =>
     change({ showHistoryButtons: event.target.value === "visible" });
+  $("#direct-edit").onchange = (event) =>
+    change({ directEdit: event.target.checked });
   $("#reading-format").onchange = (event) =>
     change({ readingFormat: event.target.checked });
   $("#group-counts").onchange = (event) =>

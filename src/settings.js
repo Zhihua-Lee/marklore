@@ -20,6 +20,7 @@ export function defaultSettings() {
     showHistoryButtons: false,
     smoothScroll: "off",
     readingFormat: false,
+    directEdit: false,
     groupCounts: false,
     exportToc: true,
     outlineAnchors: "referenced",
@@ -57,6 +58,7 @@ export function normalizeSettings(saved = {}) {
     settings.navigationScope === "current" ? "current" : "all";
   settings.showHistoryButtons = settings.showHistoryButtons === true;
   settings.readingFormat = settings.readingFormat === true;
+  settings.directEdit = settings.directEdit === true;
   settings.groupCounts = settings.groupCounts === true;
   settings.exportToc = settings.exportToc !== false;
   settings.outlineAnchors = ["off", "all"].includes(settings.outlineAnchors)

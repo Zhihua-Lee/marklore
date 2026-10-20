@@ -1,0 +1,18 @@
+/* Direct editing: the rendered note takes the caret. It looks as it reads;
+   only the caret shows that it can be typed into. */
+#content.direct-editing {
+  outline: none;
+  caret-color: var(--accent);
+}
+/* Whole things (formulas, code, tables) keep the normal pointer. */
+#content.direct-editing [contenteditable="false"] {
+  cursor: default;
+}
+/* Links are text to type into; Ctrl+click follows them. */
+#content.direct-editing a {
+  cursor: text;
+}
+/* A new empty paragraph holds the caret at one line's height. */
+.direct-empty-block {
+  min-height: 1lh;
+}

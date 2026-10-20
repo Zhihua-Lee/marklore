@@ -339,6 +339,9 @@ export default {
     "Mouse side buttons and Alt+← / → still work when hidden",
   "默认应用…": "Default app…",
   批注: "Annotation",
+  "在预览中直接编辑（试验）": "Type directly in the preview (experimental)",
+  "编辑模式下在渲染后的正文里直接打字；公式、代码和表格仍用铅笔就地编辑":
+    "In Edit mode, type into the rendered note itself; formulas, code and tables still open with the pencil",
   阅读模式中的格式栏: "Format bar in Read mode",
   "划选文字即可高亮、标色和加粗；Alt+双击跳到源码":
     "Select text to highlight, color or bold it; Alt+double-click opens the source",

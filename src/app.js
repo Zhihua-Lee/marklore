@@ -65,6 +65,7 @@ import { wireFileDrop } from "./file-drop.js";
 import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
 import { createSelectionTools } from "./selection-tools.js";
+import { createDirectEditor } from "./direct-editing.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
 import {
@@ -97,6 +98,7 @@ const tabs = [],
 let active = null,
   lastScrollAt = 0,
   selectionTools,
+  directEditor,
   view,
   switching = false,
   renderingTimer,
@@ -377,6 +379,13 @@ function stateFor(doc) {
           // still for as long as typing went on. The budget grows with the
           // note's own render cost, so rendering takes at most about a
           // quarter of the time while typing.
+          // Typing in the page itself (direct editing) already shows: render
+          // once typing stops, not during it.
+          if (directEditor?.patching) {
+            editsPendingSince = null;
+            renderingTimer = setTimeout(refreshEditedPreview, 600);
+            return;
+          }
           const now = performance.now(),
             cost = active.renderCost ?? 0;
           editsPendingSince ??= now;
@@ -499,6 +508,19 @@ selectionTools = createSelectionTools({
     clearTimeout(renderingTimer);
     render(true);
   },
+});
+directEditor = createDirectEditor({
+  content: $("#content"),
+  view,
+  getDocument: () => active,
+  enabled: (doc) =>
+    settings.directEdit && doc?.mode === "edit" && !isDiffDocument(doc),
+  renderNow: () => {
+    clearTimeout(renderingTimer);
+    render(true);
+  },
+  report: toast,
+  patched: (node) => previewCache.taint($("#content"), node),
 });
 function editorAnchor() {
   if (view.scrollDOM.scrollTop < 2) return { from: 0, top: true };
@@ -727,6 +749,12 @@ function render(preserve) {
   editsPendingSince = null;
   if (!active) return;
   if (blockEditor?.active) return;
+  // An input method composes in the page: render once it is done.
+  if (directEditor?.composing) {
+    clearTimeout(renderingTimer);
+    renderingTimer = setTimeout(() => render(preserve), 120);
+    return;
+  }
   blockEditor?.resetHover();
   const doc = active,
     host = $("#reader");
@@ -771,6 +799,7 @@ function render(preserve) {
   });
   scheduleTableLayout();
   backlinks?.refresh();
+  directEditor?.rendered();
 }
 let outlineSignature = "";
 function updateOutline(headings) {
@@ -1165,6 +1194,7 @@ $("#content").addEventListener("change", (event) => {
 });
 $("#content").addEventListener("dblclick", (event) => {
   if (blockEditor?.active || event.target.closest(".block-editor")) return;
+  if (directEditor?.active && !event.altKey) return;
   if (event.target.closest("button,a,summary,input")) return;
   const hit = atPoint($("#content"), event.clientX, event.clientY);
   if (!hit) return;
@@ -1228,6 +1258,8 @@ $("#content").addEventListener(
     const link = event.target.closest("a");
     if (!link) return;
     event.preventDefault();
+    // Typing into a link's text: Ctrl+click follows it.
+    if (directEditor?.active && !(event.ctrlKey || event.metaKey)) return;
     await navigateLink(link.getAttribute("href") || "");
   }),
 );
@@ -1516,6 +1548,7 @@ function changeSettings(patch) {
   if (geometryChanged) capture();
   Object.assign(settings, patch);
   applySettings();
+  if ("directEdit" in patch) directEditor?.rendered();
   if ("searchExclude" in patch) showExcluded();
   if ("groupCounts" in patch) updateTabs();
   if (patch.sidebar === true) run(followCurrentFolder)();

@@ -183,6 +183,16 @@ export function createPreviewCache({
         remove(entries.keys().next().value);
       return true;
     },
+    // Typing in the page (direct editing) changed this node: describe it
+    // afresh, and render the next text even if it equals the cached one.
+    taint(container, node) {
+      for (let el = node; el && el !== container; el = el.parentNode)
+        if (el.parentNode === container || shell(el.parentNode)) {
+          signatures.delete(el);
+          break;
+        }
+      if (active) active.html = null;
+    },
     release(key) {
       remove(key);
       if (active?.key === key) active = null;

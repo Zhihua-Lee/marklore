@@ -178,7 +178,11 @@ export function wireSourceCopy({ host, source, skip = () => false }) {
     const range = clipped(host);
     if (!range || skip(event)) return;
     const target = event.target instanceof Element ? event.target : null;
-    if (target?.closest("input, textarea, [contenteditable], .block-editor"))
+    if (
+      target?.closest(
+        'input, textarea, [contenteditable="true"]:not(.direct-editing), .block-editor',
+      )
+    )
       return;
     if (rendered) {
       rendered = false;

@@ -33,6 +33,11 @@ test("the heading list nests by level, keeps formulas and drops inner links and 
       innerLinks: nav.querySelectorAll("a a").length,
       ids: nav.querySelectorAll("[id]").length,
       math: nav.querySelectorAll(".katex").length,
+      // Folds without a script: open, titled.
+      fold: [
+        nav.querySelector(":scope > details")?.open,
+        nav.querySelector(":scope > details > summary")?.textContent,
+      ],
       single: headingList(single),
     };
   });
@@ -45,6 +50,7 @@ test("the heading list nests by level, keeps formulas and drops inner links and 
   expect(result.innerLinks).toBe(0);
   expect(result.ids).toBe(0);
   expect(result.math).toBe(1);
+  expect(result.fold).toEqual([true, "目录"]);
   expect(result.single).toBe("");
 });
 

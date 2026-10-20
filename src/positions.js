@@ -195,6 +195,12 @@ function anchorHit(host, anchor) {
     anchor.targetId && host.querySelector("#" + CSS.escape(anchor.targetId));
   return target ? { element: target } : findPosition(host, anchor.from);
 }
+// How far below the top of `host` the anchor's position is now: passed back as
+// the anchor's `y`, the place stays where it is on screen (null if hidden).
+export function anchorOffset(host, anchor) {
+  const top = anchorTop(host, { ...anchor, y: 0, top: false }, false);
+  return top === null ? null : top - host.scrollTop;
+}
 function anchorTop(host, anchor, expand) {
   if (!anchor || anchor.top) return 0;
   const hit = anchorHit(host, anchor);

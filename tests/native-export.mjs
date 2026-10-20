@@ -15,8 +15,11 @@ const note = path.join(temp, "source.md"),
   htmlPath = path.join(temp, "export.html"),
   pdfPath = path.join(temp, "export.pdf");
 const source = `# Export fixture\n\nEnglish and 中文 paragraph with $e^{i\\pi}+1=0$.\n\n<mark style="background-color: #f2d878; color: #000000">Highlighted</mark> <span style="color: #b23c36">Colored</span>\n\n## Folded section\n\nFOLDED CONTENT INCLUDED\n\n<details><summary>Details title</summary><p>CLOSED DETAILS INCLUDED 中文</p></details>\n\n![Local illustration](image.svg)\n\n\`\`\`mermaid\nflowchart LR\nA[Draft] --> B[Export]\n\`\`\`\n\n<div style="break-before:page">SECOND PAGE END</div>\n`;
+// Links: one to the web, one to another note (no target file needed).
+const linkSource =
+  "\nSee [the site](https://example.com/page) and [a note](other.md).\n";
 const tableSource = "\n| Name | Value |\n| --- | ---: |\n| Alpha | 42 |\n";
-await fs.writeFile(note, source + tableSource);
+await fs.writeFile(note, source + linkSource + tableSource);
 await fs.writeFile(
   path.join(temp, "image.svg"),
   '<svg xmlns="http://www.w3.org/2000/svg" width="180" height="50"><rect width="180" height="50" fill="#357d70"/><text x="15" y="32" fill="white" font-size="20">LOCAL IMAGE</text></svg>',
@@ -96,7 +99,13 @@ try {
     html,
     /folio-asset:|folio-export-image:|class="fold"|id="toolbar"/,
   );
-  assert.equal(await fs.readFile(note, "utf8"), source + tableSource);
+  assert.equal(
+    await fs.readFile(note, "utf8"),
+    source + linkSource + tableSource,
+  );
+  // A standalone HTML keeps relative links (they work beside the notes).
+  assert.ok(html.includes('<a href="https://example.com/page"'));
+  assert.ok(html.includes('<a href="other.md"'));
   // Headings beside the text (on by default), each link to a heading here.
   assert.match(html, /<body class="with-toc"><nav class="export-toc"/);
   const targets = [...html.matchAll(/<a href="#([^"]+)">/g)].map((m) => m[1]);
@@ -154,6 +163,12 @@ try {
   const pdf = await fs.readFile(pdfPath);
   assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
   assert.ok(pdf.length > 10000);
+  // Links keep working in a PDF; a link to another note keeps only its text
+  // (it used to point at the export's private address).
+  const pdfText = pdf.toString("latin1");
+  assert.ok(pdfText.includes("/URI (https://example.com/page)"));
+  assert.ok(!pdfText.includes("folio-export.invalid"));
+  assert.ok(!pdfText.includes("other.md"));
   // Bookmarks from the headings, nested by level.
   assert.deepEqual(
     pdfOutline(pdf).map(({ level, title }) => [level, title.trim()]),
@@ -162,7 +177,10 @@ try {
       [2, "Folded section"],
     ],
   );
-  assert.equal(await fs.readFile(note, "utf8"), source + tableSource);
+  assert.equal(
+    await fs.readFile(note, "utf8"),
+    source + linkSource + tableSource,
+  );
   assert.deepEqual(
     await instance.evaluate(() => globalThis.__exportLifecycle),
     { registered: 1, removed: 1, requestsCleared: 1 },
@@ -226,9 +244,22 @@ try {
   );
   assert.equal(await standalone.locator(".katex").count(), 1);
   assert.equal(await standalone.locator(".export-toc a").count(), 2);
+  // The list folds without a script; the text then takes the whole width.
+  const textWidth = () =>
+    standalone.locator("article").evaluate((el) => el.clientWidth);
+  const before = await textWidth();
+  await standalone.locator(".export-toc summary").click();
+  assert.equal(
+    await standalone.locator(".export-toc details").evaluate((d) => d.open),
+    false,
+  );
+  assert.ok((await textWidth()) > before, "text wider once folded");
+  await standalone.locator(".export-toc summary").click();
   assert.equal(await standalone.locator(".diagram svg").count(), 1);
   assert.equal(
-    await standalone.locator("details").evaluate((element) => element.open),
+    await standalone
+      .locator("article details")
+      .evaluate((element) => element.open),
     true,
   );
   assert.equal(await standalone.evaluate(() => typeof require), "undefined");

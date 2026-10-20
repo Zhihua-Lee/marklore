@@ -45,6 +45,7 @@ import {
   unfold,
   selectionSource,
   constrainWordSelection,
+  anchorOffset,
 } from "./positions.js";
 import { icon } from "./icons.js";
 import { setSectionCollapsed } from "./sections.js";
@@ -446,7 +447,24 @@ blockEditor = createBlockEditor({
   onFinish: (anchor) => {
     clearTimeout(renderingTimer);
     render(false);
-    navigateToAnchor($("#reader"), anchor, { expand: true });
+    // `y` is where the editing panel's top was; the anchor lands by its first
+    // line of text, half a line lower than the block's top. Without this the
+    // block crept up a pixel or two on each Done or Esc.
+    const reader = $("#reader"),
+      block = [...$("#content").querySelectorAll("[data-from]")].find(
+        (el) => Number(el.dataset.from) === anchor.from,
+      ),
+      text = anchorOffset(reader, { from: anchor.from });
+    if (block && text !== null)
+      anchor = {
+        ...anchor,
+        y:
+          anchor.y +
+          text -
+          (block.getBoundingClientRect().top -
+            reader.getBoundingClientRect().top),
+      };
+    navigateToAnchor(reader, anchor, { expand: true });
     if (active) {
       active.anchor = anchor;
       active.pane = "preview";
@@ -1169,7 +1187,9 @@ $("#content").addEventListener("dblclick", (event) => {
   }
   const from = Math.min(selected?.from ?? hit.from, view.state.doc.length),
     to = Math.min(selected?.to ?? hit.to ?? from + 1, view.state.doc.length);
-  const anchor = { from, y: 80 };
+  // The clicked place stays where it is on screen (it used to move to 80 px
+  // below the top: a jump of a screen's height under the pointer).
+  const anchor = { from, y: anchorOffset($("#reader"), { from }) ?? 80 };
   if (active.mode === "read") setMode("edit", { anchor });
   const doc = active;
   requestAnimationFrame(() => {

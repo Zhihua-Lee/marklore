@@ -176,7 +176,7 @@ export function createBlockEditor({
       "aria-label",
       t("就地编辑{block}", { block: labels[kind] || t("源码块") }),
     );
-    panel.innerHTML = `<div class="block-edit-tools" role="group" aria-label="${t("就地编辑格式")}"><span class="block-edit-label">${labels[kind] || t("源码块")}</span><button type="button" data-format="bold" title="${t("粗体 Ctrl+B")}" aria-label="${t("就地加粗")}"><b>B</b></button><button type="button" data-format="italic" title="${t("斜体 Ctrl+I")}" aria-label="${t("就地斜体")}"><i>I</i></button><button type="button" data-format="inline" title="${t("行内代码 Ctrl+E")}" aria-label="${t("就地行内代码")}">&lt;/&gt;</button><button type="button" data-format="link" title="${t("链接 Ctrl+K")}" aria-label="${t("就地插入链接")}">${icon("link")}</button><span class="block-edit-spacer"></span><button type="button" data-history="undo" aria-label="${t("就地撤销")}" title="${t("撤销")}">${icon("undo")}</button><button type="button" data-history="redo" aria-label="${t("就地重做")}" title="${t("重做")}">${icon("redo")}</button></div><form class="block-edit-link" hidden><label>${t("链接")}<input name="url" required placeholder="${t("https://… 或 chapter.md")}"></label><button type="submit">${t("插入")}</button><button type="button" data-link-cancel>${t("取消")}</button><span role="alert"></span></form><div class="block-edit-input"></div><div class="block-edit-actions"><span>${t("Markdown · Ctrl+Enter 完成")}</span><button type="button" data-cancel>${t("取消")}</button><button type="button" data-done>${t("完成")}</button></div>`;
+    panel.innerHTML = `<div class="block-edit-float"><div class="block-edit-bar"><div class="block-edit-tools" role="group" aria-label="${t("就地编辑格式")}"><span class="block-edit-label">${labels[kind] || t("源码块")}</span><button type="button" data-format="bold" title="${t("粗体 Ctrl+B")}" aria-label="${t("就地加粗")}"><b>B</b></button><button type="button" data-format="italic" title="${t("斜体 Ctrl+I")}" aria-label="${t("就地斜体")}"><i>I</i></button><button type="button" data-format="inline" title="${t("行内代码 Ctrl+E")}" aria-label="${t("就地行内代码")}">&lt;/&gt;</button><button type="button" data-format="link" title="${t("链接 Ctrl+K")}" aria-label="${t("就地插入链接")}">${icon("link")}</button><span class="block-edit-spacer"></span><button type="button" data-history="undo" aria-label="${t("就地撤销")}" title="${t("撤销")}">${icon("undo")}</button><button type="button" data-history="redo" aria-label="${t("就地重做")}" title="${t("重做")}">${icon("redo")}</button></div><div class="block-edit-actions"><button type="button" data-cancel>${t("取消")}</button><button type="button" data-done title="${t("完成 Ctrl+Enter")}">${t("完成")}</button></div></div><form class="block-edit-link" hidden><label>${t("链接")}<input name="url" required placeholder="${t("https://… 或 chapter.md")}"></label><button type="submit">${t("插入")}</button><button type="button" data-link-cancel>${t("取消")}</button><span role="alert"></span></form></div><div class="block-edit-input"></div>`;
     target.classList.remove("block-edit-hover");
     const picture = document.createElement("button");
     picture.type = "button";
@@ -212,9 +212,19 @@ export function createBlockEditor({
       panel.querySelector(".block-edit-tools").append(group);
     }
     panel.querySelector(".block-edit-spacer").remove();
-    target.before(panel);
-    const wasHidden = target.hidden;
-    target.hidden = true;
+    // The source takes the block's place: same margins, so nothing around it
+    // moves; the tools float above it (below, near the top of the reader).
+    // A table sits in its scrolling frame, which would clip the floating
+    // tools: the whole frame gives way.
+    const place = target.parentElement?.classList.contains("table-scroll")
+      ? target.parentElement
+      : target;
+    const margins = getComputedStyle(place);
+    panel.style.marginTop = margins.marginTop;
+    panel.style.marginBottom = margins.marginBottom;
+    place.before(panel);
+    const wasHidden = place.hidden;
+    place.hidden = true;
     launch.hidden = true;
     session = {
       doc,
@@ -223,7 +233,7 @@ export function createBlockEditor({
       original,
       expected: doc.text,
       panel,
-      target,
+      target: place,
       wasHidden,
       editor: null,
     };
@@ -339,6 +349,14 @@ export function createBlockEditor({
       form.hidden = true;
       local.focus();
     };
+    // Tools float above the block, or below it when there is no room up to
+    // the reader's top edge.
+    const float = panel.querySelector(".block-edit-float");
+    panel.classList.toggle(
+      "tools-below",
+      panel.getBoundingClientRect().top - reader.getBoundingClientRect().top <
+        float.offsetHeight + 16,
+    );
     local.focus();
   }
   function sync(value) {

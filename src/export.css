@@ -242,9 +242,8 @@ summary {
     padding: 0;
     max-width: none;
   }
-  a {
-    color: inherit;
-  }
+  /* Links keep their colour in a PDF, where they can still be clicked
+     (they used to take the text's colour and read as underlined text). */
 }
 
 /* Headings beside the text of a standalone HTML page (Settings → Export):
@@ -271,11 +270,72 @@ body.with-toc > article {
   line-height: 1.45;
 }
 .export-toc-title {
-  margin: 0 0 10px 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  margin: 0 0 10px;
+  padding: 3px 8px;
+  border-radius: 5px;
   color: #68716e;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+/* Not a details card of the note: no frame of its own. */
+.export-toc > details {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+}
+.export-toc-title::-webkit-details-marker {
+  display: none;
+}
+/* A small chevron: down while open, right when folded. */
+.export-toc-title::before {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+}
+.export-toc details:not([open]) > .export-toc-title::before {
+  transform: rotate(-45deg);
+}
+.export-toc-title:hover,
+.export-toc-title:focus-visible {
+  background: #eef1ec;
+  color: #202625;
+}
+.export-toc-title:focus-visible {
+  outline: 2px solid #246d5d;
+  outline-offset: -2px;
+}
+/* Folded on a wide screen: the column gives way to the text, and only the
+   title stays, at the top left. */
+@media (min-width: 861px) {
+  body.with-toc:has(.export-toc > details:not([open])) {
+    display: block;
+  }
+  .export-toc:has(> details:not([open])) {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: auto;
+    padding: 16px;
+    border-right: 0;
+    background: transparent;
+  }
+  .export-toc:has(> details:not([open])) .export-toc-title {
+    margin: 0;
+    background: #fff;
+    box-shadow: 0 0 0 1px #e4e6e1;
+  }
 }
 .export-toc ol {
   margin: 0;

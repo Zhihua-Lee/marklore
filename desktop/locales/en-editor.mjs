@@ -70,7 +70,7 @@ export default {
   就地重做: "Redo (in place)",
   链接: "Link",
   "https://… 或 chapter.md": "https://… or chapter.md",
-  "Markdown · Ctrl+Enter 完成": "Markdown · Ctrl+Enter to finish",
+  "完成 Ctrl+Enter": "Done (Ctrl+Enter)",
   完成: "Done",
   就地插入图片: "Insert image (in place)",
   就地文字高亮: "Highlight (in place)",

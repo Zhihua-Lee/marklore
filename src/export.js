@@ -53,7 +53,11 @@ export function headingList(host) {
   const nav = document.createElement("nav");
   nav.className = "export-toc";
   nav.setAttribute("aria-label", t("目录"));
-  const title = document.createElement("p");
+  // Folds without a script (the page runs none): the reader can put the
+  // list away and read across the whole width (export.css).
+  const fold = document.createElement("details");
+  fold.open = true;
+  const title = document.createElement("summary");
   title.className = "export-toc-title";
   title.textContent = t("目录");
   const list = document.createElement("ol");
@@ -71,7 +75,8 @@ export function headingList(host) {
     item.append(link);
     list.append(item);
   }
-  nav.append(title, list);
+  fold.append(title, list);
+  nav.append(fold);
   return nav.outerHTML;
 }
 
@@ -120,6 +125,14 @@ export async function exportNote(format, { doc, toc = false }) {
     // empty (its MathML is clipped, its drawing aria-hidden): "1 傅里叶变换 "
     // instead of "1 傅里叶变换 F{f}(ω)". In headings, the drawing is read
     // instead (the tagged PDF carries no MathML either).
+    // A link to another note or a local file cannot open from a PDF: it
+    // resolved against the export's private address (https://folio-export.
+    // invalid/…). Its text stays, as text. (A standalone HTML keeps relative
+    // links, which work beside the notes.)
+    if (format === "pdf")
+      for (const link of host.querySelectorAll("a[href]"))
+        if (!/^(?:https?:|mailto:|tel:|#)/i.test(link.getAttribute("href")))
+          link.replaceWith(...link.childNodes);
     if (format === "pdf")
       for (const drawing of host.querySelectorAll(
         ":is(h1,h2,h3,h4,h5,h6) .katex-html",

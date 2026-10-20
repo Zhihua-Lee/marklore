@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                                  | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ------------------------------------------------------------------------ | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.2.8  | Typing directly in the preview; Edit without source pane; macOS CI build | 114               | 218 (default + reduced-motion) | 14 suites (packaged); installer check 36/36                     | [v0.2.8](docs/verification/v0.2.8.md)   |
 | v0.2.7  | Nothing jumps while editing; foldable export contents; PDF links         | 114               | 209 (default + reduced-motion) | 14 suites (packaged); installer check passed                    | [v0.2.7](docs/verification/v0.2.7.md)   |
 | v0.2.6  | Reliable tab clicks and group drops; optional diffs; contents in exports | 114               | 207 (default + reduced-motion) | 14 suites (packaged); installer check 36/36                     | [v0.2.6](docs/verification/v0.2.6.md)   |
 | v0.2.5  | Tabs for many notes; group pills; smooth folds; names on network drives  | 103               | 198 (default + reduced-motion) | 13 suites (packaged); installer check 33/33                     | [v0.2.5](docs/verification/v0.2.5.md)   |

@@ -67,7 +67,7 @@ export const appearanceMarkup = `
   </fieldset>
   <fieldset id="settings-editing"><legend>${t("编辑")}</legend>
     ${row("edit-split", t("编辑模式显示源码栏"), '<input id="edit-split" type="checkbox" class="switch">', t("关闭后编辑模式只显示渲染后的正文，可配合下面的直接编辑使用"))}
-    ${row("direct-edit", t("在预览中直接编辑（试验）"), '<input id="direct-edit" type="checkbox" class="switch">', t("编辑模式下在渲染后的正文里直接打字；公式、代码和表格仍用铅笔就地编辑"))}
+    ${row("direct-edit", t("在预览中直接编辑（试验）"), '<input id="direct-edit" type="checkbox" class="switch">', t("编辑模式下在渲染后的正文里直接打字，表格单元格也可以；公式、代码和表格结构仍用铅笔就地编辑"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
     ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}

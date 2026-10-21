@@ -287,10 +287,44 @@ export function watchTableLayout(host, scroller) {
       work();
     }, 80);
   };
+  // A pane opening or closing (switching to editing and back) changes the
+  // width at once: tables are sized before that frame is drawn, nearest the
+  // screen first, so the note and the scrollbar don't change again a moment
+  // later. What the budget leaves is sized as usual. Smaller steps (dragging
+  // the divider) wait for the debounced pass.
+  const layoutAll = () => {
+    const viewport = scroller.getBoundingClientRect(),
+      start = performance.now();
+    let anchor = null,
+      changed = false;
+    const keep = () => (anchor ??= visibleAnchor(scroller));
+    const tables = [
+      ...host.querySelectorAll(".table-scroll > table:not(.table-measure)"),
+    ]
+      .map((table) => {
+        const rect = table.getBoundingClientRect();
+        return {
+          table,
+          distance: Math.max(
+            0,
+            viewport.top - rect.bottom,
+            rect.top - viewport.bottom,
+          ),
+        };
+      })
+      .sort((a, b) => a.distance - b.distance);
+    for (const { table } of tables) {
+      if (performance.now() - start > 12) break;
+      changed = optimizeTable(table, keep) || changed;
+    }
+    if (changed && anchor) restoreAnchor(scroller, anchor);
+  };
   new ResizeObserver(([entry]) => {
     const width = Math.round(entry.contentRect.width);
     if (width === measuredWidth) return;
+    const jump = measuredWidth > 0 && Math.abs(width - measuredWidth) > 48;
     measuredWidth = width;
+    if (jump && host.getClientRects().length) layoutAll();
     schedule();
   }).observe(host);
   new MutationObserver(schedule).observe(document.documentElement, {

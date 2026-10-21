@@ -1,4 +1,5 @@
 import { textOffset } from "./positions.js";
+import { createHosts } from "./direct-hosts.js";
 import { t } from "../desktop/i18n.mjs";
 import "./direct-editing.css";
 
@@ -9,20 +10,24 @@ import "./direct-editing.css";
 // history is the undo history, and nothing else in the file changes. There is
 // no document model and no conversion back to Markdown.
 //
-// Formulas, code, tables, diagrams, images and HTML stay whole ("islands");
-// they keep their pencil (block editing).
+// Formulas, code, diagrams, images and HTML stay whole ("islands"); they
+// keep their pencil (block editing). Table cells take typing on one line; a
+// table's structure is the pencil's.
 //
 // Between full renders, typing patches the text node in place and keeps the
 // list of changes made since: a text run's rendered offsets map through them.
 // The next render (app.js, after a short pause) replaces what changed, and the
 // caret comes back to its place in the source.
+//
+// Each top-level block is an editing host of its own, not the whole note
+// (typing costs grow with the host); moving and selecting across blocks is
+// direct-hosts.js.
 
 const ISLANDS = [
   ".formula",
   ".math-block",
   ".code-block",
   "pre",
-  ".table-scroll",
   "button",
   "input",
   "img",
@@ -33,7 +38,7 @@ const ISLANDS = [
   "hr",
 ].join(",");
 // Blocks whose text is typed into; a new paragraph or merge is decided by them.
-const BLOCKS = "p,h1,h2,h3,h4,h5,h6,li,dt,dd";
+const BLOCKS = "p,h1,h2,h3,h4,h5,h6,li,dt,dd,td,th";
 const leafOf = (node) =>
   (node?.nodeType === 1 ? node : node?.parentElement)?.closest(
     "[data-text-from]",
@@ -48,13 +53,32 @@ export function createDirectEditor({
   report,
   // Typing patched this part of the page (the render cache must know).
   patched,
+  // Renders the source from..to in place of these blocks (app.js); returns
+  // the new nodes, or null when only a full render will do. `accept` may
+  // decline them; `prepare` sees them before they enter the page.
+  renderBlocks,
 }) {
   let changes = [],
     starts = new WeakMap(),
+    // Blocks rendered on their own after a structural edit: their positions
+    // hold from this many changes on, not from the last full render.
+    fresh = new WeakMap(),
     composition = null,
     on = false;
   const usable = (leaf) =>
     leaf && content.contains(leaf) && !leaf.parentElement.closest(ISLANDS);
+  const hosts = createHosts({
+    content,
+    scroller: content.closest("#reader") || content.parentElement,
+    islands: ISLANDS,
+    active: () => on && !composition,
+  });
+  // The block that last had the caret: a render that replaces it leaves the
+  // focus on the page's body, and the caret is put back all the same.
+  let lastHost = null;
+  content.addEventListener("focusin", (event) => {
+    lastHost = hosts.hostOf(event.target) || lastHost;
+  });
 
   // Source offset of a text run's start, now.
   function mapped(pos, from = 0, assoc = 1) {
@@ -62,11 +86,29 @@ export function createDirectEditor({
       pos = changes[i].mapPos(pos, assoc);
     return pos;
   }
+  // The top-level block holding an element: a child of the note or of a
+  // section's body.
+  function topOf(node) {
+    for (
+      let el = node?.nodeType === 1 ? node : node?.parentElement;
+      el && el !== content;
+      el = el.parentElement
+    ) {
+      const parent = el.parentElement;
+      if (parent === content || parent?.classList.contains("section-body"))
+        return el;
+    }
+    return null;
+  }
+  const versionOf = (el) => fresh.get(topOf(el)) ?? 0;
+  // A position an element carries (data-from and the like), now.
+  const now = (el, value, assoc = 1) =>
+    mapped(Number(value), versionOf(el), assoc);
   function leafStart(leaf) {
     const own = starts.get(leaf);
     return own
       ? mapped(own.pos, own.version)
-      : mapped(Number(leaf.dataset.textFrom));
+      : now(leaf, leaf.dataset.textFrom);
   }
   const leafEnd = (leaf) => leafStart(leaf) + leaf.textContent.length;
   const empty = (leaf) => leaf.classList.contains("direct-empty");
@@ -88,22 +130,52 @@ export function createDirectEditor({
     const element = node.nodeType === 1 ? node : node.parentElement,
       block = element?.closest(BLOCKS);
     if (!block || !content.contains(block)) return null;
-    const runs = leaves(block);
+    const units = unitsOf(block);
     const point = document.createRange();
     point.setStart(node, offset);
-    // The nearest run after the point, else the last one before it.
-    for (const leaf of runs) {
+    // The nearest run or formula after the point, else the last one before.
+    for (const unit of units) {
       const range = document.createRange();
-      range.selectNodeContents(leaf);
+      range.selectNode(unit);
       if (range.compareBoundaryPoints(Range.START_TO_START, point) >= 0)
-        return leafStart(leaf);
+        return unitStart(unit);
     }
-    return runs.length ? leafEnd(runs.at(-1)) : null;
+    return units.length ? unitEnd(units.at(-1)) : null;
   }
+  // A block's text runs and inline formulas, in order.
+  const isFormula = (el) => el.classList.contains("formula");
+  function unitsOf(block) {
+    return [
+      ...block.querySelectorAll(
+        "[data-text-from],.formula[data-from][data-to]",
+      ),
+    ].filter(
+      (el) =>
+        el.closest(BLOCKS) === block &&
+        (isFormula(el) ? !el.parentElement.closest(ISLANDS) : usable(el)),
+    );
+  }
+  const unitStart = (el) =>
+    isFormula(el) ? now(el, el.dataset.from) : leafStart(el);
+  const unitEnd = (el) =>
+    isFormula(el) ? now(el, el.dataset.to) : leafEnd(el);
+  // Elements matching a selector in the note, or only in some of its blocks
+  // (those just rendered: a long note has thousands of runs to look at).
+  const within = (selector, scope) =>
+    scope
+      ? scope.flatMap((node) =>
+          node.nodeType === 1
+            ? [
+                ...(node.matches(selector) ? [node] : []),
+                ...node.querySelectorAll(selector),
+              ]
+            : [],
+        )
+      : content.querySelectorAll(selector);
   // A DOM point for a source offset, after a render.
-  function pointAt(pos) {
+  function pointAt(pos, scope) {
     let best = null;
-    for (const leaf of content.querySelectorAll("[data-text-from]")) {
+    for (const leaf of within("[data-text-from]", scope)) {
       if (!usable(leaf)) continue;
       const from = leafStart(leaf),
         to = from + (empty(leaf) ? 0 : leaf.textContent.length);
@@ -176,15 +248,21 @@ export function createDirectEditor({
       at = from + (empty(leaf) ? 0 : textOffset(leaf, node, offset));
     commit({ from: at, insert: text }, at + text.length, "input.type", true);
     starts.set(leaf, { pos: from, version: changes.length });
+    // A space at a run's edge would collapse, and the browser would then
+    // type the next key elsewhere: show it as a no-break space, as the
+    // browser does when it types one.
+    const edge =
+      empty(leaf) || node.nodeType !== 3 || offset === node.length || !offset;
+    const shown = edge ? text.replace(/^ | $/g, " ") : text;
     if (empty(leaf)) {
       leaf.classList.remove("direct-empty");
-      leaf.textContent = text;
-      caretTo(leaf.firstChild, text.length);
+      leaf.textContent = shown;
+      caretTo(leaf.firstChild, shown.length);
     } else {
-      node.insertData(offset, text);
-      caretTo(node, offset + text.length);
+      node.insertData(offset, shown);
+      caretTo(node, offset + shown.length);
     }
-    verify(leaf);
+    if (verify(leaf)) markupTyped(leaf, text);
   }
   // Typing or deleting inside a run's text is left to the browser, which
   // keeps the caret without a forced layout (setting the selection from
@@ -202,7 +280,39 @@ export function createDirectEditor({
       true,
     );
     starts.set(leaf, { pos: from, version: changes.length });
-    verify(leaf);
+    // The browser typed into another run than the one the caret was in
+    // (it moves the caret off collapsed spaces): the page no longer shows
+    // the source, so render it.
+    if (leafOf(window.getSelection().anchorNode) !== leaf) return refresh();
+    if (verify(leaf) && change.insert) markupTyped(leaf, change.insert);
+  }
+  // A typed character may close inline markup: a formula's "$", a code
+  // span's backtick, a link's ")", emphasis. Render the block at once (for
+  // "*", "_", "~" and "=" after a short pause, so "**" is not shown as
+  // emphasis on the way), and keep the page as it is when nothing new formed.
+  let markupTimer = 0;
+  function markupTyped(leaf, text) {
+    clearTimeout(markupTimer);
+    if (!/[$`)*_~=]/.test(text)) return;
+    const restyle = () => {
+      if (!on || composition || !leaf.isConnected) return;
+      const olds = blocksAround([leaf]);
+      if (olds) redraw(olds, (nodes) => shape(nodes) !== shape(olds));
+    };
+    if (/[$`)]/.test(text)) restyle();
+    else markupTimer = setTimeout(restyle, 250);
+  }
+  // The inline elements of some nodes, outside formulas' own markup.
+  function shape(nodes) {
+    const list = [];
+    for (const node of nodes)
+      if (node.nodeType === 1)
+        for (const el of node.querySelectorAll(
+          "strong,em,s,del,mark,ins,code,a,img,.formula",
+        ))
+          if (!el.parentElement.closest(".formula"))
+            list.push(el.tagName + (isFormula(el) ? ".f" : ""));
+    return list.join(",");
   }
 
   // A range that covers more than one run: delete the text of each run, and
@@ -245,7 +355,7 @@ export function createDirectEditor({
       const from = Number(el.dataset.srcFrom ?? el.dataset.from),
         to = Number(el.dataset.srcTo ?? el.dataset.to);
       if (!Number.isFinite(from) || !Number.isFinite(to)) return null;
-      list.push({ from: mapped(from), to: mapped(to) });
+      list.push({ from: now(el, from), to: now(el, to) });
     }
     for (const leaf of startBlock ? leaves(startBlock) : []) {
       if (!range.intersectsNode(leaf) || outer.some((el) => el.contains(leaf)))
@@ -274,6 +384,9 @@ export function createDirectEditor({
         lineStart,
         text.indexOf("\n", pos) < 0 ? undefined : text.indexOf("\n", pos),
       );
+    // Spaces after the caret would start the new block: they go.
+    const to =
+      pos + /^[ \t]*/.exec(text.slice(pos, lineStart + line.length))[0].length;
     const item = line.match(/^(\s*)([-*+]|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?/);
     if (item) {
       // An empty item ends the list.
@@ -288,14 +401,14 @@ export function createDirectEditor({
       const marker = item[3] ? String(Number(item[3]) + 1) + item[4] : item[2];
       const insert =
         "\n" + item[1] + marker + item[5] + (item[6] ? "[ ] " : "");
-      return { change: { from: pos, insert }, caret: pos + insert.length };
+      return { change: { from: pos, to, insert }, caret: pos + insert.length };
     }
     const quote = line.match(/^(\s*(?:>\s?)+)/);
     if (quote) {
       const insert = "\n" + quote[1].trimEnd() + "\n" + quote[1];
-      return { change: { from: pos, insert }, caret: pos + insert.length };
+      return { change: { from: pos, to, insert }, caret: pos + insert.length };
     }
-    return { change: { from: pos, insert: "\n\n" }, caret: pos + 2 };
+    return { change: { from: pos, to, insert: "\n\n" }, caret: pos + 2 };
   }
 
   // Backspace at the start of a block: first its marker (# , - , > ) goes,
@@ -314,7 +427,11 @@ export function createDirectEditor({
         prefix,
       )
     )
-      return { change: { from: lineStart, to: pos }, caret: lineStart };
+      return {
+        change: { from: lineStart, to: pos },
+        caret: lineStart,
+        around: [leaf],
+      };
     const previous = previousRun(block);
     if (!previous) return null;
     const end = leafEnd(previous),
@@ -325,7 +442,11 @@ export function createDirectEditor({
       )
     )
       return null;
-    return { change: { from: end, to: pos }, caret: end };
+    return {
+      change: { from: end, to: pos },
+      caret: end,
+      around: [previous, leaf],
+    };
   }
   function joinForward(leaf) {
     const block = leaf.closest(BLOCKS),
@@ -342,7 +463,11 @@ export function createDirectEditor({
       )
     )
       return null;
-    return { change: { from: pos, to: start }, caret: pos };
+    return {
+      change: { from: pos, to: start },
+      caret: pos,
+      around: [leaf, next],
+    };
   }
   function blocksOf() {
     return [...content.querySelectorAll(BLOCKS)].filter(
@@ -368,8 +493,10 @@ export function createDirectEditor({
         BLOCKS,
       );
     if (!block) return null;
+    // Formulas, and escapes ("\|"): one character on the page, several in
+    // the source.
     const formulas = [
-      ...block.querySelectorAll(".formula[data-from][data-to]"),
+      ...block.querySelectorAll(".formula[data-from][data-to],.md-escape"),
     ].filter((el) => el.closest(BLOCKS) === block);
     const caret = document.createRange();
     caret.setStart(node, range.startOffset);
@@ -391,19 +518,79 @@ export function createDirectEditor({
         between.setEnd(node, range.startOffset);
       }
       if (between.toString() !== "") return null;
-      const from = mapped(Number(el.dataset.from)),
-        to = mapped(Number(el.dataset.to));
-      return { change: { from, to }, caret: from };
+      const from = now(el, el.dataset.from ?? el.dataset.srcFrom),
+        to = now(el, el.dataset.to ?? el.dataset.srcTo);
+      return { change: { from, to }, caret: from, around: [el] };
     }
     return null;
   }
-  function structural({ change, caret }, userEvent) {
-    commit(change, caret, userEvent);
-    refresh();
+  // A structural edit (a new block, a join, a removed formula): only the
+  // blocks around it are rendered again, at once; the full render waits for
+  // a pause in typing, as typing in a run does.
+  function structural({ change, caret, around }, userEvent) {
+    clearTimeout(markupTimer);
+    const olds = around && blocksAround(around);
+    commit(change, caret, userEvent, Boolean(olds));
+    if (!olds || !redraw(olds)) refresh();
+  }
+  // The top-level blocks spanning some nodes, with what lies between them;
+  // null when they are not siblings or a heading is among them (a heading
+  // also opens a section, which only a full render builds).
+  function blocksAround(nodes) {
+    const tops = nodes.map(topOf);
+    if (tops.some((top) => !top || top.parentNode !== tops[0].parentNode))
+      return null;
+    const siblings = [...tops[0].parentNode.childNodes],
+      at = tops.map((top) => siblings.indexOf(top));
+    const span = siblings.slice(Math.min(...at), Math.max(...at) + 1);
+    if (
+      span.some(
+        (node) =>
+          node.nodeType === 1 &&
+          (!positioned(node) ||
+            node.matches(".note-section,h1,h2,h3,h4,h5,h6")),
+      )
+    )
+      return null;
+    return span;
+  }
+  // The element carrying a top-level block's source range (a table's sits
+  // inside its scroll box).
+  const positioned = (top) =>
+    top.dataset.from !== undefined
+      ? top
+      : top.firstElementChild?.dataset.from !== undefined
+        ? top.firstElementChild
+        : null;
+  // Render these blocks again from the source; `accept` may decline the
+  // result (it changes nothing). Returns whether the page was updated.
+  function redraw(olds, accept) {
+    const blocks = olds.filter((node) => node.nodeType === 1);
+    const first = positioned(blocks[0]),
+      last = positioned(blocks.at(-1));
+    const from = now(first, first.dataset.from, -1),
+      to = Math.min(view.state.doc.length, now(last, last.dataset.to, 1));
+    if (!(from <= to)) return false;
+    // Islands are marked while the nodes are detached: setting
+    // contenteditable in the page makes the browser restyle at once.
+    const nodes = renderBlocks?.(olds, from, to, {
+      accept,
+      prepare: (nodes) => {
+        markIslands(nodes);
+        hosts.mark(nodes);
+      },
+    });
+    if (!nodes) return false;
+    for (const node of nodes)
+      if (node.nodeType === 1) fresh.set(node, changes.length);
+    settle(true, nodes);
+    return true;
   }
   function refuse() {
-    report?.(t("这里不能直接编辑：公式、代码和表格请用铅笔就地编辑"));
+    report?.(t("这里不能直接编辑：公式、代码和表格结构请用铅笔就地编辑"));
   }
+  const cellOf = (node) =>
+    (node?.nodeType === 1 ? node : node?.parentElement)?.closest("td,th");
 
   function onBeforeInput(event) {
     if (!on || composition) return;
@@ -415,6 +602,36 @@ export function createDirectEditor({
     const leaf = range && leafOf(range.startContainer);
     const target = event.getTargetRanges?.()[0];
     native = null;
+    clearTimeout(markupTimer);
+    // In a table cell, text stays on one line and a "|" is written escaped;
+    // the table's structure is the pencil's.
+    const cell = range && cellOf(range.startContainer);
+    if (cell) {
+      if (!collapsed && cellOf(range.endContainer) !== cell) {
+        event.preventDefault();
+        return refuse();
+      }
+      if (/^insert(?:Paragraph|LineBreak)$/.test(type)) {
+        event.preventDefault();
+        return report?.(t("表格单元格里不能换行；改表格结构请用铅笔"));
+      }
+      const data =
+        event.data ?? event.dataTransfer?.getData("text/plain") ?? null;
+      if (data !== null && /[|\r\n]/.test(data) && type.startsWith("insert")) {
+        event.preventDefault();
+        const at = sourceAt(range.startContainer, range.startOffset);
+        if (at === null || !collapsed) return refuse();
+        const insert = data.replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|");
+        return structural(
+          {
+            change: { from: at, insert },
+            caret: at + insert.length,
+            around: [cell],
+          },
+          "input.type",
+        );
+      }
+    }
     if (
       type === "insertText" &&
       collapsed &&
@@ -473,6 +690,8 @@ export function createDirectEditor({
       const formula = formulaNextTo(range, type === "deleteContentForward");
       if (formula) return structural(formula, "delete");
     }
+    // At a cell's edge there is nothing to join.
+    if (collapsed && cell && type.startsWith("delete")) return;
     if (collapsed && type === "deleteContentBackward" && usable(leaf)) {
       const join = joinBackward(leaf);
       return join ? structural(join, "delete") : refuse();
@@ -488,10 +707,11 @@ export function createDirectEditor({
       ? sourceAt(range.startContainer, range.startOffset)
       : edits[0].from;
     if (at === null) return refuse();
+    const around = [range.startContainer, range.endContainer];
     if (type === "insertParagraph") {
-      if (edits.length) commit(edits, at, "delete");
+      if (edits.length) commit(edits, at, "delete", true);
       const next = newBlock(edits.length ? changes.at(-1).mapPos(at) : at);
-      return structural(next, "input");
+      return structural({ ...next, around }, "input");
     }
     let insert = "";
     if (type === "insertLineBreak") insert = "  \n";
@@ -509,7 +729,7 @@ export function createDirectEditor({
       else all.push({ from: at, insert });
     }
     structural(
-      { change: all, caret: at + insert.length },
+      { change: all, caret: at + insert.length, around },
       type.startsWith("delete") ? "delete" : "input",
     );
   }
@@ -577,6 +797,36 @@ export function createDirectEditor({
   content.addEventListener("drop", (event) => {
     if (on) event.preventDefault();
   });
+  // Over several blocks the browser copies only the first block's part (each
+  // block is a host of its own). The source copy (copy-source.js) usually
+  // writes the clipboard; otherwise the selected text is. A cut copies the
+  // whole selection, then removes it from the source.
+  const spanning = (range) =>
+    range &&
+    !range.collapsed &&
+    hosts.hostOf(range.startContainer) !== hosts.hostOf(range.endContainer);
+  window.addEventListener("copy", (event) => {
+    const range = on && !event.defaultPrevented && selectedRange();
+    if (!spanning(range)) return;
+    event.clipboardData.setData("text/plain", range.toString());
+    event.preventDefault();
+  });
+  content.addEventListener("cut", (event) => {
+    const range = on && !composition && selectedRange();
+    if (!spanning(range)) return;
+    event.preventDefault();
+    document.execCommand("copy");
+    const edits = rangeChanges(range);
+    if (edits === null) return refuse();
+    structural(
+      {
+        change: edits,
+        caret: edits[0].from,
+        around: [range.startContainer, range.endContainer],
+      },
+      "delete.cut",
+    );
+  });
 
   return {
     get patching() {
@@ -594,94 +844,149 @@ export function createDirectEditor({
       const next = Boolean(enabled(doc));
       if (next !== on) {
         on = next;
-        if (on) {
-          content.contentEditable = "true";
-          content.spellcheck = false;
-        } else content.removeAttribute("contenteditable");
+        if (!on) hosts.unmark();
         content.classList.toggle("direct-editing", on);
       }
       if (!on) return;
+      hosts.mark();
       if (doc && doc.previewText === doc.text) {
         changes = [];
         starts = new WeakMap();
+        fresh = new WeakMap();
       }
-      for (const island of content.querySelectorAll(ISLANDS))
-        if (!island.parentElement.closest(ISLANDS))
-          island.contentEditable = "false";
-      // A render replaced the run holding the caret: put it back.
-      const focused =
-        document.activeElement === content ||
-        content.contains(document.activeElement);
-      const selection = window.getSelection(),
-        main = view.state.selection.main;
-      // When the run holding the caret is replaced, the browser leaves the
-      // caret between blocks (it looked like the start of the paragraph, and
-      // typing went astray). The caret stays only if it is still on text at
-      // the place the source editor has.
-      const node = selection.anchorNode,
-        kept =
-          node?.isConnected &&
-          content.contains(node) &&
-          usable(leafOf(node)) &&
-          sourceAt(node, selection.anchorOffset) === main.anchor &&
-          sourceAt(selection.focusNode, selection.focusOffset) === main.head;
+      markIslands();
       const forced = restore;
       restore = false;
-      if (!focused || (kept && !forced)) return;
-      const anchor = pointAt(main.anchor) || placeholder(main.anchor),
-        head = main.head === main.anchor ? anchor : pointAt(main.head);
-      if (!anchor || !head) return;
-      selection.setBaseAndExtent(
-        anchor.node,
-        anchor.offset,
-        head.node,
-        head.offset,
-      );
+      settle(forced);
     },
   };
 
-  // A caret where the source has no text yet (a new empty paragraph or list
-  // item): an empty run there takes the first keystroke.
-  function placeholder(pos) {
+  function markIslands(scope) {
+    for (const island of within(ISLANDS, scope))
+      if (
+        island.getAttribute("contenteditable") !== "false" &&
+        !island.parentElement?.closest(ISLANDS)
+      )
+        island.setAttribute("contenteditable", "false");
+  }
+  // A render replaced the run holding the caret: put it back. `scope`: the
+  // blocks just rendered, where the caret's place is.
+  function settle(forced, scope) {
+    const focused =
+      content.contains(document.activeElement) ||
+      (document.activeElement === document.body &&
+        lastHost !== null &&
+        !lastHost.isConnected);
+    const selection = window.getSelection(),
+      main = view.state.selection.main;
+    // When the run holding the caret is replaced, the browser leaves the
+    // caret between blocks (it looked like the start of the paragraph, and
+    // typing went astray). The caret stays only if it is still on text at
+    // the place the source editor has.
+    const node = selection.anchorNode,
+      kept =
+        node?.isConnected &&
+        content.contains(node) &&
+        usable(leafOf(node)) &&
+        sourceAt(node, selection.anchorOffset) === main.anchor &&
+        sourceAt(selection.focusNode, selection.focusOffset) === main.head;
+    if (!focused || (kept && !forced)) return;
+    const anchor =
+        pointAt(main.anchor, scope) ||
+        afterInline(main.anchor, scope) ||
+        placeholder(main.anchor, scope),
+      head = main.head === main.anchor ? anchor : pointAt(main.head);
+    if (!anchor || !head) return;
+    const host = hosts.hostOf(anchor.node) || hosts.adopt(anchor.node);
+    if (host && document.activeElement !== host)
+      host.focus({ preventScroll: true });
+    selection.setBaseAndExtent(
+      anchor.node,
+      anchor.offset,
+      head.node,
+      head.offset,
+    );
+  }
+
+  // An empty run at a source position: it takes the first keystroke there.
+  function emptyRun(pos) {
     const run = document.createElement("span");
     run.className = "direct-empty";
     run.dataset.textFrom = String(pos);
     run.dataset.textTo = String(pos);
     run.textContent = "​";
-    const item = [...content.querySelectorAll("li[data-from]")].find(
+    starts.set(run, { pos, version: changes.length });
+    return run;
+  }
+  // Just after a formula, emphasis, code or link that ends where the caret
+  // is, with no text after it yet (a formula's closing "$" was typed last).
+  function afterInline(pos, scope) {
+    let best = null;
+    for (const el of within(".formula[data-to],[data-src-to]", scope)) {
+      if (el.parentElement.closest(ISLANDS) || !el.closest(BLOCKS)) continue;
+      const end = isFormula(el)
+        ? now(el, el.dataset.to)
+        : now(el, el.dataset.srcTo);
+      // The outermost of nested ones: the last that ends here.
+      if (end === pos) best = el;
+    }
+    if (!best) return null;
+    const run = emptyRun(pos);
+    best.after(run);
+    patched?.(run);
+    return { node: run.firstChild, offset: 0 };
+  }
+  // A caret where the source has no text yet (a new empty paragraph or list
+  // item): an empty run there takes the first keystroke.
+  function placeholder(pos, scope) {
+    // Never inside a table: a paragraph there would be typed into the row.
+    for (const table of within("table[data-from]", scope))
+      if (
+        now(table, table.dataset.from) < pos &&
+        pos < now(table, table.dataset.to)
+      )
+        return null;
+    const run = emptyRun(pos);
+    const item = [...within("li[data-from]", scope)].find(
       (li) =>
-        Number(li.dataset.from) <= pos &&
-        pos <= Number(li.dataset.to) &&
+        now(li, li.dataset.from) <= pos &&
+        pos <= now(li, li.dataset.to) &&
         !leaves(li).length,
     );
     if (item) {
       item.append(run);
+      patched?.(run);
       return { node: run.firstChild, offset: 0 };
     }
     // Inside the quote that holds the position (a new quote line), else at
     // the top level; after the last block before it, a formula included.
     let host = null;
-    for (const quote of content.querySelectorAll("blockquote[data-from]"))
+    for (const quote of within("blockquote[data-from]", scope))
       if (
-        Number(quote.dataset.from) <= pos &&
-        pos <= Number(quote.dataset.to) &&
+        now(quote, quote.dataset.from) <= pos &&
+        pos <= now(quote, quote.dataset.to) &&
         !quote.parentElement.closest(ISLANDS)
       )
         host = quote;
     let before = null;
-    for (const block of (host || content).querySelectorAll("[data-from]")) {
+    for (const block of host || !scope
+      ? (host || content).querySelectorAll("[data-from]")
+      : within("[data-from]", scope)) {
       if (
         block.parentElement.closest(ISLANDS) ||
         block.parentElement.closest("[data-from]") !== host
       )
         continue;
-      if (Number(block.dataset.to) <= pos) before = block;
+      if (now(block, block.dataset.to) <= pos) before = block;
     }
+    // Not after the blocks just rendered: look through the whole note.
+    if (!before && !host && scope) return placeholder(pos);
     const paragraph = document.createElement("p");
     paragraph.className = "direct-empty-block";
     paragraph.append(run);
     if (before) before.after(paragraph);
     else (host || content).prepend(paragraph);
+    patched?.(paragraph);
     return { node: run.firstChild, offset: 0 };
   }
 }

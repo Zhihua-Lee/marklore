@@ -42,6 +42,7 @@ export const FOLIO_API = [
   "linkTargets",
   "windowState",
   "windowAction",
+  "releaseMemory",
   "language",
   "platform",
 ];

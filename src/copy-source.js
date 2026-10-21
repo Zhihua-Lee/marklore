@@ -163,6 +163,12 @@ function renderedCopy(range) {
   const holder = document.createElement("div");
   holder.append(range.cloneContents());
   for (const node of holder.querySelectorAll(chrome)) node.remove();
+  // Direct editing's marks stay in the note.
+  for (const el of holder.querySelectorAll(
+    "[contenteditable], [data-direct-host]",
+  ))
+    for (const name of ["contenteditable", "data-direct-host", "spellcheck"])
+      el.removeAttribute(name);
   const html = holder.innerHTML;
   holder.style.cssText =
     "position:fixed;left:-99999px;top:0;white-space:normal";
@@ -180,7 +186,7 @@ export function wireSourceCopy({ host, source, skip = () => false }) {
     const target = event.target instanceof Element ? event.target : null;
     if (
       target?.closest(
-        'input, textarea, [contenteditable="true"]:not(.direct-editing), .block-editor',
+        'input, textarea, [contenteditable="true"]:not(.direct-editing, .direct-editing *), .block-editor',
       )
     )
       return;

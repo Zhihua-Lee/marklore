@@ -193,5 +193,6 @@ export default {
   "下载的文件校验不符，已放弃更新":
     "The download doesn't match its checksum; the update was cancelled",
   更新尚未下载: "The update hasn't been downloaded",
+  更新包不完整: "The update package is incomplete",
   无法启动更新: "Couldn't start the update",
 };

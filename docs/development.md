@@ -69,6 +69,7 @@ pnpm dev
 | `pnpm test:native-editing`      | 桌面编辑流程。              |
 | `pnpm test:native-navigation`   | 系统前进／后退与阅读位置。  |
 | `pnpm test:native-image-access` | 本地图片授权与错误说明。    |
+| `pnpm test:native-gpu`          | 关闭 GPU 时照常显示。       |
 | `pnpm test:native:all`          | 依次运行全部原生套件。      |
 | `pnpm format:check`             | Prettier 格式检查。         |
 
@@ -95,6 +96,8 @@ pnpm dist
 
 分发时保留整个目录，以及 Electron／Chromium 随附的许可文件。不要只复制 `Marklore.exe`。
 
+打包时 [build/after-pack.cjs](../build/after-pack.cjs) 删去 Chromium 中 Marklore 用不到的部分：WebGPU 的着色器编译器（`dxcompiler.dll`、`dxil.dll`）和无 GPU 时的 Vulkan／软件 WebGL（`vk_swiftshader.dll`、`vk_swiftshader_icd.json`、`vulkan-1.dll`），共约 33 MB；同时删去开发时 Electron 写在 `node_modules/electron/dist` 里、会被复制进包的 `debug.log`（含本机路径）。页面有 GPU 时用 GPU 绘制，没有时用软件绘制，两者都不需要这些文件；图表用 canvas 2D。`tests/native-gpu.mjs` 以 `--disable-gpu` 启动打包后的程序，检查公式、表格和图表照常显示。安装包使用最高压缩（`compression: maximum`）。`Marklore.exe` 本身（约 235 MB）是 Chromium 与 Electron，无法再减。
+
 验证打包后的程序：
 
 ```powershell
@@ -114,13 +117,15 @@ CI 的 `mac` 任务在 `macos-latest` 上运行 `pnpm exec electron-builder --ma
 
 ### 应用内更新
 
-`desktop/updater.mjs` 读取 `https://api.github.com/repos/Zhihua-Lee/marklore/releases/latest`，按固定的资产名下载：`Marklore-Setup-vX.Y.Z-x64.exe`（安装版）或 `Marklore-vX.Y.Z-win-x64.zip`（压缩包版，内含一个 `Marklore-vX.Y.Z-win-x64` 文件夹），并用 `SHA256SUMS-vX.Y.Z.txt` 校验。发布时这些名字不能变。下载在单独的会话中进行，默认会话仍拦截所有网络请求。
+`desktop/updater.mjs` 读取 `https://api.github.com/repos/Zhihua-Lee/marklore/releases/latest`，按固定的资产名下载：`Marklore-Setup-vX.Y.Z-x64.exe`（安装版）或 `Marklore-vX.Y.Z-win-x64.zip`（压缩包版，内含一个 `Marklore-vX.Y.Z-win-x64` 文件夹），并用 `SHA256SUMS-vX.Y.Z.txt` 校验。发布时这些名字不能变。
 
-校验通过后写入一个 PowerShell 辅助脚本并退出：脚本等旧进程结束，安装版运行 `Setup /S /currentuser --updated /D=<原目录>`，压缩包版用 `robocopy /E` 覆盖程序目录（不删除文件，便携 `data` 保留），然后重新启动 Marklore。下次启动时读取 `pending.json` 报告结果并删除下载。`FOLIO_UPDATE_FEED` 可把查询指向本地测试服务；`tests/native-update.mjs` 用它端到端测试压缩包版的更新。
+新版本与正在运行的程序使用同一个 Electron 时，两种版本都只下载应用文件 `Marklore-vX.Y.Z-app-electron-<Electron 版本>.zip`（约 3.5 MB，内含同名文件夹，只有 `resources/app.asar`、README、LICENSE 和第三方声明），而不是约 100 MB 的完整包。文件名里的 Electron 版本决定能否使用：版本不同、发布中没有这个文件或程序目录不可写时，照旧下载完整包。发布时用 `node tools/app-update.mjs <win-unpacked> <输出目录> [版本]` 生成，Electron 版本取自包内的 `version` 文件，并把它加入 `SHA256SUMS-vX.Y.Z.txt`。下载在单独的会话中进行，默认会话仍拦截所有网络请求。
+
+校验通过后写入一个 PowerShell 辅助脚本并退出：脚本等旧进程结束，安装版运行 `Setup /S /currentuser --updated /D=<原目录>`，压缩包版用 `robocopy /E` 覆盖程序目录（不删除文件，便携 `data` 保留）；应用文件同样用 `robocopy` 覆盖，安装版随后把“应用和功能”中的版本改为新版本。然后重新启动 Marklore。下次启动时读取 `pending.json` 报告结果并删除下载；下载里有 `app.asar`，Electron 的 `fs` 会把它当作归档读，所以删除用 `original-fs`。`FOLIO_UPDATE_FEED` 可把查询指向本地测试服务；`tests/native-update.mjs` 用它端到端测试：压缩包版先用完整包、再用应用文件更新，安装版（`tools/installer-check.ps1 -Newer`）先用新安装包、再用应用文件更新。
 
 ### 发布与清理本地产物
 
-版本发布到 GitHub Releases（win-x64 zip、source zip、`SHA256SUMS-vX.Y.Z.txt`）后，本地只需保留最近几个版本：
+版本发布到 GitHub Releases（安装包、win-x64 zip、应用文件 zip、source zip、`SHA256SUMS-vX.Y.Z.txt`）后，本地只需保留最近几个版本：
 
 ```powershell
 pnpm prune-releases            # 预览：列出将被清理的项目
@@ -133,25 +138,31 @@ pnpm prune-releases --apply    # 移到回收站
 
 ## 源码结构
 
-| 路径                                                                                       | 职责                                                          |
-| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------- |
-| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs) | 窗口、隔离接口、文件监听与会话恢复。                          |
-| [`desktop/files.mjs`](../desktop/files.mjs)                                                | 文件授权、编码、版本校验、备份与目录操作。                    |
-| [`desktop/integration.mjs`](../desktop/integration.mjs)                                    | Windows 系统集成。                                            |
-| [`src/app.js`](../src/app.js)                                                              | 文档状态、编辑器和交互协调。                                  |
-| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)         | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。           |
-| [`src/render-cache.js`](../src/render-cache.js)                                            | 有界的近期预览 DOM 复用。                                     |
-| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)         | 标签交互、排序与分组。                                        |
-| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)   | 源码格式工具与块级就地编辑。                                  |
-| [`src/copy-source.js`](../src/copy-source.js)                                              | 从阅读区复制对应的 Markdown 源码。                            |
-| [`src/link-preview.js`](../src/link-preview.js)                                            | 链接悬浮预览与异步状态管理。                                  |
-| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)         | 内容快照、离线资源嵌入和 PDF／HTML 导出。                     |
-| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                      | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。 |
-| [`tests/`](../tests/)                                                                      | 单元、浏览器与原生回归用例。                                  |
+| 路径                                                                                                 | 职责                                                                 |
+| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)           | 窗口、隔离接口、文件监听与会话恢复。                                 |
+| [`desktop/files.mjs`](../desktop/files.mjs)                                                          | 文件授权、编码、版本校验、备份与目录操作。                           |
+| [`desktop/integration.mjs`](../desktop/integration.mjs)                                              | Windows 系统集成。                                                   |
+| [`src/app.js`](../src/app.js)                                                                        | 文档状态、编辑器和交互协调。                                         |
+| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)                   | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。                  |
+| [`src/render-cache.js`](../src/render-cache.js)                                                      | 有界的近期预览 DOM 复用。                                            |
+| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)                   | 标签交互、排序与分组。                                               |
+| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)             | 源码格式工具与块级就地编辑。                                         |
+| [`src/direct-editing.js`](../src/direct-editing.js)、[`src/direct-hosts.js`](../src/direct-hosts.js) | 在渲染后的笔记中直接编辑；每个块各自是编辑区，跨块的光标移动与选择。 |
+| [`src/memory-release.js`](../src/memory-release.js)                                                  | 繁重渲染结束、页面安静后请主进程回收内存。                           |
+| [`src/copy-source.js`](../src/copy-source.js)                                                        | 从阅读区复制对应的 Markdown 源码。                                   |
+| [`src/link-preview.js`](../src/link-preview.js)                                                      | 链接悬浮预览与异步状态管理。                                         |
+| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)                   | 内容快照、离线资源嵌入和 PDF／HTML 导出。                            |
+| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。        |
+| [`tests/`](../tests/)                                                                                | 单元、浏览器与原生回归用例。                                         |
 
 渲染进程没有直接的 Node／文件系统访问权限，本地文件操作经过主进程的授权接口。新增渲染能力应保持 HTML 清理、图表限制和本地资源授权边界，不通过放开远程加载来解决展示问题。
 
 长文相关改动需同时检查首次打开、编辑、切换模式／标签和阅读位置恢复。滚动路径上不要加非被动的 `wheel` 监听，也不要在滚动时逐次测量阅读锚点：渲染后的公式会让每次命中测试花费约 10 ms，直接造成滚轮卡顿（参见 `src/app.js` 中的滚动遮罩与 `src/table-layout.js` 的延迟锚点）。现有缓存减少重复工作，但首次解析仍有成本，不能仅凭小样本声称任意长文流畅。
+
+直接编辑时，笔记本身不可编辑，每个顶层块（段落、标题、列表、引用、表格）各自是一个编辑区：浏览器处理一次按键的开销随编辑区大小增长，1800 行的笔记上从每键约 40 ms 降到约 20 ms。把整篇笔记临时设为可编辑会让整篇重新计算样式（约 0.3 s），所以不在两种方式之间切换。浏览器把光标和选区限制在一个编辑区内，跨块的方向键、Shift 选择、拖选、Shift+点击、Ctrl+A、Ctrl+Home/End、PageUp/PageDown 和块之间的点击由 `src/direct-hosts.js` 处理；跨块选区的复制与剪切写入完整内容（浏览器自己只会复制第一个块的部分）。给块加 CSS `contain` 在这种方式下测不出收益，加在列表等块上还会改变外边距，所以没有使用。
+
+长笔记渲染（公式、表格，尤其是 Mermaid 图）会留下大量垃圾，Chromium 要到内存紧张时才回收。页面出现超过 100 ms 的长任务后安静 5 秒且没有输入时，渲染进程请求主进程回收（`releaseMemory`）；主进程只在渲染进程超过 200 MB、且距上次至少 1 分钟时，通过调试接口执行 `HeapProfiler.collectGarbage`（V8 的低内存回收，同时整理 Blink 的堆）。1800 行的示例笔记上约减少 85–95 MB，耗时约 0.2 s。
 
 ## 文档维护
 

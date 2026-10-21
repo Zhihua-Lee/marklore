@@ -172,7 +172,9 @@ export function previewTextSelection(
     doc.previewText !== doc.text ||
     !selected?.rangeCount ||
     selected.isCollapsed ||
-    !selected.toString().trim()
+    // The range, not the selection: over several editing hosts (direct
+    // editing) the selection's own text stops at the first.
+    !selected.getRangeAt(0).toString().trim()
   )
     return null;
   const text = doc.text;
@@ -428,12 +430,19 @@ export function createSelectionTools({
     if (last.range) range.setEnd(last.range.endContainer, last.range.endOffset);
     else range.setEndAfter(last.element);
     const selected = window.getSelection();
-    (content.isContentEditable ? content : reader).focus({
+    editingFocus().focus({
       preventScroll: true,
     });
     selected.removeAllRanges();
     selected.addRange(range);
     refresh();
+  }
+  // Direct editing: the block holding the selection takes the focus back.
+  function editingFocus() {
+    const node = window.getSelection()?.anchorNode;
+    const el = node?.nodeType === 1 ? node : node?.parentElement;
+    const host = el?.closest('[contenteditable="true"]');
+    return host && content.contains(host) ? host : reader;
   }
   function apply(action, options = {}, s = snapshot) {
     if (!valid(s)) {
@@ -535,7 +544,7 @@ export function createSelectionTools({
       hide();
       window.getSelection()?.removeAllRanges();
       if (focused)
-        (content.isContentEditable ? content : reader).focus({
+        editingFocus().focus({
           preventScroll: true,
         });
       return;
@@ -562,7 +571,7 @@ export function createSelectionTools({
       hide();
       (key === "y" || event.shiftKey ? redo : undo)(view);
       render();
-      (content.isContentEditable ? content : reader).focus({
+      editingFocus().focus({
         preventScroll: true,
       });
       return;

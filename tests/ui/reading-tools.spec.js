@@ -175,6 +175,27 @@ test("task checkboxes toggle their own source line and mark the note unsaved", a
   await expect(boxes.nth(1)).not.toBeChecked();
 });
 
+test("a task box clicked before the preview catches up toggles its own task", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.keyboard.press("Control+2");
+  await page.locator("#editor .cm-line").first().click();
+  await page.keyboard.press("End");
+  // A line typed above the tasks; the box is clicked before the preview
+  // renders again, while its position is still the old one.
+  await page.evaluate(async () => {
+    document.execCommand("insertText", false, "\n\nIntro line.");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    document
+      .querySelectorAll("#content input.task-list-item-checkbox")[2]
+      .click();
+  });
+  await expect.poll(() => source(page)).toContain("  - [x] nested task");
+  expect(await source(page)).toContain("# Tools\n\nIntro line.\n");
+  expect(await source(page)).toContain("- [ ] first task\n- [x] done task");
+});
+
 test("start page lists recent notes, reopens them and can clear the list", async ({
   page,
 }) => {

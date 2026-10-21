@@ -474,12 +474,17 @@ else {
       send("command", "quit");
     }
   });
+  // Started while Chromium initialises: the window needs the saved theme.
+  firstSessionRead = readSession();
+  const preferencesRead = integration.load();
+  // The page asks for its tabs once the files given on the command line are open.
+  let argumentsOpen;
+  const launched = new Promise((resolve) => (argumentsOpen = resolve));
   app
     .whenReady()
     .then(async () => {
-      await integration.load();
+      await preferencesRead;
       files.otherFormats = integration.otherFormats;
-      recent.refreshJumpList().catch(() => {});
       if (process.platform === "win32")
         app.setAppUserModelId("io.marklore.desktop");
       session.defaultSession.setPermissionRequestHandler(
@@ -548,7 +553,6 @@ else {
         }
       });
       // Paint the saved theme's page colour before the renderer loads (no light flash in dark mode).
-      firstSessionRead = readSession();
       const dark = (await firstSessionRead).settings?.theme === "dark";
       setLanguage(
         resolveLanguage(
@@ -556,7 +560,6 @@ else {
           app.getLocale(),
         ),
       );
-      recent.refreshJumpList().catch(() => {});
       win = new BrowserWindow({
         width: 1360,
         height: 920,
@@ -580,6 +583,9 @@ else {
           spellcheck: false,
         },
       });
+      // The renderer starts loading while the rest is set up below: everything
+      // up to the first await runs before it can send a message.
+      const loading = win.loadURL("folio://app/");
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       win.on("show", () => {
         if (pendingDisk) {
@@ -1270,7 +1276,34 @@ else {
         allowClose = true;
         app.quit();
       });
+      // A long note's render (its formulas, tables and diagrams) leaves much
+      // garbage that Chromium keeps until memory runs short: about 90 MB on
+      // an 1,800-line note. Once the page has been quiet, V8's low-memory
+      // collection (which also compacts Blink's heap) gives it back. It takes
+      // ~0.2 s on such a note, so only for a large renderer, at most once a
+      // minute.
+      let memoryReleased = 0;
+      api("releaseMemory", async () => {
+        if (Date.now() - memoryReleased < 60000) return false;
+        const pid = win.webContents.getOSProcessId(),
+          memory = app.getAppMetrics().find((m) => m.pid === pid)?.memory;
+        const kb = memory?.privateBytes ?? memory?.workingSetSize ?? 0;
+        if (kb < 200 * 1024) return false;
+        const debug = win.webContents.debugger;
+        if (debug.isAttached()) return false;
+        memoryReleased = Date.now();
+        try {
+          debug.attach("1.3");
+          await debug.sendCommand("HeapProfiler.collectGarbage");
+          return true;
+        } catch {
+          return false; // DevTools are open, or the page went away.
+        } finally {
+          if (debug.isAttached()) debug.detach();
+        }
+      });
       api("ready", async () => {
+        await launched;
         // The first boot reuses the read started before the window existed; a
         // renderer reload must see what was persisted since.
         const old = await (firstSessionRead || readSession());
@@ -1331,10 +1364,12 @@ else {
           active: old.active,
         };
       });
+      setImmediate(() => recent.refreshJumpList().catch(() => {}));
       await acceptArgs(process.argv.slice(app.isPackaged ? 1 : 2));
       launching = false;
       await acceptArgs(early.splice(0));
-      await win.loadURL("folio://app/");
+      argumentsOpen();
+      await loading;
       app.on("window-all-closed", () => {
         if (!mac) app.quit();
       });

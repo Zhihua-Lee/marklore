@@ -70,7 +70,7 @@ export function renderDiagrams(host, theme, onLayout) {
           pre.classList.add("diagram-host");
           pre.append(diagram);
           pre.dataset.diagramTheme = theme;
-          onLayout();
+          onLayout?.();
         } catch (e) {
           if (stale()) return;
           code.hidden = false;

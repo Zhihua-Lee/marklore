@@ -64,13 +64,26 @@ test("off by default: the preview does not take typing", async ({ page }) => {
     "contenteditable",
     "true",
   );
+  await expect(page.locator('#content [contenteditable="true"]')).toHaveCount(
+    0,
+  );
 });
 
 test("typing in a paragraph changes exactly that text, live", async ({
   page,
 }) => {
   await boot(page);
-  await expect(page.locator("#content")).toHaveAttribute(
+  // Each block is an editing host of its own; the note is not one.
+  await expect(page.locator("#content")).not.toHaveAttribute(
+    "contenteditable",
+    "true",
+  );
+  for (const block of ["#content h1", "#content p", "#content ul"])
+    await expect(page.locator(block).first()).toHaveAttribute(
+      "contenteditable",
+      "true",
+    );
+  await expect(page.locator("#content pre").first()).not.toHaveAttribute(
     "contenteditable",
     "true",
   );
@@ -153,6 +166,91 @@ test("Enter in a quote types into a new line of that quote, not elsewhere", asyn
         .map((p) => p.parentElement.tagName),
     ),
   ).toEqual(["BLOCKQUOTE"]);
+});
+
+test("a closing $ typesets the formula at once, and typing goes on after it", async ({
+  page,
+}) => {
+  await boot(page);
+  await caretAtEnd(page, "Second");
+  await page.keyboard.type(" Area $a^2$");
+  // Well before the render that follows a pause (600 ms).
+  await expect(
+    paragraph(page, "Second").locator(".formula .katex"),
+  ).toHaveCount(1, { timeout: 400 });
+  await page.keyboard.type(".");
+  expect(await source(page)).toContain("Second paragraph. Area $a^2$.\n");
+  await expect(paragraph(page, "Second")).toContainText(/\.$/);
+});
+
+test("closing bold renders after a short pause, before typing stops", async ({
+  page,
+}) => {
+  await boot(page);
+  await caretAtEnd(page, "Second");
+  await page.keyboard.type(" **Note.**");
+  await expect(paragraph(page, "Second").locator("strong")).toHaveText(
+    "Note.",
+    { timeout: 500 },
+  );
+  await page.keyboard.type(" Done");
+  expect(await source(page)).toContain("Second paragraph. **Note.** Done\n");
+});
+
+test("Enter renders only its block; blocks below still map to the source", async ({
+  page,
+}) => {
+  await boot(page);
+  const list = page.locator("#content ul").first();
+  const before = await list.getAttribute("data-from");
+  // Split "Second paragraph." after "Second".
+  await page.evaluate(() => {
+    const run = [
+      ...document.querySelectorAll("#content p [data-text-from]"),
+    ].find((el) => el.textContent.startsWith("Second")).firstChild;
+    document.querySelector("#content").focus();
+    getSelection().collapse(run, "Second".length);
+  });
+  await page.keyboard.press("Enter");
+  await expect(paragraph(page, "paragraph.")).toHaveText("paragraph.");
+  await expect(paragraph(page, "Second")).toHaveText("Second");
+  // No full render yet: the list keeps the position it was rendered with...
+  expect(await list.getAttribute("data-from")).toBe(before);
+  // ...and typing in it still lands at its place in the source.
+  await page.locator("#content li").filter({ hasText: "one" }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("X");
+  expect(await source(page)).toContain("Second\n\nparagraph.\n\n- oneX\n- two");
+  // Once typing stops, the full render brings every position up to date.
+  await expect
+    .poll(() => list.getAttribute("data-from"))
+    .toBe(String(Number(before) + 1));
+});
+
+test("table cells take typing on one line; a | is written escaped", async ({
+  page,
+}) => {
+  const table = "# T\n\n| A | B |\n| --- | --- |\n| one | two |\n\nAfter.\n";
+  await boot(page, { text: table });
+  const cell = page.locator("#content td").filter({ hasText: "one" });
+  await cell.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("!");
+  expect(await source(page)).toBe(table.replace("| one |", "| one! |"));
+  await expect(cell).toHaveText("one!");
+  await page.keyboard.type("|");
+  expect(await source(page)).toContain("| one!\\| | two |");
+  // Typing goes on after the escaped "|", in the same cell.
+  await page.keyboard.type("?");
+  expect(await source(page)).toContain("| one!\\|? | two |");
+  await expect(cell).toHaveText("one!|?");
+  // Enter and joins change nothing in a cell.
+  const now = await source(page);
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Backspace");
+  expect(await source(page)).toBe(now);
+  await expect(page.locator("#content table")).toHaveCount(1);
 });
 
 test("deleting a selection across bold keeps the markup around what is left", async ({
@@ -303,4 +401,94 @@ test("after a pause the preview re-renders and the caret stays where typing goes
         !!getSelection().anchorNode?.parentElement?.closest("[data-text-from]"),
     ),
   ).toBe(true);
+});
+
+// Each block is its own editing host (typing in a long note costs a block's
+// work, not the note's); the caret and selections still cross blocks.
+test("arrow keys, Shift and a drag cross blocks", async ({ page }) => {
+  await boot(page);
+  const hostOf = (end) =>
+    page.evaluate((end) => {
+      const node = getSelection()[end + "Node"];
+      return (node.nodeType === 1 ? node : node.parentElement)
+        .closest("[data-direct-host]")
+        ?.textContent.replace(/\s+/g, "")
+        .slice(0, 6);
+    }, end);
+  // Right at a block's end goes to the next block's start; Left comes back.
+  await caretAtEnd(page, "First");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.type("X");
+  expect(await source(page)).toContain("XSecond paragraph.");
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("Y");
+  expect(await source(page)).toContain("here.Y\n\nXSecond");
+  // Down from a block's last line goes to the next block, Up back.
+  await paragraph(page, "Second").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowDown");
+  expect(await hostOf("anchor")).toBe("onetwo");
+  await page.keyboard.press("ArrowUp");
+  expect(await hostOf("anchor")).toBe("XSecon");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  expect(await hostOf("anchor")).toMatch(/^.?Title/);
+  // Ctrl+End: the end of the last block that takes typing.
+  await page.keyboard.press("Control+End");
+  expect(await hostOf("anchor")).toBe("onetwo");
+  // Shift+Down selects into the next block; Backspace removes the selection.
+  await paragraph(page, "Second").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+ArrowDown");
+  expect(await hostOf("anchor")).toBe("XSecon");
+  expect(await hostOf("focus")).toBe("onetwo");
+  await page.keyboard.press("Shift+End");
+  await page.keyboard.press("Backspace");
+  expect(await source(page)).not.toContain("Second paragraph.");
+  expect(await source(page)).toContain("two");
+  // A drag from one block into another selects across them.
+  const first = await paragraph(page, "First").boundingBox();
+  const target = await page.locator("#content li").first().boundingBox();
+  await page.mouse.move(first.x + 2, first.y + first.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(target.x + 30, target.y + target.height / 2, {
+    steps: 6,
+  });
+  await page.mouse.up();
+  expect(await hostOf("anchor")).toMatch(/^First/);
+  expect(await hostOf("focus")).not.toMatch(/^First/);
+  // Ctrl+A selects the whole note, not one block.
+  await paragraph(page, "First").click();
+  await page.keyboard.press("Control+a");
+  expect(await hostOf("anchor")).toMatch(/^.?Title/);
+  expect(
+    await page.evaluate(() => getSelection().getRangeAt(0).toString()),
+  ).toContain("two");
+});
+
+test("cutting a selection over blocks copies all of it and removes it from the source", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.evaluate(() => {
+    window.__copied = null;
+    // Last in line: what the clipboard gets.
+    window.addEventListener("copy", (event) => {
+      window.__copied = event.clipboardData.getData("text/plain");
+    });
+  });
+  await paragraph(page, "First").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Shift+ArrowDown");
+  await page.keyboard.press("Shift+End");
+  await page.keyboard.press("Control+x");
+  await expect(paragraph(page, "Second")).toHaveCount(0);
+  expect(await source(page)).toContain(
+    "First **bold** text and $x^2$ here.\n\n- one",
+  );
+  // The clipboard has the whole selection, not the first block's part.
+  await expect
+    .poll(() => page.evaluate(() => window.__copied))
+    .toContain("Second paragraph.");
 });

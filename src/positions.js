@@ -25,6 +25,17 @@ function underShield(measure) {
 export function atPoint(host, x, y) {
   return underShield(() => pointSource(host, x, y));
 }
+// The DOM caret position at a point of the page, or null.
+export function caretAt(x, y) {
+  return underShield(() => {
+    const caret = document.caretPositionFromPoint?.(x, y);
+    if (caret) return { node: caret.offsetNode, offset: caret.offset };
+    const range = document.caretRangeFromPoint?.(x, y);
+    return range
+      ? { node: range.startContainer, offset: range.startOffset }
+      : null;
+  });
+}
 function pointSource(host, x, y) {
   const caret = document.caretPositionFromPoint?.(x, y);
   const range = !caret && document.caretRangeFromPoint?.(x, y);

@@ -93,7 +93,102 @@ In Edit mode the source is on the left and the preview on the right; formulas, t
 
 ### Type right in the rendered note
 
-Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. Formulas, code and tables keep the pencil for editing in place. Turn off `Show the source pane in Edit mode` too, and Edit mode is the rendered note alone.
+Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. A formula typesets the moment you type its closing `<div align="center">
+
+<img src="docs/images/logo.svg" width="112" alt="Marklore logo: an open book shaped like an M, with a mug">
+
+# Marklore
+
+English · [简体中文](README.zh-CN.md)
+
+**A Markdown knowledge base for Windows: AI drafts your notes, you refine and mark them up. Plain files on your disk, and a reader worth spending hours in.**
+
+[![CI](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml/badge.svg)](https://github.com/Zhihua-Lee/marklore/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Zhihua-Lee/marklore?label=release)](https://github.com/Zhihua-Lee/marklore/releases/latest)
+![Windows](https://img.shields.io/badge/Windows-10%20%7C%2011-285e50)
+[![License: MIT](https://img.shields.io/badge/license-MIT-285e50)](LICENSE)
+
+[Why Marklore](#why-marklore) · [With an AI agent](#working-with-an-ai-agent) · [Features](#features) · [Install](#install) · [Getting started](#getting-started) · [User guide (Chinese)](docs/user-guide.md)
+
+</div>
+
+![Marklore reading view: the library on the left, rendered formulas and tables in the middle, the outline on the right](docs/images/en/overview.png)
+
+## Why Marklore
+
+More and more notes start as an AI draft. That is where the work begins: you check the draft, rewrite it and mark it up until it is yours. Marklore is built for that loop.
+
+**Your notes are the database.** A knowledge base in Marklore is a folder of ordinary `.md` files. Nothing is imported, there is no vault format, and Marklore keeps nothing of its own in your folders: drafts, backups and settings stay in your user profile. Git, a sync folder, any text editor, a script and any AI agent all work on the same files.
+
+**AI drafts, you refine.** Let Claude Code, Codex or any agent that edits files write first drafts and reorganize notes in the folder. Marklore shows each change as it lands: an open note re-renders within a fraction of a second, and new notes appear in the library. Then the note is yours to correct, in the editor or right in the rendered preview. The agent never overwrites your unsaved edits; Marklore shows a conflict instead.
+
+**Mark it up like a notebook.** Select text on the rendered page and highlight it, color it or make it bold, as you would in OneNote. Turn this on for Read mode too, if you like, in `Settings → Annotation`; it is off by default, so reading stays undisturbed. The marks are saved in the Markdown file itself, as standard inline HTML, so they travel with the note.
+
+**Reading comes first.** Most Markdown tools are editors with a preview pane. Marklore is a reader that you can also edit in:
+
+- typeset formulas, diagrams and sortable tables;
+- an outline that glides to each section;
+- link previews, so a reference never costs you your place;
+- typography tuned for long sessions, and optional smooth scrolling.
+
+**Links are how knowledge connects.** Relative links and heading anchors are ordinary Markdown, so they work in any viewer and any agent can write them. Marklore makes them navigable both ways: hover to preview, click to open, and `Alt+←` to return to the exact spot. A link you write once is also seen from the other end: a small count beside a section or definition shows which notes cite it, and in what sentence.
+
+**Local and quiet.** No account, no cloud, no telemetry, and no network requests from your notes. Remote images are not loaded. Marklore goes online only to check for and download updates: when you click **Check for updates**, or at startup if you turn that on.
+
+## Working with an AI agent
+
+![An agent writes a new note into the library; Marklore shows it in the tree and renders each addition as it lands](docs/images/en/agent.gif)
+
+1. Open your knowledge-base folder in Marklore (**Open folder**).
+2. Run your agent in the same folder, for example `claude` in a terminal there, and ask it to write, split, link or tidy notes.
+3. Read and refine: new files appear in the library, and open notes re-render as they change. Rewrite, correct and highlight by hand whenever you like; nothing is saved until you press `Ctrl+S`.
+
+To keep what the agent writes rendering correctly, you can put a few conventions in the folder's `AGENTS.md` or `CLAUDE.md`:
+
+```markdown
+Notes here are plain Markdown, read in Marklore.
+
+- One topic per file. Link related notes with relative links, including
+  heading anchors: [Parseval's identity](Fourier-analysis.md#parsevals-identity).
+- Give definitions and theorems an anchor others can link to: a line
+  `<a id="erm"></a>` above a paragraph that starts `**Definition (ERM).**`.
+- Inline math in `$…$`. Display math in `$$` blocks, each `$$` on its own line.
+- Tables, fenced code and fenced `mermaid` diagrams render as usual.
+- Images go in an `assets` folder next to the note.
+```
+
+## Features
+
+### Highlight and color, right on the page
+
+Select text on the rendered page and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. It is always there in Edit mode's preview; turn on `Settings → Annotation → Format bar in Read mode` to mark up while reading, where double-clicking a word selects it and `Alt`+double-click opens its source. The highlight and color buttons apply your last color; right-click either for the palette.
+
+![In Read mode, phrases are highlighted and colored on the page; Edit mode then shows the marks written into the Markdown](docs/images/en/annotate.gif)
+
+### Who links here, right where it is linked
+
+Beside each section, definition or theorem that other notes link to, a small count shows how often. Hover it to see the citing notes, their section and the sentence with the link; click one to jump there, and `Alt+←` to come back. Links in the note that lead nowhere get a dashed underline.
+
+Definitions and theorems marked with an anchor (`<a id="erm"></a>` above a bold lead such as **Definition (ERM).**) are listed in the outline under their section, with their counts, once something links to them. `Settings → Layout & sidebars → Anchors in the outline` can list every anchor instead, or none.
+
+Linking without typing paths:
+
+- **Copy link to here:** right-click a heading, definition or paragraph (or a note in the library, for the whole note). A paragraph without an anchor gets one, named after its bold lead (you can change it). Paste the link into another note and Marklore makes the path relative to that note.
+- **Pick a target:** in a link field (`Ctrl+K`, or Link in the format bar), type part of a note's name; choosing it lists its headings and anchors.
+
+Both write ordinary Markdown links and `<a id>` anchors, which other Markdown tools read too.
+
+![Hovering the count beside a definition lists the two notes that cite it; one opens at the citing sentence, Alt+← returns, and an anchored paragraph is reached from the outline](docs/images/en/backlinks.gif)
+
+### Live preview while you edit
+
+In Edit mode the source is on the left and the preview on the right; formulas, tables and code render while you type. You can also edit a single block right in the preview: its source takes the block's place, and nothing around it moves. Double-clicking text in the reading view opens its source in Edit mode, with the clicked text staying where it was on screen.
+
+![Typing a sentence with a formula in Edit mode: the preview renders it as it is typed](docs/images/en/edit.gif)
+
+### Type right in the rendered note
+
+Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. , and table cells take typing too; formulas, code and a table's structure keep the pencil for editing in place. Turn off `Show the source pane in Edit mode` too, and Edit mode is the rendered note alone.
 
 ![Typing on the rendered page: a sentence with a formula typesets after a pause, Enter adds a line to the tip with a bold lead, and Source mode shows the Markdown that was written](docs/images/en/direct.gif)
 

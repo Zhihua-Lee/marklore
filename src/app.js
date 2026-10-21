@@ -79,6 +79,7 @@ import "./library-search.css";
 import { createFindBar } from "./find-bar.js";
 import { wireSourceCopy } from "./copy-source.js";
 import { createSmoothScroll } from "./smooth-scroll.js";
+import { releaseWhenQuiet } from "./memory-release.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -229,6 +230,7 @@ const tabBar = createTabBar({
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
 const smoothScroll = createSmoothScroll($("#reader"));
+releaseWhenQuiet(api?.releaseMemory);
 wireSourceCopy({
   host: $("#content"),
   source: () => active?.previewText,
@@ -351,6 +353,10 @@ function stateFor(doc) {
           active.state = update.state;
           active.epoch++;
           active.htmlText = null;
+          // Edits since the preview was last rendered, to map its positions.
+          active.pending = active.pending
+            ? active.pending.compose(update.changes)
+            : update.changes;
           updateTabs();
           updateStatus();
           scheduleSession();
@@ -521,7 +527,51 @@ directEditor = createDirectEditor({
   },
   report: toast,
   patched: (node) => previewCache.taint($("#content"), node),
+  renderBlocks,
 });
+// Direct editing changed the blocks `olds` (siblings in one parent), now the
+// source from..to: render that slice alone and put it in their place, so a
+// structural edit costs one block's render, not the note's. The full render
+// still follows once typing stops. Returns the new nodes, or null where a
+// slice could render differently from the whole note (headings, reference
+// definitions, footnotes, raw HTML blocks), or math has not loaded yet;
+// also when `accept` declines the new nodes (nothing changed). `prepare`
+// sees them before they enter the page.
+function renderBlocks(olds, from, to, { accept, prepare } = {}) {
+  const doc = active;
+  if (!doc || blockEditor?.active || isDiffDocument(doc)) return null;
+  const slice = doc.text.slice(from, to);
+  if (
+    /^ {0,3}(?:#{1,6}(?:\s|$)|=+\s*$|-{2,}\s*$|<)/m.test(slice) ||
+    /^ {0,3}\[[^\]]+\]:|\[\^/m.test(doc.text) ||
+    (mayContainMath(slice) && !mathReady())
+  )
+    return null;
+  const result = renderMarkdown(slice, doc.fileId, {
+    deferMath: true,
+    interactiveTasks: true,
+    progressive: false,
+    base: from,
+  });
+  const nodes = [...result.fragment.childNodes];
+  while (nodes[0]?.nodeType === 3 && !nodes[0].textContent.trim())
+    nodes.shift();
+  while (nodes.at(-1)?.nodeType === 3 && !nodes.at(-1).textContent.trim())
+    nodes.pop();
+  if (!nodes.length || (accept && !accept(nodes))) return null;
+  prepare?.(nodes);
+  const container = $("#content");
+  previewCache.place(container, olds, nodes, result.hydrate);
+  doc.partial = true;
+  renderDiagrams(container, settings.theme);
+  const has = (selector) =>
+    nodes.some((node) => node.querySelector?.(selector));
+  if (has("table")) scheduleTableLayout();
+  // Links to mark when they lead nowhere (badges sit on headings and
+  // anchors, which a full render brings).
+  if (has("a[href]")) backlinks?.refresh();
+  return nodes;
+}
 function editorAnchor() {
   if (view.scrollDOM.scrollTop < 2) return { from: 0, top: true };
   const r = view.contentDOM.getBoundingClientRect(),
@@ -739,6 +789,10 @@ function setMode(mode, { anchor: destination } = {}) {
   $("#panes").dataset.mode = mode;
   render(false);
   updateModes();
+  // The reader changes width with the source pane: land it before the first
+  // frame, so the note and the scrollbar don't show the old position first.
+  if (mode !== "source")
+    navigateToAnchor($("#reader"), anchor, { expand: true });
   requestAnimationFrame(() => {
     if (active === doc && doc.mode === mode)
       restore(doc, anchor, { expand: true, select: mode !== "read" });
@@ -779,6 +833,8 @@ function render(preserve) {
     bytes: doc.renderBytes,
   });
   doc.previewText = doc.text;
+  doc.pending = null;
+  doc.partial = false;
   // E.g. highlight.js arriving re-renders code blocks under an open preview.
   linkPreview.release();
   if (changed) {
@@ -1172,9 +1228,22 @@ const TASK_MARKER = /^([ \t>]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX])\]/;
 $("#content").addEventListener("change", (event) => {
   const box = event.target.closest?.("input.task-list-item-checkbox");
   if (!box || !active) return;
-  const from = Number(
-    box.closest("li.task-list-item[data-from]")?.dataset.from,
-  );
+  // Positions after an edit not yet rendered may name another task: map them
+  // through the edits since the last render. Blocks rendered on their own
+  // since (direct editing) carry newer positions: render first then, and
+  // go on only with a box the render kept.
+  if (active.previewText !== active.text && active.partial) {
+    clearTimeout(renderingTimer);
+    render(true);
+    if (active.previewText !== active.text || !box.isConnected) {
+      box.checked = !box.checked;
+      toast(t("预览正在更新，请稍后再试。"));
+      return;
+    }
+  }
+  let from = Number(box.closest("li.task-list-item[data-from]")?.dataset.from);
+  if (active.previewText !== active.text && active.pending)
+    from = active.pending.mapPos(from, 1);
   const doc = view.state.doc;
   const match =
     !blockEditor?.active &&

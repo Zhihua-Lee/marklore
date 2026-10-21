@@ -4,16 +4,34 @@ import { createHash } from "node:crypto";
 import { execFile, spawn as spawnProcess } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
+import { createRequire } from "node:module";
 import { t } from "./i18n.mjs";
 
 // Updates from Marklore's GitHub releases. An installed copy runs the new
 // setup over itself; a zip copy (also a portable one) has its folder
 // overwritten once it has quit. Either way the program stays at the same
 // path, so the file association and the startup entry keep working. Each
-// download is checked against the release's SHA256SUMS file first.
+// download is checked against the release's SHA256SUMS file first. When the
+// new version runs on the same Electron, either copy takes only Marklore's own
+// files (app.asar and the documents beside the program, a few MB) instead of
+// the whole package.
 export const feedUrl =
   "https://api.github.com/repos/Zhihua-Lee/marklore/releases/latest";
 const execute = promisify(execFile);
+// Electron reads a path through an .asar file as a path into that archive, so
+// removing an unpacked update (it holds resources/app.asar) never finished
+// and left the files behind. Its unpatched fs sees a plain file.
+const plain = (() => {
+  try {
+    return createRequire(import.meta.url)("original-fs").promises;
+  } catch {
+    return fs;
+  }
+})();
+const removeFolder = (folder) =>
+  plain
+    .rm(folder, { recursive: true, force: true, maxRetries: 10 })
+    .catch(() => {});
 
 const parts = (version) =>
   String(version)
@@ -29,13 +47,25 @@ export function newer(a, b) {
   return false;
 }
 
-// The asset names each release carries (see docs/development.md).
-export const assetNames = (version) => ({
+// The asset names each release carries (see docs/development.md). The app
+// files are named after the Electron version they need.
+export const assetNames = (version, electron) => ({
   setup: `Marklore-Setup-v${version}-x64.exe`,
   zip: `Marklore-v${version}-win-x64.zip`,
   folder: `Marklore-v${version}-win-x64`,
   sums: `SHA256SUMS-v${version}.txt`,
+  ...(electron && { app: `Marklore-v${version}-app-electron-${electron}.zip` }),
 });
+
+// What the app files hold, beside the program: everything else in the
+// package is Electron's and stays as it is.
+export const appFiles = [
+  "resources/app.asar",
+  "LICENSE",
+  "THIRD-PARTY-NOTICES.txt",
+  "README.md",
+  "README.zh-CN.md",
+];
 
 // "<sha256>  <name>" lines, as sha256sum writes them.
 export function parseSums(text) {
@@ -50,13 +80,15 @@ export function parseSums(text) {
 // Run by Windows PowerShell after Marklore quits: it waits for the old
 // copy's processes to end, puts the new files in place and starts the
 // program again. Folder copies are overwritten without deleting anything, so
-// a portable "data" folder beside the program stays as it is.
+// a portable "data" folder beside the program stays as it is. App files are
+// copied the same way; an installed copy then shows the new version in
+// "Apps & features".
 // Marklore starts it and waits: it starts itself again as a process of its
 // own and returns. (PowerShell started detached by Node does not run.)
-export const helperScript = `param([int]$Parent, [string]$Kind, [string]$Source, [string]$Target, [string]$Log, [switch]$Own)
+export const helperScript = `param([int]$Parent, [string]$Kind, [string]$Source, [string]$Target, [string]$Log, [string]$Version, [switch]$Own)
 if (-not $Own) {
   $q = { param($v) '"' + $v + '"' }
-  $list = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', (& $q $PSCommandPath), '-Parent', $Parent, '-Kind', $Kind, '-Source', (& $q $Source), '-Target', (& $q $Target), '-Log', (& $q $Log), '-Own')
+  $list = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', (& $q $PSCommandPath), '-Parent', $Parent, '-Kind', $Kind, '-Source', (& $q $Source), '-Target', (& $q $Target), '-Log', (& $q $Log), '-Version', $Version, '-Own')
   Start-Process -FilePath (Join-Path $PSHOME 'powershell.exe') -ArgumentList $list -WindowStyle Hidden
   exit 0
 }
@@ -75,6 +107,10 @@ if ($Kind -eq 'installer') {
 } else {
   & robocopy $Source $Target /E /R:10 /W:1 /NP /NFL /NDL /NJH /NJS | Out-Null
   Note "robocopy exit $LASTEXITCODE"
+  if ($Kind -eq 'app' -and $Version) {
+    $uninstaller = Join-Path $Target 'Uninstall Marklore.exe'
+    Get-ChildItem 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall' -ErrorAction SilentlyContinue | Where-Object { "$((Get-ItemProperty $_.PSPath).UninstallString)".Contains($uninstaller) } | ForEach-Object { Set-ItemProperty $_.PSPath DisplayVersion $Version; Note "entry $Version" }
+  }
 }
 Start-Process -FilePath $exe
 Note 'started'
@@ -87,6 +123,7 @@ export function createUpdater({
   available,
   temp,
   fetch,
+  electron = process.versions.electron,
   feed = process.env.FOLIO_UPDATE_FEED || feedUrl,
   run = execute,
   spawn = spawnProcess,
@@ -167,13 +204,7 @@ export function createUpdater({
         : (await fs.readFile(log, "utf8").catch(() => "")).trim();
       // Reported once, even if a scanner still holds a file in the folder.
       await fs.rm(pendingFile, { force: true }).catch(() => {});
-      await fs
-        .rm(folder, {
-          recursive: true,
-          force: true,
-          maxRetries: 10,
-        })
-        .catch(() => {});
+      await removeFolder(folder);
       return {
         updated,
         version: pending?.version,
@@ -209,31 +240,43 @@ export function createUpdater({
       const target = path.dirname(executable);
       if (kind === "folder" && !(await writable(target)))
         throw Error(t("程序所在文件夹不可写入，请从发布页下载"));
-      const names = assetNames(state.latest),
+      const names = assetNames(state.latest, electron),
+        find = (name) => release.assets?.find((item) => item.name === name),
         asset = (name) => {
-          const found = release.assets?.find((item) => item.name === name);
+          const found = find(name);
           if (!found) throw Error(t("发布中缺少 {name}", { name }));
           return found;
         };
-      const wanted = kind === "installer" ? names.setup : names.zip;
       set({ downloading: true, progress: 0, error: null });
       try {
-        await fs.rm(folder, { recursive: true, force: true });
+        // A scanner may still hold files of an earlier update a moment.
+        await removeFolder(folder);
         await fs.mkdir(folder, { recursive: true });
         const sumsFile = path.join(folder, names.sums);
         await download(asset(names.sums), sumsFile, false);
-        const expected = parseSums(await fs.readFile(sumsFile, "utf8")).get(
-          wanted,
-        );
+        const sums = parseSums(await fs.readFile(sumsFile, "utf8"));
+        // Same Electron and a folder that takes files: only the app files.
+        const app =
+          names.app &&
+          find(names.app) &&
+          sums.has(names.app) &&
+          (kind === "folder" || (await writable(target)));
+        const wanted = app
+          ? names.app
+          : kind === "installer"
+            ? names.setup
+            : names.zip;
+        const expected = sums.get(wanted);
         if (!expected)
           throw Error(t("校验文件中没有 {name}", { name: wanted }));
         const file = path.join(folder, wanted);
         if ((await download(asset(wanted), file, true)) !== expected)
           throw Error(t("下载的文件校验不符，已放弃更新"));
         let source = file;
-        if (kind === "folder") {
-          const staging = path.join(folder, "staging");
-          await fs.mkdir(staging);
+        if (app || kind === "folder") {
+          // A new folder each time: an earlier one may not be gone yet.
+          const staging = path.join(folder, `staging-${Date.now()}`);
+          await fs.mkdir(staging, { recursive: true });
           await run(
             path.join(
               process.env.SystemRoot || "C:\\Windows",
@@ -244,9 +287,19 @@ export function createUpdater({
             { windowsHide: true, timeout: 300000, maxBuffer: 1024 * 1024 },
           );
           source = path.join(staging, names.folder);
-          await fs.access(path.join(source, path.basename(executable)));
+          // Listed, not opened: Electron reads an .asar path as an archive.
+          const [dir, name] = app
+            ? ["resources", "app.asar"]
+            : [".", path.basename(executable)];
+          if (!(await fs.readdir(path.join(source, dir))).includes(name))
+            throw Error(t("更新包不完整"));
         }
-        ready = { source, target, version: state.latest };
+        ready = {
+          source,
+          target,
+          version: state.latest,
+          kind: app ? "app" : kind,
+        };
         set({ downloading: false, progress: 100, ready: state.latest });
       } catch (error) {
         set({ downloading: false, progress: null, error: error.message });
@@ -262,7 +315,11 @@ export function createUpdater({
       await fs.writeFile(script, "\ufeff" + helperScript, "utf8");
       await fs.writeFile(
         pendingFile,
-        JSON.stringify({ version: ready.version, from: version, kind }),
+        JSON.stringify({
+          version: ready.version,
+          from: version,
+          kind: ready.kind,
+        }),
       );
       const child = spawn(
         path.join(
@@ -281,13 +338,15 @@ export function createUpdater({
           "-Parent",
           String(process.pid),
           "-Kind",
-          kind,
+          ready.kind,
           "-Source",
           ready.source,
           "-Target",
           ready.target,
           "-Log",
           log,
+          "-Version",
+          ready.version,
         ],
         { stdio: "ignore", windowsHide: true },
       );

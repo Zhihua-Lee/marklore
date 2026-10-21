@@ -338,6 +338,38 @@ export function createParser() {
           token.attrSet("data-folio-edit", key);
           state.env.editBlocks.push({ key, from, to, kind: token.type });
         }
+        // A table cell's "\|" reaches the inline parser as a plain "|" (the
+        // table rule unescapes it): split such text at its pipes into
+        // escapes, so each piece is found in the source again.
+        if (
+          token.type === "inline" &&
+          /^t[hd]_open$/.test(state.tokens[i - 1]?.type) &&
+          token.children?.some(
+            (child) => child.type === "text" && child.content.includes("|"),
+          )
+        ) {
+          const list = [];
+          for (const child of token.children) {
+            if (child.type !== "text" || !child.content.includes("|")) {
+              list.push(child);
+              continue;
+            }
+            child.content.split("|").forEach((piece, k) => {
+              if (k) {
+                const pipe = new state.Token("text_special", "", 0);
+                pipe.content = "|";
+                pipe.markup = "\\|";
+                list.push(pipe);
+              }
+              if (piece) {
+                const text = new state.Token("text", "", 0);
+                text.content = piece;
+                list.push(text);
+              }
+            });
+          }
+          token.children = list;
+        }
         if (token.type === "inline") {
           const range = `${from}:${to}`;
           const inlineSource = state.src.slice(from, to);
@@ -401,6 +433,20 @@ export function createParser() {
               ) {
                 child.meta = { from: at, to: at + child.content.length };
                 cursor = at + child.content.length;
+              }
+            } else if (child.type === "text_special" && child.markup) {
+              // An escape or entity ("\|", "&amp;") stays a token of its own
+              // with its source span: joined into the text around it, the
+              // text would match nothing in the source and lose its place.
+              const relative = inlineSource.indexOf(
+                child.markup,
+                cursor - from,
+              );
+              const at = relative < 0 ? -1 : from + relative;
+              if (at >= cursor && at + child.markup.length <= to) {
+                child.type = "folio_escape";
+                child.meta = { from: at, to: at + child.markup.length };
+                cursor = child.meta.to;
               }
             } else if (child.type === "folio_math") {
               const relative = inlineSource.indexOf(
@@ -466,6 +512,10 @@ export function createParser() {
     return t.meta && from >= t.meta.from
       ? `<span data-text-from="${from}" data-text-to="${t.meta.to}">${content}</span>`
       : content;
+  };
+  md.renderer.rules.folio_escape = (tokens, i) => {
+    const t = tokens[i];
+    return `<span class="md-escape" data-src-from="${t.meta.from}" data-src-to="${t.meta.to}">${escape(t.content)}</span>`;
   };
   const codeInline = md.renderer.rules.code_inline;
   md.renderer.rules.code_inline = (tokens, i, options, env, self) => {
@@ -649,6 +699,9 @@ export function renderMarkdown(
     mapPosition = null,
     // Long code blocks show in full instead of folded.
     expandCode = false,
+    // The source is a slice of a note starting here (direct editing renders
+    // the blocks it changed): positions point into the whole note.
+    base = 0,
   } = {},
 ) {
   const env = { mathFragments: [], deferMath };
@@ -857,6 +910,28 @@ export function renderMarkdown(
         );
     for (const heading of env.headings || [])
       heading.from = mapPosition(heading.from);
+  }
+  if (base) {
+    for (const name of [
+      "data-from",
+      "data-to",
+      "data-text-from",
+      "data-text-to",
+      "data-block-from",
+      "data-block-to",
+      "data-edit-from",
+      "data-edit-to",
+      "data-src-from",
+      "data-src-to",
+      "data-src-inner-from",
+      "data-src-inner-to",
+    ])
+      for (const element of template.content.querySelectorAll(`[${name}]`))
+        element.setAttribute(
+          name,
+          String(base + Number(element.getAttribute(name))),
+        );
+    for (const heading of env.headings || []) heading.from += base;
   }
   const html = template.innerHTML;
   return {

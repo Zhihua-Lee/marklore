@@ -343,8 +343,8 @@ export default {
   "关闭后编辑模式只显示渲染后的正文，可配合下面的直接编辑使用":
     "When off, Edit mode shows only the rendered note; pair it with typing directly in the preview below",
   "在预览中直接编辑（试验）": "Type directly in the preview (experimental)",
-  "编辑模式下在渲染后的正文里直接打字；公式、代码和表格仍用铅笔就地编辑":
-    "In Edit mode, type into the rendered note itself; formulas, code and tables still open with the pencil",
+  "编辑模式下在渲染后的正文里直接打字，表格单元格也可以；公式、代码和表格结构仍用铅笔就地编辑":
+    "In Edit mode, type into the rendered note itself, table cells included; formulas, code and a table's structure still open with the pencil",
   阅读模式中的格式栏: "Format bar in Read mode",
   "划选文字即可高亮、标色和加粗；Alt+双击跳到源码":
     "Select text to highlight, color or bold it; Alt+double-click opens the source",

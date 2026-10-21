@@ -53,6 +53,7 @@ for (const name of [
   "linkTargets",
   "windowState",
   "windowAction",
+  "releaseMemory",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {

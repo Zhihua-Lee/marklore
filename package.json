@@ -27,6 +27,7 @@
     "test:native-navigation": "node tests/native-navigation.mjs",
     "test:native-image-access": "node tests/native-image-access.mjs",
     "test:native-update": "node tests/native-update.mjs",
+    "test:native-gpu": "node tests/native-gpu.mjs",
     "test:native:all": "node tools/run-native-suites.mjs",
     "icons": "node tools/build-icons.mjs",
     "format": "prettier --write src desktop tests tools docs *.mjs *.json *.md",
@@ -78,6 +79,8 @@
       "!node_modules/**"
     ],
     "asar": true,
+    "afterPack": "build/after-pack.cjs",
+    "compression": "maximum",
     "electronLanguages": [
       "zh-CN",
       "en-US"

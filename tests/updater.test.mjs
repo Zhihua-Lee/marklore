@@ -69,7 +69,21 @@ function feed(version, files) {
   };
 }
 
-async function setup({ installed, files, version = "0.3.1" }) {
+// The folder the update was unpacked to (a new one each time).
+async function staged(temp, names) {
+  const folder = path.join(temp, "marklore-update");
+  const [staging] = (await fs.readdir(folder)).filter((name) =>
+    name.startsWith("staging-"),
+  );
+  return path.join(folder, staging, names.folder);
+}
+
+async function setup({
+  installed,
+  files,
+  version = "0.3.1",
+  electron = "44.4.5",
+}) {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), "marklore-update-"));
   const program = path.join(temp, "app");
   await fs.mkdir(program);
@@ -83,11 +97,15 @@ async function setup({ installed, files, version = "0.3.1" }) {
     temp,
     feed: "https://example.test/latest",
     fetch: feed(version, files),
-    // Stands in for tar: unpack the "zip" as one folder with the program.
+    electron,
+    // Stands in for tar: unpack the "zip" as one folder, with the program or
+    // only the app files.
     run: async (_tar, args) => {
       const folder = path.join(args[3], assetNames(version).folder);
-      await fs.mkdir(folder, { recursive: true });
-      await fs.writeFile(path.join(folder, "Marklore.exe"), "new");
+      await fs.mkdir(path.join(folder, "resources"), { recursive: true });
+      if (args[1].includes("-app-"))
+        await fs.writeFile(path.join(folder, "resources", "app.asar"), "new");
+      else await fs.writeFile(path.join(folder, "Marklore.exe"), "new");
     },
     spawn: (...args) => {
       spawned.push(args);
@@ -136,10 +154,56 @@ test("a zip copy unpacks the checked zip beside itself", async () => {
   await updater.apply();
   const args = spawned[0][1];
   assert.equal(args[args.indexOf("-Kind") + 1], "folder");
-  assert.equal(
-    args[args.indexOf("-Source") + 1],
-    path.join(temp, "marklore-update", "staging", names.folder),
-  );
+  assert.equal(args[args.indexOf("-Source") + 1], await staged(temp, names));
+});
+
+test("on the same Electron, either copy takes only the app files", async () => {
+  const names = assetNames("0.3.1", "44.4.5");
+  assert.equal(names.app, "Marklore-v0.3.1-app-electron-44.4.5.zip");
+  for (const installed of [true, false]) {
+    const { temp, program, updater, spawned } = await setup({
+      installed,
+      files: {
+        [names.setup]: Buffer.alloc(300000, 7),
+        [names.zip]: Buffer.from("zip"),
+        [names.app]: Buffer.from("app"),
+      },
+    });
+    await updater.check();
+    await updater.prepare();
+    await updater.apply();
+    const args = spawned[0][1];
+    assert.equal(args[args.indexOf("-Kind") + 1], "app");
+    assert.equal(args[args.indexOf("-Source") + 1], await staged(temp, names));
+    assert.equal(args[args.indexOf("-Target") + 1], program);
+    assert.equal(args[args.indexOf("-Version") + 1], "0.3.1");
+    // Only the app files were downloaded.
+    assert.deepEqual(
+      (await fs.readdir(path.join(temp, "marklore-update")))
+        .filter((name) => !name.startsWith("staging-"))
+        .sort(),
+      ["apply-update.ps1", names.app, "pending.json", names.sums].sort(),
+    );
+  }
+});
+
+test("another Electron takes the whole package", async () => {
+  const names = assetNames("0.3.1", "45.0.0");
+  const { updater, spawned } = await setup({
+    installed: false,
+    files: { [names.zip]: Buffer.from("zip"), [names.app]: Buffer.from("app") },
+  });
+  await updater.check();
+  await updater.prepare();
+  await updater.apply();
+  const args = spawned[0][1];
+  assert.equal(args[args.indexOf("-Kind") + 1], "folder");
+});
+
+test("the helper sets an installed copy's version after app files", () => {
+  assert.match(helperScript, /\$Kind -eq 'app'/);
+  assert.match(helperScript, /Set-ItemProperty \$_\.PSPath DisplayVersion/);
+  assert.match(helperScript, /'-Version', \$Version, '-Own'/);
 });
 
 test("a download that does not match its checksum is refused", async () => {

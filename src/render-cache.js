@@ -193,6 +193,26 @@ export function createPreviewCache({
         }
       if (active) active.html = null;
     },
+    // Direct editing rendered some blocks of the visible note on their own:
+    // they take the place of `olds` (siblings in one parent). They are
+    // described before their formulas expand, as a full render's are, so the
+    // next full render keeps them when it renders the same.
+    place(container, olds, nodes, hydrate) {
+      for (const node of nodes) describe(node);
+      for (const node of nodes) hydrate?.(node);
+      const first = olds[0];
+      first.before(...nodes);
+      for (const old of olds) old.remove();
+      if (!active) return;
+      // Blocks before the first heading are the entry's own nodes.
+      const at = active.nodes.indexOf(first);
+      if (at >= 0) {
+        const rest = active.nodes.filter((node) => !olds.includes(node));
+        rest.splice(at, 0, ...nodes);
+        active.nodes = rest;
+      }
+      active.html = null;
+    },
     release(key) {
       remove(key);
       if (active?.key === key) active = null;

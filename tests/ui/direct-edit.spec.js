@@ -492,3 +492,33 @@ test("cutting a selection over blocks copies all of it and removes it from the s
     .poll(() => page.evaluate(() => window.__copied))
     .toContain("Second paragraph.");
 });
+
+test("the render after a pause keeps the note where it is on screen", async ({
+  page,
+}) => {
+  const long = Array.from(
+    { length: 60 },
+    (_, i) =>
+      `Paragraph ${i} has enough words to wrap over two lines in the reader, with $x_${i}$ inside it.`,
+  ).join("\n\n");
+  await boot(page, { editSplit: false, text: `# Long\n\n${long}\n` });
+  // Stop mid-line: the reading anchor's character is above the probe point.
+  await page.evaluate(
+    () => (document.querySelector("#reader").scrollTop = 913),
+  );
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(
+    () => document.querySelector("#reader").scrollTop,
+  );
+  const box = await paragraph(page, "Paragraph 30").boundingBox();
+  await page.mouse.click(box.x + 20, box.y + 8);
+  await page.keyboard.type(" typed");
+  // The pause render replaces the paragraph; nothing above it changed.
+  await page.waitForTimeout(1500);
+  expect(
+    Math.abs(
+      (await page.evaluate(() => document.querySelector("#reader").scrollTop)) -
+        before,
+    ),
+  ).toBeLessThanOrEqual(1);
+});

@@ -42,11 +42,22 @@ function pointSource(host, x, y) {
   const node = caret?.offsetNode || range?.startContainer,
     offset = caret?.offset ?? range?.startOffset;
   const leaf = node?.parentElement?.closest("[data-text-from]");
-  if (leaf && host.contains(leaf))
+  if (leaf && host.contains(leaf)) {
+    // Where that character's box starts now (findPosition measures the same
+    // box when the anchor is restored).
+    let top;
+    if (node.nodeType === 3) {
+      const range = document.createRange();
+      range.setStart(node, Math.min(offset, node.length));
+      range.setEnd(node, Math.min(node.length, offset + 1));
+      top = range.getBoundingClientRect().top;
+    }
     return {
       from: Number(leaf.dataset.textFrom) + textOffset(leaf, node, offset),
       exact: true,
+      top,
     };
+  }
   const target = document.elementFromPoint(x, y)?.closest("[data-from]");
   if (target && host.contains(target))
     return {
@@ -122,7 +133,12 @@ function readingAnchor(host) {
     rect.left + rect.width * 0.5,
   ]) {
     const hit = atPoint(host, x, y);
-    if (hit?.exact) return { ...hit, y: 32 };
+    // The character keeps its place: its box's top, not the probe's height
+    // (up to a line below it), goes back to where it is now.
+    if (hit?.exact) {
+      const { top, ...anchor } = hit;
+      return { ...anchor, y: top === undefined ? 32 : top - rect.top };
+    }
     const block = document.elementFromPoint(x, y)?.closest("[data-from]");
     if (block && host.contains(block)) visibleBlock = block;
   }

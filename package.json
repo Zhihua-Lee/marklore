@@ -1,6 +1,6 @@
 {
   "name": "marklore",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "private": true,
   "type": "module",
   "description": "Independent offline Markdown notebook for Windows",
@@ -51,17 +51,17 @@
     "dompurify": "3.4.16",
     "highlight.js": "11.12.0",
     "katex": "0.18.9",
-    "markdown-it": "15.0.2",
+    "markdown-it": "15.0.3",
     "markdown-it-footnote": "4.0.0",
     "markdown-it-task-lists": "2.1.1",
-    "mermaid": "12.0.0"
+    "mermaid": "12.2.0"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
-    "electron": "44.4.5",
+    "electron": "44.9.3",
     "electron-builder": "26.15.3",
     "prettier": "3.9.9",
-    "vite": "8.3.1"
+    "vite": "8.3.4"
   },
   "build": {
     "appId": "io.marklore.desktop",

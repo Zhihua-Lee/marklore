@@ -121,6 +121,8 @@ CI 的 `mac` 任务在 `macos-latest` 上运行 `pnpm exec electron-builder --ma
 
 新版本与正在运行的程序使用同一个 Electron 时，两种版本都只下载应用文件 `Marklore-vX.Y.Z-app-electron-<Electron 版本>.zip`（约 3.5 MB，内含同名文件夹，只有 `resources/app.asar`、README、LICENSE 和第三方声明），而不是约 100 MB 的完整包。文件名里的 Electron 版本决定能否使用：版本不同、发布中没有这个文件或程序目录不可写时，照旧下载完整包。发布时用 `node tools/app-update.mjs <win-unpacked> <输出目录> [版本]` 生成，Electron 版本取自包内的 `version` 文件，并把它加入 `SHA256SUMS-vX.Y.Z.txt`。下载在单独的会话中进行，默认会话仍拦截所有网络请求。
 
+SHA256SUMS 与下载走同一条连接，能冒充 GitHub 的人可以一并替换，所以更新的安全取决于 TLS。Chrome 用 CRLSet 推送屏蔽出事的证书机构，Electron 收不到这些推送；更新会话因此自己拒绝经过这些机构的证书链（`distrusted`，用 `setCertificateVerifyProc`，其余照 Chromium 的验证结果）。目前是 eMudhra（2026-10，中间证书私钥可被猜出）。以后再有证书机构出事，把它加进 `distrusted` 并发布新版本。
+
 校验通过后写入一个 PowerShell 辅助脚本并退出：脚本等旧进程结束，安装版运行 `Setup /S /currentuser --updated /D=<原目录>`，压缩包版用 `robocopy /E` 覆盖程序目录（不删除文件，便携 `data` 保留）；应用文件同样用 `robocopy` 覆盖，安装版随后把“应用和功能”中的版本改为新版本。然后重新启动 Marklore。下次启动时读取 `pending.json` 报告结果并删除下载；下载里有 `app.asar`，Electron 的 `fs` 会把它当作归档读，所以删除用 `original-fs`。`FOLIO_UPDATE_FEED` 可把查询指向本地测试服务；`tests/native-update.mjs` 用它端到端测试：压缩包版先用完整包、再用应用文件更新，安装版（`tools/installer-check.ps1 -Newer`）先用新安装包、再用应用文件更新。
 
 ### 发布与清理本地产物

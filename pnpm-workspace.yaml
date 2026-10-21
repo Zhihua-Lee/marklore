@@ -2,3 +2,11 @@ allowBuilds:
   electron: true
   esbuild: true
   electron-winstaller: false
+
+minimumReleaseAgeExclude:
+  - electron@44.9.3
+
+overrides:
+  # Security fixes the packages that bring them in do not pin yet.
+  lodash-es: ^4.18.1
+  source-map-js: ^1.2.2

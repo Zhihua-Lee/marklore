@@ -11,6 +11,7 @@ import {
   assetNames,
   createUpdater,
   helperScript,
+  distrusted,
 } from "../desktop/updater.mjs";
 
 test("compares release versions", () => {
@@ -19,6 +20,39 @@ test("compares release versions", () => {
   assert.equal(newer("0.2.9", "0.2.9"), false);
   assert.equal(newer("0.2.8", "0.2.9"), false);
   assert.equal(newer("1.0.0", "0.99.99"), true);
+});
+
+test("refuses certificate chains through eMudhra", () => {
+  const cert = (cn, org, issuerCert) => ({
+    subjectName: cn,
+    issuerName: issuerCert?.subjectName ?? cn,
+    subject: { commonName: cn, organizations: [org] },
+    issuerCert,
+  });
+  const sectigo = cert("AAA Certificate Services", "Comodo CA Limited");
+  sectigo.issuerCert = sectigo;
+  const forged = cert(
+    "api.github.com",
+    "GitHub, Inc.",
+    cert("EM DV TLS CA - G3B", "eMudhra Inc", sectigo),
+  );
+  assert.equal(distrusted(forged), true);
+  // By name alone, whatever the organization says.
+  assert.equal(
+    distrusted(cert("x", "x", cert("EM OV CS CA - G3C", "Other", sectigo))),
+    true,
+  );
+  const github = cert(
+    "api.github.com",
+    "GitHub, Inc.",
+    cert(
+      "Sectigo ECC Domain Validation Secure Server CA",
+      "Sectigo Limited",
+      sectigo,
+    ),
+  );
+  assert.equal(distrusted(github), false);
+  assert.equal(distrusted(undefined), false);
 });
 
 test("reads sha256sum lines", () => {

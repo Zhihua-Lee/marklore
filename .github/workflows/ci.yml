@@ -11,6 +11,10 @@ on:
         type: boolean
         default: false
 
+# Read-only token: the jobs only check out, test and upload artifacts.
+permissions:
+  contents: read
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -26,6 +30,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true # not the runner's cached, possibly unpatched, release
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
@@ -57,6 +62,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true # not the runner's cached, possibly unpatched, release
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
@@ -81,6 +87,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          check-latest: true # not the runner's cached, possibly unpatched, release
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm build

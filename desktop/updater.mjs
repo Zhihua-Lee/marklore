@@ -47,6 +47,29 @@ export function newer(a, b) {
   return false;
 }
 
+// Whether a certificate chain (Electron's Certificate, each with its
+// issuerCert) passes through a certificate authority whose keys are broken.
+// Chrome blocks these through CRLSet updates, which Electron does not get, so
+// the update connection refuses them itself. 2026-10: eMudhra's G3B/G3C
+// intermediates (cross-signed by Sectigo) had guessable private keys; nothing
+// Marklore downloads is issued by eMudhra, so all of it is refused.
+export function distrusted(certificate) {
+  for (let c = certificate, depth = 0; c && depth < 10; depth++) {
+    const names = [
+      c.subjectName,
+      c.issuerName,
+      ...(c.subject?.organizations ?? []),
+    ].join("\n");
+    if (/emudhra/i.test(names)) return true;
+    if (
+      /^EM (DV|OV|EV) (TLS|CS) CA - G3[BC]$/.test(c.subject?.commonName ?? "")
+    )
+      return true;
+    c = c.issuerCert === c ? null : c.issuerCert;
+  }
+  return false;
+}
+
 // The asset names each release carries (see docs/development.md). The app
 // files are named after the Electron version they need.
 export const assetNames = (version, electron) => ({

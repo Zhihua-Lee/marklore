@@ -19,7 +19,7 @@ import { FileStore, within, realPath } from "./files.mjs";
 import { normalizeExcluded, excludedBy } from "./excluded.mjs";
 import { createExporter } from "./export.mjs";
 import { createIntegration } from "./integration.mjs";
-import { createUpdater } from "./updater.mjs";
+import { createUpdater, distrusted } from "./updater.mjs";
 import { profileFolder } from "./profile-folder.mjs";
 import { createLibraryWatch } from "./library-watch.mjs";
 import { createLinkIndex } from "./link-index.mjs";
@@ -491,6 +491,13 @@ else {
         (_wc, _permission, done) => done(false),
       );
       session.defaultSession.setPermissionCheckHandler(() => false);
+      // Updates refuse chains through broken certificate authorities;
+      // otherwise Chromium's own verification stands (-3).
+      session
+        .fromPartition("marklore-update")
+        .setCertificateVerifyProc((request, done) =>
+          done(distrusted(request.validatedCertificate) ? -2 : -3),
+        );
       // No external HTTP requests from notes, including tracking images. Links open only after confirmation.
       session.defaultSession.webRequest.onBeforeRequest(
         { urls: ["http://*/*", "https://*/*"] },

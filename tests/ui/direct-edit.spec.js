@@ -522,3 +522,65 @@ test("the render after a pause keeps the note where it is on screen", async ({
     ),
   ).toBeLessThanOrEqual(1);
 });
+
+// On Windows the input method hears of changes to the text around its
+// composition, and Sogou Pinyin ends the composition then: background work
+// (lazy formulas, diagrams, tables, link marks) waits until it is done.
+test("nothing else in the note changes while an input method composes", async ({
+  page,
+}) => {
+  // Long enough that formulas further down are still waiting to be typeset.
+  const long = Array.from(
+    { length: 600 },
+    (_, i) =>
+      `Line ${i} with $\\sum_{k=0}^{${i}} \\frac{y_k}{${i + 1}}$ and [a link](#nowhere${i}).`,
+  ).join("\n\n");
+  await boot(page, { editSplit: false, text: `# Long\n\n${long}\n` });
+  const box = await paragraph(page, /^Line 2 with/).boundingBox();
+  await page.mouse.click(box.x + 20, box.y + 6);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", {
+    text: "zh",
+    selectionStart: 2,
+    selectionEnd: 2,
+  });
+  await page.evaluate(() => {
+    window.__changes = 0;
+    new MutationObserver((records) => {
+      window.__changes += records.filter(
+        (r) => r.type !== "characterData",
+      ).length;
+    }).observe(document.querySelector("#content"), {
+      subtree: true,
+      childList: true,
+      attributes: true,
+    });
+  });
+  // Scrolling brings formulas that are not typeset yet into view.
+  const pending = await page.evaluate(
+    () => document.querySelectorAll("#content [data-folio-math]").length,
+  );
+  expect(pending).toBeGreaterThan(0);
+  for (let i = 0; i < 8; i++) {
+    await page.evaluate(() =>
+      document.querySelector("#reader").scrollBy(0, 3000),
+    );
+    await cdp.send("Input.imeSetComposition", {
+      text: "zhongwen".slice(0, 3 + (i % 6)),
+      selectionStart: 3,
+      selectionEnd: 3,
+    });
+    await page.waitForTimeout(150);
+  }
+  expect(await page.evaluate(() => window.__changes)).toBe(0);
+  await cdp.send("Input.insertText", { text: "中文" });
+  await expect.poll(() => source(page)).toContain("中文");
+  // Afterwards the formulas are typeset as usual.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.querySelectorAll("#content [data-folio-math]").length,
+      ),
+    )
+    .toBeLessThan(pending);
+});

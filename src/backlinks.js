@@ -3,6 +3,7 @@
 // the count), the same counts in the outline, and broken links marked in
 // place. Nothing is shown where nothing links in.
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
+import { settled } from "./composing.js";
 import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import "./backlinks.css";
@@ -300,12 +301,18 @@ export function createBacklinks({
         !/^#(L\d|fn)/i.test(href)
       );
     });
-    for (const a of links) {
-      a.classList.remove("link-broken");
-      a.removeAttribute("data-broken");
-    }
+    // Only what changes is written, and not while an input method composes
+    // (see composing.js): the note is checked again after each render.
+    await settled();
+    if (doc !== getActive()) return;
     const mark = (a, status) => {
-      if (status === "ok") return;
+      const broken = status === "ok" ? undefined : status;
+      if (a.dataset.broken === broken) return;
+      if (!broken) {
+        a.classList.remove("link-broken");
+        a.removeAttribute("data-broken");
+        return;
+      }
       a.classList.add("link-broken");
       a.dataset.broken = status;
       a.title =
@@ -343,6 +350,7 @@ export function createBacklinks({
       .catch(() => null);
     if (!results) return;
     unknown.forEach((a, i) => statuses.set(key(a), results[i] || "ok"));
+    await settled();
     if (mine !== epoch || doc !== getActive()) return;
     unknown.forEach((a, i) => mark(a, results[i] || "ok"));
   }

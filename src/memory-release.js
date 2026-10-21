@@ -2,6 +2,8 @@
 // ask the app to collect what that work left behind once the page has been
 // quiet for a while: no long task and no input (main.mjs decides whether it is
 // worth it). Chromium would otherwise keep that memory until it runs short.
+import { composing } from "./composing.js";
+
 export function releaseWhenQuiet(release, { quiet = 5000 } = {}) {
   if (!release || typeof PerformanceObserver === "undefined") return;
   if (!PerformanceObserver.supportedEntryTypes?.includes("longtask")) return;
@@ -15,7 +17,8 @@ export function releaseWhenQuiet(release, { quiet = 5000 } = {}) {
   const schedule = () => {
     clearTimeout(timer);
     timer = setTimeout(() => {
-      if (performance.now() - lastInput < quiet) return schedule();
+      if (performance.now() - lastInput < quiet || composing())
+        return schedule();
       release().catch(() => {});
     }, quiet);
   };

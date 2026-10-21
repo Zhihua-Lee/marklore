@@ -185,12 +185,23 @@ test("a Folio Notes login entry counts as another version", async () => {
   assert.equal((await integration.status()).startupOtherVersion, true);
 });
 
-test("Windows 10 opens the supported general defaults page", async () => {
+test("Windows 10 asks how to open a .md file, with Always use this app", async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "marklore-defaults-"));
+  const started = [];
   const { integration, launches } = fixture("unused", {
     windowsRelease: "10.0.19045",
+    temp,
+    launch: async (file, args) => started.push([path.basename(file), ...args]),
   });
   await integration.defaults();
-  assert.deepEqual(launches, ["ms-settings:defaultapps"]);
+  // Not the page of every file type.
+  assert.deepEqual(launches, []);
+  const sample = path.join(temp, "Marklore", "Marklore.md");
+  assert.deepEqual(started, [
+    ["rundll32.exe", "shell32.dll,OpenAs_RunDLL", sample],
+  ]);
+  assert.equal(await fs.readFile(sample, "utf8"), "# Marklore\n");
+  await fs.rm(temp, { recursive: true, force: true });
 });
 
 test("unsupported systems and unexpected registry errors are not reported as successful", async () => {

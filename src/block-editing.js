@@ -1,3 +1,4 @@
+import { composing } from "./composing.js";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap, drawSelection } from "@codemirror/view";
 import {
@@ -73,7 +74,7 @@ export function createBlockEditor({
     launch.style.top = Math.max(viewport.top + 40, r.top) + "px";
   }
   function selectTarget(element) {
-    if (session || getDocument()?.mode !== "edit") return;
+    if (session || getDocument()?.mode !== "edit" || composing()) return;
     const next = element?.closest("[data-edit-from]");
     if (!next || !content.contains(next)) return;
     if (target !== next) {

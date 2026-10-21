@@ -61,6 +61,12 @@ try {
     shell.openExternal = async (uri) => {
       globalThis.__desktopUris.push(uri);
     };
+    // Windows 10's "open with" dialog for a .md file (integration.mjs).
+    globalThis.__desktopLaunch = async (file, args) => {
+      globalThis.__desktopUris.push(
+        [file.split("\\").pop(), args[0], args[1].split("\\").pop()].join(" "),
+      );
+    };
     const setContextMenu = Tray.prototype.setContextMenu;
     Tray.prototype.setContextMenu = function (menu) {
       globalThis.__desktopTrayMenu = menu;
@@ -99,7 +105,7 @@ try {
     assert.deepEqual(await instance.evaluate(() => globalThis.__desktopUris), [
       Number(os.release().split(".")[2]) >= 22000
         ? "ms-settings:defaultapps?registeredAppUser=Marklore"
-        : "ms-settings:defaultapps",
+        : "rundll32.exe shell32.dll,OpenAs_RunDLL Marklore.md",
     ]);
   }
   await page.screenshot({

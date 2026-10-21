@@ -1,3 +1,4 @@
+import { composing } from "./composing.js";
 import { wireSortableTables } from "./table-sort.js";
 import { chooseColumnWidths } from "./table-widths.js";
 import {
@@ -215,6 +216,7 @@ export function watchTableLayout(host, scroller) {
     if (!host.getClientRects().length) return;
     if (
       navigationMoving(scroller) ||
+      composing() ||
       performance.now() - lastScroll < 250 ||
       timer !== null
     )
@@ -250,8 +252,9 @@ export function watchTableLayout(host, scroller) {
     timer = setTimeout(() => {
       timer = null;
       if (!host.getClientRects().length) return;
-      // Measure tables where a jump lands, not the ones it flies past.
-      if (navigationMoving(scroller)) {
+      // Measure tables where a jump lands, not the ones it flies past; and
+      // not while an input method composes (see composing.js).
+      if (navigationMoving(scroller) || composing()) {
         schedule();
         return;
       }
@@ -324,7 +327,7 @@ export function watchTableLayout(host, scroller) {
     if (width === measuredWidth) return;
     const jump = measuredWidth > 0 && Math.abs(width - measuredWidth) > 48;
     measuredWidth = width;
-    if (jump && host.getClientRects().length) layoutAll();
+    if (jump && host.getClientRects().length && !composing()) layoutAll();
     schedule();
   }).observe(host);
   new MutationObserver(schedule).observe(document.documentElement, {

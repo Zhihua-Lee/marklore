@@ -80,6 +80,7 @@ import { createFindBar } from "./find-bar.js";
 import { wireSourceCopy } from "./copy-source.js";
 import { createSmoothScroll } from "./smooth-scroll.js";
 import { releaseWhenQuiet } from "./memory-release.js";
+import { measureAllLines } from "./editor-heights.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
@@ -327,6 +328,7 @@ function stateFor(doc) {
       // A diff is plain text in the editor; only notes read as Markdown.
       ...(isDiffDocument(doc) ? [] : [markdown()]),
       EditorView.lineWrapping,
+      measureAllLines,
       keymap.of([
         {
           key: "Mod-s",

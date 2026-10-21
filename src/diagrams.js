@@ -1,5 +1,6 @@
 import { t } from "../desktop/i18n.mjs";
 import DOMPurify from "dompurify";
+import { settled } from "./composing.js";
 let library,
   initializedTheme,
   counter = 0,
@@ -52,6 +53,8 @@ export function renderDiagrams(host, theme, onLayout) {
             "folio-diagram-" + ++counter,
             source,
           );
+          // Not while an input method composes (see composing.js).
+          await settled();
           if (stale()) return;
           diagram.innerHTML = DOMPurify.sanitize(svg, {
             USE_PROFILES: { svg: true, svgFilters: true },

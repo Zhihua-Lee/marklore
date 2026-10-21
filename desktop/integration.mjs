@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -6,6 +6,19 @@ import os from "node:os";
 import { t } from "./i18n.mjs";
 
 const execute = promisify(execFile);
+// Starts a program and leaves it running on its own. The native tests put a
+// recorder in globalThis.__desktopLaunch: they never open system dialogs.
+const launchDetached = (file, args) =>
+  globalThis.__desktopLaunch
+    ? globalThis.__desktopLaunch(file, args)
+    : new Promise((resolve, reject) => {
+        const child = spawn(file, args, { detached: true, stdio: "ignore" });
+        child.once("error", reject);
+        child.once("spawn", () => {
+          child.unref();
+          resolve();
+        });
+      });
 export const applicationName = "Marklore";
 export const progId = "Marklore.Markdown";
 const classes = "HKCU\\Software\\Classes";
@@ -138,6 +151,8 @@ export function createIntegration({
   platform = process.platform,
   windowsRelease = os.release(),
   run = execute,
+  launch = launchDetached,
+  temp = os.tmpdir(),
 }) {
   const reg = path.join(
     process.env.SystemRoot || "C:\\Windows",
@@ -290,13 +305,29 @@ export function createIntegration({
     },
     async defaults() {
       if (!supported) throw Error(t("仅 Windows 支持默认应用设置"));
-      // App-specific links are a Windows 11 feature; Windows 10 uses the
-      // general settings page where users can choose by file extension.
-      const suffix =
-        Number(windowsRelease.split(".")[2]) >= 22000
-          ? "?registeredAppUser=" + encodeURIComponent(applicationName)
-          : "";
-      await shell.openExternal("ms-settings:defaultapps" + suffix);
+      // No app can make itself the default; Windows asks the user. Windows 11
+      // has a Default apps page for Marklore alone. Windows 10 only has the
+      // page of every file type, so it gets the "How do you want to open this
+      // file?" dialog for a .md file instead, with "Always use this app".
+      if (Number(windowsRelease.split(".")[2]) >= 22000) {
+        await shell.openExternal(
+          "ms-settings:defaultapps?registeredAppUser=" +
+            encodeURIComponent(applicationName),
+        );
+        return;
+      }
+      const folder = path.join(temp, "Marklore"),
+        sample = path.join(folder, "Marklore.md");
+      await fs.mkdir(folder, { recursive: true });
+      await fs.writeFile(sample, "# Marklore\n", "utf8");
+      await launch(
+        path.join(
+          process.env.SystemRoot || "C:\\Windows",
+          "System32",
+          "rundll32.exe",
+        ),
+        ["shell32.dll,OpenAs_RunDLL", sample],
+      );
     },
     async startupSettings() {
       if (!supported) throw Error(t("仅 Windows 支持启动应用设置"));

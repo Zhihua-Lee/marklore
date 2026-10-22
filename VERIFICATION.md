@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                                  | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ------------------------------------------------------------------------ | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.3.6  | Direct editing: no doubled paragraphs, empty notes and block prefixes    | 126               | 239 (default + reduced-motion) | 16 suites (packaged); installer check 41/41                     | [v0.3.6](docs/verification/v0.3.6.md)   |
 | v0.3.5  | Direct editing: formulas open in place, caret stays in its paragraph     | 126               | 239 (default + reduced-motion) | 16 suites (packaged); installer check 41/41                     | [v0.3.5](docs/verification/v0.3.5.md)   |
 | v0.3.4  | Direct editing: input methods kept, headings and code blocks             | 126               | 232 (default + reduced-motion) | 16 suites (packaged); installer check 0 failed                  | [v0.3.4](docs/verification/v0.3.4.md)   |
 | v0.3.3  | Security update: Electron 44.9.3, updates refuse eMudhra, dependencies   | 126               | 230 (default + reduced-motion) | 16 suites (packaged); installer check 40/40                     | [v0.3.3](docs/verification/v0.3.3.md)   |

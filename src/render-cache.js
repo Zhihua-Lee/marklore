@@ -165,8 +165,21 @@ export function createPreviewCache({
     return node;
   }
   function children(candidates, previous, hydrate) {
+    const active = previous[0]?.ownerDocument.activeElement;
+    // A section whose heading is being edited has its old foldKey on the page:
+    // keep it out of the name match so another section with that name cannot
+    // take it.
+    const editedShell = (node) =>
+      node.nodeType === 1 &&
+      node.classList.contains("note-section") &&
+      Boolean(
+        node.firstElementChild &&
+        (typed.has(node.firstElementChild) ||
+          (active && node.firstElementChild.contains(active))),
+      );
     const buckets = new Map();
     for (const node of previous) {
+      if (editedShell(node)) continue;
       const key = identity(node);
       if (!buckets.has(key)) buckets.set(key, { nodes: [], cursor: 0 });
       buckets.get(key).nodes.push(node);
@@ -218,7 +231,8 @@ export function createPreviewCache({
       (node.classList.contains("backlink-badge") ||
         // A place direct editing made to type into, not typed into yet.
         node.classList.contains("direct-empty") ||
-        node.classList.contains("direct-empty-block"));
+        (node.classList.contains("direct-empty-block") &&
+          Boolean(node.querySelector(".direct-empty"))));
   // Typeset formulas and diagrams are taken whole from the new block (it was
   // hydrated); buttons showing a state the reader set (a folded section, an
   // expanded code block) are kept.
@@ -242,6 +256,9 @@ export function createPreviewCache({
     if (live.className !== className)
       if (className) live.className = className;
       else live.removeAttribute("class");
+    const anchor = live.ownerDocument.getSelection?.()?.anchorNode;
+    for (const empty of live.querySelectorAll(":scope > .direct-empty"))
+      if (!anchor || !empty.contains(anchor)) empty.remove();
     const a = [...live.childNodes].filter((node) => !added(node)),
       b = [...next.childNodes];
     if (
@@ -260,7 +277,8 @@ export function createPreviewCache({
         // one included.
         if (node.data.replace(/\u00a0/g, " ") !== other.data)
           node.data = other.data;
-      } else if (node.matches(whole)) node.replaceWith(other);
+      } else if (node.matches(whole) || other.matches(whole))
+        node.replaceWith(other);
       else if (!(node.tagName === "BUTTON" && stated(node, other)))
         morph(node, other);
     });
@@ -337,7 +355,7 @@ export function createPreviewCache({
           fragment = template.content;
         }
         const previous =
-          active?.key === key ? active.nodes : entry?.nodes || [];
+          active?.key === key ? [...container.childNodes] : entry?.nodes || [];
         const nodes = children([...fragment.childNodes], previous, hydrate);
         entry = { key, html, nodes, hydrate, bytes: cost ?? html.length * 2 };
       }

@@ -41,7 +41,10 @@ async function boot(
     { text, directEdit, editSplit },
   );
   await page.goto("/");
-  await page.locator("#content h1").waitFor();
+  await page
+    .locator(text ? "#content [data-from]" : "#tabs .tab")
+    .first()
+    .waitFor();
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   await expect(page.locator("#panes")).toHaveAttribute("data-mode", "edit");
 }
@@ -679,6 +682,9 @@ test("the render after a pause keeps the block typed into, and the focus", async
   await cdp.send("Input.insertText", { text: "新" });
   await page.waitForTimeout(1000);
   expect(await source(page)).toContain("Second paragraph.\n\n新\n\n- one");
+  await expect(
+    page.locator("#content p").filter({ hasText: "新" }),
+  ).toHaveCount(1);
   const after = await kept();
   expect(after.host).toBe(true);
   expect(after.events).toEqual([]);
@@ -963,6 +969,9 @@ test("Enter on an empty item leaves the list; a new task item takes typing in th
   await page.keyboard.type("Hello");
   await page.waitForTimeout(900);
   expect(await source(page)).toMatch(/- one\n\nHello\n/);
+  await expect(
+    page.locator("#content p").filter({ hasText: "Hello" }),
+  ).toHaveCount(1);
   await expect(paragraph(page, "Hello")).toHaveText("Hello");
   // After a task, Enter starts a task item; typing goes into it.
   await caretIn(page, "task");
@@ -990,4 +999,106 @@ test("Enter on an empty item leaves the list; a new task item takes typing in th
   await cdp.send("Input.insertText", { text: "新" });
   expect(await page.evaluate(() => window.__focus)).toEqual([]);
   expect(await source(page)).toContain("First para.\n\n新\n\nLast.");
+});
+
+test("an empty note and a newly created note take direct typing, headings and display math without duplicate rendering", async ({
+  page,
+}) => {
+  await boot(page, { text: "", editSplit: false });
+  // Clicking the blank reader area of an empty note places the caret at 0.
+  await page.locator("#reader").click({ position: { x: 120, y: 200 } });
+  await page.keyboard.type("# ");
+  // `# ` transforms into h1 immediately on Space, before the pause render.
+  await expect(page.locator("#content h1")).toHaveCount(1);
+  await expect(page.locator("#content p")).toHaveCount(0);
+  await page.keyboard.type("Heading");
+  await page.waitForTimeout(800);
+  await expect(page.locator("#content h1")).toHaveCount(1);
+  await expect(page.locator("#content p")).toHaveCount(0);
+  expect(await source(page)).toBe("# Heading");
+
+  // Upgrade h1 -> h2 by typing `#` at the start of the heading, and insert a paragraph above with Enter.
+  await page.keyboard.press("Home");
+  await page.keyboard.type("#");
+  await expect(page.locator("#content h2")).toHaveCount(1);
+  expect(await source(page)).toBe("## Heading");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Intro");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Intro\n\n## Heading");
+  await expect(
+    page.locator("#content p").filter({ hasText: "Intro" }),
+  ).toHaveCount(1);
+  await expect(page.locator("#content h2")).toHaveCount(1);
+
+  // Typing multi-line display math with Enter, and inline $$x^2$$ without premature $x^2$ split.
+  await page.locator("#content h2 [data-text-from]").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("$$");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("a+b=c");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("$$");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Next $$x^2$$ end.");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(
+    "Intro\n\n## Heading\n\n$$\na+b=c\n$$\n\nNext $$x^2$$ end.",
+  );
+  await expect(page.locator("#content .math-block")).toHaveCount(1);
+  await expect(page.locator("#content .formula")).toHaveCount(1);
+
+  // New note button (#new) focuses direct editing right away when editSplit is off.
+  await page.locator("#new").click();
+  // The focus comes with the next frame.
+  await page.waitForFunction(() =>
+    document.querySelector("#content").contains(document.activeElement),
+  );
+  await page.keyboard.type("# A");
+  await expect(page.locator("#content h1")).toHaveCount(1);
+  // Deleting the last character of a heading keeps the caret inside the empty h1 across pause renders.
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(800);
+  await expect(page.locator("#content h1")).toHaveCount(1);
+  await expect(page.locator("#content p")).toHaveCount(0);
+  // Backspace in an empty heading removes `# ` and turns it back into a paragraph.
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("Fresh note");
+  await page.waitForTimeout(800);
+  await expect(page.locator("#content h1")).toHaveCount(0);
+  await expect(
+    page.locator("#content p").filter({ hasText: "Fresh note" }),
+  ).toHaveCount(1);
+});
+
+test("Enter splits a paragraph at a later line's start; display math at the note's start; a heading's level with wide spacing", async ({
+  page,
+}) => {
+  await boot(page, { text: "Top.\n\nfoo\nbar\n\n#  Title" });
+  await page.locator("#content p").filter({ hasText: "bar" }).click();
+  await page.keyboard.press("End");
+  for (let i = 0; i < 3; i++) await page.keyboard.press("ArrowLeft");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("X");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Top.\n\nfoo\n\n\nXbar\n\n#  Title");
+  await page.locator("#content h1 [data-text-from]").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.type("#");
+  await expect(page.locator("#content h2")).toHaveCount(1);
+  expect(await source(page)).toBe("Top.\n\nfoo\n\n\nXbar\n\n##  Title");
+  await page.locator("#content p").filter({ hasText: "Top." }).click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("$$");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("a+b");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("$$");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toMatch(/^\$\$\na\+b\n\$\$\n\nTop\./);
+  await expect(
+    page.locator("#content .math-block, #content .math-source"),
+  ).toHaveCount(1);
 });

@@ -224,6 +224,13 @@ export function createParser() {
       if (state.src[end - 1] !== "\\") break;
       end += close.length;
     }
+    // An unclosed "$$" (being typed) is text: its second "$" does not open
+    // a formula ("$$x^2$" is not "$" and "$x^2$").
+    if (delimiter === "$$" && end < 0) {
+      if (!silent) state.pending += "$$";
+      state.pos = start + 2;
+      return true;
+    }
     if (
       end < 0 ||
       state.src.slice(start, end).includes("\n\n") ||
@@ -1006,7 +1013,8 @@ export function renderMarkdown(
       // A display formula's range runs to the next line.
       if (display) text = text.replace(/\s+$/, "");
       const to = from + text.length;
-      if (!(from < open && open < to)) continue;
+      if (!(display ? from <= open && open <= to : from < open && open < to))
+        continue;
       // A display formula in a list or quote has their markers in its lines.
       if (
         display &&

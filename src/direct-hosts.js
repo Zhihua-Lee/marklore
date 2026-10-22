@@ -110,7 +110,9 @@ export function createHosts({ content, scroller, islands, active, keys }) {
       const at = [...thing.parentNode.childNodes].indexOf(thing);
       return { node: thing.parentNode, offset: end ? at + 1 : at };
     }
-    return node ? { node, offset: end ? node.length : 0 } : null;
+    return node
+      ? { node, offset: node.data === "​" || !end ? 0 : node.length }
+      : null;
   }
   // The caret's box; a collapsed range has none at some places.
   function caretRect(node, offset) {
@@ -149,6 +151,7 @@ export function createHosts({ content, scroller, islands, active, keys }) {
   function onLine(host, line, x) {
     reveal(line);
     const boxes = lineBoxes(host);
+    if (!boxes.length) return edge(host, false);
     const box =
       boxes.find((b) => sameLine(line, b)) ||
       boxes.reduce((best, b) =>
@@ -157,7 +160,6 @@ export function createHosts({ content, scroller, islands, active, keys }) {
           ? b
           : best,
       );
-    if (!box) return edge(host, false);
     const point = caretAt(
       Math.max(box.left + 1, Math.min(box.right - 1, x)),
       middle(box),
@@ -226,7 +228,11 @@ export function createHosts({ content, scroller, islands, active, keys }) {
       i += down ? 1 : -1
     ) {
       const boxes = lineBoxes(hosts[i]);
-      if (!boxes.length) continue;
+      if (!boxes.length) {
+        const point = edge(hosts[i], !down);
+        if (point) return point;
+        continue;
+      }
       const line = down
         ? boxes.reduce((a, b) => (b.top < a.top ? b : a))
         : boxes.reduce((a, b) => (b.bottom > a.bottom ? b : a));
@@ -492,7 +498,20 @@ export function createHosts({ content, scroller, islands, active, keys }) {
     goalX = null;
     const target = event.target;
     // Formulas, code, buttons and section headings keep their own clicks.
-    if (target.nodeType !== 1 || target.closest(islands)) return;
+    if (
+      target.nodeType !== 1 ||
+      (target !== scroller && !content.contains(target)) ||
+      target.closest(islands)
+    )
+      return;
+    if (target === scroller) {
+      const box = scroller.getBoundingClientRect();
+      if (
+        event.clientX >= box.left + scroller.clientWidth ||
+        event.clientY >= box.top + scroller.clientHeight
+      )
+        return;
+    }
     const host = hostOf(target);
     const selection = window.getSelection();
     if (
@@ -571,7 +590,7 @@ export function createHosts({ content, scroller, islands, active, keys }) {
     if (drag?.taken) event.preventDefault();
   });
   content.addEventListener("keydown", onKeyDown, true);
-  content.addEventListener("mousedown", onMouseDown, true);
+  scroller.addEventListener("mousedown", onMouseDown, true);
   document.addEventListener("mousemove", onMouseMove, true);
   // The browser would end its own drag with a selection of its own.
   document.addEventListener(

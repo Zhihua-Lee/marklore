@@ -1707,7 +1707,11 @@ const commands = {
   new: () => {
     if (!add({ name: t("未命名.md") }, { opener: active })) return;
     setMode("edit");
-    requestAnimationFrame(() => view.focus());
+    requestAnimationFrame(() =>
+      directEditor?.active && !settings.editSplit
+        ? directEditor.focus()
+        : view.focus(),
+    );
   },
   save: () => save(),
   saveAs: () => save(true),

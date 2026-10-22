@@ -55,6 +55,12 @@ const codeOf = (node) =>
   (node?.nodeType === 1 ? node : node?.parentElement)?.closest(
     "pre > code[data-text-from],.math-source > [data-text-from]",
   ) || null;
+// Where the paragraph holding a source position starts: after the last blank
+// line before it, or at the note's start.
+function paragraphStart(text, pos) {
+  const blank = text.lastIndexOf("\n\n", pos - 1);
+  return blank < 0 ? 0 : blank + 2;
+}
 // The text node and offset at a character offset of a run.
 function textPoint(leaf, offset) {
   const walker = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
@@ -296,6 +302,15 @@ export function createDirectEditor({
     selection.collapse(node, offset);
   }
 
+  function unmarkEmpty(leaf) {
+    leaf.classList.remove("direct-empty");
+    if (!leaf.classList.length) leaf.removeAttribute("class");
+    const block = leaf.closest(".direct-empty-block");
+    if (block) {
+      block.classList.remove("direct-empty-block");
+      if (!block.classList.length) block.removeAttribute("class");
+    }
+  }
   // Typed text at a collapsed caret inside a run: patch the run in place.
   function typeInto(leaf, node, offset, text) {
     const from = leafStart(leaf),
@@ -310,8 +325,7 @@ export function createDirectEditor({
       (empty(leaf) || node.nodeType !== 3 || offset === node.length || !offset);
     const shown = edge ? text.replace(/^ | $/g, " ") : text;
     if (empty(leaf)) {
-      leaf.classList.remove("direct-empty");
-      if (!leaf.classList.length) leaf.removeAttribute("class");
+      unmarkEmpty(leaf);
       leaf.textContent = shown;
       caretTo(leaf.firstChild, shown.length);
     } else {
@@ -395,6 +409,7 @@ export function createDirectEditor({
       true,
     );
     starts.set(leaf, { pos: from, version: changes.length });
+    unmarkEmpty(leaf);
     // The browser typed into another run than the one the caret was in
     // (it moves the caret off collapsed spaces): the page no longer shows
     // the source, so render it.
@@ -417,9 +432,28 @@ export function createDirectEditor({
   }
   function markupTyped(leaf, text) {
     clearTimeout(markupTimer);
-    if (!/[$`)*_~=]/.test(text) || codeOf(leaf)) return;
-    if (!/[$`)]/.test(text) && inOpenFormula(view.state.selection.main.head))
-      return;
+    if (codeOf(leaf)) return;
+    const head = view.state.selection.main.head,
+      line = view.state.doc.lineAt(head);
+    if (text === " " && leaf.closest(BLOCKS)?.tagName === "P") {
+      if (
+        /^ {0,3}(?:#{1,6}|[-*+]|\d+[.)]|>|[-*+]\s+\[[ xX]\]) $/.test(
+          view.state.doc.sliceString(line.from, head),
+        )
+      )
+        return void refresh();
+    }
+    if (text === "$" && line.text.trim() === "$$") {
+      const docText = view.state.doc.toString(),
+        paraStart = paragraphStart(docText, line.from);
+      if (
+        paraStart < line.from &&
+        /^\s*\$\$/.test(docText.slice(paraStart, line.from))
+      )
+        return void refresh();
+    }
+    if (!/[$`)*_~=]/.test(text)) return;
+    if (!/[$`)]/.test(text) && inOpenFormula(head)) return;
     const restyle = () => {
       if (!on || composition || !leaf.isConnected) return;
       const olds = blocksAround([leaf]);
@@ -431,13 +465,22 @@ export function createDirectEditor({
   // The inline elements of some nodes, outside formulas' own markup.
   function shape(nodes) {
     const list = [];
-    for (const node of nodes)
-      if (node.nodeType === 1)
-        for (const el of node.querySelectorAll(
-          "strong,em,s,del,mark,ins,code,a,img,.formula",
-        ))
-          if (!el.parentElement.closest(".formula"))
-            list.push(el.tagName + (isFormula(el) ? ".f" : ""));
+    for (const node of nodes) {
+      if (node.nodeType !== 1) continue;
+      if (node.matches(".math-block,.math-source")) list.push("MATH");
+      for (const el of node.querySelectorAll(
+        "strong,em,s,del,mark,ins,code,a,img,.formula,.math-block,.math-source",
+      ))
+        if (!el.parentElement.closest(".formula")) {
+          const from = Number(el.dataset.srcFrom ?? el.dataset.from),
+            to = Number(el.dataset.srcTo ?? el.dataset.to),
+            span =
+              Number.isFinite(from) && Number.isFinite(to)
+                ? ":" + (to - from)
+                : "";
+          list.push(el.tagName + (isFormula(el) ? ".f" : "") + span);
+        }
+    }
     return list.join(",");
   }
 
@@ -513,6 +556,25 @@ export function createDirectEditor({
     // Spaces after the caret would start the new block: they go.
     const to =
       pos + /^[ \t]*/.exec(text.slice(pos, lineStart + line.length))[0].length;
+    const paraStart = paragraphStart(text, pos),
+      paraBefore = text.slice(paraStart, pos).replace(/\\\$/g, "");
+    if (
+      /^\s*\$\$/.test(paraBefore) &&
+      (paraBefore.match(/\$\$/g) || []).length % 2 === 1
+    )
+      return { change: { from: pos, to, insert: "\n" }, caret: pos + 1 };
+    const heading = line.match(/^(\s*#{1,6}\s+)/);
+    if (heading && pos <= lineStart + heading[1].length) {
+      if (line.slice(heading[1].length).trim())
+        return {
+          change: { from: lineStart, to: lineStart, insert: "\n\n" },
+          caret: lineStart,
+        };
+      return {
+        change: { from: lineStart, to: lineStart + line.length, insert: "" },
+        caret: lineStart,
+      };
+    }
     const item = line.match(/^(\s*)([-*+]|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?/);
     if (item) {
       // An empty item ends the list: a blank line after it, or what is typed
@@ -539,6 +601,11 @@ export function createDirectEditor({
       const insert = "\n" + quote[1].trimEnd() + "\n" + quote[1];
       return { change: { from: pos, to, insert }, caret: pos + insert.length };
     }
+    // At a paragraph's start: an empty paragraph above, the caret in it (blank
+    // lines alone would show nothing). At a later line's start the paragraph
+    // splits there.
+    if (pos === paraStart && line.trim())
+      return { change: { from: pos, to, insert: "\n\n" }, caret: pos };
     return { change: { from: pos, to, insert: "\n\n" }, caret: pos + 2 };
   }
 
@@ -701,8 +768,11 @@ export function createDirectEditor({
     content.querySelectorAll(".formula-source,.math-source > [data-text-from]");
   const holds = (run, { anchor, head } = view.state.selection.main) => {
     const from = leafStart(run),
-      to = leafEnd(run);
-    return (from < anchor && anchor < to) || (from < head && head < to);
+      to = leafEnd(run),
+      block = run.parentElement.classList.contains("math-source");
+    return block
+      ? (from <= anchor && anchor <= to) || (from <= head && head <= to)
+      : (from < anchor && anchor < to) || (from < head && head < to);
   };
   // The caret left an open formula: typeset it again.
   function closeFormulas() {
@@ -721,7 +791,7 @@ export function createDirectEditor({
     if (!range.collapsed || !usable(leaf) || empty(leaf) || codeOf(leaf))
       return null;
     const block = leaf.closest(BLOCKS),
-      units = unitsOf(block);
+      units = unitsOf(block).filter((u) => !empty(u));
     if ((forward ? units.at(-1) : units[0]) !== leaf) return null;
     const at = sourceAt(range.startContainer, range.startOffset);
     if (at !== (forward ? leafEnd(leaf) : leafStart(leaf))) return null;
@@ -790,7 +860,7 @@ export function createDirectEditor({
       span.some(
         (node) =>
           node.nodeType === 1 &&
-          (!positioned(node) ||
+          (!(positioned(node) || leaves(node).length) ||
             node.matches(".note-section,h1,h2,h3,h4,h5,h6")),
       )
     )
@@ -811,8 +881,15 @@ export function createDirectEditor({
     const blocks = olds.filter((node) => node.nodeType === 1);
     const first = positioned(blocks[0]),
       last = positioned(blocks.at(-1));
-    const from = now(first, first.dataset.from, -1),
-      to = Math.min(view.state.doc.length, now(last, last.dataset.to, 1));
+    const from = first
+        ? now(first, first.dataset.from, -1)
+        : leafStart(leaves(blocks[0])[0]),
+      to = Math.min(
+        view.state.doc.length,
+        last
+          ? now(last, last.dataset.to, 1)
+          : leafEnd(leaves(blocks.at(-1)).at(-1)),
+      );
     if (!(from <= to)) return false;
     // Islands are marked while the nodes are detached: setting
     // contenteditable in the page makes the browser restyle at once.
@@ -826,6 +903,8 @@ export function createDirectEditor({
     if (!nodes) return false;
     for (const node of nodes)
       if (node.nodeType === 1) fresh.set(node, changes.length);
+    markEmpty(nodes);
+    hosts.mark(nodes);
     settle(true, nodes);
     return true;
   }
@@ -887,6 +966,20 @@ export function createDirectEditor({
       const at = sourceAt(range.startContainer, range.startOffset);
       if (/^insert(?:Paragraph|LineBreak)$/.test(type)) {
         event.preventDefault();
+        if (
+          collapsed &&
+          code.parentElement.classList.contains("math-source") &&
+          (at === leafStart(code) || at === leafEnd(code))
+        ) {
+          const before = at === leafStart(code);
+          commit(
+            { from: at, insert: "\n\n" },
+            before ? at : at + 2,
+            "input",
+            false,
+          );
+          return refresh();
+        }
         const line = view.state.doc.lineAt(at);
         const insert =
           "\n" + /^[ \t]*/.exec(view.state.doc.sliceString(line.from, at))[0];
@@ -898,6 +991,31 @@ export function createDirectEditor({
         at === (type.endsWith("Backward") ? leafStart(code) : leafEnd(code))
       )
         return event.preventDefault();
+    }
+    const heading = leaf?.closest("h1,h2,h3,h4,h5");
+    if (
+      type === "insertText" &&
+      collapsed &&
+      event.data === "#" &&
+      heading &&
+      leaves(heading)[0] === leaf &&
+      sourceAt(range.startContainer, range.startOffset) === leafStart(leaf)
+    ) {
+      const pos = leafStart(leaf),
+        line = view.state.doc.lineAt(pos),
+        prefix = /^( {0,3}#{1,5})[ \t]+$/.exec(
+          view.state.doc.sliceString(line.from, pos),
+        );
+      if (prefix) {
+        event.preventDefault();
+        commit(
+          { from: line.from + prefix[1].length, insert: "#" },
+          pos + 1,
+          "input.type",
+          false,
+        );
+        return refresh();
+      }
     }
     if (
       type === "insertText" &&
@@ -941,6 +1059,20 @@ export function createDirectEditor({
           },
           "delete",
         );
+      }
+      if (change.from === from && change.to === leafEnd(run) && !codeOf(run)) {
+        event.preventDefault();
+        if (run.classList.contains("formula-source"))
+          return structural({ change, caret: from, around: [run] }, "delete");
+        commit(change, from, "delete", true);
+        run.classList.add("direct-empty");
+        run.dataset.textFrom = String(from);
+        run.dataset.textTo = String(from);
+        run.textContent = "​";
+        starts.set(run, { pos: from, version: changes.length });
+        caretTo(run.firstChild, 0);
+        patched?.(run);
+        return;
       }
       native = { leaf: run, from, change };
       return;
@@ -1077,8 +1209,7 @@ export function createDirectEditor({
       // The composed text went in beside the empty run's placeholder
       // character: take that out (the caret moves with the text).
       if (empty(leaf)) {
-        leaf.classList.remove("direct-empty");
-        if (!leaf.classList.length) leaf.removeAttribute("class");
+        unmarkEmpty(leaf);
         const node = leaf.firstChild,
           at = node?.nodeType === 3 ? node.data.indexOf("​") : -1;
         if (at >= 0) node.deleteData(at, 1);
@@ -1104,6 +1235,18 @@ export function createDirectEditor({
       closeFormulas();
     });
   }
+  content.addEventListener("mousedown", (event) => {
+    if (!on || composition || event.button) return;
+    const formula = event.target.closest?.(
+      ".formula[data-from][data-to],.math-block[data-from][data-to]",
+    );
+    if (
+      formula &&
+      content.contains(formula) &&
+      !formula.parentElement.closest(".formula,.block-editor")
+    )
+      event.preventDefault();
+  });
   // A click on a formula opens it, the caret before its closing delimiter.
   content.addEventListener("click", (event) => {
     if (!on || composition || event.button) return;
@@ -1221,19 +1364,67 @@ export function createDirectEditor({
         content.classList.toggle("direct-editing", on);
       }
       if (!on) return;
-      hosts.mark();
       if (doc && doc.previewText === doc.text) {
         changes = [];
         starts = new WeakMap();
         fresh = new WeakMap();
       }
+      markEmpty();
+      hosts.mark();
       markIslands();
       const forced = restore;
       restore = false;
       settle(forced);
     },
+    focus() {
+      if (!on) return false;
+      settle(true);
+      const host = content.querySelector("[data-direct-host]");
+      if (!host) return false;
+      if (!content.contains(document.activeElement))
+        host.focus({ preventScroll: true });
+      if (!selectedRange()) {
+        const point = pointAt(view.state.selection.main.head) || pointAt(0);
+        if (point) caretTo(point.node, point.offset);
+      }
+      return true;
+    },
   };
 
+  function markEmpty(scope) {
+    if (!scope && !content.querySelector(BLOCKS)) {
+      const paragraph = document.createElement("p");
+      paragraph.className = "direct-empty-block";
+      paragraph.append(emptyRun(view.state.doc.length));
+      content.append(paragraph);
+    }
+    for (const block of within("h1,h2,h3,h4,h5,h6,li,blockquote", scope)) {
+      if (
+        block.dataset.from === undefined ||
+        block.parentElement?.closest(ISLANDS) ||
+        block.querySelector(BLOCKS) ||
+        unitsOf(block).length
+      )
+        continue;
+      const from = now(block, block.dataset.from),
+        line = view.state.doc.lineAt(Math.min(from, view.state.doc.length)),
+        prefix =
+          /^\s*(?:#{1,6}[ \t]*|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+|(?:>[ \t]?)+)/.exec(
+            line.text.slice(Math.max(0, from - line.from)),
+          )?.[0].length ?? 0,
+        run = emptyRun(Math.min(view.state.doc.length, from + prefix));
+      if (block.tagName === "BLOCKQUOTE") {
+        const paragraph = document.createElement("p");
+        paragraph.className = "direct-empty-block";
+        paragraph.append(run);
+        block.append(paragraph);
+      } else {
+        const summary = block.querySelector(":scope > .section-summary");
+        if (summary) summary.before(run);
+        else block.append(run);
+      }
+    }
+  }
   function markIslands(scope) {
     for (const island of within(ISLANDS, scope))
       if (
@@ -1311,6 +1502,9 @@ export function createDirectEditor({
       if (end === pos) best = el;
     }
     if (!best) return null;
+    const next = best.nextSibling;
+    if (next?.nodeType === 1 && empty(next))
+      return { node: next.firstChild || next, offset: 0 };
     const run = emptyRun(pos);
     best.after(run);
     patched?.(run);
@@ -1328,6 +1522,9 @@ export function createDirectEditor({
         : now(el, el.dataset.srcFrom);
       // The outermost of nested ones: the first that starts here.
       if (start !== pos) continue;
+      const prev = el.previousSibling;
+      if (prev?.nodeType === 1 && empty(prev))
+        return { node: prev.firstChild || prev, offset: 0 };
       const run = emptyRun(pos);
       el.before(run);
       patched?.(run);
@@ -1416,7 +1613,16 @@ export function createDirectEditor({
         block.parentElement.closest("[data-from]") !== host
       )
         continue;
-      if (now(block, block.dataset.to) <= pos) before = block;
+      const end = block.classList.contains("math-block")
+        ? now(block, block.dataset.from) +
+          view.state.doc
+            .sliceString(
+              now(block, block.dataset.from),
+              now(block, block.dataset.to),
+            )
+            .trimEnd().length
+        : now(block, block.dataset.to);
+      if (end <= pos) before = block;
     }
     // Not after the blocks just rendered: look through the whole note.
     if (!before && !host && scope) return placeholder(pos);

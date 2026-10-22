@@ -555,8 +555,9 @@ function renderBlocks(olds, from, to, { accept, prepare } = {}) {
     interactiveTasks: true,
     progressive: false,
     base: from,
+    open: directEditor?.caret() ?? null,
   });
-  const nodes = [...result.fragment.childNodes];
+  let nodes = [...result.fragment.childNodes];
   while (nodes[0]?.nodeType === 3 && !nodes[0].textContent.trim())
     nodes.shift();
   while (nodes.at(-1)?.nodeType === 3 && !nodes.at(-1).textContent.trim())
@@ -564,7 +565,8 @@ function renderBlocks(olds, from, to, { accept, prepare } = {}) {
   if (!nodes.length || (accept && !accept(nodes))) return null;
   prepare?.(nodes);
   const container = $("#content");
-  previewCache.place(container, olds, nodes, result.hydrate);
+  // The block holding the focus may stay, taking the new content.
+  nodes = previewCache.place(container, olds, nodes, result.hydrate);
   doc.partial = true;
   renderDiagrams(container, settings.theme);
   const has = (selector) =>
@@ -818,11 +820,18 @@ function render(preserve) {
     host = $("#reader");
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
   let fragment = null;
-  if (doc.htmlText !== doc.text) {
+  // Direct editing shows the formula holding the caret as its source: render
+  // again when that changes, too.
+  const open = directEditor?.opened() ?? null;
+  if (doc.htmlText !== doc.text || (doc.htmlOpen ?? null) !== open) {
     const result = renderDocument(doc, {
       deferMath: true,
       interactiveTasks: true,
+      open: directEditor?.caret() ?? null,
     });
+    doc.htmlOpen = result.opened
+      ? result.opened.from + ":" + result.opened.to
+      : null;
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = doc.text;

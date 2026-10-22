@@ -255,9 +255,42 @@ export function previewTextSelection(
     hasLink:
       inside.some((el) => el.matches("a")) ||
       around.some((el) => el.matches("a")),
+    // The one inline link the selection is in (or is): its address can be
+    // changed, or the link removed.
+    link: (() => {
+      const links = [...around, ...inside].filter((el) => el.matches("a"));
+      const parts = links.length === 1 && linkParts(text, links[0]);
+      return parts && !segments[1] && parts.from <= from && to <= parts.to
+        ? links[0]
+        : null;
+    })(),
     hasMarkup: inside.length > 0,
     doc,
     text,
+  };
+}
+
+// An inline link's parts in the source, `[text](address "title")`: where
+// it, its text and its address are. Null for other links (reference,
+// automatic).
+export function linkParts(text, link) {
+  const from = Number(link.dataset.srcFrom),
+    to = Number(link.dataset.srcTo),
+    innerFrom = Number(link.dataset.srcInnerFrom),
+    innerTo = Number(link.dataset.srcInnerTo);
+  if (![from, to, innerFrom, innerTo].every(Number.isFinite)) return null;
+  const tail = text.slice(innerTo, to);
+  if (!tail.startsWith("](") || !tail.endsWith(")")) return null;
+  const address = /^\s*(<[^>\n]*>|\S*)/.exec(tail.slice(2, -1));
+  const start = innerTo + 2 + address[0].length - address[1].length;
+  return {
+    from,
+    to,
+    innerFrom,
+    innerTo,
+    addressFrom: start,
+    addressTo: start + address[1].length,
+    address: address[1].replace(/^<|>$/g, ""),
   };
 }
 
@@ -331,7 +364,7 @@ export function createSelectionTools({
     ["link", t("链接"), icon("link")],
     ["inline", t("行内代码"), "&lt;/&gt;"],
   ];
-  bar.innerHTML = `<div class="selection-actions">${actions.map(([action, label, body]) => `<button type="button" data-selection-action="${action}" aria-label="${label}" title="${label}">${body}</button>`).join("")}</div><form hidden><input name="url" aria-label="${t("链接地址")}" placeholder="${t("https://… 或 note.md")}" required><button type="submit" aria-label="${t("应用链接")}">${icon("link")}</button></form>`;
+  bar.innerHTML = `<div class="selection-actions">${actions.map(([action, label, body]) => `<button type="button" data-selection-action="${action}" aria-label="${label}" title="${label}">${body}</button>`).join("")}</div><form hidden><input name="url" aria-label="${t("链接地址")}" placeholder="${t("https://… 或 note.md")}" required><button type="submit" aria-label="${t("应用链接")}">${icon("link")}</button><button type="button" data-unlink hidden aria-label="${t("移除链接")}" title="${t("移除链接")}">${icon("close")}</button></form>`;
   document.body.append(bar);
   let snapshot = null,
     dragging = false,
@@ -384,6 +417,7 @@ export function createSelectionTools({
   function unavailable(action, s) {
     if (action === "link") {
       if (s.multi) return t("跨段落的选区不能加链接");
+      if (s.link) return "";
       if (s.hasLink) return t("选区中已有链接");
       if (s.hasMath) return t("含公式的选区请使用文字样式或颜色工具");
     }
@@ -450,6 +484,7 @@ export function createSelectionTools({
       return;
     }
     if (unavailable(action, s)) return;
+    if (action === "link" && s.link) return relink(s, options.url);
     try {
       // Every block's change from the same text: one step to undo.
       const edits = s.segments.map((segment) =>
@@ -475,11 +510,45 @@ export function createSelectionTools({
       report(error.message);
     }
   }
+  // A link the selection is in: a new address, or none (the link removed,
+  // its text kept).
+  function relink(s, url) {
+    const parts = linkParts(s.text, s.link);
+    if (!parts) return;
+    const shift = parts.innerFrom - parts.from;
+    const change = url
+      ? {
+          from: parts.addressFrom,
+          to: parts.addressTo,
+          insert: /[\s()]/.test(url) ? `<${url}>` : url,
+        }
+      : {
+          from: parts.from,
+          to: parts.to,
+          insert: s.text.slice(parts.innerFrom, parts.innerTo),
+        };
+    const anchor = url ? s.from : Math.max(parts.from, s.from - shift),
+      head = url ? s.to : Math.max(anchor, s.to - shift);
+    hide();
+    view.dispatch({
+      changes: change,
+      selection: { anchor, head },
+      annotations: isolateHistory.of("full"),
+      userEvent: "input.format",
+    });
+    s.doc.pane = "preview";
+    render();
+    reselect(anchor, head);
+  }
   function execute(action) {
     if (snapshot && unavailable(action, snapshot)) return;
     if (action === "link") {
       form.hidden = !form.hidden;
       form.reset();
+      // Over a link: its address to change, and a button to remove it.
+      const parts = snapshot?.link && linkParts(snapshot.text, snapshot.link);
+      if (parts) form.elements.url.value = parts.address;
+      form.querySelector("[data-unlink]").hidden = !parts;
       position();
       if (!form.hidden) form.elements.url.focus({ preventScroll: true });
     } else apply(action);
@@ -494,6 +563,9 @@ export function createSelectionTools({
   form.onsubmit = (event) => {
     event.preventDefault();
     apply("link", { url: form.elements.url.value });
+  };
+  form.querySelector("[data-unlink]").onclick = () => {
+    if (valid(snapshot) && snapshot.link) relink(snapshot, "");
   };
   // Choosing a note's anchor (or a note twice) links the selection at once.
   if (getLinkTargets)

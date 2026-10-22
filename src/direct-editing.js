@@ -10,11 +10,14 @@ import "./direct-editing.css";
 // history is the undo history, and nothing else in the file changes. There is
 // no document model and no conversion back to Markdown.
 //
-// Formulas, diagrams, images and HTML stay whole ("islands"); they keep
-// their pencil (block editing). Table cells take typing on one line; a
-// table's structure is the pencil's. A fenced code block takes typing where
-// the page shows its text as the source has it (markdown.js marks those,
-// "code-direct"); its fences are the pencil's.
+// Diagrams, images and HTML stay whole ("islands"); they keep their pencil
+// (block editing). A formula is typeset while the caret is elsewhere; with
+// the caret in it (a click, an arrow key, typing it) it shows its source as
+// text to type into (markdown.js, "formula-source", "math-source"). Table
+// cells take typing on one line; a table's structure is the pencil's. A
+// fenced code block takes typing where the page shows its text as the
+// source has it (markdown.js marks those, "code-direct"); its fences are the
+// pencil's.
 //
 // Between full renders, typing patches the text node in place and keeps the
 // list of changes made since: a text run's rendered offsets map through them.
@@ -46,10 +49,11 @@ const leafOf = (node) =>
   (node?.nodeType === 1 ? node : node?.parentElement)?.closest(
     "[data-text-from]",
   ) || null;
-// The text of a code block taking typing (one run, highlighted inside).
+// Text typed in line by line, its line breaks its own: a code block's (one
+// run, highlighted inside) or a display formula's source.
 const codeOf = (node) =>
   (node?.nodeType === 1 ? node : node?.parentElement)?.closest(
-    "pre > code[data-text-from]",
+    "pre > code[data-text-from],.math-source > [data-text-from]",
   ) || null;
 // The text node and offset at a character offset of a run.
 function textPoint(leaf, offset) {
@@ -93,6 +97,7 @@ export function createDirectEditor({
     scroller: content.closest("#reader") || content.parentElement,
     islands: ISLANDS,
     active: () => on && !composition,
+    keys: (event) => onKey(event),
   });
   // The block that last had the caret: a render that replaces it leaves the
   // focus on the page's body, and the caret is put back all the same.
@@ -133,7 +138,9 @@ export function createDirectEditor({
   }
   // A run's text; a code block's last line break is its closing fence's.
   const textOf = (leaf) =>
-    codeOf(leaf) ? leaf.textContent.replace(/\n$/, "") : leaf.textContent;
+    leaf.matches("pre > code")
+      ? leaf.textContent.replace(/\n$/, "")
+      : leaf.textContent;
   // The offset in a run's text of a DOM point inside it.
   const offsetIn = (leaf, node, offset) =>
     Math.min(textOffset(leaf, node, offset), textOf(leaf).length);
@@ -156,6 +163,16 @@ export function createDirectEditor({
         : null;
     const element = node.nodeType === 1 ? node : node.parentElement,
       block = element?.closest(BLOCKS);
+    // In an escape ("\*", one character on the page): before or after it.
+    const escape = element?.closest(".md-escape[data-src-from]");
+    if (escape && content.contains(escape)) {
+      const range = document.createRange();
+      range.selectNodeContents(escape);
+      range.setEnd(node, offset);
+      return range.toString()
+        ? now(escape, escape.dataset.srcTo)
+        : now(escape, escape.dataset.srcFrom);
+    }
     if (!block || !content.contains(block)) return null;
     const units = unitsOf(block);
     const point = document.createRange();
@@ -169,23 +186,34 @@ export function createDirectEditor({
     }
     return units.length ? unitEnd(units.at(-1)) : null;
   }
-  // A block's text runs and inline formulas, in order.
+  // A block's text runs, inline formulas and escapes, in order.
   const isFormula = (el) => el.classList.contains("formula");
+  const isEscape = (el) => el.classList.contains("md-escape");
   function unitsOf(block) {
     return [
       ...block.querySelectorAll(
-        "[data-text-from],.formula[data-from][data-to]",
+        "[data-text-from],.formula[data-from][data-to],.md-escape[data-src-from]",
       ),
     ].filter(
       (el) =>
         el.closest(BLOCKS) === block &&
-        (isFormula(el) ? !el.parentElement.closest(ISLANDS) : usable(el)),
+        (isFormula(el) || isEscape(el)
+          ? !el.parentElement.closest(ISLANDS)
+          : usable(el)),
     );
   }
   const unitStart = (el) =>
-    isFormula(el) ? now(el, el.dataset.from) : leafStart(el);
+    isFormula(el)
+      ? now(el, el.dataset.from)
+      : isEscape(el)
+        ? now(el, el.dataset.srcFrom)
+        : leafStart(el);
   const unitEnd = (el) =>
-    isFormula(el) ? now(el, el.dataset.to) : leafEnd(el);
+    isFormula(el)
+      ? now(el, el.dataset.to)
+      : isEscape(el)
+        ? now(el, el.dataset.srcTo)
+        : leafEnd(el);
   // Elements matching a selector in the note, or only in some of its blocks
   // (those just rendered: a long note has thousands of runs to look at).
   const within = (selector, scope) =>
@@ -377,10 +405,21 @@ export function createDirectEditor({
   // span's backtick, a link's ")", emphasis. Render the block at once (for
   // "*", "_", "~" and "=" after a short pause, so "**" is not shown as
   // emphasis on the way), and keep the page as it is when nothing new formed.
+  // Inside a formula still being typed (an odd "$" before the caret on its
+  // line), "*" and "_" are the formula's, not emphasis.
   let markupTimer = 0;
+  function inOpenFormula(pos) {
+    const line = view.state.doc.lineAt(pos);
+    const before = view.state.doc
+      .sliceString(line.from, pos)
+      .replace(/\\\$/g, "");
+    return (before.match(/\$/g) || []).length % 2 === 1;
+  }
   function markupTyped(leaf, text) {
     clearTimeout(markupTimer);
     if (!/[$`)*_~=]/.test(text) || codeOf(leaf)) return;
+    if (!/[$`)]/.test(text) && inOpenFormula(view.state.selection.main.head))
+      return;
     const restyle = () => {
       if (!on || composition || !leaf.isConnected) return;
       const olds = blocksAround([leaf]);
@@ -476,14 +515,19 @@ export function createDirectEditor({
       pos + /^[ \t]*/.exec(text.slice(pos, lineStart + line.length))[0].length;
     const item = line.match(/^(\s*)([-*+]|(\d+)([.)]))(\s+)(\[[ xX]\]\s+)?/);
     if (item) {
-      // An empty item ends the list.
+      // An empty item ends the list: a blank line after it, or what is typed
+      // next would continue the item above (a lazy continuation line).
       if (
         lineStart + item[0].length >= pos &&
         !line.slice(item[0].length).trim()
       )
         return {
-          change: { from: lineStart, to: lineStart + item[0].length },
-          caret: lineStart,
+          change: {
+            from: lineStart,
+            to: lineStart + line.length,
+            insert: "\n",
+          },
+          caret: lineStart + 1,
         };
       const marker = item[3] ? String(Number(item[3]) + 1) + item[4] : item[2];
       const insert =
@@ -604,12 +648,124 @@ export function createDirectEditor({
         between.setStartAfter(el);
         between.setEnd(node, range.startOffset);
       }
-      if (between.toString() !== "") return null;
+      if (between.toString().replace(/​/g, "") !== "") return null;
       const from = now(el, el.dataset.from ?? el.dataset.srcFrom),
         to = now(el, el.dataset.to ?? el.dataset.srcTo);
       return { change: { from, to }, caret: from, around: [el] };
     }
     return null;
+  }
+  // How long a formula's opening and closing delimiters are in its source
+  // ("$", "$$", "\(", "\[", an environment's \begin{…}).
+  function delimiters(from, to) {
+    const text = view.state.doc.sliceString(from, to).trimEnd();
+    return {
+      open:
+        /^(?:\$\$|\$|\\\(|\\\[|\\begin\{[^}]*\})/.exec(text)?.[0].length ?? 0,
+      close:
+        /(?:\$\$|\$|\\\)|\\\]|\\end\{[^}]*\})$/.exec(text)?.[0].length ?? 0,
+    };
+  }
+  // The inline element (emphasis, code span, link) a deletion empties, the
+  // outermost when they nest.
+  function wholeInline(run, { from, to }) {
+    if (codeOf(run) || from !== leafStart(run) || to !== leafEnd(run))
+      return null;
+    let whole = null;
+    for (let el = run; el && !el.matches(BLOCKS); el = el.parentElement)
+      if (
+        el.dataset.srcFrom !== undefined &&
+        el.dataset.srcTo !== undefined &&
+        el.textContent === run.textContent
+      )
+        whole = el;
+    return whole;
+  }
+  // Open a formula: its source takes the caret at `pos` (the render shows
+  // the formula holding the caret as text, markdown.js).
+  let wanted = null;
+  function enter(formula, pos) {
+    const from = now(formula, formula.dataset.from);
+    // (A display formula's range runs to the next line.)
+    const text = view.state.doc
+      .sliceString(from, now(formula, formula.dataset.to))
+      .trimEnd();
+    wanted = { from, to: from + text.length };
+    view.dispatch({ selection: { anchor: pos } });
+    const olds = blocksAround([formula]);
+    if (!olds || !redraw(olds)) refresh();
+    wanted = null;
+  }
+  // An open formula's source runs, and whether the caret is in one.
+  const sources = () =>
+    content.querySelectorAll(".formula-source,.math-source > [data-text-from]");
+  const holds = (run, { anchor, head } = view.state.selection.main) => {
+    const from = leafStart(run),
+      to = leafEnd(run);
+    return (from < anchor && anchor < to) || (from < head && head < to);
+  };
+  // The caret left an open formula: typeset it again.
+  function closeFormulas() {
+    for (const run of sources()) {
+      if (holds(run)) continue;
+      const olds = blocksAround([run]);
+      if (!olds || !redraw(olds)) refresh();
+      return;
+    }
+  }
+  // At a block's last (first) text, inside emphasis, a code span or a link
+  // that ends (starts) the block: the outermost such element. The caret
+  // steps out of it with an arrow key, to type after (before) it.
+  function inlineEdge(range, forward) {
+    const leaf = leafOf(range.startContainer);
+    if (!range.collapsed || !usable(leaf) || empty(leaf) || codeOf(leaf))
+      return null;
+    const block = leaf.closest(BLOCKS),
+      units = unitsOf(block);
+    if ((forward ? units.at(-1) : units[0]) !== leaf) return null;
+    const at = sourceAt(range.startContainer, range.startOffset);
+    if (at !== (forward ? leafEnd(leaf) : leafStart(leaf))) return null;
+    let outer = null;
+    for (let el = leaf; el && el !== block; el = el.parentElement)
+      if (el.dataset.srcFrom !== undefined && el.dataset.srcTo !== undefined)
+        outer = el;
+    return outer;
+  }
+  // Keys for formulas and inline edges (direct-hosts.js asks first).
+  function onKey(event) {
+    if (
+      !on ||
+      composition ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+    )
+      return false;
+    const range = selectedRange();
+    if (!range?.collapsed) return false;
+    const forward = event.key === "ArrowRight";
+    // Into a formula next to the caret, past its delimiter.
+    const formula = formulaNextTo(range, forward);
+    if (formula && isFormula(formula.around[0])) {
+      const { from, to } = formula.change,
+        marks = delimiters(from, to);
+      event.preventDefault();
+      enter(formula.around[0], forward ? from + marks.open : to - marks.close);
+      return true;
+    }
+    const outer = inlineEdge(range, forward);
+    if (!outer) return false;
+    event.preventDefault();
+    const pos = now(
+      outer,
+      forward ? outer.dataset.srcTo : outer.dataset.srcFrom,
+    );
+    view.dispatch({ selection: { anchor: pos } });
+    const point = forward ? afterInline(pos) : beforeInline(pos);
+    if (point) caretTo(point.node, point.offset);
+    return true;
   }
   // A structural edit (a new block, a join, a removed formula): only the
   // blocks around it are rendered again, at once; the full render waits for
@@ -767,14 +923,26 @@ export function createDirectEditor({
     ) {
       const run = leafOf(target.startContainer),
         from = leafStart(run);
-      native = {
-        leaf: run,
-        from,
-        change: {
-          from: from + offsetIn(run, target.startContainer, target.startOffset),
-          to: from + offsetIn(run, target.startContainer, target.endOffset),
-        },
+      const change = {
+        from: from + offsetIn(run, target.startContainer, target.startOffset),
+        to: from + offsetIn(run, target.startContainer, target.endOffset),
       };
+      // The last of an inline element's text takes its markers with it:
+      // "****" left alone reads as a rule, "``" as text.
+      const whole = wholeInline(run, change);
+      if (whole) {
+        event.preventDefault();
+        const start = now(whole, whole.dataset.srcFrom);
+        return structural(
+          {
+            change: { from: start, to: now(whole, whole.dataset.srcTo) },
+            caret: start,
+            around: [whole],
+          },
+          "delete",
+        );
+      }
+      native = { leaf: run, from, change };
       return;
     }
     event.preventDefault();
@@ -791,13 +959,29 @@ export function createDirectEditor({
       if (range.startContainer.nodeType === 3 || empty(leaf))
         return typeInto(leaf, range.startContainer, range.startOffset, text);
     }
-    // Backspace right after a formula, or Delete right before one, takes the
-    // whole formula (it is one thing on the page, like a character).
+    // Backspace right after a formula takes its closing "$" (Delete before
+    // one, its opening "$"): the formula shows as the source it now is, to
+    // edit. An escape ("\*") goes whole, as the one character it shows.
     if (
       collapsed &&
       (type === "deleteContentBackward" || type === "deleteContentForward")
     ) {
-      const formula = formulaNextTo(range, type === "deleteContentForward");
+      const forward = type === "deleteContentForward",
+        formula = formulaNextTo(range, forward);
+      if (formula && isFormula(formula.around[0])) {
+        const { from, to } = formula.change,
+          marks = delimiters(from, to);
+        return structural(
+          {
+            change: forward
+              ? { from, to: from + marks.open }
+              : { from: to - marks.close, to },
+            caret: forward ? from : to - marks.close,
+            around: formula.around,
+          },
+          "delete",
+        );
+      }
       if (formula) return structural(formula, "delete");
     }
     // At a cell's edge there is nothing to join.
@@ -890,7 +1074,15 @@ export function createDirectEditor({
     const leaf = leafOf(window.getSelection().anchorNode);
     if (state.leaf && leaf === state.leaf && state.start !== null) {
       starts.set(leaf, { pos: state.start, version: changes.length });
-      if (empty(leaf)) return refresh();
+      // The composed text went in beside the empty run's placeholder
+      // character: take that out (the caret moves with the text).
+      if (empty(leaf)) {
+        leaf.classList.remove("direct-empty");
+        if (!leaf.classList.length) leaf.removeAttribute("class");
+        const node = leaf.firstChild,
+          at = node?.nodeType === 3 ? node.data.indexOf("​") : -1;
+        if (at >= 0) node.deleteData(at, 1);
+      }
       verify(leaf);
     } else refresh();
   }
@@ -907,10 +1099,33 @@ export function createDirectEditor({
         head = sourceAt(range.endContainer, range.endOffset);
       if (anchor === null || head === null) return;
       const main = view.state.selection.main;
-      if (main.anchor === anchor && main.head === head) return;
-      view.dispatch({ selection: { anchor, head } });
+      if (main.anchor !== anchor || main.head !== head)
+        view.dispatch({ selection: { anchor, head } });
+      closeFormulas();
     });
   }
+  // A click on a formula opens it, the caret before its closing delimiter.
+  content.addEventListener("click", (event) => {
+    if (!on || composition || event.button) return;
+    const formula = event.target.closest?.(
+      ".formula[data-from][data-to],.math-block[data-from][data-to]",
+    );
+    if (
+      !formula ||
+      !content.contains(formula) ||
+      formula.parentElement.closest(".formula,.block-editor")
+    )
+      return;
+    event.preventDefault();
+    const from = now(formula, formula.dataset.from),
+      text = view.state.doc
+        .sliceString(from, now(formula, formula.dataset.to))
+        .trimEnd(),
+      to = from + text.length;
+    let pos = to - delimiters(from, to).close;
+    if (text[pos - from - 1] === "\n") pos--;
+    enter(formula, pos);
+  });
 
   content.addEventListener("beforeinput", onBeforeInput);
   content.addEventListener("input", onInput);
@@ -979,6 +1194,23 @@ export function createDirectEditor({
     get active() {
       return on;
     },
+    // The caret's place in the source while the page has it (renders open
+    // the formula around it), else null.
+    caret() {
+      return on && (wanted || content.contains(document.activeElement))
+        ? view.state.selection.main.head
+        : null;
+    },
+    // The formula to show open ("from:to"): the one being opened, or the
+    // open one the caret is in. A render that showed another renders again.
+    opened() {
+      if (!on) return null;
+      if (wanted) return wanted.from + ":" + wanted.to;
+      if (!content.contains(document.activeElement)) return null;
+      for (const run of sources())
+        if (holds(run)) return leafStart(run) + ":" + leafEnd(run);
+      return null;
+    },
     // Called by app.js after every render, mode change and settings change.
     rendered() {
       const doc = getDocument();
@@ -1013,7 +1245,9 @@ export function createDirectEditor({
   // A render replaced the run holding the caret: put it back. `scope`: the
   // blocks just rendered, where the caret's place is.
   function settle(forced, scope) {
+    // (A formula clicked open: the click left the focus where it was.)
     const focused =
+      wanted !== null ||
       content.contains(document.activeElement) ||
       (document.activeElement === document.body &&
         lastHost !== null &&
@@ -1032,9 +1266,14 @@ export function createDirectEditor({
         sourceAt(node, selection.anchorOffset) === main.anchor &&
         sourceAt(selection.focusNode, selection.focusOffset) === main.head;
     if (!focused || (kept && !forced)) return;
+    // A new empty place to type only where no block holds the position: a
+    // caret inside a paragraph (by a formula, on a marker) stays in it.
     const anchor =
         pointAt(main.anchor, scope) ||
         afterInline(main.anchor, scope) ||
+        beforeInline(main.anchor, scope) ||
+        (scope && pointAt(main.anchor)) ||
+        nearest(main.anchor) ||
         placeholder(main.anchor, scope),
       head = main.head === main.anchor ? anchor : pointAt(main.head);
     if (!anchor || !head) return;
@@ -1076,6 +1315,65 @@ export function createDirectEditor({
     best.after(run);
     patched?.(run);
     return { node: run.firstChild, offset: 0 };
+  }
+  // Just before one that starts where the caret is, with no text before it.
+  function beforeInline(pos, scope) {
+    for (const el of within(
+      ".formula[data-from],[data-src-from]:not(.md-escape)",
+      scope,
+    )) {
+      if (el.parentElement.closest(ISLANDS) || !el.closest(BLOCKS)) continue;
+      const start = isFormula(el)
+        ? now(el, el.dataset.from)
+        : now(el, el.dataset.srcFrom);
+      // The outermost of nested ones: the first that starts here.
+      if (start !== pos) continue;
+      const run = emptyRun(pos);
+      el.before(run);
+      patched?.(run);
+      return { node: run.firstChild, offset: 0 };
+    }
+    return null;
+  }
+  // A position inside a block that no text run holds (in a formula, on a
+  // marker): the nearest place in that block's text. Not when a list item
+  // or quote with no text yet holds it (placeholder's case).
+  function nearest(pos) {
+    let block = null;
+    for (const el of content.querySelectorAll("[data-from]"))
+      if (
+        !el.matches(".formula,code") &&
+        !el.parentElement.closest(ISLANDS) &&
+        now(el, el.dataset.from) <= pos &&
+        pos < now(el, el.dataset.to)
+      )
+        block = el;
+    const units = block?.matches(BLOCKS) ? unitsOf(block) : [];
+    if (!units.length) return null;
+    // On a line of the block's text (a list item's range runs on over the
+    // blank lines after it).
+    const line = (at) => view.state.doc.lineAt(at).number;
+    if (
+      line(pos) < line(unitStart(units[0])) ||
+      line(pos) > line(unitEnd(units.at(-1)))
+    )
+      return null;
+    let best = null,
+      gap = Infinity;
+    for (const unit of units)
+      for (const end of [false, true]) {
+        const distance = Math.abs(
+          (end ? unitEnd(unit) : unitStart(unit)) - pos,
+        );
+        if (distance < gap) [gap, best] = [distance, { unit, end }];
+      }
+    const { unit, end } = best;
+    if (!isFormula(unit) && !isEscape(unit))
+      return empty(unit)
+        ? { node: unit.firstChild || unit, offset: 0 }
+        : textPoint(unit, end ? textOf(unit).length : 0);
+    const at = [...unit.parentNode.childNodes].indexOf(unit);
+    return { node: unit.parentNode, offset: end ? at + 1 : at };
   }
   // A caret where the source has no text yet (a new empty paragraph or list
   // item): an empty run there takes the first keystroke.

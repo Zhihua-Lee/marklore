@@ -300,7 +300,7 @@ test("an input method composes in place; the result lands in the source once", a
   expect(await source(page)).toContain("Second paragraph.中文!\n\n- one");
 });
 
-test("Backspace after a formula, or Delete before one, takes the whole formula", async ({
+test("Backspace after a formula takes its closing $, Delete before one its opening $", async ({
   page,
 }) => {
   await boot(page);
@@ -309,12 +309,15 @@ test("Backspace after a formula, or Delete before one, takes the whole formula",
   await formula.evaluate((el) => {
     const next = el.nextSibling;
     const node = next.nodeType === 3 ? next : next.firstChild;
-    document.querySelector("#content").focus();
+    el.closest("[data-direct-host]").focus();
     getSelection().collapse(node, 0);
   });
   await page.keyboard.press("Backspace");
-  expect(await source(page)).toContain("First **bold** text and  here.");
-  await page.keyboard.press("Control+z");
+  expect(await source(page)).toContain("First **bold** text and $x^2 here.");
+  // The source shows as text, the caret after it; typing goes on there.
+  await expect(paragraph(page, "First")).toContainText("and $x^2 here.");
+  await page.keyboard.type("$");
+  expect(await source(page)).toContain("text and $x^2$ here.");
   await expect(page.locator("#content .formula")).toHaveCount(1);
   // Caret right before it: Delete.
   await page
@@ -324,11 +327,11 @@ test("Backspace after a formula, or Delete before one, takes the whole formula",
       const previous = el.previousSibling;
       const node = previous.nodeType === 3 ? previous : previous.lastChild;
       const text = node.nodeType === 3 ? node : node.firstChild;
-      document.querySelector("#content").focus();
+      el.closest("[data-direct-host]").focus();
       getSelection().collapse(text, text.length);
     });
   await page.keyboard.press("Delete");
-  expect(await source(page)).toContain("First **bold** text and  here.");
+  expect(await source(page)).toContain("First **bold** text and x^2$ here.");
 });
 
 test("an input method at the edge of bold text lands next to it, never inside its markers", async ({
@@ -795,4 +798,196 @@ test("a fenced code block takes typing: Enter keeps the indentation, Tab indents
       .locator("#content .code-direct code")
       .evaluate((el) => el.textContent.endsWith("}\n")),
   ).toBe(true);
+});
+
+// Where the caret is: the text of the block holding it, and whether a new
+// empty paragraph was made.
+const caretBlock = (page) =>
+  page.evaluate(() => {
+    const node = getSelection().anchorNode;
+    const el = node.nodeType === 1 ? node : node.parentElement;
+    return {
+      block: el.closest("[data-direct-host]")?.textContent.trim(),
+      made: document.querySelectorAll("#content .direct-empty-block").length,
+    };
+  });
+const caretIn = (page, needle, { before = false } = {}) =>
+  page.evaluate(
+    ({ needle, before }) => {
+      const walker = document.createTreeWalker(
+        document.querySelector("#content"),
+        NodeFilter.SHOW_TEXT,
+      );
+      let node;
+      while ((node = walker.nextNode()) && !node.data.includes(needle));
+      node.parentElement.closest("[data-direct-host]").focus();
+      const at = node.data.indexOf(needle);
+      getSelection().collapse(node, before ? at : at + needle.length);
+    },
+    { needle, before },
+  );
+
+test("a formula holding the caret shows its source; the caret never leaves the paragraph", async ({
+  page,
+}) => {
+  const text = "# Title\n\nFirst para.\n\n若满足$a=1$即可。\n\nSee here.\n";
+  await boot(page, { text });
+  // A "$" typed before a formula pairs with its opening "$": the caret is
+  // inside the new formula, which shows as source.
+  await caretIn(page, "若");
+  await page.keyboard.type("$b");
+  expect(await source(page)).toContain("若$b满足$a=1$即可。");
+  await page.waitForTimeout(900);
+  expect(await caretBlock(page)).toEqual({
+    block: "若$b满足$a=1$即可。",
+    made: 0,
+  });
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await expect(page.locator("#content .formula")).toHaveCount(1);
+  // "$$", then into it, then the formula: typed as text, typeset once the
+  // caret leaves it.
+  await caretIn(page, "See");
+  await page.keyboard.type(" $$");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("f(x)");
+  await page.waitForTimeout(900);
+  expect(await caretBlock(page)).toEqual({
+    block: "See $f(x)$ here.",
+    made: 0,
+  });
+  await expect(page.locator("#content .formula-source")).toHaveText("$f(x)$");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#content .formula")).toHaveCount(2);
+  await page.keyboard.type("!");
+  expect(await source(page)).toContain("See $f(x)$! here.");
+});
+
+test("a click or an arrow key opens a formula's source; a display formula edits as lines", async ({
+  page,
+}) => {
+  const text =
+    "# Title\n\nThe value $x^2$ here.\n\n$$\na+b\n$$\n\nHello $y$\n\n$z$\n\nLast.\n";
+  await boot(page, { text });
+  // A click: the caret before the closing "$".
+  await page.locator("#content .formula .mord").first().click();
+  await expect(page.locator("#content .formula-source")).toHaveText("$x^2$");
+  await page.keyboard.type("+1");
+  expect(await source(page)).toContain("The value $x^2+1$ here.");
+  // Leaving it typesets it again.
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator("#content .formula-source")).toHaveCount(0);
+  // ArrowLeft from after a formula: into it, before its closing "$".
+  await caretIn(page, "Hello");
+  await page.keyboard.press("End");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("1");
+  expect(await source(page)).toContain("Hello $y1$");
+  // From the next block, ArrowLeft lands after a paragraph's only formula.
+  await caretIn(page, "Last", { before: true });
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("!");
+  expect(await source(page)).toContain("\n\n$z$!\n\nLast.");
+  // A display formula: Enter adds a line inside it, no new paragraph.
+  await page.locator("#content .math-block .mord").first().click();
+  await expect(page.locator("#content .math-source")).toHaveText("$$\na+b\n$$");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("c");
+  expect(await source(page)).toContain("$$\na+b\nc\n$$");
+  await caretIn(page, "Last");
+  await expect(page.locator("#content .math-source")).toHaveCount(0);
+  await expect(page.locator("#content .math-block")).toHaveCount(1);
+});
+
+test("$$ at a line's start does not take the notes below it", async ({
+  page,
+}) => {
+  const text =
+    "# Title\n\nline one\n$$line two\n\n## H\n\nMore.\n\n$$\nx\n$$\n\nLast.\n";
+  await boot(page, { text });
+  await expect(page.locator("#content .math-block")).toHaveCount(1);
+  await expect(page.locator("#content h2")).toHaveCount(1);
+  await expect(paragraph(page, "line one")).toContainText("$$line two");
+});
+
+test("arrow keys cross a heading's edges and step out of emphasis at a block's end", async ({
+  page,
+}) => {
+  const text = "# Title\n\nIntro.\n\n## Head\n\nEnds in **bold**\n";
+  await boot(page, { text });
+  await caretIn(page, "Head", { before: true });
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("L");
+  await caretIn(page, "Head");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.type("R");
+  expect(await source(page)).toContain("Intro.L\n\n## Head\n\nREnds");
+  // The caret at the bold text's end stays in it; ArrowRight steps out.
+  await caretIn(page, "bold");
+  await page.keyboard.type("er");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.type(" plain");
+  expect(await source(page)).toContain("REnds in **bolder** plain\n");
+});
+
+test("emptying a code span takes its markers; an escape keeps its place", async ({
+  page,
+}) => {
+  const text = "# Title\n\nCode `a` here.\n\nA \\* star.\n";
+  await boot(page, { text });
+  await page.evaluate(() => {
+    const code = document.querySelector("#content p code").firstChild;
+    code.parentElement.closest("[data-direct-host]").focus();
+    getSelection().collapse(code, 1);
+  });
+  await page.keyboard.press("Backspace");
+  expect(await source(page)).toContain("Code  here.");
+  await page.evaluate(() => {
+    const escape = document.querySelector("#content .md-escape");
+    escape.closest("[data-direct-host]").focus();
+    getSelection().collapse(escape.firstChild, 0);
+  });
+  await page.keyboard.type("Q");
+  expect(await source(page)).toContain("A Q\\* star.");
+});
+
+test("Enter on an empty item leaves the list; a new task item takes typing in the list; an empty paragraph keeps the focus", async ({
+  page,
+}) => {
+  const text = "# Title\n\n- one\n\n- [ ] task\n\nFirst para.\n\nLast.\n";
+  await boot(page, { text });
+  await caretIn(page, "one");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Hello");
+  await page.waitForTimeout(900);
+  expect(await source(page)).toMatch(/- one\n\nHello\n/);
+  await expect(paragraph(page, "Hello")).toHaveText("Hello");
+  // After a task, Enter starts a task item; typing goes into it.
+  await caretIn(page, "task");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#content li.task-list-item")).toHaveCount(2);
+  await page.keyboard.type("next");
+  expect(await source(page)).toContain("- [ ] task\n- [ ] next");
+  // An empty paragraph made by Enter keeps the focus over the pause render.
+  await caretIn(page, "First para.");
+  await page.keyboard.press("Enter");
+  await page.evaluate(() => {
+    window.__focus = [];
+    for (const type of ["focusout", "focusin"])
+      document.addEventListener(type, () => window.__focus.push(type), {
+        capture: true,
+      });
+  });
+  await page.waitForTimeout(1000);
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", {
+    text: "xin",
+    selectionStart: 3,
+    selectionEnd: 3,
+  });
+  await cdp.send("Input.insertText", { text: "新" });
+  expect(await page.evaluate(() => window.__focus)).toEqual([]);
+  expect(await source(page)).toContain("First para.\n\n新\n\nLast.");
 });

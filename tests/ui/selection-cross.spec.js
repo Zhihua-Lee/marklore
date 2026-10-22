@@ -88,6 +88,28 @@ test("crossing a link highlights around the whole link", async ({ page }) => {
   await expect(page.locator("#content mark a")).toHaveText("Claude Platform");
 });
 
+test("inside a link, the link button changes its address or removes the link", async ({
+  page,
+}) => {
+  await boot(page);
+  await select(page, "Claude");
+  await press(page, "链接");
+  const url = tools(page).getByRole("textbox", { name: "链接地址" });
+  await expect(url).toHaveValue("https://example.com/docs?utm_source=x");
+  await url.fill("notes/Other.md");
+  await url.press("Enter");
+  await expect
+    .poll(() => editorText(page))
+    .toContain("倍。[Claude Platform](notes/Other.md) 如果你");
+  await select(page, "Claude");
+  await press(page, "链接");
+  await tools(page).getByRole("button", { name: "移除链接" }).click();
+  await expect
+    .poll(() => editorText(page))
+    .toContain("倍。Claude Platform 如果你");
+  await expect(page.locator("#content a")).toHaveCount(0);
+});
+
 test("inside a link only its text is formatted; the link stays whole", async ({
   page,
 }) => {

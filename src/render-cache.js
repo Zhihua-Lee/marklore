@@ -214,7 +214,11 @@ export function createPreviewCache({
       "link-broken",
     ],
     added = (node) =>
-      node.nodeType === 1 && node.classList.contains("backlink-badge");
+      node.nodeType === 1 &&
+      (node.classList.contains("backlink-badge") ||
+        // A place direct editing made to type into, not typed into yet.
+        node.classList.contains("direct-empty") ||
+        node.classList.contains("direct-empty-block"));
   // Typeset formulas and diagrams are taken whole from the new block (it was
   // hydrated); buttons showing a state the reader set (a folded section, an
   // expanded code block) are kept.
@@ -269,6 +273,8 @@ export function createPreviewCache({
         (node) => node.nodeType === 1 && !shell(node) && node.contains(active),
       );
     if (!focused || nodes.includes(focused)) return nodes;
+    // An empty paragraph direct editing made (Enter) is not in the source's
+    // render yet: it stays where it is, after the blocks before it.
     // The new block in its place: after as many kept blocks as preceded it
     // (the text between blocks aside).
     const old = new Set(previous),
@@ -286,6 +292,16 @@ export function createPreviewCache({
           break;
         }
       } else if (seen++ === before) break;
+    if (added(focused)) {
+      // After the nearest kept block before it (one replaced in between
+      // would move it, and a moved element loses the focus).
+      const list = [...nodes],
+        prior = previous
+          .slice(0, previous.indexOf(focused))
+          .findLast((node) => kept.has(node));
+      list.splice(prior ? list.indexOf(prior) + 1 : 0, 0, focused);
+      return list;
+    }
     if (!next || next.tagName !== focused.tagName) return nodes;
     const value = describe(next);
     morph(focused, next);
@@ -355,13 +371,30 @@ export function createPreviewCache({
     // they take the place of `olds` (siblings in one parent). They are
     // described before their formulas expand, as a full render's are, so the
     // next full render keeps them when it renders the same.
+    // Returns the nodes now in their place: the block holding the focus
+    // stays, taking the new content in its place (see keepFocused).
     place(container, olds, nodes, hydrate) {
       for (const node of nodes) describe(node);
       for (const node of nodes) hydrate?.(node);
-      const first = olds[0];
-      first.before(...nodes);
-      for (const old of olds) old.remove();
-      if (!active) return;
+      const focus = container.ownerDocument.activeElement,
+        elements = (list) => list.filter((node) => node.nodeType === 1);
+      const focused = elements(olds).find((node) => node.contains(focus));
+      const next = focused && elements(nodes)[elements(olds).indexOf(focused)];
+      if (next && next.tagName === focused.tagName) {
+        const value = describe(next);
+        morph(focused, next);
+        signatures.set(focused, value);
+        nodes = nodes.map((node) => (node === next ? focused : node));
+      }
+      const first = olds[0],
+        kept = nodes.indexOf(focused);
+      // Never moved: a focused element taken out of the page loses the focus.
+      if (kept >= 0) {
+        focused.before(...nodes.slice(0, kept));
+        focused.after(...nodes.slice(kept + 1));
+      } else first.before(...nodes);
+      for (const old of olds) if (old !== focused || kept < 0) old.remove();
+      if (!active) return nodes;
       // Blocks before the first heading are the entry's own nodes.
       const at = active.nodes.indexOf(first);
       if (at >= 0) {
@@ -370,6 +403,7 @@ export function createPreviewCache({
         active.nodes = rest;
       }
       active.html = null;
+      return nodes;
     },
     release(key) {
       remove(key);

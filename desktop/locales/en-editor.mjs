@@ -140,6 +140,7 @@ export default {
   链接地址: "Link address",
   "https://… 或 note.md": "https://… or note.md",
   应用链接: "Apply link",
+  移除链接: "Remove link",
   含公式的选区请使用文字样式或颜色工具:
     "For selections with formulas, use the text style or color tools",
 

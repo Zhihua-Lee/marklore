@@ -15,7 +15,9 @@ import { caretAt } from "./positions.js";
 
 export const HOST = "data-direct-host";
 
-export function createHosts({ content, scroller, islands, active }) {
+// `keys` sees a key first and returns whether it took it (direct-editing.js:
+// arrow keys into formulas and out of emphasis at a block's edge).
+export function createHosts({ content, scroller, islands, active, keys }) {
   const hostOf = (node) => {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     const host = el?.closest(`[${HOST}]`);
@@ -87,9 +89,27 @@ export function createHosts({ content, scroller, islands, active }) {
     while (walker.nextNode()) nodes.push(walker.currentNode);
     return nodes;
   }
+  // A host's first (last) caret place: its text's edge, or beside a formula
+  // or image that comes before (after) the text; in a block of only such
+  // things, beside them.
   function edge(host, end) {
     const nodes = textNodes(host).filter((node) => node.data.trim());
     const node = end ? nodes.at(-1) : nodes[0];
+    const things = [...host.querySelectorAll(".formula,img")].filter(
+      (el) =>
+        !el.parentElement.closest(".formula") &&
+        (!node ||
+          (end
+            ? node.compareDocumentPosition(el) &
+              Node.DOCUMENT_POSITION_FOLLOWING
+            : node.compareDocumentPosition(el) &
+              Node.DOCUMENT_POSITION_PRECEDING)),
+    );
+    const thing = end ? things.at(-1) : things[0];
+    if (thing) {
+      const at = [...thing.parentNode.childNodes].indexOf(thing);
+      return { node: thing.parentNode, offset: end ? at + 1 : at };
+    }
     return node ? { node, offset: end ? node.length : 0 } : null;
   }
   // The caret's box; a collapsed range has none at some places.
@@ -226,21 +246,35 @@ export function createHosts({ content, scroller, islands, active }) {
   }
   // Whether nothing can be typed over between (node, offset) and the host's
   // start (back) or end.
+  // Text only, not a heading's fold button or block count. A formula or
+  // image on the way counts as something to move over.
   function atTextEdge(node, offset, forward) {
     const host = hostOf(node);
-    const range = document.createRange();
+    const point = document.createRange();
     try {
-      if (forward) {
-        range.setStart(node, offset);
-        range.setEndAfter(host.lastChild);
-      } else {
-        range.setStartBefore(host.firstChild);
-        range.setEnd(node, offset);
-      }
+      point.setStart(node, offset);
     } catch {
       return false;
     }
-    return !range.toString().replace(/[\s​]/g, "");
+    const side = (target) => {
+      const at = point.comparePoint(target, 0);
+      return forward ? at > 0 : at < 0;
+    };
+    const text = textNodes(host)
+      .map((text) =>
+        text === node
+          ? forward
+            ? text.data.slice(offset)
+            : text.data.slice(0, offset)
+          : side(text)
+            ? text.data
+            : "",
+      )
+      .join("");
+    if (text.replace(/[\s​]/g, "")) return false;
+    return ![...host.querySelectorAll(".formula,img")].some(
+      (el) => !el.parentElement.closest(".formula") && side(el),
+    );
   }
   // The next caret position from (node, offset), one character or word on.
   function horizontal(node, offset, forward, word) {
@@ -306,7 +340,8 @@ export function createHosts({ content, scroller, islands, active }) {
       !active() ||
       event.defaultPrevented ||
       event.isComposing ||
-      event.altKey
+      event.altKey ||
+      keys?.(event)
     )
       return;
     const key = event.key,

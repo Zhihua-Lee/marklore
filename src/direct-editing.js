@@ -10,9 +10,11 @@ import "./direct-editing.css";
 // history is the undo history, and nothing else in the file changes. There is
 // no document model and no conversion back to Markdown.
 //
-// Formulas, code, diagrams, images and HTML stay whole ("islands"); they
-// keep their pencil (block editing). Table cells take typing on one line; a
-// table's structure is the pencil's.
+// Formulas, diagrams, images and HTML stay whole ("islands"); they keep
+// their pencil (block editing). Table cells take typing on one line; a
+// table's structure is the pencil's. A fenced code block takes typing where
+// the page shows its text as the source has it (markdown.js marks those,
+// "code-direct"); its fences are the pencil's.
 //
 // Between full renders, typing patches the text node in place and keeps the
 // list of changes made since: a text run's rendered offsets map through them.
@@ -26,8 +28,9 @@ import "./direct-editing.css";
 const ISLANDS = [
   ".formula",
   ".math-block",
-  ".code-block",
-  "pre",
+  ".code-block:not(.code-direct)",
+  "pre:not(.code-direct > pre)",
+  ".code-toolbar",
   "button",
   "input",
   "img",
@@ -38,11 +41,29 @@ const ISLANDS = [
   "hr",
 ].join(",");
 // Blocks whose text is typed into; a new paragraph or merge is decided by them.
-const BLOCKS = "p,h1,h2,h3,h4,h5,h6,li,dt,dd,td,th";
+const BLOCKS = "p,h1,h2,h3,h4,h5,h6,li,dt,dd,td,th,pre";
 const leafOf = (node) =>
   (node?.nodeType === 1 ? node : node?.parentElement)?.closest(
     "[data-text-from]",
   ) || null;
+// The text of a code block taking typing (one run, highlighted inside).
+const codeOf = (node) =>
+  (node?.nodeType === 1 ? node : node?.parentElement)?.closest(
+    "pre > code[data-text-from]",
+  ) || null;
+// The text node and offset at a character offset of a run.
+function textPoint(leaf, offset) {
+  const walker = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
+  let last = null;
+  while (walker.nextNode()) {
+    last = walker.currentNode;
+    if (offset <= last.length) return { node: last, offset };
+    offset -= last.length;
+  }
+  return last
+    ? { node: last, offset: last.length }
+    : { node: leaf, offset: leaf.childNodes.length };
+}
 
 export function createDirectEditor({
   content,
@@ -110,7 +131,13 @@ export function createDirectEditor({
       ? mapped(own.pos, own.version)
       : now(leaf, leaf.dataset.textFrom);
   }
-  const leafEnd = (leaf) => leafStart(leaf) + leaf.textContent.length;
+  // A run's text; a code block's last line break is its closing fence's.
+  const textOf = (leaf) =>
+    codeOf(leaf) ? leaf.textContent.replace(/\n$/, "") : leaf.textContent;
+  // The offset in a run's text of a DOM point inside it.
+  const offsetIn = (leaf, node, offset) =>
+    Math.min(textOffset(leaf, node, offset), textOf(leaf).length);
+  const leafEnd = (leaf) => leafStart(leaf) + textOf(leaf).length;
   const empty = (leaf) => leaf.classList.contains("direct-empty");
 
   // The text runs of a block, in order, outside islands.
@@ -125,7 +152,7 @@ export function createDirectEditor({
     const leaf = leafOf(node);
     if (leaf)
       return usable(leaf)
-        ? leafStart(leaf) + (empty(leaf) ? 0 : textOffset(leaf, node, offset))
+        ? leafStart(leaf) + (empty(leaf) ? 0 : offsetIn(leaf, node, offset))
         : null;
     const element = node.nodeType === 1 ? node : node.parentElement,
       block = element?.closest(BLOCKS);
@@ -178,17 +205,16 @@ export function createDirectEditor({
     for (const leaf of within("[data-text-from]", scope)) {
       if (!usable(leaf)) continue;
       const from = leafStart(leaf),
-        to = from + (empty(leaf) ? 0 : leaf.textContent.length);
+        to = from + (empty(leaf) ? 0 : textOf(leaf).length);
       if (pos < from || pos > to) continue;
       // Prefer the run that starts here over the one that ends here.
       if (!best || from === pos) best = { leaf, offset: pos - from };
       if (from === pos) break;
     }
     if (!best) return null;
-    const node = best.leaf.firstChild;
-    return node?.nodeType === 3
-      ? { node, offset: empty(best.leaf) ? 0 : best.offset }
-      : { node: best.leaf, offset: 0 };
+    return empty(best.leaf)
+      ? { node: best.leaf.firstChild || best.leaf, offset: 0 }
+      : textPoint(best.leaf, best.offset);
   }
 
   // Apply a change and remember it for mapping the runs not yet re-rendered.
@@ -198,7 +224,7 @@ export function createDirectEditor({
     patching = patch;
     const transaction = view.state.update({
       changes: change,
-      selection: { anchor: caret },
+      selection: typeof caret === "number" ? { anchor: caret } : caret,
       userEvent,
     });
     try {
@@ -213,7 +239,7 @@ export function createDirectEditor({
   function verify(leaf) {
     patched?.(leaf);
     const from = leafStart(leaf),
-      text = empty(leaf) ? "" : leaf.textContent;
+      text = empty(leaf) ? "" : textOf(leaf);
     // A space typed at the end of a run shows as a no-break space.
     const plain = (value) => value.replace(/\u00a0/g, " ");
     if (
@@ -245,17 +271,19 @@ export function createDirectEditor({
   // Typed text at a collapsed caret inside a run: patch the run in place.
   function typeInto(leaf, node, offset, text) {
     const from = leafStart(leaf),
-      at = from + (empty(leaf) ? 0 : textOffset(leaf, node, offset));
+      at = from + (empty(leaf) ? 0 : offsetIn(leaf, node, offset));
     commit({ from: at, insert: text }, at + text.length, "input.type", true);
     starts.set(leaf, { pos: from, version: changes.length });
     // A space at a run's edge would collapse, and the browser would then
     // type the next key elsewhere: show it as a no-break space, as the
-    // browser does when it types one.
+    // browser does when it types one. (Code keeps its spaces.)
     const edge =
-      empty(leaf) || node.nodeType !== 3 || offset === node.length || !offset;
+      !codeOf(leaf) &&
+      (empty(leaf) || node.nodeType !== 3 || offset === node.length || !offset);
     const shown = edge ? text.replace(/^ | $/g, " ") : text;
     if (empty(leaf)) {
       leaf.classList.remove("direct-empty");
+      if (!leaf.classList.length) leaf.removeAttribute("class");
       leaf.textContent = shown;
       caretTo(leaf.firstChild, shown.length);
     } else {
@@ -263,6 +291,65 @@ export function createDirectEditor({
       caretTo(node, offset + shown.length);
     }
     if (verify(leaf)) markupTyped(leaf, text);
+  }
+  // Text typed in a code block over a range or between its highlighted
+  // parts: through the source, the block rendered again.
+  function typeInCode(code, range, insert) {
+    if (range.collapsed && range.startContainer.nodeType === 3)
+      return typeInto(code, range.startContainer, range.startOffset, insert);
+    const edits = range.collapsed
+      ? [{ from: sourceAt(range.startContainer, range.startOffset) }]
+      : rangeChanges(range);
+    if (!edits || edits[0].from === null) return refuse();
+    const all = edits.map((edit) => ({ ...edit }));
+    all[0].insert = insert;
+    structural(
+      { change: all, caret: all[0].from + insert.length, around: [code] },
+      "input",
+    );
+  }
+  // Tab in a code block indents the lines of the selection (Shift+Tab takes
+  // an indent away), by the unit the block's lines use.
+  function indentCode(code, range, outdent) {
+    const doc = view.state.doc,
+      text = code.textContent;
+    const unit = /^\t/m.test(text)
+      ? "\t"
+      : /^ {2}\S/m.test(text)
+        ? "  "
+        : "    ";
+    if (!outdent && range.collapsed) return typeInCode(code, range, unit);
+    const from = sourceAt(range.startContainer, range.startOffset),
+      to = sourceAt(range.endContainer, range.endOffset);
+    if (from === null || to === null) return;
+    const first = doc.lineAt(from).number;
+    let last = doc.lineAt(to).number;
+    // A selection ending at a line's start leaves that line.
+    if (last > first && doc.line(last).from === to) last--;
+    const list = [];
+    for (let n = first; n <= last; n++) {
+      const line = doc.line(n);
+      if (!outdent) list.push({ from: line.from, insert: unit });
+      else {
+        const lead = /^(?:\t| {1,4})/.exec(line.text)?.[0] || "";
+        const take =
+          unit === "\t" || lead === "\t" ? lead : lead.slice(0, unit.length);
+        if (take) list.push({ from: line.from, to: line.from + take.length });
+      }
+    }
+    if (!list.length) return;
+    const set = view.state.changes(list);
+    structural(
+      {
+        change: list,
+        caret: {
+          anchor: set.mapPos(from, 1),
+          head: set.mapPos(to, range.collapsed ? 1 : -1),
+        },
+        around: [code],
+      },
+      outdent ? "delete" : "input",
+    );
   }
   // Typing or deleting inside a run's text is left to the browser, which
   // keeps the caret without a forced layout (setting the selection from
@@ -293,7 +380,7 @@ export function createDirectEditor({
   let markupTimer = 0;
   function markupTyped(leaf, text) {
     clearTimeout(markupTimer);
-    if (!/[$`)*_~=]/.test(text)) return;
+    if (!/[$`)*_~=]/.test(text) || codeOf(leaf)) return;
     const restyle = () => {
       if (!on || composition || !leaf.isConnected) return;
       const olds = blocksAround([leaf]);
@@ -345,7 +432,7 @@ export function createDirectEditor({
     };
     const wholes = [
       ...(startBlock?.querySelectorAll(
-        ".formula,[data-src-from][data-src-to],code[data-text-from]",
+        ".formula,[data-src-from][data-src-to],:not(pre) > code[data-text-from]",
       ) || []),
     ].filter((el) => range.intersectsNode(el) && covered(el));
     const outer = wholes.filter(
@@ -555,13 +642,13 @@ export function createDirectEditor({
     return span;
   }
   // The element carrying a top-level block's source range (a table's sits
-  // inside its scroll box).
+  // inside its scroll box, a code block's under its toolbar).
   const positioned = (top) =>
     top.dataset.from !== undefined
       ? top
-      : top.firstElementChild?.dataset.from !== undefined
-        ? top.firstElementChild
-        : null;
+      : [top.firstElementChild, top.querySelector(":scope > pre")].find(
+          (el) => el?.dataset.from !== undefined,
+        ) || null;
   // Render these blocks again from the source; `accept` may decline the
   // result (it changes nothing). Returns whether the page was updated.
   function redraw(olds, accept) {
@@ -632,6 +719,30 @@ export function createDirectEditor({
         );
       }
     }
+    // A code block's fences are the pencil's: a selection reaching past
+    // them is refused, nothing joins across them, and a line break keeps
+    // the line's indentation.
+    const code = range && codeOf(range.startContainer);
+    if (range && codeOf(range.endContainer) !== code) {
+      event.preventDefault();
+      return report?.(t("选区跨出了代码块；代码块的开头和结尾请用铅笔修改"));
+    }
+    if (code) {
+      const at = sourceAt(range.startContainer, range.startOffset);
+      if (/^insert(?:Paragraph|LineBreak)$/.test(type)) {
+        event.preventDefault();
+        const line = view.state.doc.lineAt(at);
+        const insert =
+          "\n" + /^[ \t]*/.exec(view.state.doc.sliceString(line.from, at))[0];
+        return typeInCode(code, range, insert);
+      }
+      if (
+        collapsed &&
+        type.startsWith("delete") &&
+        at === (type.endsWith("Backward") ? leafStart(code) : leafEnd(code))
+      )
+        return event.preventDefault();
+    }
     if (
       type === "insertText" &&
       collapsed &&
@@ -641,7 +752,7 @@ export function createDirectEditor({
       !empty(leaf)
     ) {
       const from = leafStart(leaf),
-        at = from + textOffset(leaf, range.startContainer, range.startOffset);
+        at = from + offsetIn(leaf, range.startContainer, range.startOffset);
       native = { leaf, from, change: { from: at, insert: event.data } };
       return;
     }
@@ -660,9 +771,8 @@ export function createDirectEditor({
         leaf: run,
         from,
         change: {
-          from:
-            from + textOffset(run, target.startContainer, target.startOffset),
-          to: from + textOffset(run, target.startContainer, target.endOffset),
+          from: from + offsetIn(run, target.startContainer, target.startOffset),
+          to: from + offsetIn(run, target.startContainer, target.endOffset),
         },
       };
       return;
@@ -700,10 +810,23 @@ export function createDirectEditor({
       const join = joinForward(leaf);
       return join ? structural(join, "delete") : refuse();
     }
-    // Everything else rebuilds from the source.
-    let edits = collapsed ? [] : rangeChanges(range);
+    // Everything else rebuilds from the source. A deletion the browser would
+    // make over more than one text node (a word across bold) is its range.
+    const reach =
+      collapsed && target && !target.collapsed && type.startsWith("delete")
+        ? document.createRange()
+        : null;
+    if (reach) {
+      reach.setStart(target.startContainer, target.startOffset);
+      reach.setEnd(target.endContainer, target.endOffset);
+    }
+    let edits = reach
+      ? rangeChanges(reach)
+      : collapsed
+        ? []
+        : rangeChanges(range);
     if (edits === null) return refuse();
-    const at = collapsed
+    const at = !edits.length
       ? sourceAt(range.startContainer, range.startOffset)
       : edits[0].from;
     if (at === null) return refuse();
@@ -797,6 +920,22 @@ export function createDirectEditor({
   content.addEventListener("drop", (event) => {
     if (on) event.preventDefault();
   });
+  content.addEventListener("keydown", (event) => {
+    if (
+      !on ||
+      composition ||
+      event.key !== "Tab" ||
+      event.ctrlKey ||
+      event.altKey ||
+      event.metaKey
+    )
+      return;
+    const range = selectedRange(),
+      code = range && codeOf(range.startContainer);
+    if (!code || codeOf(range.endContainer) !== code) return;
+    event.preventDefault();
+    indentCode(code, range, event.shiftKey);
+  });
   // Over several blocks the browser copies only the first block's part (each
   // block is a host of its own). The source copy (copy-source.js) usually
   // writes the clipboard; otherwise the selected text is. A cut copies the
@@ -815,6 +954,8 @@ export function createDirectEditor({
     const range = on && !composition && selectedRange();
     if (!spanning(range)) return;
     event.preventDefault();
+    if (codeOf(range.startContainer) !== codeOf(range.endContainer))
+      return report?.(t("选区跨出了代码块；代码块的开头和结尾请用铅笔修改"));
     document.execCommand("copy");
     const edits = rangeChanges(range);
     if (edits === null) return refuse();
@@ -984,7 +1125,12 @@ export function createDirectEditor({
     const paragraph = document.createElement("p");
     paragraph.className = "direct-empty-block";
     paragraph.append(run);
-    if (before) before.after(paragraph);
+    // After a heading: first in its section's body.
+    const body =
+      before?.parentElement.classList.contains("note-section") &&
+      before.parentElement.querySelector(":scope > .section-body");
+    if (body) body.prepend(paragraph);
+    else if (before) before.after(paragraph);
     else (host || content).prepend(paragraph);
     patched?.(paragraph);
     return { node: run.firstChild, offset: 0 };

@@ -338,6 +338,26 @@ export function createParser() {
           token.attrSet("data-folio-edit", key);
           state.env.editBlocks.push({ key, from, to, kind: token.type });
         }
+        // A fenced code block's text, where the page shows it exactly as the
+        // source has it (not in a list or a quote, not a diagram): direct
+        // editing types into it (before its last line break, which the
+        // closing fence needs). An empty block keeps to the pencil.
+        if (
+          token.type === "fence" &&
+          token.level === 0 &&
+          token.content &&
+          !/^mermaid\b/i.test(token.info.trim())
+        ) {
+          const start = offsets[token.map[0] + 1];
+          const end = [offsets[token.map[1] - 1], to].find(
+            (end) =>
+              start !== undefined &&
+              end >= start &&
+              state.src.slice(start, end) === token.content,
+          );
+          if (end !== undefined)
+            token.meta = { code: { from: start, to: end } };
+        }
         // A table cell's "\|" reaches the inline parser as a plain "|" (the
         // table rule unescapes it): split such text at its pipes into
         // escapes, so each piece is found in the source again.
@@ -498,11 +518,20 @@ export function createParser() {
   });
   for (const name of ["fence", "code_block"]) {
     const original = md.renderer.rules[name];
-    md.renderer.rules[name] = (tokens, i, options, env, renderer) =>
-      original(tokens, i, options, env, renderer).replace(
-        /^<pre/,
-        `<pre ${attrs(tokens[i])}`,
-      );
+    md.renderer.rules[name] = (tokens, i, options, env, renderer) => {
+      const code = tokens[i].meta?.code,
+        html = original(tokens, i, options, env, renderer).replace(
+          /^<pre/,
+          `<pre ${attrs(tokens[i])}`,
+        );
+      return code
+        ? html.replace(
+            "<code",
+            () =>
+              `<code data-text-from="${code.from}" data-text-to="${code.to}"`,
+          )
+        : html;
+    };
   }
   md.renderer.rules.text = (tokens, i) => {
     const t = tokens[i],

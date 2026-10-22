@@ -25,7 +25,8 @@ export function createHosts({ content, scroller, islands, active }) {
   const all = () => [...content.querySelectorAll(`[${HOST}]`)].filter(shown);
 
   // The hosts among these top-level nodes: a section holds its heading and,
-  // in its body, its blocks.
+  // in its body, its blocks; a code block taking typing, its code (not its
+  // toolbar).
   const heading = (el) => /^H[1-6]$/.test(el.tagName);
   function candidates(node, out = []) {
     if (node.nodeType !== 1) return out;
@@ -34,6 +35,9 @@ export function createHosts({ content, scroller, islands, active }) {
         if (heading(child)) out.push(child);
         else if (child.classList.contains("section-body"))
           for (const block of child.children) candidates(block, out);
+    } else if (node.classList.contains("code-direct")) {
+      const pre = node.querySelector(":scope > pre");
+      if (pre) out.push(pre);
     } else if (!node.matches(islands)) out.push(node);
     return out;
   }

@@ -5,35 +5,53 @@ export function createPreviewCache({
   maxHtmlBytes = 4 * 1024 * 1024,
 } = {}) {
   const entries = new Map(),
-    signatures = new WeakMap();
+    signatures = new WeakMap(),
+    // Blocks typed into (direct editing) since they were last described.
+    typed = new WeakSet();
   let active = null,
     bytes = 0;
-  const keys = ["from", "to", "textFrom", "textTo", "editFrom", "editTo"];
-  const mappedSelector =
-    "[data-from],[data-to],[data-text-from],[data-text-to],[data-edit-from],[data-edit-to]";
+  // The source positions the renderer writes (markdown.js).
+  const keys = ["", "text", "edit", "block", "src", "srcInner"].flatMap(
+    (kind) => (kind ? [kind + "From", kind + "To"] : ["from", "to"]),
+  );
+  const mappedSelector = keys
+    .map(
+      (key) => `[data-${key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}]`,
+    )
+    .join(",");
   const mapped = (node) =>
     node.nodeType === 1 ? [node, ...node.querySelectorAll(mappedSelector)] : [];
   const shell = (node) =>
     node.nodeType === 1 &&
     (node.classList.contains("note-section") ||
       node.classList.contains("section-body"));
-  const shellKey = (node) =>
+  // A section or section body, and of which level.
+  const kind = (node) =>
     JSON.stringify([
       node.className.replace(/\s*collapsed\b/, ""),
-      node.dataset.foldKey,
       node.dataset.level,
     ]);
+  const shellKey = (node) => JSON.stringify([kind(node), node.dataset.foldKey]);
 
+  // Without positions, and without what direct editing sets on blocks in the
+  // page (editing hosts, islands).
+  const plain = (raw) =>
+    raw.replace(
+      / data-(?:text-|edit-|block-|src-(?:inner-)?)?(?:from|to)="\d+"| contenteditable="(?:true|false)"| data-direct-host=""| spellcheck="false"/g,
+      "",
+    );
   function describe(node) {
     let value = signatures.get(node);
+    if (value && typed.has(node)) {
+      typed.delete(node);
+      value = retyped(node, value);
+      if (value) signatures.set(node, value);
+    }
     if (!value) {
       const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
       value = {
         raw,
-        signature:
-          node.nodeType === 1
-            ? raw.replace(/ data-(?:text-|edit-)?(?:from|to)="\d+"/g, "")
-            : raw,
+        signature: node.nodeType === 1 ? plain(raw) : raw,
         ranges: mapped(node).map((element) =>
           keys.map((key) => element.dataset[key]),
         ),
@@ -41,6 +59,29 @@ export function createPreviewCache({
       signatures.set(node, value);
     }
     return value;
+  }
+  // A block typed into: as it was rendered, with the text its runs hold now.
+  // A render of the same text then keeps the block (only its positions
+  // change): it holds the caret, and an input method composing there on
+  // Windows ends the composition when the block is replaced. Null when the
+  // typing did more than change the runs' text.
+  function retyped(node, value) {
+    const template = node.ownerDocument.createElement("template");
+    template.innerHTML = value.raw;
+    const skeleton = template.content.firstElementChild,
+      runs = skeleton ? [...skeleton.querySelectorAll("[data-text-from]")] : [],
+      live = [...node.querySelectorAll("[data-text-from]")];
+    if (
+      runs.length !== live.length ||
+      live.some((run) => [...run.childNodes].some((n) => n.nodeType !== 3))
+    )
+      return null;
+    // A space typed at a run's edge shows as a no-break space.
+    runs.forEach((run, i) => {
+      run.textContent = live[i].textContent.replace(/\u00a0/g, " ");
+    });
+    const raw = skeleton.outerHTML;
+    return { raw, signature: plain(raw), ranges: value.ranges };
   }
   function identity(node) {
     return shell(node)
@@ -95,12 +136,13 @@ export function createPreviewCache({
   }
   function reuse(node, old, hydrate) {
     if (shell(node)) {
-      if (old && shell(old) && shellKey(node) === shellKey(old)) {
-        if (
-          node.dataset.blockCount !== undefined &&
-          node.dataset.blockCount !== old.dataset.blockCount
-        )
-          old.dataset.blockCount = node.dataset.blockCount;
+      if (old && shell(old) && kind(node) === kind(old)) {
+        for (const key of ["blockCount", "foldKey"])
+          if (
+            node.dataset[key] !== undefined &&
+            node.dataset[key] !== old.dataset[key]
+          )
+            old.dataset[key] = node.dataset[key];
         reconcile(
           old,
           children([...node.childNodes], [...old.childNodes], hydrate),
@@ -129,11 +171,126 @@ export function createPreviewCache({
       if (!buckets.has(key)) buckets.set(key, { nodes: [], cursor: 0 });
       buckets.get(key).nodes.push(node);
     }
-    return candidates.map((node) => {
+    const olds = candidates.map((node) => {
       const bucket = buckets.get(identity(node));
-      const old = bucket?.nodes[bucket.cursor++];
-      return reuse(node, old, hydrate);
+      return bucket?.nodes[bucket.cursor++];
     });
+    // A section whose heading changed (typed into, renamed) is still the
+    // section left over in its place: its heading and blocks are kept where
+    // they render the same, and the heading being typed into keeps the focus.
+    const used = new Set(olds),
+      spare = previous.filter((node) => shell(node) && !used.has(node));
+    candidates.forEach((node, i) => {
+      if (olds[i] || !shell(node)) return;
+      const at = spare.findIndex((old) => kind(old) === kind(node));
+      if (at >= 0) olds[i] = spare.splice(at, 1)[0];
+    });
+    return keepFocused(
+      previous,
+      candidates.map((node, i) => reuse(node, olds[i], hydrate)),
+    );
+  }
+  // The block holding the focus (being typed into) stays in the page even
+  // when it renders differently: it takes the new block's attributes and
+  // content (morph). The focus moving to another element tells the input
+  // method its text field changed, and some (Sogou Pinyin) end their
+  // composition then.
+  // What the page sets on rendered elements, kept as it is: editing hosts
+  // and islands, an open <details>, a broken link's mark; classes the
+  // reader toggles or the page marks with; and what it adds (backlink
+  // counts).
+  const own = [
+      "contenteditable",
+      "data-direct-host",
+      "spellcheck",
+      "open",
+      "data-broken",
+    ],
+    toggled = [
+      "collapsed",
+      "code-collapsed",
+      "code-wrap",
+      "has-backlinks",
+      "link-broken",
+    ],
+    added = (node) =>
+      node.nodeType === 1 && node.classList.contains("backlink-badge");
+  // Typeset formulas and diagrams are taken whole from the new block (it was
+  // hydrated); buttons showing a state the reader set (a folded section, an
+  // expanded code block) are kept.
+  const whole = ".formula,.math-block,.mermaid,svg,img";
+  const stated = (a, b) =>
+    ["aria-expanded", "aria-pressed"].some(
+      (name) => a.getAttribute(name) !== b.getAttribute(name),
+    );
+  function morph(live, next) {
+    for (const { name } of [...live.attributes])
+      if (!next.hasAttribute(name) && !own.includes(name) && name !== "class")
+        live.removeAttribute(name);
+    for (const { name, value } of [...next.attributes])
+      if (name !== "class" && live.getAttribute(name) !== value)
+        live.setAttribute(name, value);
+    const classes = new Set(next.classList);
+    for (const name of toggled)
+      if (live.classList.contains(name)) classes.add(name);
+      else classes.delete(name);
+    const className = [...classes].join(" ");
+    if (live.className !== className)
+      if (className) live.className = className;
+      else live.removeAttribute("class");
+    const a = [...live.childNodes].filter((node) => !added(node)),
+      b = [...next.childNodes];
+    if (
+      a.length !== b.length ||
+      a.some(
+        (node, i) =>
+          node.nodeType !== b[i].nodeType ||
+          (node.nodeType === 1 && node.tagName !== b[i].tagName),
+      )
+    )
+      return live.replaceChildren(...b);
+    a.forEach((node, i) => {
+      const other = b[i];
+      if (node.nodeType !== 1) {
+        // The text being typed into stays, a typed space shown as a no-break
+        // one included.
+        if (node.data.replace(/\u00a0/g, " ") !== other.data)
+          node.data = other.data;
+      } else if (node.matches(whole)) node.replaceWith(other);
+      else if (!(node.tagName === "BUTTON" && stated(node, other)))
+        morph(node, other);
+    });
+  }
+  function keepFocused(previous, nodes) {
+    const active = previous[0]?.ownerDocument.activeElement;
+    const focused =
+      active &&
+      previous.find(
+        (node) => node.nodeType === 1 && !shell(node) && node.contains(active),
+      );
+    if (!focused || nodes.includes(focused)) return nodes;
+    // The new block in its place: after as many kept blocks as preceded it
+    // (the text between blocks aside).
+    const old = new Set(previous),
+      kept = new Set(nodes),
+      elements = (list) => list.filter((node) => node.nodeType === 1);
+    const before = elements(
+      previous.slice(0, previous.indexOf(focused)),
+    ).filter((node) => kept.has(node)).length;
+    let seen = 0,
+      next = null;
+    for (const node of elements(nodes))
+      if (!old.has(node)) {
+        if (seen === before) {
+          next = node;
+          break;
+        }
+      } else if (seen++ === before) break;
+    if (!next || next.tagName !== focused.tagName) return nodes;
+    const value = describe(next);
+    morph(focused, next);
+    signatures.set(focused, value);
+    return nodes.map((node) => (node === next ? focused : node));
   }
   function reconcile(parent, nodes) {
     const keep = new Set(nodes);
@@ -183,12 +340,13 @@ export function createPreviewCache({
         remove(entries.keys().next().value);
       return true;
     },
-    // Typing in the page (direct editing) changed this node: describe it
-    // afresh, and render the next text even if it equals the cached one.
+    // Typing in the page (direct editing) changed this node: read its text
+    // again at the next render, and render the next text even if it equals
+    // the cached one.
     taint(container, node) {
       for (let el = node; el && el !== container; el = el.parentNode)
         if (el.parentNode === container || shell(el.parentNode)) {
-          signatures.delete(el);
+          typed.add(el);
           break;
         }
       if (active) active.html = null;

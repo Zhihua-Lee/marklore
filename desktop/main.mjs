@@ -150,8 +150,15 @@ let tray,
   desktopWrite = Promise.resolve(),
   pendingDisk = false;
 // Automated runs (FOLIO_TEST_INACTIVE) show windows without activating them,
-// so tests never take the foreground from whoever is using the computer.
+// so tests never take the foreground from whoever is using the computer;
+// off screen and out of the taskbar, so they do not cover what is on it.
+// Chromium would stop painting a window it finds covered or off screen.
 const inactive = Boolean(process.env.FOLIO_TEST_INACTIVE);
+if (inactive)
+  app.commandLine.appendSwitch(
+    "disable-features",
+    "CalculateNativeWinOcclusion",
+  );
 function showWindow() {
   if (!win || win.isDestroyed()) return;
   if (win.isMinimized()) win.restore();
@@ -577,6 +584,7 @@ else {
         backgroundColor: dark ? "#202523" : "#f6f5f1",
         title: "Marklore",
         icon: path.join(here, "icons/folio.png"),
+        ...(inactive && { x: -20000, y: -20000, skipTaskbar: true }),
         ...(ownWindowControls && { titleBarStyle: "hidden" }),
         ...(mac && {
           titleBarStyle: "hiddenInset",

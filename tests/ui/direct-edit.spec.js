@@ -78,14 +78,20 @@ test("typing in a paragraph changes exactly that text, live", async ({
     "contenteditable",
     "true",
   );
-  for (const block of ["#content h1", "#content p", "#content ul"])
+  // A code block's code is one too; its toolbar is not.
+  for (const block of [
+    "#content h1",
+    "#content p",
+    "#content ul",
+    "#content pre",
+  ])
     await expect(page.locator(block).first()).toHaveAttribute(
       "contenteditable",
       "true",
     );
-  await expect(page.locator("#content pre").first()).not.toHaveAttribute(
+  await expect(page.locator("#content .code-toolbar").first()).toHaveAttribute(
     "contenteditable",
-    "true",
+    "false",
   );
   // Moving around changes nothing.
   await paragraph(page, "Second").click();
@@ -436,7 +442,11 @@ test("arrow keys, Shift and a drag cross blocks", async ({ page }) => {
   expect(await hostOf("anchor")).toMatch(/^.?Title/);
   // Ctrl+End: the end of the last block that takes typing.
   await page.keyboard.press("Control+End");
-  expect(await hostOf("anchor")).toBe("onetwo");
+  expect(await hostOf("anchor")).toBe("x=1");
+  // Its last line, before the closing fence.
+  await page.keyboard.type("Z");
+  expect(await source(page)).toContain("x = 1Z\n```");
+  await page.keyboard.press("Backspace");
   // Shift+Down selects into the next block; Backspace removes the selection.
   await paragraph(page, "Second").click();
   await page.keyboard.press("Home");
@@ -583,4 +593,206 @@ test("nothing else in the note changes while an input method composes", async ({
       ),
     )
     .toBeLessThan(pending);
+});
+
+// The render after a pause in typing must not replace the block typed into,
+// nor move the focus: on Windows either tells the input method its text field
+// changed, and Sogou Pinyin then ends the composition the next word starts.
+test("the render after a pause keeps the block typed into, and the focus", async ({
+  page,
+}) => {
+  await boot(page);
+  const cdp = await page.context().newCDPSession(page);
+  const watch = () =>
+    page.evaluate(() => {
+      const anchor = getSelection().anchorNode;
+      window.__typed = {
+        host: anchor.parentElement.closest("[data-direct-host]"),
+        node: anchor,
+        below: [...document.querySelectorAll("#content li")],
+        events: [],
+      };
+      for (const type of ["focusout", "focusin"])
+        document.addEventListener(
+          type,
+          () => window.__typed.events.push(type),
+          {
+            capture: true,
+          },
+        );
+    });
+  const kept = () =>
+    page.evaluate(() => {
+      const { host, node, below, events } = window.__typed;
+      const anchor = getSelection().anchorNode;
+      return {
+        host:
+          host.isConnected &&
+          anchor.parentElement.closest("[data-direct-host]") === host,
+        node: anchor === node,
+        below: below.every((li) => li.isConnected),
+        events,
+      };
+    });
+  // A paragraph with bold and a formula, with typed text before both.
+  await paragraph(page, "First").click({ position: { x: 8, y: 8 } });
+  await watch();
+  for (const [pinyin, word] of [
+    ["zhong", "中"],
+    ["wen", "文"],
+  ]) {
+    await cdp.send("Input.imeSetComposition", {
+      text: pinyin,
+      selectionStart: pinyin.length,
+      selectionEnd: pinyin.length,
+    });
+    await cdp.send("Input.insertText", { text: word });
+    // Long enough for the preview to render again.
+    await page.waitForTimeout(1000);
+  }
+  expect(await source(page)).toMatch(
+    /F中文irst \*\*bold\*\* text and \$x\^2\$ here\./,
+  );
+  expect(await kept()).toEqual({
+    host: true,
+    node: true,
+    below: true,
+    events: [],
+  });
+  // Typing goes on at the caret, and the source maps the block afresh.
+  await page.keyboard.type("!");
+  expect(await source(page)).toContain("F中文!irst **bold**");
+
+  // A new paragraph: it renders differently from the empty one typed into,
+  // and takes the new content in place, keeping the focus.
+  await caretAtEnd(page, "Second");
+  await page.keyboard.press("Enter");
+  await watch();
+  await cdp.send("Input.imeSetComposition", {
+    text: "xin",
+    selectionStart: 3,
+    selectionEnd: 3,
+  });
+  await cdp.send("Input.insertText", { text: "新" });
+  await page.waitForTimeout(1000);
+  expect(await source(page)).toContain("Second paragraph.\n\n新\n\n- one");
+  const after = await kept();
+  expect(after.host).toBe(true);
+  expect(after.events).toEqual([]);
+  await page.keyboard.type("!");
+  expect(await source(page)).toContain("\n\n新!\n\n- one");
+});
+
+test("a heading keeps its section, its text and the focus while typed into; Enter after it starts a paragraph in the section", async ({
+  page,
+}) => {
+  const text = "# Title\n\nIntro.\n\n## Sub heading\n\nBody.\n";
+  await boot(page, { text });
+  const cdp = await page.context().newCDPSession(page);
+  await page.locator("#content h2 [data-text-from]").click();
+  await page.keyboard.press("End");
+  await page.evaluate(() => {
+    const anchor = getSelection().anchorNode;
+    window.__typed = {
+      section: anchor.parentElement.closest(".note-section"),
+      body: document.querySelector("#content h2 ~ .section-body p"),
+      node: anchor,
+      events: [],
+    };
+    for (const type of ["focusout", "focusin"])
+      document.addEventListener(type, () => window.__typed.events.push(type), {
+        capture: true,
+      });
+  });
+  // Typing changes the heading's id (its anchor), and so its section's.
+  for (const [pinyin, word] of [
+    ["zhong", "中"],
+    ["wen", "文"],
+  ]) {
+    await cdp.send("Input.imeSetComposition", {
+      text: pinyin,
+      selectionStart: pinyin.length,
+      selectionEnd: pinyin.length,
+    });
+    await cdp.send("Input.insertText", { text: word });
+    await page.waitForTimeout(1000);
+  }
+  expect(await source(page)).toContain("## Sub heading中文\n\nBody.");
+  await expect(page.locator("#content h2")).toHaveAttribute(
+    "id",
+    "sub-heading中文",
+  );
+  expect(
+    await page.evaluate(() => {
+      const { section, body, node, events } = window.__typed;
+      return {
+        section: section.isConnected,
+        body: body.isConnected,
+        node: getSelection().anchorNode === node,
+        events,
+      };
+    }),
+  ).toEqual({ section: true, body: true, node: true, events: [] });
+  // Enter at its end: a paragraph first in its section, typed into.
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("new");
+  expect(await source(page)).toContain("## Sub heading中文\n\nnew\n\nBody.");
+  await expect(
+    page.locator("#content h2 ~ .section-body > p").first(),
+  ).toHaveText("new");
+});
+
+test("a fenced code block takes typing: Enter keeps the indentation, Tab indents, the fences stay", async ({
+  page,
+}) => {
+  const fence = "```js\nif (a) {\n  x = 1;\n}\n```";
+  const text = `# Code\n\nPara.\n\n${fence}\n\n- item\n\n  \`\`\`js\n  inlist()\n  \`\`\`\n`;
+  await boot(page, { text });
+  // In a list the code is indented in the source: it keeps to the pencil.
+  await expect(page.locator("#content .code-direct")).toHaveCount(1);
+  await expect(page.locator("#content li pre")).not.toHaveAttribute(
+    "contenteditable",
+    "true",
+  );
+  const caretAfter = (needle) =>
+    page.evaluate((needle) => {
+      const code = document.querySelector("#content .code-direct code");
+      const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode()) && !node.data.includes(needle));
+      code.closest("pre").focus();
+      getSelection().collapse(node, node.data.indexOf(needle) + needle.length);
+    }, needle);
+  await caretAfter(";");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("y = 2;");
+  expect(await source(page)).toContain("  x = 1;\n  y = 2;\n}\n```");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("z");
+  expect(await source(page)).toContain("  y = 2;  z\n}");
+  await page.keyboard.press("Shift+Tab");
+  expect(await source(page)).toContain("\ny = 2;  z\n}");
+  // After a pause the block renders again; typing goes on in place.
+  await page.waitForTimeout(900);
+  await page.keyboard.type("!");
+  expect(await source(page)).toContain("\ny = 2;  z!\n}");
+  // Backspace at the code's start, Delete at its end: nothing joins.
+  const before = await source(page);
+  await caretAfter("if");
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Control+End");
+  expect(await source(page)).toBe(before);
+  // A selection reaching out of the block is refused.
+  await paragraph(page, "Para").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Shift+ArrowDown");
+  await page.keyboard.type("Q");
+  expect(await source(page)).toBe(before);
+  // Copying the code still gives the source's text.
+  expect(
+    await page
+      .locator("#content .code-direct code")
+      .evaluate((el) => el.textContent.endsWith("}\n")),
+  ).toBe(true);
 });

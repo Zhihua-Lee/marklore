@@ -66,6 +66,7 @@ import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
 import { createSelectionTools } from "./selection-tools.js";
 import { createDirectEditor } from "./direct-editing.js";
+import { composing } from "./composing.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
 import {
@@ -805,8 +806,9 @@ function render(preserve) {
   editsPendingSince = null;
   if (!active) return;
   if (blockEditor?.active) return;
-  // An input method composes in the page: render once it is done.
-  if (directEditor?.composing) {
+  // An input method composes in the page, or is about to (composing.js):
+  // render once it is done.
+  if (directEditor?.composing || (directEditor?.active && composing())) {
     clearTimeout(renderingTimer);
     renderingTimer = setTimeout(() => render(preserve), 120);
     return;

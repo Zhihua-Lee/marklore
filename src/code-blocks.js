@@ -18,6 +18,9 @@ export function decorateCodeBlocks(fragment, { fold = true } = {}) {
     const document = pre.ownerDocument;
     const frame = document.createElement("figure");
     frame.className = "code-block";
+    // Its text is the source's, as it stands there (markdown.js): direct
+    // editing types into it.
+    if (code.hasAttribute("data-text-from")) frame.classList.add("code-direct");
     const toolbar = document.createElement("figcaption");
     toolbar.className = "code-toolbar";
     const language = document.createElement("span");

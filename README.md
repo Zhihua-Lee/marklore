@@ -93,7 +93,7 @@ In Edit mode the source is on the left and the preview on the right; formulas, t
 
 ### Type right in the rendered note
 
-Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. A formula typesets the moment you type its closing `$`, and table cells take typing too; formulas, code and a table's structure keep the pencil for editing in place. Turn off `Show the source pane in Edit mode` too, and Edit mode is the rendered note alone.
+Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. A formula typesets the moment you type its closing `$`, and headings, code blocks and table cells take typing too; formulas and a table's structure keep the pencil for editing in place. Turn off `Show the source pane in Edit mode` too, and Edit mode is the rendered note alone.
 
 ![Typing on the rendered page: a sentence with a formula typesets after a pause, Enter adds a line to the tip with a bold lead, and Source mode shows the Markdown that was written](docs/images/en/direct.gif)
 

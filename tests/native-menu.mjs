@@ -238,9 +238,10 @@ try {
         "[NC]::SetProcessDPIAware() | Out-Null",
         `$h = [IntPtr]::new([Int64]${hit.hwnd})`,
         ...Object.entries(probes).map(([name, p]) => {
+          // Screen points, each a signed 16-bit half (test windows sit off screen).
           const x = Math.round((hit.content.x + p.x) * hit.scale),
             y = Math.round((hit.content.y + p.y) * hit.scale);
-          return `"${name}=" + [NC]::SendMessage($h, 0x84, [IntPtr]::Zero, [IntPtr]::new(([Int64]${y} -shl 16) -bor ${x}))`;
+          return `"${name}=" + [NC]::SendMessage($h, 0x84, [IntPtr]::Zero, [IntPtr]::new(([Int64](${y} -band 0xFFFF) -shl 16) -bor (${x} -band 0xFFFF)))`;
         }),
       ].join("\n"),
     ],

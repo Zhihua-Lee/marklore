@@ -56,6 +56,8 @@ export default {
   就地编辑此块: "Edit this block in place",
   "这里不能直接编辑：公式、代码和表格结构请用铅笔就地编辑":
     "This part can't be typed into directly: use the pencil for formulas, code and a table's structure",
+  "选区跨出了代码块；代码块的开头和结尾请用铅笔修改":
+    "The selection reaches past the code block; use the pencil to change where it starts and ends",
   "表格单元格里不能换行；改表格结构请用铅笔":
     "A table cell holds one line; use the pencil to change the table's structure",
   "预览正在更新，请稍后再试。":

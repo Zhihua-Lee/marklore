@@ -166,6 +166,9 @@ export function createBacklinks({
     const doc = getActive(),
       mine = ++epoch;
     const incoming = await load(doc);
+    // Counts go into headings (being typed into, maybe): not while an input
+    // method composes (see composing.js).
+    await settled();
     if (mine !== epoch || doc !== getActive()) return;
     const { groups, title, missing } = resolve(incoming);
     // Re-rendering the note often keeps the linked blocks: then the counts

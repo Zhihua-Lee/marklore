@@ -73,7 +73,7 @@ pnpm dev
 | `pnpm test:native:all`          | 依次运行全部原生套件。      |
 | `pnpm format:check`             | Prettier 格式检查。         |
 
-浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。
+浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。原生测试设置 `FOLIO_TEST_INACTIVE=1`（`tools/run-native-suites.mjs` 自动设置）：窗口不激活、放在屏幕外、不进任务栏，并关闭 Chromium 的遮挡检测，以免它停止绘制屏幕外的窗口。
 
 - 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。
@@ -165,6 +165,10 @@ pnpm prune-releases --apply    # 移到回收站
 直接编辑时，笔记本身不可编辑，每个顶层块（段落、标题、列表、引用、表格）各自是一个编辑区：浏览器处理一次按键的开销随编辑区大小增长，1800 行的笔记上从每键约 40 ms 降到约 20 ms。把整篇笔记临时设为可编辑会让整篇重新计算样式（约 0.3 s），所以不在两种方式之间切换。浏览器把光标和选区限制在一个编辑区内，跨块的方向键、Shift 选择、拖选、Shift+点击、Ctrl+A、Ctrl+Home/End、PageUp/PageDown 和块之间的点击由 `src/direct-hosts.js` 处理；跨块选区的复制与剪切写入完整内容（浏览器自己只会复制第一个块的部分）。给块加 CSS `contain` 在这种方式下测不出收益，加在列表等块上还会改变外边距，所以没有使用。
 
 输入法组字（拼音尚未上屏）期间，后台工作不改动页面：Windows 会把组字附近文字的变化通知输入法，搜狗拼音等因此提前结束组字。`src/composing.js` 记录是否在组字；公式补排、表格列宽、图表插入、链接标记、悬停标记和内存回收在组字时推迟到结束后（`tests/ui/direct-edit.spec.js` 检查组字期间页面没有其他变化）。新增会改动页面的后台工作也要这样做。
+
+组字从输入法接管的第一个键（keyCode 229）算起，而不是从 `compositionstart` 算起：两者之间页面若重新渲染，组字还没开始就被结束。停顿后的重新渲染也不能替换正在输入的那一块、不能让焦点离开它：焦点换到另一个元素，等于告诉输入法换了输入框。`src/render-cache.js` 因此按打字后的文字（`retyped`）比对被输入过的块，相同就只更新位置属性；块确实变了（新段落、形成了加粗）时，带焦点的块原地换上新内容（`keepFocused`）。比对时忽略所有源码位置属性（`data-*-from/to`，含 `data-src-*`、`data-block-*`）和直接编辑加在块上的属性。原地更新（`morph`）逐层对照新旧节点：结构相同就保留原节点、只改属性和变了的文字，正在输入的文字节点因此不变；公式与图表整个换成新的；页面自己加的东西（反向链接计数、折叠和换行状态、断链标记）保留。标题里打字会改变它的锚点 id，也就改变了所在章节的标识，这时沿用同一位置、同一级别的旧章节，标题和正文块都不重建。
+
+代码块在源码中原样出现时（顶层的围栏代码，不在列表或引用里，非空，不是 Mermaid）也可以直接编辑：`markdown.js` 给其中的 `<code>` 标上 `data-text-from/to`，`code-blocks.js` 给代码框加 `code-direct`，编辑区是其中的 `<pre>`，工具栏不可编辑。代码最后的换行属于结束围栏，打字和删除都停在它之前；`Enter` 保留当前行缩进，`Tab`／`Shift+Tab` 按代码已有的缩进单位增减；跨出代码块的选区一律拒绝，以免破坏围栏。
 
 源码窗格（CodeMirror）只测量屏幕附近的行，其余按字数估算高度；自动换行的长行（中文尤甚）估算偏低 20–45%，滚动时滚动条会不断变短、跳动。`src/editor-heights.js` 在空闲时分片把整篇滚一遍并测量（用 CodeMirror 未公开的同步 `view.measure()`），每片结束前把屏幕顶部那一行放回原处；之后估算误差在 3% 以内。笔记大改或宽度变化后重新测量。
 

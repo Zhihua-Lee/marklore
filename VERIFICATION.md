@@ -1,6 +1,6 @@
 # Verification
 
-Last updated 2026-10-20.
+Last updated 2026-10-21.
 
 This index lists what was checked for each documented release; the full record of
 each pass lives in [docs/verification/](docs/verification/). A recorded pass covers
@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                                  | Unit              | Browser (UI)                   | Native                                                          | Link                                    |
 | ------- | ------------------------------------------------------------------------ | ----------------- | ------------------------------ | --------------------------------------------------------------- | --------------------------------------- |
+| v0.3.4  | Direct editing: input methods kept, headings and code blocks             | 126               | 232 (default + reduced-motion) | 16 suites (packaged); installer check 0 failed                  | [v0.3.4](docs/verification/v0.3.4.md)   |
 | v0.3.3  | Security update: Electron 44.9.3, updates refuse eMudhra, dependencies   | 126               | 230 (default + reduced-motion) | 16 suites (packaged); installer check 40/40                     | [v0.3.3](docs/verification/v0.3.3.md)   |
 | v0.3.2  | Input methods keep composing; default app on Windows 10; source heights  | 125               | 230 (default + reduced-motion) | 16 suites (packaged); installer check 0 failed                  | [v0.3.2](docs/verification/v0.3.2.md)   |
 | v0.3.1  | Faster direct editing; small updates; smaller package; less memory       | 125               | 229 (default + reduced-motion) | 16 suites (packaged); installer check 40/40                     | [v0.3.1](docs/verification/v0.3.1.md)   |

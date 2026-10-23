@@ -60,7 +60,14 @@ async function libraries(store) {
     used.add(name.toLowerCase());
     out.push({ name, path: real });
   }
-  return { list: out, excluded: excludedBy(access.excluded) };
+  // Compared with real paths, as the libraries are (a short 8.3 name or a
+  // link in a stored path would miss them otherwise).
+  const excluded = await Promise.all(
+    access.excluded
+      .filter((p) => typeof p === "string")
+      .map((p) => realPath(p).catch(() => p)),
+  );
+  return { list: out, excluded: excludedBy(excluded) };
 }
 
 function noOpenLibrary() {

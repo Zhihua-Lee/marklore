@@ -1,12 +1,22 @@
 // Context menu and the export (app) menu share keyboard navigation and dismissal.
 export function createMenus({ run, appMenuEntries }) {
   const $ = (s) => document.querySelector(s);
-  function showContext(e, actions) {
+  // An action may carry a second, muted line (detail); a wide menu has room
+  // for it.
+  function showContext(e, actions, { wide = false } = {}) {
     const menu = $("#context");
     menu.replaceChildren();
-    for (const [name, fn, disabled] of actions) {
+    menu.classList.toggle("wide", wide);
+    for (const [name, fn, disabled, detail] of actions) {
       const b = document.createElement("button");
       b.textContent = name;
+      if (detail) {
+        const line = document.createElement("span");
+        line.className = "menu-detail";
+        line.textContent = detail;
+        b.append(line);
+        b.title = name + "\n" + detail;
+      }
       b.setAttribute("role", "menuitem");
       b.disabled = !!disabled;
       b.onclick = run(() => {

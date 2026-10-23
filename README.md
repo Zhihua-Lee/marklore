@@ -48,6 +48,8 @@ More and more notes start as an AI draft. That is where the work begins: you che
 2. Run your agent in the same folder, for example `claude` in a terminal there, and ask it to write, split, link or tidy notes.
 3. Read and refine: new files appear in the library, and open notes re-render as they change. Rewrite, correct and highlight by hand whenever you like; nothing is saved until you press `Ctrl+S`.
 
+Or let the agent propose instead of write: add Marklore as an MCP server (`Settings → AI assistant` copies the setup for Claude Code, Codex or any MCP client) and tick the libraries it may read. Its edits then wait in Marklore: preview the note as it would read, with the changes marked, or as a source diff, and accept or reject them. Comments go both ways too: select a passage and comment on it, and the agent reads, answers and resolves; it can start threads of its own. Proposals and comments stay in your user profile, not in the notes.
+
 To keep what the agent writes rendering correctly, you can put a few conventions in the folder's `AGENTS.md` or `CLAUDE.md`:
 
 ```markdown

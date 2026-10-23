@@ -140,25 +140,31 @@ pnpm prune-releases --apply    # 移到回收站
 
 ## 源码结构
 
-| 路径                                                                                                 | 职责                                                                 |
-| ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)           | 窗口、隔离接口、文件监听与会话恢复。                                 |
-| [`desktop/files.mjs`](../desktop/files.mjs)                                                          | 文件授权、编码、版本校验、备份与目录操作。                           |
-| [`desktop/integration.mjs`](../desktop/integration.mjs)                                              | Windows 系统集成。                                                   |
-| [`src/app.js`](../src/app.js)                                                                        | 文档状态、编辑器和交互协调。                                         |
-| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)                   | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。                  |
-| [`src/render-cache.js`](../src/render-cache.js)                                                      | 有界的近期预览 DOM 复用。                                            |
-| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)                   | 标签交互、排序与分组。                                               |
-| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)             | 源码格式工具与块级就地编辑。                                         |
-| [`src/direct-editing.js`](../src/direct-editing.js)、[`src/direct-hosts.js`](../src/direct-hosts.js) | 在渲染后的笔记中直接编辑；每个块各自是编辑区，跨块的光标移动与选择。 |
-| [`src/memory-release.js`](../src/memory-release.js)                                                  | 繁重渲染结束、页面安静后请主进程回收内存。                           |
-| [`src/copy-source.js`](../src/copy-source.js)                                                        | 从阅读区复制对应的 Markdown 源码。                                   |
-| [`src/link-preview.js`](../src/link-preview.js)                                                      | 链接悬浮预览与异步状态管理。                                         |
-| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)                   | 内容快照、离线资源嵌入和 PDF／HTML 导出。                            |
-| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。        |
-| [`tests/`](../tests/)                                                                                | 单元、浏览器与原生回归用例。                                         |
+| 路径                                                                                                   | 职责                                                                 |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)             | 窗口、隔离接口、文件监听与会话恢复。                                 |
+| [`desktop/files.mjs`](../desktop/files.mjs)                                                            | 文件授权、编码、版本校验、备份与目录操作。                           |
+| [`desktop/integration.mjs`](../desktop/integration.mjs)                                                | Windows 系统集成。                                                   |
+| [`src/app.js`](../src/app.js)                                                                          | 文档状态、编辑器和交互协调。                                         |
+| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)                     | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。                  |
+| [`src/render-cache.js`](../src/render-cache.js)                                                        | 有界的近期预览 DOM 复用。                                            |
+| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)                     | 标签交互、排序与分组。                                               |
+| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)               | 源码格式工具与块级就地编辑。                                         |
+| [`src/direct-editing.js`](../src/direct-editing.js)、[`src/direct-hosts.js`](../src/direct-hosts.js)   | 在渲染后的笔记中直接编辑；每个块各自是编辑区，跨块的光标移动与选择。 |
+| [`src/memory-release.js`](../src/memory-release.js)                                                    | 繁重渲染结束、页面安静后请主进程回收内存。                           |
+| [`src/copy-source.js`](../src/copy-source.js)                                                          | 从阅读区复制对应的 Markdown 源码。                                   |
+| [`src/link-preview.js`](../src/link-preview.js)                                                        | 链接悬浮预览与异步状态管理。                                         |
+| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)                     | 内容快照、离线资源嵌入和 PDF／HTML 导出。                            |
+| [`desktop/mcp.mjs`](../desktop/mcp.mjs)、[`desktop/mcp-server.mjs`](../desktop/mcp-server.mjs)         | MCP 服务器入口（stdio JSON-RPC）与数据目录定位。                     |
+| [`desktop/mcp-tools.mjs`](../desktop/mcp-tools.mjs)                                                    | MCP 工具：读取开放的笔记库、提议修改、批注。                         |
+| [`desktop/ai-store.mjs`](../desktop/ai-store.mjs)、[`desktop/ai-bridge.mjs`](../desktop/ai-bridge.mjs) | 提议与批注的存储（`ai` 文件夹）及主进程一侧。                        |
+| [`src/proposals.js`](../src/proposals.js)、[`src/comments.js`](../src/comments.js)                     | 提议条、预览与接受；批注的标记与讨论卡片。                           |
+| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                  | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。        |
+| [`tests/`](../tests/)                                                                                  | 单元、浏览器与原生回归用例。                                         |
 
 渲染进程没有直接的 Node／文件系统访问权限，本地文件操作经过主进程的授权接口。新增渲染能力应保持 HTML 清理、图表限制和本地资源授权边界，不通过放开远程加载来解决展示问题。
+
+MCP 服务器就是 Marklore 程序本身：AI 工具以 `ELECTRON_RUN_AS_NODE=1` 运行 `Marklore.exe <app.asar>/desktop/mcp.mjs`（`设置 → AI 助手` 给出完整命令），不开窗口、不取单实例锁，按与主进程相同的规则找到数据目录（`FOLIO_DATA_DIR`、便携版的 `data`、用户目录）。没有用 MCP SDK：协议只用到 `initialize`、`tools/list`、`tools/call`，手写的 JSON-RPC 省去一串依赖。服务器与应用通过数据目录的 `ai` 文件夹交换：`access.json` 由应用在会话保存时按 `settings.aiLibraries` 与当前笔记库写入，服务器每次调用都重读，路径检查（`mcp-tools.mjs` 的 `locate`）先解析真实路径再判断是否在开放的笔记库内，隐藏文件夹和不参与搜索的文件夹一律拒绝；提议每条一个文件，服务器只新建，应用只裁决；批注每篇笔记一个文件，双方都写，写入前取锁（锁目录，10 秒后视为失效）。服务器从不写笔记：接受修改时由页面把修改作为一次编辑应用到编辑器（可撤销），再走正常的保存与版本校验；新建笔记由主进程以 `wx` 写入。修改用“原文 → 新文”表示，原文须在笔记中恰好出现一次（`proposal-edits.mjs`），提议时与接受时各检查一次；批注按原文加前后各 32 字的上下文定位（`comment-anchors.mjs`）。`tests/native-ai.mjs` 用应用给出的命令启动真实服务器，走完提议、接受、双向批注和关闭访问。
 
 长文相关改动需同时检查首次打开、编辑、切换模式／标签和阅读位置恢复。滚动路径上不要加非被动的 `wheel` 监听，也不要在滚动时逐次测量阅读锚点：渲染后的公式会让每次命中测试花费约 10 ms，直接造成滚轮卡顿（参见 `src/app.js` 中的滚动遮罩与 `src/table-layout.js` 的延迟锚点）。现有缓存减少重复工作，但首次解析仍有成本，不能仅凭小样本声称任意长文流畅。
 

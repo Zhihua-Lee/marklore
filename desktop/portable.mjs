@@ -15,6 +15,8 @@ export const OWN_DATA = [
   "recent.json",
   "desktop-settings.json",
   "backups",
+  // AI proposals and the libraries opened to AI (desktop/ai-store.mjs).
+  "ai",
 ];
 
 // Written when portable mode is switched off: the running app holds its

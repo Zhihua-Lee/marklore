@@ -43,6 +43,13 @@ export const FOLIO_API = [
   "windowState",
   "windowAction",
   "releaseMemory",
+  "proposals",
+  "openProposal",
+  "decideProposal",
+  "createProposedNote",
+  "aiSetup",
+  "comments",
+  "changeComment",
   "language",
   "platform",
 ];

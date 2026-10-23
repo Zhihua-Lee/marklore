@@ -195,4 +195,14 @@ export default {
   更新尚未下载: "The update hasn't been downloaded",
   更新包不完整: "The update package is incomplete",
   无法启动更新: "Couldn't start the update",
+  // AI proposals and Settings → AI assistant.
+  无效操作: "Invalid action",
+  这条提议已处理或已过期: "This proposal was already decided or has lapsed",
+  "无法打开这条提议：{reason}": "Can't open this proposal: {reason}",
+  "目标位置已有文件，或不在开放给 AI 的笔记库中":
+    "a file is already there, or it is not in a library open to AI",
+  "笔记已不存在，或不在开放给 AI 的笔记库中":
+    "the note is gone, or it is not in a library open to AI",
+  // Comment threads.
+  这条批注已不存在: "This comment no longer exists",
 };

@@ -30,6 +30,8 @@ export function defaultSettings() {
     librarySide: "left",
     outlineSide: "right",
     searchExclude: [],
+    // Library folders an AI may read (Settings → AI assistant).
+    aiLibraries: [],
   };
 }
 
@@ -93,5 +95,6 @@ export function normalizeSettings(saved = {}) {
   settings.outlineSide = settings.outlineSide === "left" ? "left" : "right";
   settings.theme = settings.theme === "dark" ? "dark" : "light";
   settings.searchExclude = normalizeExcluded(settings.searchExclude);
+  settings.aiLibraries = normalizeExcluded(settings.aiLibraries);
   return settings;
 }

@@ -66,6 +66,9 @@ import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
 import { createSelectionTools } from "./selection-tools.js";
 import { createDirectEditor } from "./direct-editing.js";
+import { createProposals } from "./proposals.js";
+import { createComments } from "./comments.js";
+import { wireAiSettings } from "./ai-settings.js";
 import { composing } from "./composing.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
@@ -125,13 +128,19 @@ configureColorTools(
   },
 );
 let editingKeys = [];
-let blockEditor, imageInsertion, backlinks, linkHere;
+let blockEditor,
+  imageInsertion,
+  backlinks,
+  linkHere,
+  proposals,
+  comments,
+  paintAiSettings;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
-<main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
+<main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="comments-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
-<div id="conflict" role="alert" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div></div>
+<div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div></div>
 <span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="${t("右侧栏")}"></aside></div>
 <div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div>
 <div id="app-menu" class="context app-menu" role="menu" aria-label="${t("应用菜单")}" hidden></div>${appearanceMarkup}
@@ -512,6 +521,7 @@ selectionTools = createSelectionTools({
   // Read mode formats from the page only when the reader turned it on.
   editable: (doc) =>
     !isDiffDocument(doc) &&
+    !doc.preview &&
     (doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat)),
   render: () => {
     clearTimeout(renderingTimer);
@@ -759,6 +769,8 @@ function activateTab(doc, { revealGroup = true } = {}) {
   closeColorPicker();
   blockEditor?.finish();
   linkPreview.hide();
+  proposals?.leave();
+  comments?.close();
   clearTimeout(renderingTimer);
   const origin = navigationSnapshot();
   active = doc;
@@ -771,6 +783,7 @@ function activateTab(doc, { revealGroup = true } = {}) {
   updateTabs();
   updateModes();
   showConflict();
+  proposals?.paint();
   restoreSoon(doc, doc.anchor);
   if (!replayingHistory)
     readingHistory.visit({ id: doc.id, anchor: doc.anchor }, origin);
@@ -781,6 +794,8 @@ function activateTab(doc, { revealGroup = true } = {}) {
 }
 function setMode(mode, { anchor: destination } = {}) {
   if (!active || active.mode === mode) return;
+  // Leaving a proposal's preview: back where the note was read before it.
+  const back = proposals?.leave();
   selectionTools?.hide();
   closeColorPicker();
   blockEditor?.finish();
@@ -788,7 +803,7 @@ function setMode(mode, { anchor: destination } = {}) {
   clearTimeout(renderingTimer);
   capture();
   const doc = active,
-    anchor = destination || doc.anchor;
+    anchor = destination || back || doc.anchor;
   doc.anchor = anchor;
   doc.mode = mode;
   $("#panes").dataset.mode = mode;
@@ -823,8 +838,11 @@ function render(preserve) {
   // Direct editing shows the formula holding the caret as its source: render
   // again when that changes, too.
   const open = directEditor?.opened() ?? null;
-  if (doc.htmlText !== doc.text || (doc.htmlOpen ?? null) !== open) {
-    const result = renderDocument(doc, {
+  // A proposal under preview shows the note as it would read (proposals.js).
+  const shown = proposals?.shown(doc),
+    text = shown?.text ?? doc.text;
+  if (doc.htmlText !== text || (doc.htmlOpen ?? null) !== open) {
+    const result = renderDocument(shown ? { ...doc, ...shown } : doc, {
       deferMath: true,
       interactiveTasks: true,
       open: directEditor?.caret() ?? null,
@@ -834,7 +852,7 @@ function render(preserve) {
       : null;
     doc.html = result.html;
     doc.headings = result.headings;
-    doc.htmlText = doc.text;
+    doc.htmlText = text;
     doc.hydrate = result.hydrate;
     doc.renderBytes = result.bytes;
     doc.formulaCount = result.formulaCount;
@@ -845,7 +863,7 @@ function render(preserve) {
     hydrate: doc.hydrate,
     bytes: doc.renderBytes,
   });
-  doc.previewText = doc.text;
+  doc.previewText = text;
   doc.pending = null;
   doc.partial = false;
   // E.g. highlight.js arriving re-renders code blocks under an open preview.
@@ -869,6 +887,9 @@ function render(preserve) {
   scheduleTableLayout();
   backlinks?.refresh();
   directEditor?.rendered();
+  proposals?.rendered();
+  comments?.rendered();
+  proposals?.paint();
 }
 let outlineSignature = "";
 function updateOutline(headings) {
@@ -1023,6 +1044,7 @@ async function closeTab(doc) {
     }
     const index = tabs.indexOf(doc);
     if (index < 0) return;
+    doc.preview = null;
     if (doc === active) {
       capture();
       active = null;
@@ -1241,6 +1263,10 @@ const TASK_MARKER = /^([ \t>]*(?:[-*+]|\d+[.)])[ \t]+)\[([ xX])\]/;
 $("#content").addEventListener("change", (event) => {
   const box = event.target.closest?.("input.task-list-item-checkbox");
   if (!box || !active) return;
+  if (active.preview) {
+    box.checked = !box.checked;
+    return;
+  }
   // Positions after an edit not yet rendered may name another task: map them
   // through the edits since the last render. Blocks rendered on their own
   // since (direct editing) carry newer positions: render first then, and
@@ -1563,6 +1589,19 @@ $("#content").addEventListener("contextmenu", (event) => {
   showContext(event, [
     ...(selected ? [[t("复制"), () => document.execCommand("copy")]] : []),
     [t("复制指向这里的链接"), () => linkHere.copy(event.target), !active.path],
+    ...(selected && comments
+      ? (() => {
+          // The selection as it is now: the menu click may change it.
+          const source = selectionSource($("#content"));
+          return [
+            [
+              t("添加批注… Ctrl+Alt+M"),
+              () => comments.startNew(source),
+              !comments.available(),
+            ],
+          ];
+        })()
+      : []),
   ]);
 });
 wireFileDrop({
@@ -1600,6 +1639,7 @@ function applySettings() {
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? t("切换为窄版") : t("切换为宽版");
   applyAppearance(settings);
+  paintAiSettings?.();
   refreshColorButtons();
   updateHistoryButtons();
   if (themeChanged) renderDiagrams($("#content"), settings.theme, () => {});
@@ -1788,6 +1828,47 @@ for (const [id, fn] of Object.entries({
 for (const b of document.querySelectorAll("button[data-mode]"))
   b.onclick = () => setMode(b.dataset.mode);
 wireAppearance(changeSettings);
+paintAiSettings = wireAiSettings({
+  api,
+  getRoots: () => roots,
+  getSettings: () => settings,
+  change: changeSettings,
+  report: toast,
+});
+comments = createComments({
+  api,
+  content: $("#content"),
+  reader: $("#reader"),
+  button: $("#comments-button"),
+  getActive: () => active,
+  jump: (from) => jump(from),
+  report: toast,
+  run,
+  showContext,
+});
+proposals = createProposals({
+  api,
+  bar: $("#proposal-bar"),
+  button: $("#proposals-button"),
+  content: $("#content"),
+  getActive: () => active,
+  tabs,
+  add,
+  closeTab,
+  activate: activateTab,
+  view,
+  dirty,
+  save,
+  setMode,
+  render: () => {
+    clearTimeout(renderingTimer);
+    render(false);
+  },
+  restore: (doc, anchor, options) => restoreSoon(doc, anchor, options),
+  report: toast,
+  run,
+  showContext,
+});
 const openDesktopSettings = wireDesktopSettings({
   api,
   flush: () => flushSession(),

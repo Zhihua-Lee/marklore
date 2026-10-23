@@ -1150,6 +1150,22 @@ main[data-empty="true"] > #panes {
   font-size: 13px;
   padding: 8px 12px;
 }
+.context.wide {
+  width: min(380px, calc(100vw - 16px));
+}
+.context.wide button {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.context .menu-detail {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
 dialog {
   background: var(--paper);
   color: var(--ink);

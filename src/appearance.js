@@ -2,6 +2,7 @@ import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import { readingWeight } from "./typography.js";
 import { desktopSettingsMarkup } from "./desktop-settings.js";
+import { aiSettingsMarkup } from "./ai-settings.js";
 const $ = (selector) => document.querySelector(selector);
 // Each language is listed under its own name.
 const nativeNames = [
@@ -24,6 +25,7 @@ const sections = [
   ["settings-export", t("导出")],
   ["settings-editing", t("编辑")],
   ["settings-annotation", t("批注")],
+  ["settings-ai", t("AI 助手")],
   ["desktop-settings", t("后台与系统")],
 ];
 export const appearanceMarkup = `
@@ -72,6 +74,7 @@ export const appearanceMarkup = `
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
     ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}
   </fieldset>
+${aiSettingsMarkup}
 ${desktopSettingsMarkup}
   </div>
   </div>

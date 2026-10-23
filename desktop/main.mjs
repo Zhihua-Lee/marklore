@@ -34,6 +34,8 @@ import {
   retireDisabled,
 } from "./portable.mjs";
 import { t, setLanguage, getLanguage, resolveLanguage } from "./i18n.mjs";
+import { createAiStore, AI_FOLDER } from "./ai-store.mjs";
+import { createAiBridge } from "./ai-bridge.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -267,6 +269,16 @@ let win,
   sessionWrite = Promise.resolve(),
   allowClose = false;
 const watchers = new Map();
+// AI proposals through Marklore's MCP server (desktop/mcp.mjs), which the
+// assistant starts as this program in Node mode.
+const ai = createAiBridge({
+  store: createAiStore(path.join(app.getPath("userData"), AI_FOLDER)),
+  openFile: (p) => openFile(p),
+  pathOf: (id) => files.file(id).path,
+  notify: (kind) => send(kind, null),
+  executable: process.execPath,
+  script: path.join(here, "mcp.mjs"),
+});
 // Tab id -> last draft received from the renderer (see the "session" handler).
 const draftCache = new Map();
 const send = (name, data) => {
@@ -772,6 +784,9 @@ else {
         }
         return { documents, errors };
       });
+      for (const [name, handler] of Object.entries(ai.handlers))
+        api(name, handler);
+      ai.start();
       api("copyText", (text) => {
         if (
           typeof text !== "string" ||
@@ -1227,6 +1242,9 @@ else {
           .map((id) => files.directories.get(id))
           .filter(Boolean);
         followLibrary(roots, value.settings?.searchExclude);
+        ai.sync(roots, value.settings).catch((e) =>
+          console.warn("AI access:", e.message),
+        );
         savedSession = {
           ...value,
           tabs,
@@ -1364,6 +1382,10 @@ else {
           roots.map((root) => root.path),
           old.settings?.searchExclude,
         );
+        ai.sync(
+          roots.map((root) => root.path),
+          old.settings,
+        ).catch((e) => console.warn("AI access:", e.message));
         ready = true;
         if (!updatesStarted) {
           updatesStarted = true;
@@ -1390,6 +1412,7 @@ else {
       });
       app.on("will-quit", () => {
         libraryWatch.close();
+        ai.close();
         tray?.destroy();
         for (const entry of watchers.values()) entry.watcher.close();
         watchers.clear();

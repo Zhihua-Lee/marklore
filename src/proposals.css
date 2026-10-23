@@ -1,0 +1,127 @@
+/* AI proposals: a quiet strip above the note in the accent's tint, the
+   changed text washed in the same tint, a thin accent rule beside each
+   changed block. Deleted text shows in the source diff; its place is marked
+   with a dashed rule. */
+#proposal-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 7px 14px;
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  background: color-mix(in srgb, var(--accent) 8%, var(--paper));
+  color: var(--ink);
+  font-size: 12px;
+}
+#proposal-bar .proposal-text {
+  flex: 1 1 260px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+#proposal-bar .proposal-mark {
+  display: inline-flex;
+  margin-right: 5px;
+  color: var(--accent);
+}
+#proposal-bar .proposal-mark .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+#proposal-bar strong {
+  font-weight: 600;
+  white-space: nowrap;
+}
+#proposal-bar .proposal-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#proposal-bar .proposal-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+#proposal-bar .proposal-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+#proposal-bar button[aria-pressed="true"] {
+  background: color-mix(in srgb, var(--accent) 16%, var(--paper));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+#proposal-bar button.icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+#proposal-bar button.icon .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+#appearance .ai-libraries {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+#appearance .ai-libraries small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#appearance .ai-libraries li.empty {
+  padding: 4px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+#proposals-button {
+  position: relative;
+  color: var(--accent);
+}
+#proposals-button[hidden] {
+  display: none;
+}
+#proposals-button::after {
+  content: attr(data-count);
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--paper);
+  font: 600 9px/13px var(--font-ui);
+  text-align: center;
+}
+::highlight(folio-proposal) {
+  background-color: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--reading-ink);
+}
+.prose :is(.proposal-changed, .proposal-removed) {
+  position: relative;
+}
+.prose :is(.proposal-changed, .proposal-removed)::before {
+  content: "";
+  position: absolute;
+  top: 0.15em;
+  bottom: 0.15em;
+  left: -14px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.prose .proposal-removed:not(.proposal-changed)::before {
+  width: 0;
+  border-left: 3px dashed color-mix(in srgb, var(--danger) 70%, transparent);
+  border-radius: 0;
+  background: none;
+}
+@media print {
+  #proposal-bar {
+    display: none;
+  }
+}

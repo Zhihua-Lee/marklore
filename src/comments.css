@@ -1,0 +1,132 @@
+/* Comment threads: the passage gets a soft ochre underline (apart from the
+   find bar's yellow wash and the proposals' accent tint); the thread opens in
+   a card like the selection tools. */
+:root {
+  --comment: #8f6119;
+}
+:root[data-theme="dark"] {
+  --comment: #e0b25c;
+}
+::highlight(folio-comment) {
+  background-color: color-mix(in srgb, var(--comment) 12%, transparent);
+  text-decoration: underline 2px
+    color-mix(in srgb, var(--comment) 75%, transparent);
+  text-underline-offset: 3px;
+}
+#comments-button {
+  position: relative;
+}
+#comments-button[hidden] {
+  display: none;
+}
+#comments-button::after {
+  content: attr(data-count);
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--comment);
+  color: var(--paper);
+  font: 600 9px/13px var(--font-ui);
+  text-align: center;
+}
+#comments-button.settled::after {
+  display: none;
+}
+.comment-card {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(70vh, 520px);
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 4px 16px #0002;
+  font: 400 13px/1.45 var(--font-ui);
+}
+.comment-card .comment-quote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--comment) 70%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.comment-card .comment-lost {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+.comment-card .comment-messages {
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.comment-card .comment-messages li + li {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.comment-card .comment-messages strong {
+  font-weight: 600;
+}
+.comment-card .comment-messages li[data-by="ai"] strong {
+  color: var(--accent);
+}
+.comment-card time {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.comment-card .comment-messages p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.comment-card textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.comment-card .comment-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.comment-card .comment-actions button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.comment-card .comment-close {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  padding: 0 !important;
+}
+.comment-card .comment-close .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+@media print {
+  .comment-card {
+    display: none;
+  }
+}

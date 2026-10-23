@@ -51,6 +51,12 @@ const paths = {
     '<rect x="6.5" y="8.5" width="9" height="9" rx="1"/><path d="M9 6.5h7.5a1 1 0 0 1 1 1V15"/>',
   theme:
     '<circle cx="12" cy="12" r="8.5"/><path d="M12 3.5v17M12 3.5a8.5 8.5 0 0 1 0 17Z" fill="currentColor" stroke="none"/>',
+  // Comment threads: a speech bubble.
+  comment:
+    '<path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/>',
+  // AI proposals: a four-pointed spark.
+  spark:
+    '<path d="M12 3.5c.7 4.6 2.4 6.3 7 7-4.6.7-6.3 2.4-7 7-.7-4.6-2.4-6.3-7-7 4.6-.7 6.3-2.4 7-7Z"/><path d="M19 3v3M17.5 4.5h3"/>',
 };
 
 export function icon(name) {

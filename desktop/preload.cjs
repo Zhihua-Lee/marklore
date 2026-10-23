@@ -54,6 +54,13 @@ for (const name of [
   "windowState",
   "windowAction",
   "releaseMemory",
+  "proposals",
+  "openProposal",
+  "decideProposal",
+  "createProposedNote",
+  "aiSetup",
+  "comments",
+  "changeComment",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {
@@ -68,6 +75,8 @@ api.on = (name, callback) => {
       "links",
       "names",
       "update",
+      "proposals",
+      "comments",
     ].includes(name)
   )
     throw Error("Invalid event");

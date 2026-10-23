@@ -56,10 +56,37 @@ const codeOf = (node) =>
     "pre > code[data-text-from],.math-source > [data-text-from]",
   ) || null;
 // Where the paragraph holding a source position starts: after the last blank
-// line before it, or at the note's start.
+// line or block boundary before it, or at the note's start.
 function paragraphStart(text, pos) {
-  const blank = text.lastIndexOf("\n\n", pos - 1);
-  return blank < 0 ? 0 : blank + 2;
+  let at = text.lastIndexOf("\n", pos - 1);
+  while (at >= 0) {
+    const prev = text.lastIndexOf("\n", at - 1) + 1,
+      line = text.slice(prev, at);
+    if (
+      !line.trim() ||
+      /^\s*(?:#{1,6}\s|`{3,}|~{3,}|(?:[-*_]\s*){3,}\s*$)/.test(line)
+    )
+      return at + 1;
+    at = prev - 1;
+  }
+  return 0;
+}
+// Whether a fenced code block is open at a line start: an opening fence
+// before it without its closing one.
+function inFence(text, lineStart) {
+  let open = null;
+  for (const [line, marks] of text
+    .slice(0, lineStart)
+    .matchAll(/^ {0,3}(`{3,}|~{3,}).*$/gm)) {
+    if (!open) open = marks;
+    else if (
+      marks[0] === open[0] &&
+      marks.length >= open.length &&
+      line.trim() === marks
+    )
+      open = null;
+  }
+  return open !== null;
 }
 // The text node and offset at a character offset of a run.
 function textPoint(leaf, offset) {
@@ -104,6 +131,36 @@ export function createDirectEditor({
     islands: ISLANDS,
     active: () => on && !composition,
     keys: (event) => onKey(event),
+    // A click below a last block that is not a paragraph (a table, a code
+    // block, a list): an empty paragraph after it takes the caret. The source
+    // changes only when something is typed there (typeInto).
+    appendBlock: () => {
+      const end = view.state.doc.length;
+      let run = content.querySelector("p[data-append] > .direct-empty");
+      if (!run) {
+        const paragraph = document.createElement("p");
+        paragraph.className = "direct-empty-block";
+        paragraph.dataset.append = "";
+        paragraph.append((run = emptyRun(end)));
+        // In the innermost section the note ends in.
+        let parent = content;
+        while (parent.lastElementChild?.classList.contains("note-section")) {
+          const body = parent.lastElementChild.querySelector(
+            ":scope > .section-body",
+          );
+          if (!body) break;
+          parent = body;
+        }
+        parent.append(paragraph);
+        patched?.(paragraph);
+      }
+      view.dispatch({ selection: { anchor: end } });
+      const host = hosts.hostOf(run) || hosts.adopt(run);
+      if (host && document.activeElement !== host)
+        host.focus({ preventScroll: true });
+      caretTo(run.firstChild, 0);
+      return true;
+    },
   });
   // The block that last had the caret: a render that replaces it leaves the
   // focus on the page's body, and the caret is put back all the same.
@@ -286,6 +343,12 @@ export function createDirectEditor({
   // Render at once; the caret comes back from the source editor's selection.
   let restore = false;
   function refresh() {
+    for (const block of content.querySelectorAll(".direct-empty-block"))
+      if (
+        !block.closest("blockquote") ||
+        block.parentElement.children.length > 1
+      )
+        block.remove();
     restore = true;
     renderNow();
     return false;
@@ -313,9 +376,29 @@ export function createDirectEditor({
   }
   // Typed text at a collapsed caret inside a run: patch the run in place.
   function typeInto(leaf, node, offset, text) {
-    const from = leafStart(leaf),
+    let from = leafStart(leaf),
       at = from + (empty(leaf) ? 0 : offsetIn(leaf, node, offset));
-    commit({ from: at, insert: text }, at + text.length, "input.type", true);
+    // The paragraph a click below the last block made (appendBlock): its
+    // text starts after a blank line, so a table or list does not take it.
+    const tail =
+        empty(leaf) && leaf.closest("p[data-append]") && at > 0
+          ? view.state.doc.sliceString(Math.max(0, at - 2), at)
+          : "\n\n",
+      lead = tail === "\n\n" ? "" : tail.endsWith("\n") ? "\n" : "\n\n",
+      needsFenceNewline =
+        empty(leaf) &&
+        leaf.matches("pre > code") &&
+        view.state.doc.sliceString(at, at + 1) !== "\n";
+    commit(
+      {
+        from: at,
+        insert: lead + text + (needsFenceNewline ? "\n" : ""),
+      },
+      at + lead.length + text.length,
+      "input.type",
+      true,
+    );
+    from += lead.length;
     starts.set(leaf, { pos: from, version: changes.length });
     // A space at a run's edge would collapse, and the browser would then
     // type the next key elsewhere: show it as a no-break space, as the
@@ -326,7 +409,7 @@ export function createDirectEditor({
     const shown = edge ? text.replace(/^ | $/g, " ") : text;
     if (empty(leaf)) {
       unmarkEmpty(leaf);
-      leaf.textContent = shown;
+      leaf.textContent = shown + (needsFenceNewline ? "\n" : "");
       caretTo(leaf.firstChild, shown.length);
     } else {
       node.insertData(offset, shown);
@@ -539,7 +622,17 @@ export function createDirectEditor({
         range.compareBoundaryPoints(Range.END_TO_END, whole) < 0
           ? sourceAt(range.endContainer, range.endOffset)
           : leafEnd(leaf);
-      if (end > start) list.push({ from: start, to: end });
+      if (end > start) {
+        const whole = wholeInline(leaf, { from: start, to: end });
+        list.push(
+          whole
+            ? {
+                from: now(whole, whole.dataset.srcFrom),
+                to: now(whole, whole.dataset.srcTo),
+              }
+            : { from: start, to: end },
+        );
+      }
     }
     list.sort((x, y) => x.from - y.from);
     return list.length ? list : [{ from: a, to: b }];
@@ -549,13 +642,11 @@ export function createDirectEditor({
   function newBlock(pos) {
     const text = view.state.doc.toString(),
       lineStart = text.lastIndexOf("\n", pos - 1) + 1,
-      line = text.slice(
-        lineStart,
-        text.indexOf("\n", pos) < 0 ? undefined : text.indexOf("\n", pos),
-      );
+      lineEnd =
+        text.indexOf("\n", pos) < 0 ? text.length : text.indexOf("\n", pos),
+      line = text.slice(lineStart, lineEnd);
     // Spaces after the caret would start the new block: they go.
-    const to =
-      pos + /^[ \t]*/.exec(text.slice(pos, lineStart + line.length))[0].length;
+    const to = pos + /^[ \t]*/.exec(text.slice(pos, lineEnd))[0].length;
     const paraStart = paragraphStart(text, pos),
       paraBefore = text.slice(paraStart, pos).replace(/\\\$/g, "");
     if (
@@ -563,6 +654,18 @@ export function createDirectEditor({
       (paraBefore.match(/\$\$/g) || []).length % 2 === 1
     )
       return { change: { from: pos, to, insert: "\n" }, caret: pos + 1 };
+    // In a code block the page does not show as one yet (its fence was just
+    // typed): a line break, spaces kept.
+    if (inFence(text, lineStart))
+      return { change: { from: pos, insert: "\n" }, caret: pos + 1 };
+    const fence = line.match(/^(\s*)(`{3,}|~{3,})[^`~]*$/);
+    if (fence && pos === lineEnd) {
+      const close = "\n" + fence[1] + fence[2];
+      return {
+        change: { from: pos, to, insert: "\n" + close },
+        caret: pos + 1,
+      };
+    }
     const heading = line.match(/^(\s*#{1,6}\s+)/);
     if (heading && pos <= lineStart + heading[1].length) {
       if (line.slice(heading[1].length).trim())
@@ -571,7 +674,7 @@ export function createDirectEditor({
           caret: lineStart,
         };
       return {
-        change: { from: lineStart, to: lineStart + line.length, insert: "" },
+        change: { from: lineStart, to: lineEnd, insert: "" },
         caret: lineStart,
       };
     }
@@ -586,7 +689,7 @@ export function createDirectEditor({
         return {
           change: {
             from: lineStart,
-            to: lineStart + line.length,
+            to: lineEnd,
             insert: "\n",
           },
           caret: lineStart + 1,
@@ -598,24 +701,62 @@ export function createDirectEditor({
     }
     const quote = line.match(/^(\s*(?:>\s?)+)/);
     if (quote) {
+      if (
+        lineStart + quote[0].length >= pos &&
+        !line.slice(quote[0].length).trim()
+      ) {
+        const prevStart =
+            lineStart > 0 ? text.lastIndexOf("\n", lineStart - 2) + 1 : 0,
+          prevLine = lineStart > 0 ? text.slice(prevStart, lineStart - 1) : "",
+          from = /^\s*(?:>\s?)+$/.test(prevLine) ? prevStart : lineStart;
+        return {
+          change: { from, to: lineEnd, insert: "\n" },
+          caret: from + 1,
+        };
+      }
       const insert = "\n" + quote[1].trimEnd() + "\n" + quote[1];
       return { change: { from: pos, to, insert }, caret: pos + insert.length };
     }
+    if (!line.trim())
+      return { change: { from: pos, to: pos, insert: "" }, caret: pos };
     // At a paragraph's start: an empty paragraph above, the caret in it (blank
     // lines alone would show nothing). At a later line's start the paragraph
     // splits there.
     if (pos === paraStart && line.trim())
       return { change: { from: pos, to, insert: "\n\n" }, caret: pos };
+    if (pos === lineStart && pos > paraStart)
+      return { change: { from: pos, to, insert: "\n" }, caret: pos + 1 };
+    if (to === lineEnd && text[lineEnd] === "\n" && text[lineEnd + 1] !== "\n")
+      return {
+        change: { from: pos, to: lineEnd + 1, insert: "\n\n" },
+        caret: pos + 2,
+      };
     return { change: { from: pos, to, insert: "\n\n" }, caret: pos + 2 };
   }
 
+  function outerStart(unit) {
+    const block = unit.closest(BLOCKS);
+    let from = unitStart(unit);
+    for (let el = unit; el && el !== block; el = el.parentElement)
+      if (el.dataset.srcFrom !== undefined)
+        from = Math.min(from, now(el, el.dataset.srcFrom));
+    return from;
+  }
+  function outerEnd(unit) {
+    const block = unit.closest(BLOCKS);
+    let to = unitEnd(unit);
+    for (let el = unit; el && el !== block; el = el.parentElement)
+      if (el.dataset.srcTo !== undefined)
+        to = Math.max(to, now(el, el.dataset.srcTo));
+    return to;
+  }
   // Backspace at the start of a block: first its marker (# , - , > ) goes,
   // then the block joins the one before. Delete at the end joins the next.
   function joinBackward(leaf) {
     const block = leaf.closest(BLOCKS),
-      runs = leaves(block);
-    if (runs[0] !== leaf) return null;
-    const pos = leafStart(leaf),
+      units = unitsOf(block);
+    if (units[0] !== leaf) return null;
+    const pos = outerStart(leaf),
       text = view.state.doc.toString(),
       lineStart = text.lastIndexOf("\n", pos - 1) + 1,
       prefix = text.slice(lineStart, pos);
@@ -630,31 +771,61 @@ export function createDirectEditor({
         caret: lineStart,
         around: [leaf],
       };
-    const previous = previousRun(block);
-    if (!previous) return null;
-    const end = leafEnd(previous),
-      gap = text.slice(end, pos);
     if (
-      !/^\s*(?:(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|(?:>\s?)+)\s*)*$/.test(
-        gap,
-      )
+      block.classList.contains("direct-empty-block") &&
+      pos === 0 &&
+      text.startsWith("\n\n")
     )
-      return null;
-    return {
-      change: { from: end, to: pos },
-      caret: end,
-      around: [previous, leaf],
-    };
+      return { change: { from: 0, to: 2 }, caret: 0 };
+    const prevTop = topOf(block)?.previousElementSibling;
+    if (prevTop?.matches("hr[data-edit-from]")) {
+      const start = now(prevTop, prevTop.dataset.editFrom, -1);
+      return { change: { from: start, to: pos }, caret: start };
+    }
+    const previous = previousUnit(block);
+    if (previous) {
+      const end = outerEnd(previous),
+        gap = text.slice(end, pos);
+      if (
+        /^\s*(?:(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|(?:>\s?)+)\s*)*$/.test(
+          gap,
+        )
+      )
+        return {
+          change: { from: end, to: pos },
+          caret: end,
+          around: [previous, leaf],
+        };
+    }
+    if (
+      block.classList.contains("direct-empty-block") &&
+      pos > 0 &&
+      text[pos - 1] === "\n"
+    ) {
+      const from = pos > 1 && text[pos - 2] === "\n" ? pos - 2 : pos - 1;
+      return { change: { from, to: pos }, caret: from };
+    }
+    return null;
   }
   function joinForward(leaf) {
     const block = leaf.closest(BLOCKS),
-      runs = leaves(block);
-    if (runs.at(-1) !== leaf) return null;
-    const pos = leafEnd(leaf),
-      next = nextRun(block);
+      units = unitsOf(block);
+    if (units.at(-1) !== leaf) return null;
+    const pos = outerEnd(leaf),
+      text = view.state.doc.toString();
+    if (block.classList.contains("direct-empty-block") && text[pos] === "\n") {
+      const to = text[pos + 1] === "\n" ? pos + 2 : pos + 1;
+      return { change: { from: pos, to }, caret: pos };
+    }
+    const nextTop = topOf(block)?.nextElementSibling;
+    if (nextTop?.matches("hr[data-edit-from]")) {
+      const end = now(nextTop, nextTop.dataset.editTo, 1);
+      return { change: { from: pos, to: end }, caret: pos };
+    }
+    const next = nextUnit(block);
     if (!next) return null;
-    const start = leafStart(next),
-      gap = view.state.doc.sliceString(pos, start);
+    const start = outerStart(next),
+      gap = text.slice(pos, start);
     if (
       !/^\s*(?:(?:#{1,6}\s+|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+|(?:>\s?)+)\s*)*$/.test(
         gap,
@@ -669,18 +840,18 @@ export function createDirectEditor({
   }
   function blocksOf() {
     return [...content.querySelectorAll(BLOCKS)].filter(
-      (block) => !block.closest(ISLANDS) && leaves(block).length,
+      (block) => !block.closest(ISLANDS) && unitsOf(block).length,
     );
   }
-  function previousRun(block) {
+  function previousUnit(block) {
     const all = blocksOf(),
       at = all.indexOf(block);
-    return at > 0 ? leaves(all[at - 1]).at(-1) : null;
+    return at > 0 ? unitsOf(all[at - 1]).at(-1) : null;
   }
-  function nextRun(block) {
+  function nextUnit(block) {
     const all = blocksOf(),
       at = all.indexOf(block);
-    return at >= 0 && at + 1 < all.length ? leaves(all[at + 1])[0] : null;
+    return at >= 0 && at + 1 < all.length ? unitsOf(all[at + 1])[0] : null;
   }
 
   // The inline formula touching the caret on one side, with nothing typed
@@ -768,11 +939,8 @@ export function createDirectEditor({
     content.querySelectorAll(".formula-source,.math-source > [data-text-from]");
   const holds = (run, { anchor, head } = view.state.selection.main) => {
     const from = leafStart(run),
-      to = leafEnd(run),
-      block = run.parentElement.classList.contains("math-source");
-    return block
-      ? (from <= anchor && anchor <= to) || (from <= head && head <= to)
-      : (from < anchor && anchor < to) || (from < head && head < to);
+      to = leafEnd(run);
+    return (from < anchor && anchor < to) || (from < head && head < to);
   };
   // The caret left an open formula: typeset it again.
   function closeFormulas() {
@@ -935,19 +1103,41 @@ export function createDirectEditor({
       }
       if (/^insert(?:Paragraph|LineBreak)$/.test(type)) {
         event.preventDefault();
-        return report?.(t("表格单元格里不能换行；改表格结构请用铅笔"));
+        if (collapsed) {
+          const row = cell.parentElement,
+            col = [...row.children].indexOf(cell),
+            nextRow =
+              row.nextElementSibling ||
+              row.parentElement.nextElementSibling?.firstElementChild,
+            below = nextRow?.children[col],
+            target = below && leaves(below)[0];
+          if (target) {
+            const host = hosts.hostOf(target);
+            if (host && document.activeElement !== host)
+              host.focus({ preventScroll: true });
+            const point = empty(target)
+              ? { node: target.firstChild || target, offset: 0 }
+              : textPoint(target, 0);
+            caretTo(point.node, point.offset);
+          }
+        }
+        return;
       }
       const data =
         event.data ?? event.dataTransfer?.getData("text/plain") ?? null;
       if (data !== null && /[|\r\n]/.test(data) && type.startsWith("insert")) {
         event.preventDefault();
-        const at = sourceAt(range.startContainer, range.startOffset);
-        if (at === null || !collapsed) return refuse();
+        const edits = collapsed
+          ? [{ from: sourceAt(range.startContainer, range.startOffset) }]
+          : rangeChanges(range);
+        if (!edits || edits[0].from === null) return refuse();
         const insert = data.replace(/\r?\n|\r/g, " ").replace(/\|/g, "\\|");
+        const all = edits.map((e) => ({ ...e }));
+        all[0].insert = insert;
         return structural(
           {
-            change: { from: at, insert },
-            caret: at + insert.length,
+            change: all,
+            caret: all[0].from + insert.length,
             around: [cell],
           },
           "input.type",
@@ -989,8 +1179,19 @@ export function createDirectEditor({
         collapsed &&
         type.startsWith("delete") &&
         at === (type.endsWith("Backward") ? leafStart(code) : leafEnd(code))
-      )
-        return event.preventDefault();
+      ) {
+        event.preventDefault();
+        if (!textOf(code) && code.matches("pre > code")) {
+          const frame = code.closest(".code-block[data-edit-from]");
+          if (frame) {
+            const start = now(frame, frame.dataset.editFrom, -1),
+              end = now(frame, frame.dataset.editTo, 1);
+            commit({ from: start, to: end }, start, "delete", false);
+            return refresh();
+          }
+        }
+        return;
+      }
     }
     const heading = leaf?.closest("h1,h2,h3,h4,h5");
     if (
@@ -1060,19 +1261,30 @@ export function createDirectEditor({
           "delete",
         );
       }
-      if (change.from === from && change.to === leafEnd(run) && !codeOf(run)) {
-        event.preventDefault();
-        if (run.classList.contains("formula-source"))
-          return structural({ change, caret: from, around: [run] }, "delete");
-        commit(change, from, "delete", true);
-        run.classList.add("direct-empty");
-        run.dataset.textFrom = String(from);
-        run.dataset.textTo = String(from);
-        run.textContent = "​";
-        starts.set(run, { pos: from, version: changes.length });
-        caretTo(run.firstChild, 0);
-        patched?.(run);
-        return;
+      if (change.from === from && change.to === leafEnd(run)) {
+        if (run.matches("pre > code")) {
+          event.preventDefault();
+          commit(change, from, "delete", true);
+          run.textContent = "\n";
+          starts.set(run, { pos: from, version: changes.length });
+          caretTo(run.firstChild, 0);
+          patched?.(run);
+          return;
+        }
+        if (!codeOf(run)) {
+          event.preventDefault();
+          if (run.classList.contains("formula-source"))
+            return structural({ change, caret: from, around: [run] }, "delete");
+          commit(change, from, "delete", true);
+          run.classList.add("direct-empty");
+          run.dataset.textFrom = String(from);
+          run.dataset.textTo = String(from);
+          run.textContent = "​";
+          starts.set(run, { pos: from, version: changes.length });
+          caretTo(run.firstChild, 0);
+          patched?.(run);
+          return;
+        }
       }
       native = { leaf: run, from, change };
       return;
@@ -1090,6 +1302,8 @@ export function createDirectEditor({
       if (!text) return;
       if (range.startContainer.nodeType === 3 || empty(leaf))
         return typeInto(leaf, range.startContainer, range.startOffset, text);
+      if (leaf.matches("pre > code") && leaf.firstChild?.nodeType === 3)
+        return typeInto(leaf, leaf.firstChild, 0, text);
     }
     // Backspace right after a formula takes its closing "$" (Delete before
     // one, its opening "$"): the formula shows as the source it now is, to
@@ -1115,16 +1329,94 @@ export function createDirectEditor({
         );
       }
       if (formula) return structural(formula, "delete");
+      if (usable(leaf) && empty(leaf)) {
+        const sibling = forward
+          ? leaf.nextElementSibling
+          : leaf.previousElementSibling;
+        if (
+          sibling &&
+          (forward ? sibling.dataset.srcFrom : sibling.dataset.srcTo) !==
+            undefined
+        ) {
+          const edge = now(
+            sibling,
+            forward ? sibling.dataset.srcFrom : sibling.dataset.srcTo,
+          );
+          return structural(
+            {
+              change: forward
+                ? { from: edge, to: edge + 1 }
+                : { from: edge - 1, to: edge },
+              caret: forward ? edge : edge - 1,
+              around: [sibling],
+            },
+            "delete",
+          );
+        }
+      }
     }
     // At a cell's edge there is nothing to join.
-    if (collapsed && cell && type.startsWith("delete")) return;
-    if (collapsed && type === "deleteContentBackward" && usable(leaf)) {
-      const join = joinBackward(leaf);
-      return join ? structural(join, "delete") : refuse();
+    if (collapsed && cell && type.startsWith("delete")) {
+      const units = unitsOf(cell),
+        at = sourceAt(range.startContainer, range.startOffset);
+      if (
+        !units.length ||
+        (type === "deleteContentBackward" &&
+          units[0] === leaf &&
+          (empty(leaf) || at === leafStart(leaf))) ||
+        (type === "deleteContentForward" &&
+          units.at(-1) === leaf &&
+          (empty(leaf) || at === leafEnd(leaf)))
+      )
+        return;
     }
-    if (collapsed && type === "deleteContentForward" && usable(leaf)) {
-      const join = joinForward(leaf);
-      return join ? structural(join, "delete") : refuse();
+    if (
+      collapsed &&
+      (type === "deleteContentBackward" || type === "deleteContentForward") &&
+      usable(leaf)
+    ) {
+      const block = leaf.closest(BLOCKS),
+        units = block ? unitsOf(block) : [],
+        at = sourceAt(range.startContainer, range.startOffset);
+      if (
+        type === "deleteContentBackward" &&
+        units[0] === leaf &&
+        (empty(leaf) || at === leafStart(leaf))
+      ) {
+        const join = joinBackward(leaf);
+        if (join) return structural(join, "delete");
+        if (at === 0 || outerStart(leaf) === 0) {
+          if (at > 0)
+            return structural(
+              {
+                change: { from: at - 1, to: at },
+                caret: at - 1,
+                around: [leaf],
+              },
+              "delete",
+            );
+          return;
+        }
+        return refuse();
+      }
+      if (
+        type === "deleteContentForward" &&
+        units.at(-1) === leaf &&
+        (empty(leaf) || at === leafEnd(leaf))
+      ) {
+        const join = joinForward(leaf);
+        if (join) return structural(join, "delete");
+        const docEnd = view.state.doc.length;
+        if (at === docEnd || outerEnd(leaf) === docEnd) {
+          if (at < docEnd)
+            return structural(
+              { change: { from: at, to: at + 1 }, caret: at, around: [leaf] },
+              "delete",
+            );
+          return;
+        }
+        return refuse();
+      }
     }
     // Everything else rebuilds from the source. A deletion the browser would
     // make over more than one text node (a word across bold) is its range.
@@ -1136,7 +1428,7 @@ export function createDirectEditor({
       reach.setStart(target.startContainer, target.startOffset);
       reach.setEnd(target.endContainer, target.endOffset);
     }
-    let edits = reach
+    const edits = reach
       ? rangeChanges(reach)
       : collapsed
         ? []
@@ -1175,8 +1467,8 @@ export function createDirectEditor({
 
   // Input methods compose in the page; the result goes to the source when
   // the composition ends. Renders wait until then.
-  function onCompositionStart() {
-    if (!on) return;
+  function onCompositionStart(event) {
+    if (!on || event.target.closest?.(".block-editor")) return;
     const range = selectedRange();
     const from = range && sourceAt(range.startContainer, range.startOffset),
       to = range && sourceAt(range.endContainer, range.endOffset);
@@ -1192,7 +1484,7 @@ export function createDirectEditor({
           };
   }
   function onCompositionEnd(event) {
-    if (!on || !composition) return;
+    if (!on || !composition || event.target.closest?.(".block-editor")) return;
     const state = composition;
     composition = null;
     if (state.lost) return refresh();
@@ -1226,6 +1518,19 @@ export function createDirectEditor({
     syncing = requestAnimationFrame(() => {
       const range = !composition && selectedRange();
       if (!range) return;
+      const startEl =
+        range.startContainer.nodeType === 1
+          ? range.startContainer
+          : range.startContainer.parentElement;
+      if (startEl?.closest(".block-editor")) return;
+      for (const block of content.querySelectorAll(".direct-empty-block"))
+        if (
+          !block.contains(range.startContainer) &&
+          (!block.closest("blockquote") ||
+            block.parentElement.children.length > 1) &&
+          content.querySelectorAll(BLOCKS).length > 1
+        )
+          block.remove();
       const anchor = sourceAt(range.startContainer, range.startOffset),
         head = sourceAt(range.endContainer, range.endOffset);
       if (anchor === null || head === null) return;
@@ -1288,8 +1593,28 @@ export function createDirectEditor({
       event.metaKey
     )
       return;
-    const range = selectedRange(),
-      code = range && codeOf(range.startContainer);
+    const range = selectedRange();
+    if (!range) return;
+    const cell = cellOf(range.startContainer);
+    if (cell && cellOf(range.endContainer) === cell) {
+      const cells = [
+          ...(cell.closest("table")?.querySelectorAll("th,td") || []),
+        ],
+        next = cells[cells.indexOf(cell) + (event.shiftKey ? -1 : 1)],
+        target = next && leaves(next).at(-1);
+      if (target) {
+        event.preventDefault();
+        const host = hosts.hostOf(target);
+        if (host && document.activeElement !== host)
+          host.focus({ preventScroll: true });
+        const point = empty(target)
+          ? { node: target.firstChild || target, offset: 0 }
+          : textPoint(target, textOf(target).length);
+        caretTo(point.node, point.offset);
+      }
+      return;
+    }
+    const code = codeOf(range.startContainer);
     if (!code || codeOf(range.endContainer) !== code) return;
     event.preventDefault();
     indentCode(code, range, event.shiftKey);
@@ -1369,6 +1694,18 @@ export function createDirectEditor({
         starts = new WeakMap();
         fresh = new WeakMap();
       }
+      const head = view.state.selection.main.head;
+      for (const block of content.querySelectorAll(".direct-empty-block")) {
+        const run = block.querySelector(".direct-empty");
+        const other = [...content.querySelectorAll("[data-text-from]")].some(
+          (el) =>
+            !block.contains(el) &&
+            usable(el) &&
+            leafStart(el) <= head &&
+            head <= leafEnd(el),
+        );
+        if (!run || leafStart(run) !== head || other) block.remove();
+      }
       markEmpty();
       hosts.mark();
       markIslands();
@@ -1398,16 +1735,26 @@ export function createDirectEditor({
       paragraph.append(emptyRun(view.state.doc.length));
       content.append(paragraph);
     }
-    for (const block of within("h1,h2,h3,h4,h5,h6,li,blockquote", scope)) {
+    for (const block of within(
+      "h1,h2,h3,h4,h5,h6,li,blockquote,td,th",
+      scope,
+    )) {
+      // A table cell keeps its own text position (the row has data-from).
+      const cell = block.matches("td,th"),
+        at = cell ? block.dataset.cellFrom : block.dataset.from;
       if (
-        block.dataset.from === undefined ||
+        at === undefined ||
         block.parentElement?.closest(ISLANDS) ||
         block.querySelector(BLOCKS) ||
         unitsOf(block).length
       )
         continue;
-      const from = now(block, block.dataset.from),
-        line = view.state.doc.lineAt(Math.min(from, view.state.doc.length)),
+      const from = now(block, at);
+      if (cell) {
+        block.append(emptyRun(Math.min(view.state.doc.length, from)));
+        continue;
+      }
+      const line = view.state.doc.lineAt(Math.min(from, view.state.doc.length)),
         prefix =
           /^\s*(?:#{1,6}[ \t]*|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+|(?:>[ \t]?)+)/.exec(
             line.text.slice(Math.max(0, from - line.from)),
@@ -1422,6 +1769,40 @@ export function createDirectEditor({
         const summary = block.querySelector(":scope > .section-summary");
         if (summary) summary.before(run);
         else block.append(run);
+      }
+    }
+    for (const code of within("pre > code[data-text-from]", scope))
+      if (usable(code) && !code.textContent) {
+        const pos = now(code, code.dataset.textFrom);
+        code.classList.add("direct-empty");
+        code.textContent = "​";
+        starts.set(code, { pos, version: changes.length });
+      }
+    const head = view.state.selection.main.head;
+    for (const p of within("p.math-open[data-to]", scope)) {
+      const last = leaves(p).at(-1),
+        end = now(p, p.dataset.to);
+      if (
+        last &&
+        head === end &&
+        end > leafEnd(last) &&
+        view.state.doc.sliceString(end - 1, end) === "\n"
+      )
+        p.append("\n", emptyRun(end));
+    }
+    for (const br of within("br", scope)) {
+      const block = br.closest(BLOCKS);
+      if (
+        block &&
+        !br.parentElement.closest(ISLANDS) &&
+        !br.nextElementSibling &&
+        !br.nextSibling?.textContent.trim()
+      ) {
+        const last = leaves(block).at(-1);
+        if (last) {
+          const line = view.state.doc.lineAt(leafEnd(last));
+          if (line.to < view.state.doc.length) br.after(emptyRun(line.to + 1));
+        }
       }
     }
   }

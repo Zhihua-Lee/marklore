@@ -1082,12 +1082,12 @@ test("Enter splits a paragraph at a later line's start; display math at the note
   await page.keyboard.press("Enter");
   await page.keyboard.type("X");
   await page.waitForTimeout(800);
-  expect(await source(page)).toBe("Top.\n\nfoo\n\n\nXbar\n\n#  Title");
+  expect(await source(page)).toBe("Top.\n\nfoo\n\nXbar\n\n#  Title");
   await page.locator("#content h1 [data-text-from]").click();
   await page.keyboard.press("Home");
   await page.keyboard.type("#");
   await expect(page.locator("#content h2")).toHaveCount(1);
-  expect(await source(page)).toBe("Top.\n\nfoo\n\n\nXbar\n\n##  Title");
+  expect(await source(page)).toBe("Top.\n\nfoo\n\nXbar\n\n##  Title");
   await page.locator("#content p").filter({ hasText: "Top." }).click();
   await page.keyboard.press("Home");
   await page.keyboard.press("Enter");
@@ -1100,5 +1100,120 @@ test("Enter splits a paragraph at a later line's start; display math at the note
   expect(await source(page)).toMatch(/^\$\$\na\+b\n\$\$\n\nTop\./);
   await expect(
     page.locator("#content .math-block, #content .math-source"),
+  ).toHaveCount(1);
+});
+
+test("tables: Enter goes to the cell below, Tab to the next cell; an empty cell takes typing", async ({
+  page,
+}) => {
+  await boot(page, {
+    text: "| A | B |\n|---|---|\n| one |  |\n| three | four |\n\nEnd.\n",
+  });
+  await page.locator("#content td").filter({ hasText: "one" }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("X");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("Y");
+  await page.waitForTimeout(800);
+  await page.locator("#content td").nth(1).click();
+  await page.keyboard.type("Z");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.type("W");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(
+    "| A | B |\n|---|---|\n| oneW | Z |\n| Xthree | fourY |\n\nEnd.\n",
+  );
+});
+
+test("a click below a last table or code block starts a paragraph after it", async ({
+  page,
+}) => {
+  for (const [text, block, typed, place = "#content"] of [
+    ["Intro.\n\n| A | B |\n|---|---|\n| 1 | 2 |", "table", "After"],
+    ["Intro.\n\n```\ncode\n```\n", "pre", "Tail"],
+    // In the innermost section the note ends in.
+    [
+      "# Top\n\n## Inner\n\n```\ncode\n```\n",
+      "pre",
+      "Deep",
+      "#content .note-section .note-section .section-body",
+    ],
+  ]) {
+    await boot(page, { text });
+    const box = await page.locator(`#content ${block}`).boundingBox();
+    await page.mouse.click(box.x + 20, box.y + box.height + 60);
+    // A click alone leaves the source as it was.
+    expect(await source(page)).toBe(text);
+    await page.keyboard.type(typed);
+    await page.waitForTimeout(800);
+    expect(await source(page)).toBe(
+      text + (text.endsWith("\n") ? "\n" : "\n\n") + typed,
+    );
+    await expect(
+      page.locator("#content p").filter({ hasText: typed }),
+    ).toHaveCount(1);
+    await expect(
+      page.locator(`${place} > p`).filter({ hasText: typed }),
+    ).toHaveCount(1);
+  }
+});
+
+test("code fences: Enter after ``` closes the block; an emptied block goes with Backspace", async ({
+  page,
+}) => {
+  await boot(page, { text: "Intro.\n" });
+  await page.locator("#content p").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("```js");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("let a");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("b");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Intro.\n\n```js\nlet a\nb\n```");
+  for (let i = 0; i < 8; i++) await page.keyboard.press("Backspace");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Intro.\n\n");
+});
+
+test("Backspace and Delete: a rule goes, a whole bold word goes with its marks, nothing at the note's edges", async ({
+  page,
+}) => {
+  await boot(page, { text: "Above.\n\n---\n\nBelow.\n" });
+  await paragraph(page, "Below").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Above.\n\nBelow.\n");
+  await paragraph(page, "Above").click();
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Backspace");
+  await paragraph(page, "Below").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Delete");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Above.\n\nBelow.\n");
+  await boot(page, { text: "A **bold** b.\n" });
+  await page.locator("#content strong").dblclick();
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("A b.\n");
+});
+
+test("Enter on an empty quote line leaves the quote", async ({ page }) => {
+  await boot(page, { text: "> Tip.\n\nNext.\n" });
+  await page.locator("#content blockquote p").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Out");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("> Tip.\n\nOut\n\nNext.\n");
+  await expect(
+    page.locator("#content > p, #content .section-body > p").filter({
+      hasText: "Out",
+    }),
   ).toHaveCount(1);
 });

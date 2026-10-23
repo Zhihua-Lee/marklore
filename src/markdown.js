@@ -275,10 +275,21 @@ export function createParser() {
         closeIndex = text.indexOf(close);
       // Display math ends before a blank line, as in TeX: a "$$" typed at a
       // line's start must not take the notes below it up to the next one.
+      const nextClose = (at) => {
+        for (let k = at; k < end; k++) {
+          const s = state.src
+            .slice(state.bMarks[k] + state.tShift[k], state.eMarks[k])
+            .trim();
+          if (s) return s === close;
+        }
+        return false;
+      };
       while (
         closeIndex < 0 &&
         line + 1 < end &&
-        state.bMarks[line + 1] + state.tShift[line + 1] < state.eMarks[line + 1]
+        (state.bMarks[line + 1] + state.tShift[line + 1] <
+          state.eMarks[line + 1] ||
+          (first.trim() === opening && nextClose(line + 2)))
       ) {
         line++;
         text +=
@@ -332,6 +343,11 @@ export function createParser() {
         token.attrSet("data-from", String(from));
         token.attrSet("data-to", String(to));
         if (
+          token.type === "paragraph_open" &&
+          /^\s*\$\$[ \t]*(?:\r?\n|$)/.test(state.src.slice(from, to))
+        )
+          token.attrJoin("class", "math-open");
+        if (
           token.level === 0 &&
           [
             "paragraph_open",
@@ -353,15 +369,18 @@ export function createParser() {
         // A fenced code block's text, where the page shows it exactly as the
         // source has it (not in a list or a quote, not a diagram): direct
         // editing types into it (before its last line break, which the
-        // closing fence needs). An empty block keeps to the pencil.
+        // closing fence needs).
         if (
           token.type === "fence" &&
           token.level === 0 &&
-          token.content &&
           !/^mermaid\b/i.test(token.info.trim())
         ) {
           const start = offsets[token.map[0] + 1];
-          const end = [offsets[token.map[1] - 1], to].find(
+          const end = (
+            token.content
+              ? [offsets[token.map[1] - 1], to]
+              : [offsets[token.map[1] - 1]]
+          ).find(
             (end) =>
               start !== undefined &&
               end >= start &&
@@ -406,6 +425,16 @@ export function createParser() {
           const range = `${from}:${to}`;
           const inlineSource = state.src.slice(from, to);
           let cursor = inlineCursors.get(range) ?? from;
+          const cell = /^t[hd]_open$/.test(state.tokens[i - 1]?.type)
+            ? state.tokens[i - 1]
+            : null;
+          if (cell) {
+            if (cursor === from && /^\s*\|/.test(inlineSource))
+              cursor = from + inlineSource.indexOf("|") + 1;
+            const pos = cursor + (state.src[cursor] === " " ? 1 : 0);
+            cell.attrSet("data-cell-from", String(Math.min(pos, to)));
+          }
+          const spanStart = cursor;
           // Text is located by searching forward, so step over what is not
           // text first: a word in a tag attribute or a link's URL must not be
           // taken for the text that follows it.
@@ -495,8 +524,15 @@ export function createParser() {
               }
             }
           }
+          if (cell) {
+            for (let p = cursor; p < to; p++)
+              if (state.src[p] === "|" && state.src[p - 1] !== "\\") {
+                cursor = p + 1;
+                break;
+              }
+          }
           inlineCursors.set(range, cursor);
-          markInlineSpans(state.src, token.children || [], from, to);
+          markInlineSpans(state.src, token.children || [], spanStart, to);
         }
       }
       if (token.type === "heading_open") {
@@ -1013,8 +1049,7 @@ export function renderMarkdown(
       // A display formula's range runs to the next line.
       if (display) text = text.replace(/\s+$/, "");
       const to = from + text.length;
-      if (!(display ? from <= open && open <= to : from < open && open < to))
-        continue;
+      if (!(from < open && open < to)) continue;
       // A display formula in a list or quote has their markers in its lines.
       if (
         display &&

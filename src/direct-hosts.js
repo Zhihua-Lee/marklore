@@ -17,7 +17,14 @@ export const HOST = "data-direct-host";
 
 // `keys` sees a key first and returns whether it took it (direct-editing.js:
 // arrow keys into formulas and out of emphasis at a block's edge).
-export function createHosts({ content, scroller, islands, active, keys }) {
+export function createHosts({
+  content,
+  scroller,
+  islands,
+  active,
+  keys,
+  appendBlock,
+}) {
   const hostOf = (node) => {
     const el = node?.nodeType === 1 ? node : node?.parentElement;
     const host = el?.closest(`[${HOST}]`);
@@ -89,6 +96,12 @@ export function createHosts({ content, scroller, islands, active, keys }) {
     while (walker.nextNode()) nodes.push(walker.currentNode);
     return nodes;
   }
+  const nodeEnd = (host, node) =>
+    host?.tagName === "PRE" &&
+    node === textNodes(host).at(-1) &&
+    node.data.endsWith("\n")
+      ? node.length - 1
+      : node.length;
   // A host's first (last) caret place: its text's edge, or beside a formula
   // or image that comes before (after) the text; in a block of only such
   // things, beside them.
@@ -111,7 +124,7 @@ export function createHosts({ content, scroller, islands, active, keys }) {
       return { node: thing.parentNode, offset: end ? at + 1 : at };
     }
     return node
-      ? { node, offset: node.data === "​" || !end ? 0 : node.length }
+      ? { node, offset: node.data === "​" || !end ? 0 : nodeEnd(host, node) }
       : null;
   }
   // The caret's box; a collapsed range has none at some places.
@@ -309,9 +322,11 @@ export function createHosts({ content, scroller, islands, active, keys }) {
       if (!forward) i--;
       node = nodes[i];
       if (!node) return null;
-      offset = forward ? 0 : node.length;
+      offset = forward ? 0 : nodeEnd(host, node);
     }
-    const step = (text, at) => {
+    const len = (n) => nodeEnd(host, n);
+    const step = (n, at) => {
+      const text = n.data.slice(0, len(n));
       if (!word) return forward ? at + 1 : at - 1;
       const pattern = forward ? /^\s*[^\s]+/ : /[^\s]+\s*$/;
       const match = forward
@@ -325,17 +340,17 @@ export function createHosts({ content, scroller, islands, active, keys }) {
           ? text.length
           : 0;
     };
-    let next = step(node.data, offset);
-    while (next < 0 || next > node.length) {
+    let next = step(node, Math.min(offset, len(node)));
+    while (next < 0 || next > len(node)) {
       i += forward ? 1 : -1;
       const other = nodes[i];
-      if (!other) return { node, offset: forward ? node.length : 0 };
+      if (!other) return { node, offset: forward ? len(node) : 0 };
       node = other;
       next = forward
-        ? Math.min(node.length, word ? step(node.data, 0) : 1)
+        ? Math.min(len(node), word ? step(node, 0) : 1)
         : word
-          ? step(node.data, node.length)
-          : node.length - 1;
+          ? step(node, len(node))
+          : len(node) - 1;
       if (next < 0) next = 0;
     }
     return { node, offset: next };
@@ -537,6 +552,27 @@ export function createHosts({ content, scroller, islands, active, keys }) {
       return;
     }
     if (!host) {
+      // A click below the note's last block: when that is not a paragraph or
+      // a heading (a table, code, a list), a new paragraph after it. Sections
+      // nest; a folded one ends with its heading.
+      let bottom = [...content.children].findLast(shown);
+      while (bottom?.classList.contains("note-section"))
+        bottom =
+          (!bottom.classList.contains("collapsed") &&
+            [
+              ...(bottom.querySelector(":scope > .section-body")?.children ||
+                []),
+            ].findLast(shown)) ||
+          bottom.firstElementChild;
+      if (
+        bottom &&
+        !bottom.matches("p,h1,h2,h3,h4,h5,h6") &&
+        event.clientY > bottom.getBoundingClientRect().bottom + 12 &&
+        appendBlock?.()
+      ) {
+        event.preventDefault();
+        return;
+      }
       const point = nearest(event.clientX, event.clientY);
       if (!point) return;
       event.preventDefault();

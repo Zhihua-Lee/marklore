@@ -46,6 +46,17 @@ if (typeof document !== "undefined") {
     },
     true,
   );
+  // Over a selection spanning editing hosts the browser starts a composition
+  // but never ends it; the input method's text then comes as plain typing.
+  document.addEventListener(
+    "beforeinput",
+    (event) => {
+      if (!composition || event.inputType !== "insertText") return;
+      composition = false;
+      end();
+    },
+    true,
+  );
   // A composition cut short by the window losing focus never reports its end.
   window.addEventListener("blur", () => {
     composition = false;

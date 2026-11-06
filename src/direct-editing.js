@@ -384,7 +384,9 @@ export function createDirectEditor({
         empty(leaf) && leaf.closest("p[data-append]") && at > 0
           ? view.state.doc.sliceString(Math.max(0, at - 2), at)
           : "\n\n",
-      lead = tail === "\n\n" ? "" : tail.endsWith("\n") ? "\n" : "\n\n",
+      lead =
+        (empty(leaf) && leaf.dataset.lead) ||
+        (tail === "\n\n" ? "" : tail.endsWith("\n") ? "\n" : "\n\n"),
       needsFenceNewline =
         empty(leaf) &&
         leaf.matches("pre > code") &&
@@ -1083,8 +1085,14 @@ export function createDirectEditor({
     (node?.nodeType === 1 ? node : node?.parentElement)?.closest("td,th");
 
   function onBeforeInput(event) {
+    // Over a selection spanning blocks the browser starts a composition but
+    // never ends it: the input method's text comes as plain typing. Take it
+    // as that (the composition would otherwise hold off all typing after).
+    if (on && composition && event.inputType === "insertText")
+      composition = null;
     if (!on || composition) return;
     if (event.target.closest?.(".block-editor")) return;
+    flushSelection();
     const type = event.inputType;
     if (type === "insertCompositionText") return;
     const range = selectedRange();
@@ -1469,6 +1477,7 @@ export function createDirectEditor({
   // the composition ends. Renders wait until then.
   function onCompositionStart(event) {
     if (!on || event.target.closest?.(".block-editor")) return;
+    flushSelection();
     const range = selectedRange();
     const from = range && sourceAt(range.startContainer, range.startOffset),
       to = range && sourceAt(range.endContainer, range.endOffset);
@@ -1515,30 +1524,42 @@ export function createDirectEditor({
     if (!on || composition) return;
     cancelAnimationFrame(syncing);
     // Read the selection when the frame comes: typing may have moved it.
-    syncing = requestAnimationFrame(() => {
-      const range = !composition && selectedRange();
-      if (!range) return;
-      const startEl =
-        range.startContainer.nodeType === 1
-          ? range.startContainer
-          : range.startContainer.parentElement;
-      if (startEl?.closest(".block-editor")) return;
-      for (const block of content.querySelectorAll(".direct-empty-block"))
-        if (
-          !block.contains(range.startContainer) &&
-          (!block.closest("blockquote") ||
-            block.parentElement.children.length > 1) &&
-          content.querySelectorAll(BLOCKS).length > 1
-        )
-          block.remove();
-      const anchor = sourceAt(range.startContainer, range.startOffset),
-        head = sourceAt(range.endContainer, range.endOffset);
-      if (anchor === null || head === null) return;
-      const main = view.state.selection.main;
-      if (main.anchor !== anchor || main.head !== head)
-        view.dispatch({ selection: { anchor, head } });
-      closeFormulas();
-    });
+    syncing = requestAnimationFrame(syncSelection);
+  }
+  // An edit right after a click or an arrow key (within the frame) reads the
+  // selection first: the edit's undo puts the caret back where it began.
+  function flushSelection() {
+    if (!syncing) return;
+    cancelAnimationFrame(syncing);
+    syncSelection();
+  }
+  function syncSelection() {
+    syncing = 0;
+    const range = !composition && selectedRange();
+    if (!range) return;
+    const startEl =
+      range.startContainer.nodeType === 1
+        ? range.startContainer
+        : range.startContainer.parentElement;
+    if (startEl?.closest(".block-editor")) return;
+    // A page-made empty paragraph goes once the caret has left it (not while
+    // a selection starts or ends in it).
+    for (const block of content.querySelectorAll(".direct-empty-block"))
+      if (
+        !block.contains(range.startContainer) &&
+        !block.contains(range.endContainer) &&
+        (!block.closest("blockquote") ||
+          block.parentElement.children.length > 1) &&
+        content.querySelectorAll(BLOCKS).length > 1
+      )
+        block.remove();
+    const anchor = sourceAt(range.startContainer, range.startOffset),
+      head = sourceAt(range.endContainer, range.endOffset);
+    if (anchor === null || head === null) return;
+    const main = view.state.selection.main;
+    if (main.anchor !== anchor || main.head !== head)
+      view.dispatch({ selection: { anchor, head } });
+    closeFormulas();
   }
   content.addEventListener("mousedown", (event) => {
     if (!on || composition || event.button) return;
@@ -1595,6 +1616,10 @@ export function createDirectEditor({
       return;
     const range = selectedRange();
     if (!range) return;
+    flushSelection();
+    // Tab never takes the focus out of the note: what is typed next would
+    // be lost. Only cells and code use it.
+    event.preventDefault();
     const cell = cellOf(range.startContainer);
     if (cell && cellOf(range.endContainer) === cell) {
       const cells = [
@@ -1603,7 +1628,6 @@ export function createDirectEditor({
         next = cells[cells.indexOf(cell) + (event.shiftKey ? -1 : 1)],
         target = next && leaves(next).at(-1);
       if (target) {
-        event.preventDefault();
         const host = hosts.hostOf(target);
         if (host && document.activeElement !== host)
           host.focus({ preventScroll: true });
@@ -1616,7 +1640,6 @@ export function createDirectEditor({
     }
     const code = codeOf(range.startContainer);
     if (!code || codeOf(range.endContainer) !== code) return;
-    event.preventDefault();
     indentCode(code, range, event.shiftKey);
   });
   // Over several blocks the browser copies only the first block's part (each
@@ -1713,16 +1736,25 @@ export function createDirectEditor({
       restore = false;
       settle(forced);
     },
+    // The caret to the source editor's place in the page (after an undo,
+    // or for a new note), on text in a block that takes typing.
     focus() {
       if (!on) return false;
-      settle(true);
       const host = content.querySelector("[data-direct-host]");
       if (!host) return false;
       if (!content.contains(document.activeElement))
         host.focus({ preventScroll: true });
-      if (!selectedRange()) {
-        const point = pointAt(view.state.selection.main.head) || pointAt(0);
-        if (point) caretTo(point.node, point.offset);
+      settle(true);
+      const anchor = window.getSelection().anchorNode;
+      if (!selectedRange() || !hosts.hostOf(anchor)) {
+        const head = view.state.selection.main.head;
+        const point = pointAt(head) || nearest(head) || closest(head);
+        if (point) {
+          const own = hosts.hostOf(point.node) || hosts.adopt(point.node);
+          if (own && document.activeElement !== own)
+            own.focus({ preventScroll: true });
+          caretTo(point.node, point.offset);
+        }
       }
       return true;
     },
@@ -1755,11 +1787,15 @@ export function createDirectEditor({
         continue;
       }
       const line = view.state.doc.lineAt(Math.min(from, view.state.doc.length)),
-        prefix =
-          /^\s*(?:#{1,6}[ \t]*|[-*+][ \t]+(?:\[[ xX]\][ \t]+)?|\d+[.)][ \t]+|(?:>[ \t]?)+)/.exec(
+        marker =
+          /^\s*(?:#{1,6}(?:[ \t]+|$)|[-*+](?:[ \t]+|$)(?:\[[ xX]\](?:[ \t]+|$))?|\d+[.)](?:[ \t]+|$)|(?:>[ \t]?)+)/.exec(
             line.text.slice(Math.max(0, from - line.from)),
-          )?.[0].length ?? 0,
-        run = emptyRun(Math.min(view.state.doc.length, from + prefix));
+          )?.[0] ?? "",
+        run = emptyRun(Math.min(view.state.doc.length, from + marker.length));
+      // A marker with no space after it ("-", "1.", "#", "- [ ]"): what is
+      // typed goes after it, with the space the marker needs. (A quote's ">"
+      // needs none.)
+      if (marker && /[^\s>]$/.test(marker)) run.dataset.lead = " ";
       if (block.tagName === "BLOCKQUOTE") {
         const paragraph = document.createElement("p");
         paragraph.className = "direct-empty-block";
@@ -1846,8 +1882,12 @@ export function createDirectEditor({
         beforeInline(main.anchor, scope) ||
         (scope && pointAt(main.anchor)) ||
         nearest(main.anchor) ||
-        placeholder(main.anchor, scope),
-      head = main.head === main.anchor ? anchor : pointAt(main.head);
+        placeholder(main.anchor, scope) ||
+        closest(main.anchor),
+      head =
+        main.head === main.anchor
+          ? anchor
+          : pointAt(main.head) || closest(main.head);
     if (!anchor || !head) return;
     const host = hosts.hostOf(anchor.node) || hosts.adopt(anchor.node);
     if (host && document.activeElement !== host)
@@ -1952,6 +1992,28 @@ export function createDirectEditor({
         : textPoint(unit, end ? textOf(unit).length : 0);
     const at = [...unit.parentNode.childNodes].indexOf(unit);
     return { node: unit.parentNode, offset: end ? at + 1 : at };
+  }
+  // Last resort: the end of the text run nearest the position, so the caret
+  // is never left between blocks (where typing goes nowhere).
+  function closest(pos) {
+    let best = null,
+      gap = Infinity;
+    for (const leaf of content.querySelectorAll("[data-text-from]")) {
+      if (!usable(leaf)) continue;
+      const from = leafStart(leaf),
+        to = empty(leaf) ? from : leafEnd(leaf),
+        distance = pos < from ? from - pos : pos > to ? pos - to : 0;
+      if (distance < gap)
+        [gap, best] = [
+          distance,
+          { leaf, at: pos <= from ? 0 : Math.min(pos, to) - from },
+        ];
+      if (!gap) break;
+    }
+    if (!best) return null;
+    return empty(best.leaf)
+      ? { node: best.leaf.firstChild || best.leaf, offset: 0 }
+      : textPoint(best.leaf, best.at);
   }
   // A caret where the source has no text yet (a new empty paragraph or list
   // item): an empty run there takes the first keystroke.

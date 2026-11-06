@@ -527,6 +527,7 @@ selectionTools = createSelectionTools({
     clearTimeout(renderingTimer);
     render(true);
   },
+  refocus: () => Boolean(directEditor?.active && directEditor.focus()),
 });
 directEditor = createDirectEditor({
   content: $("#content"),

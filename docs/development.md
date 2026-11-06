@@ -77,6 +77,7 @@ pnpm dev
 
 - 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。
+- 直接编辑有一个随机编辑测试 [tests/ui/direct-edit-fuzz.spec.js](../tests/ui/direct-edit-fuzz.spec.js)：在一篇样样都有的笔记里随机点击、选择、打字、删除、回车、Tab、输入法组字（含暂停和 keyCode 229）、粘贴、剪切、撤销和重做。每批操作等页面安定后检查：页面无报错；每段文字与它声称来自的源码一致，且与重新渲染源码的结果相同；源码只在操作所在的块及其相邻块内变化；在光标处打的普通文字原样进入源码；光标仍在笔记里；组字期间正在组字的文本节点没有被替换。最后撤销到底必须逐字节回到原文件，再重做回到最终内容，且每次 Ctrl+Z 都用掉一步、没有别的修改插进来。默认 2 个种子各 30 批；`FOLIO_FUZZ_SEEDS=n` 跑种子 1..n，`FOLIO_FUZZ_SEED=k` 只跑种子 k（失败信息会给出种子和步数），`FOLIO_FUZZ_STEPS=m` 改批数，`FOLIO_FUZZ_TRACE=1` 在失败信息里附上每个动作前后源码选区与页面光标的位置。改直接编辑的逻辑后，先跑一轮更大的（如 `FOLIO_FUZZ_SEEDS=16 FOLIO_FUZZ_STEPS=60`）。发现的问题另写成 `direct-edit.spec.js` 里的固定用例。
 - 已有开发服务器时，设置 `FOLIO_BASE_URL`（如 `http://127.0.0.1:5173`）可跳过自动启动；`FOLIO_BROWSER_CHANNEL=""` 使用 Playwright 自带的 Chromium。
 
 ### 持续集成

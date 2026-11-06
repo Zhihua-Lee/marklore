@@ -1217,3 +1217,122 @@ test("Enter on an empty quote line leaves the quote", async ({ page }) => {
     }),
   ).toHaveCount(1);
 });
+
+// Found by the random editing test (direct-edit-fuzz.spec.js).
+
+test("Tab never takes the caret out of the note", async ({ page }) => {
+  await boot(page, {
+    text: "Plain text.\n\n- item\n\n| A | B |\n|---|---|\n| 1 | 2 |\n",
+  });
+  await paragraph(page, "Plain").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.type("!");
+  await page.locator("#content li").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("?");
+  // The last cell: no cell after it.
+  await page.locator("#content td").last().click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Tab");
+  await page.keyboard.type("3");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(
+    "Plain text.!\n\n- item?\n\n| A | B |\n|---|---|\n| 1 | 23 |\n",
+  );
+});
+
+test("typing in an empty task with no space after its box goes after the box", async ({
+  page,
+}) => {
+  await boot(page, { text: "Tasks:\n\n- [ ]\n- [ ] \n" });
+  await page
+    .locator("#content li.task-list-item")
+    .first()
+    .click({ position: { x: 80, y: 8 } });
+  await page.keyboard.type("Buy");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Tasks:\n\n- [ ] Buy\n- [ ] \n");
+  await expect(page.locator("#content li.task-list-item").first()).toHaveText(
+    "Buy",
+  );
+  // A bare list marker or heading mark: what is typed goes after it.
+  await boot(page, { text: "Intro.\n\n- one\n*\n\n#\n" });
+  await page
+    .locator("#content li")
+    .nth(1)
+    .click({ position: { x: 40, y: 8 } });
+  await page.keyboard.type("Two");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Intro.\n\n- one\n* Two\n\n#\n");
+  await page.locator("#content h1").click({ position: { x: 40, y: 8 } });
+  await page.keyboard.type("Head");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe("Intro.\n\n- one\n* Two\n\n# Head\n");
+});
+
+test("an edit made right after a click is undone back to where it was made", async ({
+  page,
+}) => {
+  await boot(page);
+  // Typing within the frame of the click, before the selection is read.
+  await paragraph(page, "Second").click();
+  await page.keyboard.press("End");
+  await page.keyboard.type("Z");
+  await page.waitForTimeout(800);
+  await paragraph(page, "First").click();
+  await page.waitForTimeout(100);
+  await page.keyboard.press("Control+z");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(note);
+  // The caret is back where the Z was.
+  await page.keyboard.type("Q");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(
+    note.replace("Second paragraph.", "Second paragraph.Q"),
+  );
+});
+
+test("an input method over a selection spanning blocks replaces it, and typing goes on", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.locator("#content h1").click();
+  await page.keyboard.press("End");
+  await page.keyboard.press("Shift+ArrowRight");
+  const cdp = await page.context().newCDPSession(page);
+  for (const text of ["n", "ni", "nihao"])
+    await cdp.send("Input.imeSetComposition", {
+      text,
+      selectionStart: text.length,
+      selectionEnd: text.length,
+    });
+  await cdp.send("Input.insertText", { text: "你好" });
+  await page.waitForTimeout(900);
+  expect(await source(page)).toBe(note.replace("# Title\n\n", "# Title你好"));
+  await page.keyboard.type("!");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(note.replace("# Title\n\n", "# Title你好!"));
+});
+
+test("selecting back out of a new empty paragraph keeps the selection", async ({
+  page,
+}) => {
+  await boot(page);
+  await caretAtEnd(page, "Second");
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(800);
+  await page.keyboard.press("Shift+ArrowLeft");
+  await page.keyboard.type("X");
+  await page.waitForTimeout(800);
+  expect(await source(page)).toBe(
+    note.replace("Second paragraph.", "Second paragraph.X"),
+  );
+  expect(
+    await page.evaluate(() =>
+      document.querySelector("#content").contains(document.activeElement),
+    ),
+  ).toBe(true);
+});

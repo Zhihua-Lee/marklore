@@ -349,6 +349,9 @@ export function createSelectionTools({
   report,
   editable = (doc) => doc.mode === "edit",
   getLinkTargets = null,
+  // After an undo: put the caret back at the source editor's (direct
+  // editing); false when it did not.
+  refocus = () => false,
 }) {
   const bar = document.createElement("div");
   bar.className = "selection-tools";
@@ -643,9 +646,10 @@ export function createSelectionTools({
       hide();
       (key === "y" || event.shiftKey ? redo : undo)(view);
       render();
-      editingFocus().focus({
-        preventScroll: true,
-      });
+      if (!refocus())
+        editingFocus().focus({
+          preventScroll: true,
+        });
       return;
     }
     const action = { b: "bold", i: "italic", e: "inline", k: "link" }[key];

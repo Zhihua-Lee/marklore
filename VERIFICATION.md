@@ -1,6 +1,6 @@
 # Verification
 
-Last updated 2026-10-22.
+Last updated 2026-11-06.
 
 This index lists what was checked for each documented release; the full record of
 each pass lives in [docs/verification/](docs/verification/). A recorded pass covers
@@ -43,6 +43,7 @@ that were partial or overlapping are shown as passed/total and are not summed.
 
 | Version | Summary                                                                  | Unit              | Browser (UI)                                | Native                                                          | Link                                    |
 | ------- | ------------------------------------------------------------------------ | ----------------- | ------------------------------------------- | --------------------------------------------------------------- | --------------------------------------- |
+| v0.4.1  | Tab hover card; aligned task lists; direct-editing fixes                 | 143               | CI 263 + 1 on retry                         | 3 suites (packaged): smoke, editing, navigation                 | [v0.4.1](docs/verification/v0.4.1.md)   |
 | v0.4.0  | AI assistants propose edits and comment through MCP                      | 143               | 255 (local, all specs); CI 251 + 3 on retry | 17 suites (packaged); installer check 40/40                     | [v0.4.0](docs/verification/v0.4.0.md)   |
 | v0.3.6  | Direct editing: no doubled paragraphs, empty notes and block prefixes    | 126               | 239 (default + reduced-motion)              | 16 suites (packaged); installer check 41/41                     | [v0.3.6](docs/verification/v0.3.6.md)   |
 | v0.3.5  | Direct editing: formulas open in place, caret stays in its paragraph     | 126               | 239 (default + reduced-motion)              | 16 suites (packaged); installer check 41/41                     | [v0.3.5](docs/verification/v0.3.5.md)   |

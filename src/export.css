@@ -213,6 +213,19 @@ summary {
   max-width: 100%;
   height: auto;
 }
+.diagram {
+  --ondine-bg: #fff;
+  --ondine-fg: #202625;
+  --ondine-muted: #68716e;
+  --ondine-line: #5f6664;
+  --ondine-border: #4a5250;
+  --ondine-surface: #fff;
+  --ondine-surface-alt: #e6efeb;
+  --ondine-accent: #246d5d;
+  --ondine-stroke: 1.25px;
+  --ondine-radius: 4px;
+  --ondine-font: "Inter Variable", "Noto Sans SC", "Segoe UI", sans-serif;
+}
 .footnotes {
   font-size: 0.85em;
   border-top: 1px solid #d9ddda;

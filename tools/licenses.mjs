@@ -4,6 +4,9 @@ import { createRequire } from "node:module";
 const root = process.cwd(),
   seen = new Set(),
   sections = [];
+// Dependencies only a package's command-line tool uses; the app bundles none
+// of their code (ondine: the app imports its compiler, not its CLI).
+const cliOnly = { ondine: ["incur"] };
 async function visit(name, from) {
   const require = createRequire(path.join(from, "package.json"));
   let folder, pkg;
@@ -35,7 +38,7 @@ async function visit(name, from) {
     `${key}\nDeclared license: ${pkg.license}\n${texts.join("\n\n")}`,
   );
   for (const dep of Object.keys(pkg.dependencies || {}))
-    await visit(dep, folder);
+    if (!cliOnly[pkg.name]?.includes(dep)) await visit(dep, folder);
 }
 const pkg = JSON.parse(await fs.readFile("package.json", "utf8"));
 for (const name of Object.keys(pkg.dependencies)) await visit(name, root);

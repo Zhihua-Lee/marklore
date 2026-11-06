@@ -9,6 +9,25 @@
   height: auto;
   margin: auto;
 }
+/* Ondine draws with these; they follow the theme without a new drawing.
+   A diagram's own classDef/style still wins for its nodes. */
+.diagram {
+  --ondine-bg: var(--reading-paper);
+  --ondine-fg: var(--reading-ink);
+  --ondine-muted: var(--muted);
+  --ondine-line: color-mix(in srgb, var(--reading-ink) 62%, transparent);
+  --ondine-border: color-mix(in srgb, var(--reading-ink) 70%, transparent);
+  --ondine-surface: var(--reading-paper);
+  --ondine-surface-alt: color-mix(
+    in srgb,
+    var(--accent) 12%,
+    var(--reading-paper)
+  );
+  --ondine-accent: var(--accent);
+  --ondine-stroke: 1.25px;
+  --ondine-radius: 4px;
+  --ondine-font: var(--font-ui);
+}
 .prose .code-block:has(.diagram),
 .prose img {
   outline: 1px solid transparent;

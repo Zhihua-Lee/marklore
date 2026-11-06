@@ -32,6 +32,7 @@ Marklore is a desktop Markdown knowledge base built on Electron, for reading, ed
 
 - Never run tests against the real user profile (`%APPDATA%\Marklore`). Use `FOLIO_DATA_DIR` or the test fixtures.
 - Media and logs must not show personal paths.
+- This repository, its commit messages and its release notes are public. Write about the product and how it was checked, never about the owner's machine (drives, disk space, which program is in front), their habits or rules for agents, or which agents did the work.
 
 ## Project context
 

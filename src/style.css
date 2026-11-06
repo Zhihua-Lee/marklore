@@ -696,6 +696,12 @@ main[data-empty="true"] > #panes {
   vertical-align: -0.08em;
   accent-color: var(--accent);
 }
+/* A task's box hangs where a bullet would be, so its text lines up with the
+   plain and numbered items around it, at every depth. The space after the
+   box is the source's own, so the box's right margin is narrower by it. */
+.prose .task-list-item input.task-list-item-checkbox {
+  margin: 0 0.3em 0 -1.45em;
+}
 .prose li > ul,
 .prose li > ol {
   margin-block: 0.3em 0;

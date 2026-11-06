@@ -430,9 +430,12 @@ Retained when the other chapter is folded.
   await expect(parent).not.toHaveClass(/collapsed/);
   await expect(child).toBeVisible();
   await expect(page.locator("main > footer, #path, #progress")).toHaveCount(0);
-  await expect(
-    page.getByRole("tab", { name: "Layout.md", exact: true }),
-  ).toHaveAttribute("title", "C:/synthetic/Layout.md");
+  // The file's place shows on the card under its tab (tab-preview.spec.js).
+  await page.getByRole("tab", { name: "Layout.md", exact: true }).hover();
+  await expect(page.locator("#tab-preview .tab-preview-path")).toHaveText(
+    "C:/synthetic/Layout.md",
+  );
+  await page.locator("#content").hover();
   const styles = await page.evaluate(() => {
     const q = (s) => document.querySelector(s),
       css = (s) => getComputedStyle(q(s));

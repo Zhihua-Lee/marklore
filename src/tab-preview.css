@@ -1,0 +1,67 @@
+/* The card under a tab the pointer rests on (tab-preview.js). */
+#tab-preview {
+  position: fixed;
+  z-index: 60;
+  width: min(320px, calc(100vw - 16px));
+  padding: 9px 12px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 8px 24px #0002;
+  pointer-events: none;
+  animation: tab-preview-in 0.12s ease-out;
+}
+@keyframes tab-preview-in {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #tab-preview {
+    animation: none;
+  }
+}
+.tab-preview-name {
+  display: block;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.tab-preview-path {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.tab-preview-state {
+  color: var(--accent);
+  font-size: 11px;
+  line-height: 1.4;
+}
+/* The page: the note at a small native text size (never a scaled picture),
+   cut off at the card's foot. */
+.tab-preview-page {
+  height: 176px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 5px;
+  background: var(--reading-paper);
+  color: var(--reading-ink);
+  mask-image: linear-gradient(#000 75%, transparent);
+}
+.tab-preview-page[hidden] {
+  display: none;
+}
+.tab-preview-page .prose {
+  --note-size: 11px;
+  max-width: none;
+  margin: 0;
+  padding: 8px 12px;
+  line-height: 1.6;
+}
+/* A glance, not a reader: no fold controls or section rails. */
+#tab-preview :is(.fold, .section-summary, .section-rail) {
+  display: none;
+}

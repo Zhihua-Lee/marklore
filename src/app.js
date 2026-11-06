@@ -3,6 +3,7 @@ import "./language.js";
 import { t } from "../desktop/i18n.mjs";
 import { createNavigationHistory } from "./navigation-history.js";
 import { createTabBar } from "./tab-bar.js";
+import { createTabPreview } from "./tab-preview.js";
 import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
 import { defaultSettings, normalizeSettings } from "./settings.js";
@@ -238,6 +239,12 @@ const tabBar = createTabBar({
   report: (error) => toast(error.message || String(error)),
   context: (event, actions, doc) =>
     actions ? showContext(event, actions) : contextMenu(event, doc),
+});
+createTabPreview({
+  host: $("#tabs"),
+  find: (id) => tabs.find((doc) => doc.id === id),
+  active: () => active,
+  dirty,
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
 const smoothScroll = createSmoothScroll($("#reader"));

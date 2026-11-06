@@ -91,11 +91,20 @@ test("crowded tabs shrink to their first character; all fit; the current one is 
   expect(seen.width).toBeGreaterThanOrEqual(28);
   expect(seen.initial).toBe('"线"');
   expect(seen.close).toBe("none");
-  // The full name is still what assistive technology and the tooltip get.
+  // The full name is still what assistive technology and the card under the
+  // tab get.
   await expect(narrow.getByRole("tab")).toHaveAttribute(
-    "title",
+    "aria-label",
+    "线性.md",
+  );
+  await narrow.hover();
+  await expect(page.locator("#tab-preview .tab-preview-name")).toHaveText(
+    "线性.md",
+  );
+  await expect(page.locator("#tab-preview .tab-preview-path")).toHaveText(
     "C:/s/线性.md",
   );
+  await page.locator("#content").hover();
   const current = await tab(page, "概率.md").evaluate(
     (el) => el.getBoundingClientRect().width,
   );

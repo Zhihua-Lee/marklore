@@ -80,6 +80,16 @@ li {
 li > p {
   margin-block: 0.4em;
 }
+/* A task's box hangs where a bullet would be (as on screen). */
+.task-list-item {
+  list-style: none;
+}
+.task-list-item input.task-list-item-checkbox {
+  width: 0.95em;
+  height: 0.95em;
+  margin: 0 0.3em 0 -1.45em;
+  vertical-align: -0.08em;
+}
 hr {
   border: 0;
   height: 1px;

@@ -306,7 +306,6 @@ export function createTabBar({
       // (a dot first when unsaved).
       label.dataset.initial =
         (dirty(doc) ? "●" : "") + (Array.from(doc.name.trim())[0] || "");
-      label.title = doc.path || doc.name;
       label.tabIndex = active() === doc ? 0 : -1;
       label.setAttribute("aria-selected", String(active() === doc));
       node

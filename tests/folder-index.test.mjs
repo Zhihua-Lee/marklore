@@ -151,7 +151,11 @@ test("a child not listed yet gets an entry; line endings and BOM are kept", () =
 });
 
 test("the library lists a folder in its index's order and rewrites it", async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "marklore-index-"));
+  // The real path: the store resolves folders, and a temp folder may have
+  // an 8.3 short name (as on CI).
+  const dir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "marklore-index-")),
+  );
   try {
     for (const name of [
       "Intro.md",

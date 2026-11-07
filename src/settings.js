@@ -21,7 +21,8 @@ export function defaultSettings() {
     smoothScroll: "off",
     readingFormat: false,
     directEdit: false,
-    editSplit: true,
+    editSplit: false,
+    richEdit: true,
     groupCounts: false,
     exportToc: true,
     outlineAnchors: "referenced",
@@ -62,7 +63,8 @@ export function normalizeSettings(saved = {}) {
   settings.showHistoryButtons = settings.showHistoryButtons === true;
   settings.readingFormat = settings.readingFormat === true;
   settings.directEdit = settings.directEdit === true;
-  settings.editSplit = settings.editSplit !== false;
+  settings.editSplit = settings.editSplit === true;
+  settings.richEdit = settings.richEdit !== false;
   settings.groupCounts = settings.groupCounts === true;
   settings.exportToc = settings.exportToc !== false;
   settings.outlineAnchors = ["off", "all"].includes(settings.outlineAnchors)

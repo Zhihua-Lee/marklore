@@ -153,9 +153,20 @@ export async function check(files) {
 
 export function sourceFiles() {
   const files = [];
-  for (const dir of ["src", "desktop"])
-    for (const name of fs.readdirSync(path.join(root, dir)))
-      if (/\.(js|mjs|cjs)$/.test(name)) files.push(path.join(root, dir, name));
+  // Folders inside src (src/rich) too; desktop/locales holds the English.
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(path.join(root, dir), {
+      withFileTypes: true,
+    })) {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (rel !== path.join("desktop", "locales")) walk(rel);
+      } else if (/\.(js|mjs|cjs)$/.test(entry.name))
+        files.push(path.join(root, rel));
+    }
+  };
+  walk("src");
+  walk("desktop");
   return files;
 }
 

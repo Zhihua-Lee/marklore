@@ -12,7 +12,7 @@ import { createLibrary } from "./library.js";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
 import { createMenus } from "./menus.js";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Transaction } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { basicSetup } from "codemirror";
 import { editorSearch } from "./editor-search.js";
@@ -67,6 +67,7 @@ import { wireEditing, editingHighlight } from "./editing.js";
 import { createBlockEditor } from "./block-editing.js";
 import { createSelectionTools } from "./selection-tools.js";
 import { createDirectEditor } from "./direct-editing.js";
+import { createRichEditor } from "./rich/editor.js";
 import { createProposals } from "./proposals.js";
 import { createComments } from "./comments.js";
 import { wireAiSettings } from "./ai-settings.js";
@@ -95,6 +96,9 @@ import "@fontsource-variable/inter";
 import "katex/dist/katex.min.css";
 import "./style.css";
 import "./diagrams.css";
+import "prosemirror-view/style/prosemirror.css";
+import "prosemirror-tables/style/tables.css";
+import "./rich/rich.css";
 import "./layout.css";
 import "./code-blocks.css";
 
@@ -106,6 +110,8 @@ let active = null,
   lastScrollAt = 0,
   selectionTools,
   directEditor,
+  richEditor,
+  richPushing = false,
   view,
   switching = false,
   renderingTimer,
@@ -141,7 +147,7 @@ $("#app").innerHTML = `
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="comments-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
-<div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div></div>
+<div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div><div id="rich-reader"><article id="rich" class="prose"></article></div></div>
 <span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="${t("右侧栏")}"></aside></div>
 <div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div>
 <div id="app-menu" class="context app-menu" role="menu" aria-label="${t("应用菜单")}" hidden></div>${appearanceMarkup}
@@ -376,10 +382,26 @@ function stateFor(doc) {
           active.pending = active.pending
             ? active.pending.compose(update.changes)
             : update.changes;
-          updateTabs();
+          // The tab bar measures itself (a layout of the whole page): only
+          // when the tab's unsaved mark changes.
+          if (dirty(active) !== active.tabDirty) {
+            active.tabDirty = dirty(active);
+            updateTabs();
+          }
           updateStatus();
           scheduleSession();
           clearTimeout(renderingTimer);
+          // Typed in the editor, the note already shows; only the outline
+          // follows, once typing pauses.
+          if (richPushing) {
+            editsPendingSince = null;
+            renderingTimer = setTimeout(() => {
+              if (!richActive(active)) return;
+              active.headings = parseHeadings(active.text);
+              updateOutline(active.headings);
+            }, 1000);
+            return;
+          }
           const refreshEditedPreview = () => {
             if (
               (active?.text.length > 80000 || active?.formulaCount > 200) &&
@@ -541,7 +563,10 @@ directEditor = createDirectEditor({
   view,
   getDocument: () => active,
   enabled: (doc) =>
-    settings.directEdit && doc?.mode === "edit" && !isDiffDocument(doc),
+    settings.directEdit &&
+    !settings.richEdit &&
+    doc?.mode === "edit" &&
+    !isDiffDocument(doc),
   renderNow: () => {
     clearTimeout(renderingTimer);
     render(true);
@@ -550,6 +575,102 @@ directEditor = createDirectEditor({
   patched: (node) => previewCache.taint($("#content"), node),
   renderBlocks,
 });
+// Edit mode types into the note as drawn (src/rich): the editor writes the
+// Markdown back and hands it here as the note's new text, through the
+// source pane's own document, so saving, the tab's unsaved mark and the
+// session work as for any edit.
+richEditor = createRichEditor({
+  host: $("#rich"),
+  getTheme: () => settings.theme,
+  follow: (href) => run(() => navigateLink(href))(),
+  onFocus: () => {
+    if (active) active.pane = "preview";
+  },
+  onText: (doc, text) => {
+    if (doc !== active || view.state.doc.toString() === text) return;
+    const old = view.state.doc.toString();
+    let from = 0;
+    while (from < old.length && from < text.length && old[from] === text[from])
+      from++;
+    let end = 0;
+    while (
+      end < old.length - from &&
+      end < text.length - from &&
+      old[old.length - 1 - end] === text[text.length - 1 - end]
+    )
+      end++;
+    richPushing = true;
+    try {
+      view.dispatch({
+        changes: {
+          from,
+          to: old.length - end,
+          insert: text.slice(from, text.length - end),
+        },
+        annotations: Transaction.addToHistory.of(false),
+      });
+    } finally {
+      richPushing = false;
+    }
+  },
+});
+// Edit mode shows the editor for notes (not diffs, nor a proposal shown as
+// it would read).
+function richActive(doc = active) {
+  return Boolean(
+    settings.richEdit &&
+    doc?.mode === "edit" &&
+    !isDiffDocument(doc) &&
+    !doc.preview &&
+    !doc.richBlocked &&
+    !proposals?.shown(doc),
+  );
+}
+// Edit mode shows the source pane when asked to (Settings → Editing), when
+// the editor is off, and for a note the editor does not take.
+function sourcePaneShown(doc = active) {
+  return (
+    settings.editSplit ||
+    (!settings.richEdit && !settings.directEdit) ||
+    Boolean(doc?.richBlocked)
+  );
+}
+function updateSplit() {
+  $("#panes").dataset.split = sourcePaneShown() ? "on" : "off";
+}
+// The reading position in the pane that shows the note, and going to one:
+// the editor in Edit mode keeps its own (src/rich/editor.js).
+function paneAnchor() {
+  return richActive() ? richEditor.anchor() : visibleAnchor($("#reader"));
+}
+function goToAnchor(doc, anchor, options = {}) {
+  if (richActive(doc)) richEditor.scrollTo(anchor, options.behavior);
+  else navigateToAnchor($("#reader"), anchor, options);
+}
+function showRich(doc) {
+  $("#panes").dataset.rich = "on";
+  if (doc.headingsText !== doc.text) {
+    doc.headings = parseHeadings(doc.text);
+    doc.headingsText = doc.text;
+  }
+  updateOutline(doc.headings);
+  updateStatus();
+  richEditor.show(doc).then((shown) => {
+    // A note the editor would not write back exactly is edited as before
+    // (source pane and preview), never rewritten.
+    if (!shown) {
+      doc.richBlocked = true;
+      toast(t("这篇笔记含有编辑器还不能原样保留的写法，已改用源码栏编辑"));
+      if (active === doc) {
+        updateSplit();
+        render(false);
+      }
+      return;
+    }
+    if (active !== doc || !richActive(doc)) return;
+    if (currentAnchor?.id === doc.id) richEditor.scrollTo(currentAnchor.anchor);
+  });
+}
 // Direct editing changed the blocks `olds` (siblings in one parent), now the
 // source from..to: render that slice alone and put it in their place, so a
 // structural edit costs one block's render, not the note's. The full render
@@ -614,9 +735,9 @@ function capture() {
   active.anchor =
     blockEditor?.anchor() ||
     (active.mode === "source" ||
-    (active.mode === "edit" && active.pane === "editor" && settings.editSplit)
+    (active.mode === "edit" && active.pane === "editor" && sourcePaneShown())
       ? editorAnchor()
-      : visibleAnchor($("#reader")));
+      : paneAnchor());
   active.folds = [
     ...$("#content").querySelectorAll(".note-section.collapsed"),
   ].map((el) => el.dataset.foldKey);
@@ -632,8 +753,7 @@ function restore(
   if (doc !== active) return;
   restoring = true;
   currentAnchor = { id: doc.id, anchor };
-  if (doc.mode !== "source")
-    navigateToAnchor($("#reader"), anchor, { expand, behavior });
+  if (doc.mode !== "source") goToAnchor(doc, anchor, { expand, behavior });
   if (doc.mode !== "read") {
     const from = Math.min(anchor.from || 0, view.state.doc.length);
     view.dispatch({
@@ -643,6 +763,9 @@ function restore(
         yMargin: anchor.top ? 0 : 32,
       }),
     });
+    // Entering Edit mode puts the caret where the note was being read.
+    if (select && richActive(doc) && richEditor.doc === doc)
+      richEditor.caretAt(anchor.from || 0);
   }
   requestAnimationFrame(() => {
     restoring = false;
@@ -787,6 +910,7 @@ function activateTab(doc, { revealGroup = true } = {}) {
   $("#home").hidden = true;
   setEditorState(doc.state || stateFor(doc));
   $("#panes").dataset.mode = doc.mode;
+  updateSplit();
   render(false);
   updateTabs();
   updateModes();
@@ -819,8 +943,7 @@ function setMode(mode, { anchor: destination } = {}) {
   updateModes();
   // The reader changes width with the source pane: land it before the first
   // frame, so the note and the scrollbar don't show the old position first.
-  if (mode !== "source")
-    navigateToAnchor($("#reader"), anchor, { expand: true });
+  if (mode !== "source") goToAnchor(doc, anchor, { expand: true });
   requestAnimationFrame(() => {
     if (active === doc && doc.mode === mode)
       restore(doc, anchor, { expand: true, select: mode !== "read" });
@@ -830,6 +953,8 @@ function setMode(mode, { anchor: destination } = {}) {
 function render(preserve) {
   editsPendingSince = null;
   if (!active) return;
+  if (richActive(active)) return showRich(active);
+  $("#panes").dataset.rich = "off";
   if (blockEditor?.active) return;
   // An input method composes in the page, or is about to (composing.js):
   // render once it is done.
@@ -1261,7 +1386,7 @@ function sourceToPreview() {
   if (!active || active.mode === "read") return;
   render(false);
   const { from, to } = view.state.selection.main;
-  navigateToAnchor($("#reader"), { from, y: 32 }, { expand: true });
+  goToAnchor(active, { from, y: 32 }, { expand: true });
   highlightLocation(from, to);
   active.pane = "editor";
 }
@@ -1312,7 +1437,7 @@ $("#content").addEventListener("dblclick", (event) => {
   if (blockEditor?.active || event.target.closest(".block-editor")) return;
   if (directEditor?.active && !event.altKey) return;
   // Without the source pane, a double click has no source to show.
-  if (active.mode === "edit" && !settings.editSplit) return;
+  if (active.mode === "edit" && !sourcePaneShown()) return;
   if (event.target.closest("button,a,summary,input")) return;
   const hit = atPoint($("#content"), event.clientX, event.clientY);
   if (!hit) return;
@@ -1345,7 +1470,7 @@ $("#content").addEventListener("dblclick", (event) => {
   const doc = active;
   requestAnimationFrame(() => {
     if (active !== doc || doc.mode === "read") return;
-    navigateToAnchor($("#reader"), anchor, { expand: true });
+    goToAnchor(doc, anchor, { expand: true });
     view.dispatch({
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
@@ -1416,6 +1541,7 @@ function scrolled() {
   });
 }
 $("#reader").addEventListener("scroll", scrolled, { passive: true });
+$("#rich-reader").addEventListener("scroll", scrolled, { passive: true });
 view.scrollDOM.addEventListener("scroll", scrolled, { passive: true });
 // Chromium re-hit-tests the page after every scroll step to update hover. With
 // rendered formulas (KaTeX positions thousands of spans) each test took ~12 ms
@@ -1638,7 +1764,7 @@ function applySettings() {
   );
   document.documentElement.style.setProperty("--split", settings.split + "%");
   // Edit mode with or without the source pane (Settings → Editing).
-  $("#panes").dataset.split = settings.editSplit ? "on" : "off";
+  updateSplit();
   $("#split").setAttribute("aria-valuenow", String(settings.split));
   $("#zoom-reset").textContent = settings.zoom + "%";
   document.documentElement.dataset.wide = String(settings.wide);
@@ -1650,7 +1776,10 @@ function applySettings() {
   paintAiSettings?.();
   refreshColorButtons();
   updateHistoryButtons();
-  if (themeChanged) renderDiagrams($("#content"), settings.theme, () => {});
+  if (themeChanged) {
+    renderDiagrams($("#content"), settings.theme, () => {});
+    richEditor?.redraw();
+  }
 }
 function changeSettings(patch) {
   if ("language" in patch && patch.language !== settings.language) {
@@ -1684,6 +1813,7 @@ function changeSettings(patch) {
   Object.assign(settings, patch);
   applySettings();
   if ("directEdit" in patch) directEditor?.rendered();
+  if ("richEdit" in patch && active) render(false);
   if ("searchExclude" in patch) showExcluded();
   if ("groupCounts" in patch) updateTabs();
   if (patch.sidebar === true) run(followCurrentFolder)();
@@ -1756,9 +1886,11 @@ const commands = {
     if (!add({ name: t("未命名.md") }, { opener: active })) return;
     setMode("edit");
     requestAnimationFrame(() =>
-      directEditor?.active && !settings.editSplit
-        ? directEditor.focus()
-        : view.focus(),
+      richActive()
+        ? richEditor.focus()
+        : directEditor?.active && !settings.editSplit
+          ? directEditor.focus()
+          : view.focus(),
     );
   },
   save: () => save(),

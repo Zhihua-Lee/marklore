@@ -132,6 +132,7 @@ async function boot(page) {
           outline: false,
           directEdit: true,
           editSplit: true,
+          richEdit: false,
         },
       }),
     });

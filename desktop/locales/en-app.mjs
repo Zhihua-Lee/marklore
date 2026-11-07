@@ -340,6 +340,11 @@ export default {
   "默认应用…": "Default app…",
   批注: "Annotation",
   编辑模式显示源码栏: "Show the source pane in Edit mode",
+  在渲染后的正文里编辑: "Edit the note as it reads",
+  "编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑":
+    "In Edit mode, type right in the formatted note; formulas, tables and links are edited in place",
+  "在正文旁同时显示 Markdown 源码，两边同步":
+    "Show the Markdown source beside the note, kept in step both ways",
   "关闭后编辑模式只显示渲染后的正文，可配合下面的直接编辑使用":
     "When off, Edit mode shows only the rendered note; pair it with typing directly in the preview below",
   "在预览中直接编辑（试验）": "Type directly in the preview (experimental)",

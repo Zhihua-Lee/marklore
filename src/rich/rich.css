@@ -1,0 +1,168 @@
+/* The editor of Edit mode (src/rich/editor.js): the note drawn as when
+   read, typed into in place. */
+#rich-reader {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: var(--reading-paper);
+}
+#panes:not([data-rich="on"]) #rich-reader,
+#panes[data-rich="on"] #reader {
+  display: none;
+}
+#rich .ProseMirror {
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  caret-color: var(--accent);
+  min-height: 60vh;
+  padding-bottom: 30vh;
+}
+#rich .ProseMirror li > p {
+  margin: 0.15em 0;
+}
+#rich .ProseMirror li.task-item,
+#rich .ProseMirror li:has(> p > .task-list-item-checkbox:first-child) {
+  list-style: none;
+}
+#rich .task-list-item-checkbox {
+  margin: 0 0.3em 0 -1.45em;
+  cursor: pointer;
+}
+/* Drawn formulas, diagrams and raw blocks: one unit, opened by a click. */
+#rich .rich-drawn {
+  cursor: text;
+  border-radius: 3px;
+}
+#rich .rich-picked,
+#rich .ProseMirror-selectednode {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: 1px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+#rich .math-src {
+  font-family: var(--font-code);
+  font-size: 0.88em;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border-radius: 3px;
+}
+#rich pre[data-params="$$"],
+#rich .raw-block pre {
+  font-family: var(--font-code);
+  font-size: 0.85em;
+}
+#rich .raw-inline {
+  font-family: var(--font-code);
+  font-size: 0.8em;
+  color: var(--muted);
+}
+#rich .raw-inline[data-kind="footnote"] {
+  vertical-align: super;
+  font-size: 0.7em;
+  color: var(--accent);
+}
+#rich .raw-block[data-kind="text"] pre,
+#rich .raw-block[data-kind="frontmatter"] pre {
+  margin: 0.6em 0;
+  padding: 6px 10px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--reading-ink) 4%, transparent);
+  border-radius: 4px;
+  white-space: pre-wrap;
+}
+#rich .soft-break {
+  white-space: normal;
+}
+#rich table {
+  border-collapse: collapse;
+}
+#rich td,
+#rich th {
+  position: relative;
+  min-width: 3em;
+}
+#rich .selectedCell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+/* The address box under a link, and the right-click menu. */
+.rich-link-box,
+.rich-menu {
+  position: fixed;
+  z-index: 70;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px #0002;
+  font: 12px var(--font-ui);
+}
+.rich-link-box {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+.rich-link-box input {
+  width: 260px;
+  font: 12px var(--font-code);
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 3px 6px;
+}
+.rich-link-box button,
+.rich-menu button {
+  font: inherit;
+  color: inherit;
+  border: 0;
+  background: transparent;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.rich-link-box button:hover,
+.rich-menu button:hover,
+.rich-menu button:focus-visible {
+  background: var(--hover);
+}
+.rich-menu {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  padding: 4px;
+  font-size: 13px;
+}
+.rich-menu button {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  text-align: left;
+  padding: 5px 10px;
+}
+.rich-menu kbd {
+  color: var(--muted);
+  font: inherit;
+}
+.rich-menu hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 4px 0;
+}
+/* Shown boxes are flex; hidden must still hide them. */
+.rich-link-box[hidden],
+.rich-menu[hidden] {
+  display: none;
+}
+/* A long note: blocks off screen are not laid out or painted while typing
+   (each keystroke's cost grows with what the browser has to lay out). */
+#rich .ProseMirror > :not(.rich-current) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 3em;
+}

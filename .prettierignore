@@ -8,3 +8,5 @@ test-results/
 playwright-report/
 blob-report/
 .local/
+# Notes written in every Markdown spelling on purpose, for round-trip tests.
+tests/fixtures/

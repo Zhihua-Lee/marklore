@@ -55,7 +55,18 @@
     "markdown-it-footnote": "4.0.0",
     "markdown-it-task-lists": "2.1.1",
     "mermaid": "12.2.0",
-    "ondine": "0.0.3"
+    "ondine": "0.0.3",
+    "prosemirror-commands": "1.7.2",
+    "prosemirror-history": "1.5.1",
+    "prosemirror-inputrules": "1.5.1",
+    "prosemirror-keymap": "1.2.3",
+    "prosemirror-markdown": "1.13.9",
+    "prosemirror-model": "1.25.12",
+    "prosemirror-schema-list": "1.6.0",
+    "prosemirror-state": "1.4.4",
+    "prosemirror-tables": "1.8.5",
+    "prosemirror-transform": "1.12.5",
+    "prosemirror-view": "1.42.9"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

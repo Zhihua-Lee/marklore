@@ -1,0 +1,346 @@
+import { test, expect } from "@playwright/test";
+import fs from "node:fs";
+import { installFolio } from "./fixtures.js";
+
+// Edit mode types into the note as drawn (src/rich). The note's Markdown
+// stays its own: a block not touched is written back byte for byte, and a
+// touched block changes only where it was edited.
+const note = fs.readFileSync(
+  new URL("../fixtures/rich-mixed.md", import.meta.url),
+  "utf8",
+);
+
+async function boot(page, text = note, settings = {}) {
+  await installFolio(page);
+  await page.addInitScript(
+    ({ text, settings }) => {
+      window.mock = { disk: text, version: "v1", handlers: {}, saved: [] };
+      const file = (id, name, text) => ({
+        id,
+        path: "C:/synthetic/" + name,
+        name,
+        text,
+        version: "v1",
+      });
+      window.folio = folioTest.mock({
+        ready: async () => ({
+          restored: [],
+          incoming: [
+            file("rich", "Rich.md", text),
+            file("other", "Other.md", "# Other\n\nSecond note.\n"),
+          ],
+          roots: [],
+          settings: {
+            sidebar: false,
+            outline: false,
+            richEdit: true,
+            ...settings,
+          },
+        }),
+        read: async () => ({ unchanged: true }),
+        save: async (id, text, version) => {
+          window.mock.saved.push({ id, text });
+          return { version: version + "s" };
+        },
+      });
+    },
+    { text, settings },
+  );
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Rich.md", exact: true }).click();
+  await page.keyboard.press("Control+2");
+  await expect(page.locator("#rich .ProseMirror")).toBeVisible();
+  await expect(page.locator("#reader")).toBeHidden();
+}
+const editor = (page) => page.locator("#rich .ProseMirror");
+// The note's text as saving would write it.
+async function saved(page) {
+  const before = await page.evaluate(() => window.mock.saved.length);
+  await page.keyboard.press("Control+s");
+  await expect
+    .poll(() => page.evaluate(() => window.mock.saved.length))
+    .toBeGreaterThan(before);
+  return page.evaluate(() => window.mock.saved.at(-1).text);
+}
+// a differs from b by exactly `extra` inserted at one place.
+function insertedOnly(a, b, extra) {
+  let p = 0;
+  while (a[p] === b[p]) p++;
+  return a.slice(0, p) + extra + a.slice(p) === b
+    ? true
+    : JSON.stringify({
+        at: p,
+        was: a.slice(p - 20, p + 40),
+        now: b.slice(p - 20, p + 40),
+      });
+}
+// Click just after `text` (on the right half of its last character).
+// (Blocks drawn as they come on screen can change height: scroll, let the
+// page settle, then measure.)
+async function caretAfter(page, text) {
+  const locate = (scroll) =>
+    page.evaluate(
+      ([text, scroll]) => {
+        const root = document.querySelector("#rich .ProseMirror");
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          const i = node.data.indexOf(text);
+          if (i < 0) continue;
+          const range = document.createRange();
+          const end = i + text.length;
+          range.setStart(node, end - 1);
+          range.setEnd(node, end);
+          if (scroll)
+            range.startContainer.parentElement.scrollIntoView({
+              block: "center",
+            });
+          const rect = [...range.getClientRects()].at(-1);
+          return { x: rect.right - 1, y: rect.top + rect.height / 2 };
+        }
+        throw Error("no text " + text);
+      },
+      [text, scroll],
+    );
+  await locate(true);
+  await page.waitForTimeout(100);
+  await locate(true);
+  await page.waitForTimeout(50);
+  const point = await locate(false);
+  await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(50);
+}
+async function compose(page, text) {
+  const cdp = await page.context().newCDPSession(page);
+  for (let i = 1; i <= text.length; i++) {
+    await cdp.send("Input.imeSetComposition", {
+      text: text.slice(0, i),
+      selectionStart: i,
+      selectionEnd: i,
+    });
+    await page.waitForTimeout(30);
+  }
+  await cdp.send("Input.insertText", { text });
+  await page.waitForTimeout(80);
+}
+
+test("the note shows drawn and stays byte-identical until edited", async ({
+  page,
+}) => {
+  await boot(page);
+  // Formulas, a table, a diagram, a task box: drawn, no pencil.
+  await expect(editor(page).locator(".formula .katex").first()).toBeVisible();
+  await expect(
+    editor(page).locator(".math-block .katex").first(),
+  ).toBeVisible();
+  await expect(editor(page).locator("table")).toBeVisible();
+  await expect(editor(page).locator(".task-list-item-checkbox")).toHaveCount(2);
+  await expect(page.locator(".block-edit-launch, .direct-pencil")).toHaveCount(
+    0,
+  );
+  await expect(page.locator("#status")).toHaveText("已保存");
+});
+
+test("switching between Read and Edit keeps the place in the note", async ({
+  page,
+}) => {
+  const long = Array.from(
+    { length: 40 },
+    (_, i) => `## Part ${i}\n\nText of part ${i} with $x_${i}$.\n`,
+  ).join("\n");
+  await boot(page, long);
+  const top = (pane) =>
+    page.evaluate((pane) => {
+      const box = document.querySelector(pane).getBoundingClientRect();
+      const heads = [...document.querySelectorAll(pane + " h2")];
+      return heads.find((h) => h.getBoundingClientRect().bottom > box.top + 10)
+        ?.textContent;
+    }, pane);
+  // Blocks off screen have estimated heights until drawn: scroll until the
+  // heading stays put.
+  for (let i = 0; i < 6; i++) {
+    await page.locator("#rich-reader").evaluate((el) => {
+      const h = [...el.querySelectorAll("h2")].find(
+        (h) => h.textContent === "Part 25",
+      );
+      el.scrollTop +=
+        h.getBoundingClientRect().top - el.getBoundingClientRect().top - 20;
+    });
+    await page.waitForTimeout(80);
+  }
+  expect(await top("#rich-reader")).toBe("Part 25");
+  await page.keyboard.press("Control+1");
+  await expect(page.locator("#reader")).toBeVisible();
+  await expect.poll(() => top("#reader")).toMatch(/Part 2[45]/);
+  await page.keyboard.press("Control+2");
+  await expect(page.locator("#rich-reader")).toBeVisible();
+  await expect.poll(() => top("#rich-reader")).toMatch(/Part 2[45]/);
+});
+
+test("typing changes the note only where it was typed", async ({ page }) => {
+  await boot(page);
+  await caretAfter(page, "频域里卷积");
+  await page.keyboard.type("Q");
+  await caretAfter(page, "内层积分是");
+  await compose(page, "函数");
+  await expect(page.locator("#status")).toHaveText("● 未保存");
+  const text = await saved(page);
+  const once = note.replace("频域里卷积", "频域里卷积Q");
+  expect(insertedOnly(once, text, "函数")).toBe(true);
+});
+
+test("a formula is one unit: Backspace selects it, then removes it", async ({
+  page,
+}) => {
+  await boot(page);
+  // "价格 \$5" is plain text; the formula in the quote is "$x^2 + y^2 = 1$".
+  await caretAfter(page, "引用里也有公式 ");
+  await page.keyboard.press("ArrowRight");
+  // Stepping in with the arrow opens its source in place.
+  await expect(editor(page).locator(".math-src")).toHaveText("$x^2 + y^2 = 1$");
+  await page.keyboard.press("End");
+  await expect(editor(page).locator(".math-src")).toHaveCount(0);
+  await caretAfter(page, "引用里也有公式 ");
+  await page.keyboard.press("Delete");
+  await expect(
+    editor(page).locator(".rich-picked, .ProseMirror-selectednode"),
+  ).toHaveCount(1);
+  await page.keyboard.press("Delete");
+  const text = await saved(page);
+  expect(text).toContain("> 引用里也有公式 。");
+  expect(text.replace("> 引用里也有公式 。", "")).toBe(
+    note.replace("> 引用里也有公式 $x^2 + y^2 = 1$。", ""),
+  );
+});
+
+test("editing a formula's source in place, then leaving it", async ({
+  page,
+}) => {
+  await boot(page);
+  await editor(page)
+    .locator(".formula .katex-html")
+    .first()
+    .locator(".mord")
+    .first()
+    .click();
+  const open = editor(page).locator(".math-src");
+  await expect(open).toContainText("\\mathcal{F}(f * g)");
+  await page.keyboard.type("+1");
+  await page.keyboard.press("ArrowDown");
+  await expect(open).toHaveCount(0);
+  const text = await saved(page);
+  expect(insertedOnly(note, text, "+1")).toBe(true);
+});
+
+test("Enter in a numbered item renumbers; an empty item leaves the list", async ({
+  page,
+}) => {
+  await boot(page);
+  await caretAfter(page, "写出定义 ");
+  await page.keyboard.press("End");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("new step");
+  let text = await saved(page);
+  expect(text).toContain(
+    "1. 写出定义 $h(t) = (f*g)(t)$\n2. new step\n3. 对两边做变换",
+  );
+  expect(text).toContain("4. 整理得到乘积");
+  await caretAfter(page, "整理得到乘积");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("after");
+  text = await saved(page);
+  const at = text.indexOf("2. new step");
+  expect(text.slice(at, text.indexOf("3) 括号编号") + 7)).toContain(
+    "4. 整理得到乘积\n\nafter\n\n3) 括号编号",
+  );
+});
+
+test("tables: typing in cells, Tab, and the right-click menu", async ({
+  page,
+}) => {
+  await boot(page);
+  await editor(page).locator("td").first().click();
+  await page.keyboard.press("End");
+  await compose(page, "运算");
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("End");
+  await page.keyboard.type("!");
+  await editor(page).locator("td").first().click({ button: "right" });
+  await page.getByRole("menuitem", { name: "这一列居中" }).click();
+  const text = await saved(page);
+  const outside = (s) =>
+    s
+      .split("\n")
+      .filter((l) => !l.startsWith("|"))
+      .join("\n");
+  expect(outside(text)).toBe(outside(note));
+  expect(text).toContain("| 卷积运算");
+  expect(text).toContain("$f*g$!");
+  expect(text).toMatch(/\| :-+: \|/);
+});
+
+test("links: the address box under the caret, and Ctrl+K", async ({ page }) => {
+  await boot(page);
+  await editor(page).getByText("一个链接").click();
+  const box = page.locator(".rich-link-box");
+  await expect(box).toBeVisible();
+  await expect(box.locator("input")).toHaveValue("https://example.com");
+  await box.locator("input").fill("https://example.org/f");
+  await box.locator("input").press("Enter");
+  await expect(box)
+    .toBeHidden({ timeout: 2000 })
+    .catch(() => {});
+  await caretAfter(page, "第二行 ");
+  await expect(box).toBeHidden();
+  let text = await saved(page);
+  expect(text).toContain('[一个链接](https://example.org/f "标题")');
+  // Ctrl+K on a selection links it.
+  await caretAfter(page, "转义字符");
+  await page.keyboard.press("Home");
+  await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("Shift+ArrowRight");
+  await page.keyboard.press("Control+k");
+  await page.keyboard.type("notes/x.md");
+  await page.keyboard.press("Enter");
+  text = await saved(page);
+  expect(text).toMatch(/\[转义\]\(notes\/x\.md\)/);
+});
+
+test("undo returns the exact note; each tab keeps its own history", async ({
+  page,
+}) => {
+  await boot(page);
+  await caretAfter(page, "频域里卷积");
+  await page.keyboard.type("abc");
+  await page.getByRole("tab", { name: "Other.md", exact: true }).click();
+  await page.getByRole("tab", { name: /Rich.md/ }).click();
+  await expect(editor(page)).toContainText("频域里卷积abc");
+  await editor(page).focus();
+  for (let i = 0; i < 4; i++) await page.keyboard.press("Control+z");
+  await expect(editor(page)).not.toContainText("卷积abc");
+  await expect(page.locator("#status")).toHaveText("已保存");
+});
+
+test("the source pane, when shown, follows the editor and back", async ({
+  page,
+}) => {
+  await boot(page, note, { editSplit: true });
+  await expect(page.locator("#editor-pane")).toBeVisible();
+  await caretAfter(page, "频域里卷积");
+  await page.keyboard.type("R");
+  await expect(page.locator("#editor .cm-content")).toContainText(
+    "频域里卷积R",
+  );
+  await page.locator("#editor .cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("\nTail paragraph.");
+  await expect(editor(page)).toContainText("Tail paragraph.", {
+    timeout: 3000,
+  });
+});
+
+test("the source pane is off by default in Edit mode", async ({ page }) => {
+  await boot(page);
+  await expect(page.locator("#editor-pane")).toBeHidden();
+});

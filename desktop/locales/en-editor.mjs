@@ -175,4 +175,23 @@ export default {
   选区中已有链接: "The selection already contains a link",
   跨段落的选区不能转为行内代码: "Inline code cannot span several paragraphs",
   含格式的选区不能转为行内代码: "Formatted text cannot become inline code",
+
+  // The editor of Edit mode (src/rich)
+  编辑笔记: "Edit note",
+  "这篇笔记含有编辑器还不能原样保留的写法，已改用源码栏编辑":
+    "This note has writing the editor cannot keep exactly yet; it is edited in the source pane",
+  点击编辑源码: "Click to edit its source",
+  编辑链接: "Edit link",
+  打开链接: "Open link",
+  "添加链接…": "Add link…",
+  上方插入行: "Insert row above",
+  下方插入行: "Insert row below",
+  左侧插入列: "Insert column left",
+  右侧插入列: "Insert column right",
+  这一列左对齐: "Align column left",
+  这一列居中: "Center column",
+  这一列右对齐: "Align column right",
+  删除这一行: "Delete row",
+  删除这一列: "Delete column",
+  删除表格: "Delete table",
 };

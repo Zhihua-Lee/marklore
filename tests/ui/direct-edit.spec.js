@@ -34,7 +34,13 @@ async function boot(
           incoming: [file],
           roots: [],
           restored: [],
-          settings: { sidebar: false, outline: false, directEdit, editSplit },
+          settings: {
+            sidebar: false,
+            outline: false,
+            directEdit,
+            editSplit,
+            richEdit: false,
+          },
         }),
       });
     },

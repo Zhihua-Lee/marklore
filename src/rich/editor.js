@@ -1,0 +1,430 @@
+// The editor of Edit mode: the note as its rendered blocks, typed into
+// directly (ProseMirror). The Markdown stays the note's own: each change is
+// written back block by block (markdown.js) and handed to the app as the
+// note's new text, which saves, undoes in the source pane and marks the tab
+// as before. Each tab keeps its own editor state, so its undo history and
+// caret survive switching tabs.
+import { EditorState, Plugin, TextSelection } from "prosemirror-state";
+import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
+import { keymap } from "prosemirror-keymap";
+import { history, undo, redo } from "prosemirror-history";
+import {
+  baseKeymap,
+  chainCommands,
+  deleteSelection,
+  joinBackward,
+  selectNodeBackward,
+  toggleMark,
+  exitCode,
+} from "prosemirror-commands";
+import {
+  splitListItem,
+  sinkListItem,
+  liftListItem,
+} from "prosemirror-schema-list";
+import {
+  inputRules,
+  InputRule,
+  wrappingInputRule,
+  textblockTypeInputRule,
+} from "prosemirror-inputrules";
+import {
+  tableEditing,
+  goToNextCell,
+  isInTable,
+  selectedRect,
+  addRowAfter,
+} from "prosemirror-tables";
+import { t } from "../../desktop/i18n.mjs";
+import { loadMath, mayContainMath } from "../markdown.js";
+import { schema, load, write, mapBlocks } from "./markdown.js";
+import {
+  DrawnView,
+  closer,
+  stepIn,
+  grab,
+  openSelected,
+  watchFormulas,
+} from "./math.js";
+import { linkPlugins, editLink } from "./links.js";
+import { attachMenu } from "./menu.js";
+
+const S = schema.nodes;
+const M = schema.marks;
+
+// Where each top-level block starts in the note (for reading positions).
+const startsOf = new WeakMap();
+// The block holding the caret is always laid out (rich.css lets the browser
+// skip blocks off screen; a block just made must not be skipped).
+const caretBlock = new Plugin({
+  props: {
+    decorations(state) {
+      const { $from } = state.selection;
+      if ($from.depth < 1) return null;
+      const from = $from.before(1);
+      const node = state.doc.child($from.index(0));
+      return DecorationSet.create(state.doc, [
+        Decoration.node(from, from + node.nodeSize, { class: "rich-current" }),
+      ]);
+    },
+  },
+});
+
+class ImageView {
+  constructor(node, fileId) {
+    this.dom = document.createElement("img");
+    const src = node.attrs.src || "";
+    this.dom.alt = node.attrs.alt || "";
+    this.dom.decoding = "async";
+    if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src))
+      this.dom.src = src;
+    else if (fileId && src && !/^(?:https?:|javascript:|blob:)/i.test(src))
+      this.dom.src = `folio-asset://${fileId}/?path=${encodeURIComponent(src)}`;
+    else
+      this.dom.alt = t("{alt}（远程图片默认禁用）", {
+        alt: node.attrs.alt || t("图片"),
+      });
+  }
+  ignoreMutation() {
+    return true;
+  }
+}
+class TaskView {
+  constructor(node, view, getPos) {
+    this.dom = document.createElement("input");
+    this.dom.type = "checkbox";
+    this.dom.className = "task-list-item-checkbox";
+    this.dom.checked = node.attrs.checked;
+    this.dom.setAttribute("aria-label", t("切换任务完成状态"));
+    this.dom.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      const pos = getPos();
+      if (typeof pos !== "number") return;
+      const now = view.state.doc.nodeAt(pos);
+      view.dispatch(
+        view.state.tr.setNodeMarkup(pos, null, { checked: !now.attrs.checked }),
+      );
+    });
+  }
+  stopEvent() {
+    return true;
+  }
+  ignoreMutation() {
+    return true;
+  }
+}
+
+// Enter in a table goes to the cell below (a new row after the last).
+const cellBelow = (state, dispatch, view) => {
+  if (!isInTable(state)) return false;
+  const go = (st) => {
+    const rect = selectedRect(st);
+    if (rect.top + 1 >= rect.map.height) return false;
+    const pos =
+      rect.tableStart +
+      rect.map.map[(rect.top + 1) * rect.map.width + rect.left];
+    view.dispatch(
+      st.tr.setSelection(TextSelection.near(st.doc.resolve(pos + 1))),
+    );
+    return true;
+  };
+  if (go(state)) return true;
+  addRowAfter(state, dispatch);
+  return go(view.state);
+};
+// Enter in a task item starts the next with an empty box; Enter in an empty
+// task item (only its box) leaves the list like any empty item.
+const splitItem = (state, dispatch, view) => {
+  const { $from } = state.selection;
+  const para = $from.parent;
+  const isTask =
+    $from.depth >= 2 &&
+    $from.node(-1).type === S.list_item &&
+    para.firstChild?.type === S.task_box;
+  if (isTask && para.childCount === 1) {
+    const tr = state.tr.delete($from.start(), $from.start() + 1);
+    view.dispatch(tr);
+    return liftListItem(S.list_item)(view.state, view.dispatch);
+  }
+  if (!splitListItem(S.list_item)(state, dispatch)) return false;
+  if (isTask) {
+    const st = view.state;
+    view.dispatch(
+      st.tr.insert(st.selection.from, [S.task_box.create(), schema.text(" ")]),
+    );
+  }
+  return true;
+};
+const hardBreak = (state, dispatch) => {
+  dispatch?.(
+    state.tr.replaceSelectionWith(S.hard_break.create()).scrollIntoView(),
+  );
+  return true;
+};
+
+const rules = inputRules({
+  rules: [
+    // $x$ typed becomes a formula; $$ and a space starts a display formula.
+    new InputRule(
+      /(?<![$\\\w])\$([^$\s](?:[^$]*[^$\s])?)\$$/,
+      (state, m, start, end) =>
+        state.tr.replaceWith(
+          start,
+          end,
+          S.math_inline.create({ tex: m[1], raw: m[0] }),
+        ),
+    ),
+    new InputRule(/^\$\$\s$/, (state, _m, start) => {
+      const $start = state.doc.resolve(start);
+      if (
+        $start.parent.type !== S.paragraph ||
+        $start.parent.textContent.trim() !== "$$"
+      )
+        return null;
+      const from = $start.before();
+      const block = S.code_block.create(
+        { params: "$$" },
+        schema.text("$$\n\n$$"),
+      );
+      const tr = state.tr.replaceWith(from, $start.after(), block);
+      return tr.setSelection(TextSelection.create(tr.doc, from + 4));
+    }),
+    wrappingInputRule(/^\s*([-+*])\s$/, S.bullet_list, (m) => ({
+      bullet: m[1],
+    })),
+    wrappingInputRule(
+      /^(\d+)([.)])\s$/,
+      S.ordered_list,
+      (m) => ({ order: +m[1], delim: m[2] }),
+      (m, node) => node.childCount + node.attrs.order === +m[1],
+    ),
+    new InputRule(/^\[([ xX])\]\s$/, (state, m, start, end) => {
+      const $start = state.doc.resolve(start);
+      if ($start.depth < 2 || $start.node(-1).type !== S.list_item) return null;
+      return state.tr.replaceWith(start, end, [
+        S.task_box.create({ checked: m[1] !== " " }),
+        schema.text(" "),
+      ]);
+    }),
+    wrappingInputRule(/^\s*>\s$/, S.blockquote),
+    textblockTypeInputRule(/^(#{1,6})\s$/, S.heading, (m) => ({
+      level: m[1].length,
+      markup: "#",
+    })),
+    textblockTypeInputRule(/^(```|~~~)([\w+#.-]*)\s$/, S.code_block, (m) => ({
+      markup: m[1],
+      params: m[2],
+    })),
+  ],
+});
+
+export function createRichEditor({ host, getTheme, follow, onText, onFocus }) {
+  let current = null;
+  const nodeViews = {
+    math_inline: (n, v, g) => new DrawnView(n, v, g, options()),
+    math_display: (n, v, g) => new DrawnView(n, v, g, options()),
+    raw_block: (n, v, g) => new DrawnView(n, v, g, options()),
+    raw_inline: (n, v, g) => new DrawnView(n, v, g, options()),
+    image: (n) => new ImageView(n, current?.fileId),
+    task_box: (n, v, g) => new TaskView(n, v, g),
+  };
+  const options = () => ({ fileId: current?.fileId, theme: getTheme() });
+  const plugins = [
+    rules,
+    caretBlock,
+    closer,
+    history(),
+    ...linkPlugins({ follow: (href) => follow(href) }),
+    tableEditing(),
+
+    keymap({
+      "Mod-z": undo,
+      "Mod-y": redo,
+      "Mod-Shift-z": redo,
+      "Mod-b": toggleMark(M.strong),
+      "Mod-i": toggleMark(M.em),
+      "Mod-k": (_s, _d, view) => editLink(view),
+      ArrowLeft: stepIn(-1),
+      ArrowRight: stepIn(1),
+      Enter: chainCommands(openSelected, cellBelow, splitItem),
+      "Shift-Enter": chainCommands(exitCode, hardBreak),
+      Tab: chainCommands(
+        goToNextCell(1),
+        sinkListItem(S.list_item),
+        () => true,
+      ),
+      "Shift-Tab": chainCommands(
+        goToNextCell(-1),
+        liftListItem(S.list_item),
+        () => true,
+      ),
+      Backspace: chainCommands(
+        deleteSelection,
+        grab(-1),
+        joinBackward,
+        selectNodeBackward,
+      ),
+      Delete: chainCommands(deleteSelection, grab(1)),
+    }),
+    keymap(baseKeymap),
+  ];
+
+  function stateFor(doc) {
+    const loaded = load(doc.text);
+    const state = EditorState.create({ doc: loaded.doc, plugins });
+    const written = write(state.doc, loaded);
+    startsOf.set(state.doc, spans(written));
+    return { loaded, state, text: doc.text, written: written.text };
+  }
+  function spans({ starts, text }) {
+    return {
+      from: starts,
+      to: starts.map((s, i) =>
+        i + 1 < starts.length ? starts[i + 1] : text.length,
+      ),
+    };
+  }
+
+  const view = new EditorView(host, {
+    state: EditorState.create({ schema }),
+    nodeViews,
+    attributes: { spellcheck: "false", "aria-label": t("编辑笔记") },
+    dispatchTransaction(tr) {
+      const doc = current;
+      if (!doc?.rich) return;
+      const { state, transactions } = view.state.applyTransaction(tr);
+      const changed = transactions.some((x) => x.docChanged);
+      if (changed) {
+        for (const x of transactions) mapBlocks(doc.rich.loaded, x.mapping);
+        const written = write(state.doc, doc.rich.loaded);
+        startsOf.set(state.doc, spans(written));
+        doc.rich.text = written.text;
+      }
+      doc.rich.state = state;
+      view.updateState(state);
+      if (changed) onText(doc, doc.rich.text);
+    },
+    handleDOMEvents: {
+      focus: () => {
+        onFocus?.();
+        return false;
+      },
+    },
+  });
+  const detachMenu = attachMenu(view, { follow: (href) => follow(href) });
+  const scroller = host.parentElement;
+  watchFormulas(scroller);
+  // The top-level block holding a note offset: its position and source span.
+  function blockAt(from) {
+    const starts = startsOf.get(view.state.doc);
+    if (!starts) return null;
+    let index = 0;
+    for (let i = 0; i < starts.from.length; i++)
+      if (starts.from[i] <= from) index = i;
+    let pos = 0;
+    view.state.doc.forEach((_n, p, i) => i === index && (pos = p));
+    return { pos, from: starts.from[index], to: starts.to[index] };
+  }
+  // For tests and debugging on the dev server only.
+  if (import.meta.env?.DEV) window.__richView = view;
+
+  // Show doc in its own editor state. When its text changed elsewhere
+  // (source pane, disk, a proposal) since the editor last wrote it, the note
+  // is read again (its undo history here starts over) and the caret stays
+  // about where it was. Returns false, editing nothing, for a note that
+  // would not be written back exactly as it is.
+  async function show(doc) {
+    if (mayContainMath(doc.text)) await loadMath();
+    const again = doc.rich && doc.rich.text !== doc.text;
+    const at = again ? doc.rich.state.selection.from : 0;
+    if (!doc.rich || again) {
+      const next = stateFor(doc);
+      if (next.written !== doc.text) return false;
+      doc.rich = next;
+    }
+    current = doc;
+    if (view.state !== doc.rich.state) view.updateState(doc.rich.state);
+    if (again) {
+      const pos = Math.min(at, view.state.doc.content.size);
+      view.dispatch(
+        view.state.tr.setSelection(
+          TextSelection.near(view.state.doc.resolve(pos)),
+        ),
+      );
+    }
+    return true;
+  }
+  return {
+    view,
+    show,
+    get doc() {
+      return current;
+    },
+    // Draw formulas and diagrams again (theme, math loaded).
+    redraw() {
+      if (!current?.rich) return;
+      view.setProps({ nodeViews: { ...nodeViews } });
+    },
+    focus() {
+      view.focus();
+    },
+    hasFocus: () => view.hasFocus(),
+    // The caret at a note offset (the start of the block holding it).
+    caretAt(from) {
+      const hit = blockAt(from);
+      if (!hit) return;
+      view.dispatch(
+        view.state.tr.setSelection(
+          TextSelection.near(view.state.doc.resolve(hit.pos + 1)),
+        ),
+      );
+    },
+    // The reading position, as the reading view keeps it ({from, y,
+    // fraction}): the block at the top of the pane, and how far into it.
+    anchor() {
+      if (scroller.scrollTop < 2) return { from: 0, y: 0, top: true };
+      const box = scroller.getBoundingClientRect();
+      const y = box.top + 32;
+      const hit = view.posAtCoords({ left: box.left + box.width / 2, top: y });
+      const starts = startsOf.get(view.state.doc);
+      if (!hit || !starts) return { from: 0, y: 0, top: true };
+      const index = view.state.doc.resolve(hit.pos).index(0);
+      let pos = 0;
+      view.state.doc.forEach((_n, p, i) => i === index && (pos = p));
+      const dom = view.nodeDOM(pos);
+      const r = dom?.getBoundingClientRect?.();
+      const fraction = r
+        ? Math.max(0, Math.min(1, (y - r.top) / Math.max(1, r.height)))
+        : 0;
+      return { from: starts.from[index] ?? 0, y: 32, fraction };
+    },
+    // Scroll to a reading position (from the reading view or this pane).
+    scrollTo(anchor, behavior = "instant") {
+      if (!anchor || anchor.top) return scroller.scrollTo({ top: 0, behavior });
+      const hit = blockAt(anchor.from || 0);
+      const dom = hit && view.nodeDOM(hit.pos);
+      if (!dom?.getBoundingClientRect) return;
+      const r = dom.getBoundingClientRect();
+      const box = scroller.getBoundingClientRect();
+      const fraction =
+        anchor.fraction ??
+        Math.min(
+          1,
+          ((anchor.from || 0) - hit.from) / Math.max(1, hit.to - hit.from),
+        );
+      scroller.scrollTo({
+        top:
+          scroller.scrollTop +
+          r.top -
+          box.top +
+          fraction * r.height -
+          (anchor.y ?? 32),
+        behavior,
+      });
+    },
+    destroy() {
+      detachMenu();
+      view.destroy();
+    },
+  };
+}

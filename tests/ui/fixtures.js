@@ -100,6 +100,22 @@ function harness(api) {
         read: async () => ({ unchanged: true }),
         list: async () => [],
         ...overrides,
+        // Specs written for Edit mode as preview and source pane keep it;
+        // a spec of the new editor (src/rich) asks for it with richEdit.
+        ...(overrides.ready && {
+          ready: async (...args) => {
+            const ready = await overrides.ready(...args);
+            const settings = ready?.settings || {};
+            return {
+              ...ready,
+              settings: {
+                richEdit: false,
+                ...("richEdit" in settings ? {} : { editSplit: true }),
+                ...settings,
+              },
+            };
+          },
+        }),
         // Specs receive what main would persist: complete drafts, never references.
         session: async (value) => {
           const persisted = receiveSession(value);

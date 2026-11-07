@@ -74,6 +74,11 @@ function formulaFragment(html) {
   }
   return fragment.cloneNode(true);
 }
+// A formula as a sanitized DOM fragment, for the editor (src/rich/math.js);
+// TeX source in a pending span until KaTeX has loaded.
+export function formulaFragmentFor(source, display) {
+  return formulaFragment(math(source, display));
+}
 function escapedDisplayMath(source) {
   let result = "";
   for (let i = 0; i < source.length;) {

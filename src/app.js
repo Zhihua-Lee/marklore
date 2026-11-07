@@ -584,6 +584,7 @@ directEditor = createDirectEditor({
 richEditor = createRichEditor({
   host: $("#rich"),
   getTheme: () => settings.theme,
+  typeMarkdown: () => settings.typeMarkdown,
   follow: (href) => run(() => navigateLink(href))(),
   onFocus: () => {
     if (active) active.pane = "preview";

@@ -706,9 +706,30 @@ export function mapBlocks(loaded, mapping) {
 // A touched block keeps its own text except where it was changed: the
 // change between the block as first read and now, both written from the
 // tree, is carried over onto the source text where the two line up.
-function merge(source, before, after, node, env) {
-  if (before === source || before === after)
-    return before === after ? source : after;
+// First as typed (unescaped): a `\*` elsewhere in the block does not make
+// what was typed escaped too; escaped only where typed text would otherwise
+// read as formatting it is not.
+function merge(origin, node, env) {
+  origin.plain ??= unescaped(origin.node);
+  const plain = splice(origin.text, origin.plain, unescaped(node));
+  if (plain !== null && readsAs(plain, node, env)) return plain;
+  const after = writeBlock(node, env);
+  const merged = splice(origin.text, writeBlock(origin.node, env), after);
+  return merged !== null && readsAs(merged, node, env) ? merged : after;
+}
+function readsAs(text, node, env) {
+  try {
+    const back = parser.parse(text, { ...env }).content;
+    return back.childCount === 1 && back.firstChild.eq(node);
+  } catch {
+    return false;
+  }
+}
+// The source with the change from `before` to `after` (two writings of the
+// block) carried over where they line up; null where they do not.
+function splice(source, before, after) {
+  if (before === after) return source;
+  if (before === source) return after;
   let p = 0;
   const max = Math.min(before.length, after.length);
   while (p < max && before[p] === after[p]) p++;
@@ -719,17 +740,13 @@ function merge(source, before, after, node, env) {
   )
     s++;
   const runs = alignment(before, source);
-  if (!runs) return after;
+  if (!runs) return null;
   const from = mapOffset(runs, p, true);
   const to = mapOffset(runs, before.length - s, false);
-  if (from === null || to === null || from > to) return after;
-  const merged =
-    source.slice(0, from) + after.slice(p, after.length - s) + source.slice(to);
-  try {
-    const back = parser.parse(merged, { ...env }).content;
-    if (back.childCount === 1 && back.firstChild.eq(node)) return merged;
-  } catch {}
-  return after;
+  if (from === null || to === null || from > to) return null;
+  return (
+    source.slice(0, from) + after.slice(p, after.length - s) + source.slice(to)
+  );
 }
 // Runs of equal text between a and b ([aFrom, aTo, bFrom]), by Myers' diff;
 // null when they differ too much to line up.
@@ -822,20 +839,61 @@ export function write(doc, loaded) {
       return;
     }
     const origin = loaded.blocks.find((b) => b.pos === pos && b.text !== null);
-    const written = writeBlock(node, loaded.env);
     out += origin
-      ? merge(
-          origin.text,
-          writeBlock(origin.node, loaded.env),
-          written,
-          node,
-          loaded.env,
-        )
-      : written;
+      ? merge(origin, node, loaded.env)
+      : writeBlock(node, loaded.env);
     out += origin ? gapAfter(origin, last) : last ? endGap() : "\n\n";
     kept.push(false);
   });
   return { text: out, starts, kept };
+}
+
+// The text a top-level block writes as (write() for that one block).
+function blockText(node, pos, loaded) {
+  const origin = loaded.blocks.find((b) => b.pos === pos && b.text !== null);
+  if (!origin) return writeBlock(node, loaded.env);
+  return origin.node === node || origin.node.eq(node)
+    ? origin.text
+    : merge(origin, node, loaded.env);
+}
+const unescaped = (node) => {
+  escaping = false;
+  try {
+    return serializeNodes([node]);
+  } finally {
+    escaping = true;
+  }
+};
+
+// Typing as Markdown (Settings → Editing): what was just typed goes into the
+// block's text as typed, without escapes, and the block is read again from
+// that text. `before` is the top-level block at `pos` before the keystroke,
+// `after` the same block after it (as inserted, plain text). Returns the
+// block as its text now reads (`**bold**` typed: bold) when that differs
+// from `after`, else null. The rest of the block keeps its own text: a
+// `\*` in the note stays a literal star.
+export function asTyped(loaded, pos, before, after) {
+  const source = blockText(before, pos, loaded);
+  const text = splice(source, unescaped(before), unescaped(after));
+  if (text === null || text === source) return null;
+  const back = parseBlocks(text, loaded.env);
+  if (back.length !== 1 || back[0].eq(after)) return null;
+  // Only a change the typing made: the block reads as typed except where
+  // the typed text now means something.
+  if (back[0].type !== after.type && !after.isTextblock) return null;
+  return back[0];
+}
+
+// Where an offset in text a falls in text b (b being a with characters
+// added or removed): kept text maps to itself; a removed character's place
+// to the end of the kept text before it.
+export function mapText(a, b, offset) {
+  const runs = alignment(a, b);
+  if (!runs) return Math.min(offset, b.length);
+  let best = 0;
+  for (const [aFrom, aTo, bFrom] of runs)
+    if (aFrom <= offset) best = bFrom + Math.min(offset - aFrom, aTo - aFrom);
+  return best;
 }
 
 // Insert text at pos as typing would (with the marks there) and keep the

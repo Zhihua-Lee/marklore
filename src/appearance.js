@@ -69,6 +69,7 @@ export const appearanceMarkup = `
   </fieldset>
   <fieldset id="settings-editing"><legend>${t("编辑")}</legend>
     ${row("rich-edit", t("在渲染后的正文里编辑"), '<input id="rich-edit" type="checkbox" class="switch">', t("编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑"))}
+    ${row("type-markdown", t("打出的 Markdown 立即成为格式"), '<input id="type-markdown" type="checkbox" class="switch">', t("像 Typora：打完 **粗体** 就变粗；关掉后符号按字面保留"))}
     ${row("edit-split", t("编辑模式显示源码栏"), '<input id="edit-split" type="checkbox" class="switch">', t("在正文旁同时显示 Markdown 源码，两边同步"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
@@ -141,6 +142,7 @@ export function applyAppearance(settings) {
   $("#reading-format").checked = settings.readingFormat;
   $("#rich-edit").checked = settings.richEdit;
   $("#edit-split").checked = settings.editSplit;
+  $("#type-markdown").checked = settings.typeMarkdown;
   $("#group-counts").checked = settings.groupCounts;
   $("#export-toc").checked = settings.exportToc;
   $("#outline-anchors").value = settings.outlineAnchors;
@@ -255,6 +257,8 @@ export function wireAppearance(change) {
     change({ showHistoryButtons: event.target.value === "visible" });
   $("#edit-split").onchange = (event) =>
     change({ editSplit: event.target.checked });
+  $("#type-markdown").onchange = (event) =>
+    change({ typeMarkdown: event.target.checked });
   $("#rich-edit").onchange = (event) =>
     change({ richEdit: event.target.checked });
   $("#reading-format").onchange = (event) =>

@@ -341,6 +341,9 @@ export default {
   批注: "Annotation",
   编辑模式显示源码栏: "Show the source pane in Edit mode",
   在渲染后的正文里编辑: "Edit the note as it reads",
+  "打出的 Markdown 立即成为格式": "Typed Markdown becomes formatting",
+  "像 Typora：打完 **粗体** 就变粗；关掉后符号按字面保留":
+    "As in Typora: **bold** turns bold once typed; off, the symbols stay as typed",
   "编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑":
     "In Edit mode, type right in the formatted note; formulas, tables and links are edited in place",
   "在正文旁同时显示 Markdown 源码，两边同步":

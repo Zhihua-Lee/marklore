@@ -5,6 +5,7 @@
 // as before. Each tab keeps its own editor state, so its undo history and
 // caret survive switching tabs.
 import { EditorState, Plugin, TextSelection } from "prosemirror-state";
+import { Slice, Fragment } from "prosemirror-model";
 import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
 import { gapCursor, GapCursor } from "prosemirror-gapcursor";
@@ -38,7 +39,15 @@ import {
 } from "prosemirror-tables";
 import { t } from "../../desktop/i18n.mjs";
 import { loadMath, mayContainMath } from "../markdown.js";
-import { schema, load, write, mapBlocks } from "./markdown.js";
+import {
+  schema,
+  load,
+  write,
+  mapBlocks,
+  asTyped,
+  mapText,
+  parseBlocks,
+} from "./markdown.js";
 import {
   DrawnView,
   closer,
@@ -239,8 +248,95 @@ const rules = inputRules({
   ],
 });
 
-export function createRichEditor({ host, getTheme, follow, onText, onFocus }) {
+// The relative position in a block where its text (atoms as one
+// character, blocks parted by a line break) reaches `count` characters.
+const flat = (node, to = node.content.size) =>
+  node.textBetween(0, to, "\n", "￼");
+function placeOfText(node, count) {
+  for (let r = 0; r <= node.content.size; r++)
+    if (flat(node, r).length >= count) return r;
+  return node.content.size;
+}
+
+export function createRichEditor({
+  host,
+  getTheme,
+  follow,
+  onText,
+  onFocus,
+  typeMarkdown = () => true,
+}) {
   let current = null;
+  // Text just typed (handleTextInput), for typing as Markdown.
+  let typed = null;
+  // Typing as Markdown: once what was typed makes the block read
+  // differently (`**bold**` closed), the block becomes what it reads as and
+  // the caret stays after the typed text. Not in code, nor in a formula's
+  // source.
+  function retype(old, state, hit) {
+    const end = hit.from + hit.text.length;
+    if (end > state.doc.content.size) return null;
+    const $end = state.doc.resolve(end);
+    if ($end.depth < 1 || !$end.parent.inlineContent) return null;
+    if ($end.parent.type === S.code_block) return null;
+    if ($end.marks().some((m) => m.type === M.math_src || m.type === M.code))
+      return null;
+    const index = $end.index(0);
+    const pos = $end.before(1);
+    const $old = old.doc.resolve(Math.min(hit.from, old.doc.content.size));
+    if ($old.depth < 1 || $old.index(0) !== index || $old.before(1) !== pos)
+      return null;
+    const after = state.doc.child(index);
+    const next = asTyped(current.rich.loaded, pos, old.doc.child(index), after);
+    if (!next) return null;
+    const k = flat(after, end - pos - 1).length;
+    const r = placeOfText(next, mapText(flat(after), flat(next), k));
+    const tr = state.tr.replaceWith(
+      pos + 1,
+      pos + 1 + after.content.size,
+      next.content,
+    );
+    tr.setNodeMarkup(pos, next.type, next.attrs);
+    const $at = tr.doc.resolve(Math.min(pos + 1 + r, tr.doc.content.size));
+    tr.setSelection(TextSelection.near($at));
+    // Typing on after a closed `**bold**` is plain again.
+    const $c = tr.selection.$from;
+    tr.setStoredMarks(
+      $c.marks().filter((m) => $c.nodeAfter && m.isInSet($c.nodeAfter.marks)),
+    );
+    return tr;
+  }
+  const typing = new Plugin({
+    props: {
+      handleTextInput(view, from, to, text) {
+        typed =
+          typeMarkdown() && /[^\p{L}\p{N}\s]/u.test(text)
+            ? { from, to, text }
+            : null;
+        return false;
+      },
+      // Pasted plain text is read as Markdown (not in code).
+      clipboardTextParser(text, $context, plain) {
+        if (plain || !typeMarkdown() || $context.parent.type === S.code_block)
+          return null;
+        const nodes = parseBlocks(text, current?.rich?.loaded.env);
+        if (!nodes.length) return null;
+        // Within a line, the spaces around the pasted text are kept.
+        const [, lead, trail] = /^([ \t]*)[\s\S]*?([ \t]*)$/.exec(text);
+        if (
+          nodes.length === 1 &&
+          nodes[0].type === S.paragraph &&
+          (lead || trail)
+        ) {
+          let inner = nodes[0].content;
+          if (lead) inner = Fragment.from(schema.text(lead)).append(inner);
+          if (trail) inner = inner.append(Fragment.from(schema.text(trail)));
+          nodes[0] = nodes[0].copy(inner);
+        }
+        return Slice.maxOpen(Fragment.from(nodes));
+      },
+    },
+  });
   const nodeViews = {
     math_inline: (n, v, g) => new DrawnView(n, v, g, options()),
     math_display: (n, v, g) => new DrawnView(n, v, g, options()),
@@ -252,6 +348,7 @@ export function createRichEditor({ host, getTheme, follow, onText, onFocus }) {
   const options = () => ({ fileId: current?.fileId, theme: getTheme() });
   const plugins = [
     rules,
+    typing,
     caretBlock,
     closer,
     history(),
@@ -315,10 +412,20 @@ export function createRichEditor({ host, getTheme, follow, onText, onFocus }) {
     dispatchTransaction(tr) {
       const doc = current;
       if (!doc?.rich) return;
-      const { state, transactions } = view.state.applyTransaction(tr);
+      const old = view.state;
+      let { state, transactions } = old.applyTransaction(tr);
       const changed = transactions.some((x) => x.docChanged);
       if (changed) {
         for (const x of transactions) mapBlocks(doc.rich.loaded, x.mapping);
+        const hit = typed;
+        typed = null;
+        const fix = hit && !view.composing && retype(old, state, hit);
+        if (fix) {
+          const more = state.applyTransaction(fix);
+          state = more.state;
+          for (const x of more.transactions)
+            mapBlocks(doc.rich.loaded, x.mapping);
+        }
         const written = write(state.doc, doc.rich.loaded);
         startsOf.set(state.doc, spans(written));
         doc.rich.text = written.text;

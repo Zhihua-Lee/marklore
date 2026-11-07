@@ -68,6 +68,7 @@ import { createBlockEditor } from "./block-editing.js";
 import { createSelectionTools } from "./selection-tools.js";
 import { createDirectEditor } from "./direct-editing.js";
 import { createRichEditor } from "./rich/editor.js";
+import { insertImages } from "./rich/commands.js";
 import { createProposals } from "./proposals.js";
 import { createComments } from "./comments.js";
 import { wireAiSettings } from "./ai-settings.js";
@@ -496,6 +497,7 @@ editingKeys = wireEditing({
   insertImage: () => imageInsertion.pick(),
   getLinkTargets: (doc) =>
     api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
+  rich: { target: richTarget },
 });
 blockEditor = createBlockEditor({
   content: $("#content"),
@@ -536,7 +538,15 @@ blockEditor = createBlockEditor({
 imageInsertion = createImageInsertion({
   view,
   getDocument: () => active,
-  getBlockEditor: () => blockEditor,
+  // Images go where the caret is in the editor of Edit mode, else to the
+  // pencil's panel, else into the source.
+  getBlockEditor: () => ({
+    imageInsertion: () => {
+      const target = richTarget();
+      if (target) return (images) => insertImages(target, images);
+      return blockEditor.imageInsertion();
+    },
+  }),
   api,
   report: toast,
 });
@@ -617,6 +627,16 @@ richEditor = createRichEditor({
     }
   },
 });
+// The editor of Edit mode's view when the toolbar, images and the like go
+// to it: it is shown, and the source pane is hidden or was not typed into
+// last.
+function richTarget() {
+  return richEditor &&
+    richActive() &&
+    (!sourcePaneShown() || active?.pane !== "editor")
+    ? richEditor.view
+    : null;
+}
 // Edit mode shows the editor for notes (not diffs, nor a proposal shown as
 // it would read).
 function richActive(doc = active) {

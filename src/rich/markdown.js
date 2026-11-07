@@ -220,7 +220,10 @@ export const schema = new Schema({
     }),
   marks: marks
     .update("em", { ...marks.get("em"), attrs: { markup: { default: "*" } } })
-    .update("strong", {
+    // Bold ranks first: italic inside bold is written `***a* b**`, not
+    // `***a*** **b**`.
+    .remove("strong")
+    .addBefore("em", "strong", {
       ...marks.get("strong"),
       attrs: { markup: { default: "**" } },
     })

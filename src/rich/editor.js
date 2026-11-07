@@ -414,6 +414,13 @@ export function createRichEditor({
     dispatchTransaction(tr) {
       const doc = current;
       if (!doc?.rich) return;
+      // The note changed elsewhere (the source pane, the disk) since the
+      // editor last read it: no change is made on the old note; it is read
+      // again first.
+      if (tr.docChanged && doc.rich.text !== doc.text) {
+        show(doc);
+        return;
+      }
       const old = view.state;
       let { state, transactions } = old.applyTransaction(tr);
       const changed = transactions.some((x) => x.docChanged);

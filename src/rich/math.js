@@ -210,7 +210,8 @@ export const closer = new Plugin({
     const runs = [];
     state.doc.descendants((node, pos) => {
       if (node.type === S.code_block && isOpen(node)) {
-        if (!(from >= pos && to <= pos + node.nodeSize))
+        // Inside it (not before or after it, as a gap cursor can be).
+        if (!(from > pos && to < pos + node.nodeSize))
           runs.push({ kind: "block", pos, node });
         return false;
       }
@@ -241,7 +242,9 @@ export const closer = new Plugin({
         tr.replaceWith(run.pos, run.pos + run.node.nodeSize, made);
         continue;
       }
-      if (from >= run.from && from <= run.to && to <= run.to) continue;
+      // Still open while the caret is between its delimiters; just past
+      // the closing one (End, a click after it) it has been left.
+      if (from > run.from && from < run.to && to <= run.to) continue;
       const text = state.doc.textBetween(run.from, run.to);
       const node = inlineFrom(text);
       if (node) tr.replaceWith(run.from, run.to, node);

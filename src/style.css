@@ -616,7 +616,7 @@ main[data-empty="true"] > #panes {
 .prose {
   max-width: 760px;
   margin: auto;
-  padding: 44px 48px 80px 32px;
+  padding: 54px 48px 80px 32px;
   font-size: var(--note-size);
   line-height: 1.8;
   font-family: var(--font-note);
@@ -1032,6 +1032,7 @@ main[data-empty="true"] > #panes {
   background: var(--reading-paper);
 }
 #reader,
+#rich-reader,
 .preview-scroll,
 .prose .math-block,
 .prose pre,
@@ -1040,6 +1041,7 @@ main[data-empty="true"] > #panes {
 }
 :is(
   #reader,
+  #rich-reader,
   .preview-scroll,
   .prose .math-block,
   .prose pre,
@@ -1050,6 +1052,7 @@ main[data-empty="true"] > #panes {
 }
 :is(
   #reader,
+  #rich-reader,
   .preview-scroll,
   .prose .math-block,
   .prose pre,
@@ -1059,6 +1062,7 @@ main[data-empty="true"] > #panes {
 }
 :is(
   #reader,
+  #rich-reader,
   .preview-scroll,
   .prose .math-block,
   .prose pre,
@@ -1071,6 +1075,7 @@ main[data-empty="true"] > #panes {
 }
 :is(
     #reader,
+    #rich-reader,
     .preview-scroll,
     .prose .math-block,
     .prose pre,
@@ -1080,6 +1085,7 @@ main[data-empty="true"] > #panes {
 }
 :is(
   #reader,
+  #rich-reader,
   .preview-scroll,
   .prose .math-block,
   .prose pre,

@@ -77,7 +77,7 @@ export function createImageInsertion({
     (event) => {
       if (
         document.querySelector("dialog[open]") ||
-        !event.target.closest(".cm-editor,#reader")
+        !event.target.closest(".cm-editor,#reader,#rich-reader")
       )
         return;
       const files = [...(event.clipboardData?.files || [])].filter(isImageFile);

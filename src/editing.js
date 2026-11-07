@@ -8,6 +8,7 @@ import { icon } from "./icons.js";
 import { wireColorButton } from "./color-picker.js";
 import { t } from "../desktop/i18n.mjs";
 import { attachLinkPicker } from "./link-picker.js";
+import { richCommand } from "./rich/commands.js";
 import "./editing.css";
 
 export const editingHighlight = syntaxHighlighting(
@@ -60,6 +61,9 @@ export function wireEditing({
   getDocument,
   insertImage,
   getLinkTargets = null,
+  // The editor of Edit mode, when it is the one typed into: the toolbar
+  // acts on it instead of the source pane.
+  rich = { target: () => null },
 }) {
   const host = document.createElement("div");
   host.className = "editing-tools";
@@ -99,7 +103,10 @@ export function wireEditing({
       group.append(host.querySelector(selector));
     host.append(group);
   }
-  document.querySelector(".pane-caption").replaceWith(host);
+  // One toolbar for both editors, over the top of the panes: it takes no
+  // room, so the note stays where it is between reading and editing.
+  document.querySelector(".pane-caption").remove();
+  document.querySelector("#panes").append(host);
   // Preserve the existing status target without taking up a toolbar row.
   const position = document.createElement("span");
   position.id = "editor-position";
@@ -112,6 +119,11 @@ export function wireEditing({
   const apply = (action, options = {}, expected = getDocument()) => {
     if (!expected || expected !== getDocument() || expected.mode === "read")
       return false;
+    const target = rich.target();
+    if (target) {
+      richCommand(target, action, options);
+      return true;
+    }
     if (action === "undo" || action === "redo") {
       (action === "undo" ? undo : redo)(view);
     } else {
@@ -138,7 +150,15 @@ export function wireEditing({
     const doc = getDocument(),
       state = view.state;
     if (!doc || doc.mode === "read") return;
-    const selection = state.selection.main;
+    const target = rich.target();
+    // A link at the caret or around the selection: its address box.
+    if (target && action === "link" && richCommand(target, "link")) return;
+    const selection = target
+      ? {
+          from: target.state.selection.from,
+          to: target.state.selection.to,
+        }
+      : state.selection.main;
     const title = {
       link: t("插入链接"),
       table: t("插入表格"),
@@ -153,7 +173,9 @@ export function wireEditing({
     dialog.innerHTML = `<form><h2 id="edit-insert-title">${title}</h2>${fields}<p class="insert-error" role="alert" hidden></p><div class="dialog-actions"><button type="button" data-cancel>${t("取消")}</button><button type="submit" class="primary">${t("插入")}</button></div></form>`;
     if (action === "link") {
       const label = dialog.querySelector('[name="label"]');
-      label.value = state.sliceDoc(selection.from, selection.to);
+      label.value = target
+        ? target.state.doc.textBetween(selection.from, selection.to)
+        : state.sliceDoc(selection.from, selection.to);
       // Pick a note or anchor in the library instead of typing its path; an
       // empty label takes the name of what is picked.
       if (getLinkTargets && doc.fileId) {
@@ -171,13 +193,15 @@ export function wireEditing({
     dialog.querySelector("form").onsubmit = (event) => {
       event.preventDefault();
       try {
-        if (doc !== getDocument() || state !== view.state)
+        if (
+          doc !== getDocument() ||
+          (target ? target !== rich.target() : state !== view.state)
+        )
           throw Error(t("笔记已改变，请关闭此窗口后重新插入。"));
-        apply(
-          action,
-          Object.fromEntries(new FormData(event.currentTarget)),
-          doc,
-        );
+        const options = Object.fromEntries(new FormData(event.currentTarget));
+        if (target && action === "link")
+          richCommand(target, "linkText", options);
+        else apply(action, options, doc);
         dialog.close();
       } catch (error) {
         const message = dialog.querySelector(".insert-error");
@@ -186,7 +210,7 @@ export function wireEditing({
       }
     };
     dialog.onclose = () => {
-      if (doc === getDocument()) view.focus();
+      if (doc === getDocument()) (target || view).focus();
     };
     dialog.showModal();
   }
@@ -216,6 +240,17 @@ export function wireEditing({
         const doc = getDocument(),
           state = view.state;
         if (!doc || doc.mode === "read") return null;
+        const target = rich.target();
+        if (target)
+          return {
+            apply(options) {
+              if (doc !== getDocument() || target !== rich.target())
+                throw Error(t("笔记或选区已改变，请重新选择文字。"));
+              if (!target.state.selection.empty)
+                richCommand(target, action, options);
+            },
+            focus: () => target.focus(),
+          };
         return {
           apply(options) {
             if (

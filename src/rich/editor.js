@@ -734,6 +734,15 @@ export function createRichEditor({
     state: EditorState.create({ schema }),
     nodeViews,
     attributes: { spellcheck: "false", "aria-label": t("编辑笔记") },
+    // An arrow key left to the browser moves the caret before the editor
+    // hears of it (Chromium reports the move a little later): the next key
+    // soon after was decided from the old place, so a second Right stepped
+    // over a formula instead of opening it and Delete took the character
+    // before it. The caret is read first.
+    handleKeyDown(view) {
+      if (!view.composing) view.domObserver.flush();
+      return false;
+    },
     dispatchTransaction(tr) {
       const doc = current;
       if (!doc?.rich) return;

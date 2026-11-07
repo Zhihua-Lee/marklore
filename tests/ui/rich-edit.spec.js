@@ -79,13 +79,21 @@ test("a formula is one unit: Backspace selects it, then removes it", async ({
 }) => {
   await boot(page);
   // "价格 \$5" is plain text; the formula in the quote is "$x^2 + y^2 = 1$".
-  await caretAfter(page, "引用里也有公式 ");
+  // The caret goes to the formula's edge by keyboard: newer Chromium hits
+  // the italic x a pixel before the formula's box, so a click at the very
+  // edge would open it.
+  const beforeFormula = async () => {
+    await caretAfter(page, "引用里也有公式");
+    await page.keyboard.press("ArrowRight");
+  };
+  await beforeFormula();
+  await expect(editor(page).locator(".math-src")).toHaveCount(0);
   await page.keyboard.press("ArrowRight");
   // Stepping in with the arrow opens its source in place.
   await expect(editor(page).locator(".math-src")).toHaveText("$x^2 + y^2 = 1$");
   await page.keyboard.press("End");
   await expect(editor(page).locator(".math-src")).toHaveCount(0);
-  await caretAfter(page, "引用里也有公式 ");
+  await beforeFormula();
   await page.keyboard.press("Delete");
   await expect(
     editor(page).locator(".rich-picked, .ProseMirror-selectednode"),

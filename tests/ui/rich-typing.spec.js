@@ -93,11 +93,30 @@ test("with the setting off, typed symbols stay literal", async ({ page }) => {
 
 test("formulas wait while the input method composes", async ({ page }) => {
   test.setTimeout(60000);
-  // Enough formulas that typesetting them all takes a while.
+  // Idle time comes when the test says: a fast machine would otherwise
+  // typeset every formula before the composition starts.
+  await page.addInitScript(() => {
+    const held = [];
+    let hold = true;
+    const request = window.requestIdleCallback.bind(window);
+    window.requestIdleCallback = (callback, options) =>
+      hold ? held.push(callback) : request(callback, options);
+    window.idleTime = {
+      run() {
+        const deadline = { didTimeout: false, timeRemaining: () => 50 };
+        for (const callback of held.splice(0)) callback(deadline);
+      },
+      release() {
+        hold = false;
+        this.run();
+      },
+    };
+  });
+  // More formulas than the screen and its margin hold: one a paragraph.
   const formulas = Array.from(
     { length: 600 },
     (_, i) => `$\\frac{a_{${i}}}{b} + \\sqrt{c_{${i}}}$`,
-  ).join(" ");
+  ).join("\n\n");
   await boot(page, "开头\n\n" + formulas + "\n");
   const total = 600;
   const count = () => page.locator("#rich .katex").count();
@@ -111,9 +130,11 @@ test("formulas wait while the input method composes", async ({ page }) => {
   const before = await count();
   expect(before).toBeLessThan(total);
   // Idle time passes mid-composition: the page around it is left alone.
+  await page.evaluate(() => window.idleTime.run());
   await page.waitForTimeout(800);
   expect(await count()).toBe(before);
   await cdp.send("Input.insertText", { text: "中" });
+  await page.evaluate(() => window.idleTime.release());
   await expect.poll(count, { timeout: 30000 }).toBe(total);
   expect((await saved(page)).startsWith("开头中\n")).toBe(true);
 });

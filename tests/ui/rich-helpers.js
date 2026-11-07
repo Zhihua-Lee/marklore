@@ -58,6 +58,15 @@ export async function boot(page, text = note, settings = {}) {
   await page.keyboard.press("Control+2");
   await expect(page.locator("#rich .ProseMirror")).toBeVisible();
   await expect(page.locator("#reader")).toBeHidden();
+  // The editor shows an empty paragraph until a long note is read in.
+  if (text.trim())
+    await expect
+      .poll(() =>
+        page
+          .locator("#rich .ProseMirror")
+          .evaluate((e) => e.textContent.trim()),
+      )
+      .not.toBe("");
 }
 export const editor = (page) => page.locator("#rich .ProseMirror");
 // The note's text as saving would write it.

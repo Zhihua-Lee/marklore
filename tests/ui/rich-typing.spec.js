@@ -216,3 +216,20 @@ test("Markdown typed through the input method becomes formatting", async ({
   await expect(editor(page).locator("strong")).toHaveText("粗体");
   expect(await saved(page)).toBe("Start**粗体**\n");
 });
+
+test("backticks outside code show in the code font", async ({ page }) => {
+  await boot(page, "Start\n");
+  await caretAfter(page, "Start");
+  await page.keyboard.type(" a `` b");
+  await expect(editor(page).locator(".rich-tick")).toHaveCount(2);
+  const font = await editor(page)
+    .locator(".rich-tick")
+    .first()
+    .evaluate((el) => getComputedStyle(el).fontFamily);
+  expect(font).toMatch(/Mono/i);
+  // Closed, they are the code's own markup and show no more.
+  for (let i = 0; i < 4; i++) await page.keyboard.press("Backspace");
+  await page.keyboard.type("`x`");
+  await expect(editor(page).locator("p code")).toHaveText("x");
+  await expect(editor(page).locator(".rich-tick")).toHaveCount(0);
+});

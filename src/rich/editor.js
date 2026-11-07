@@ -361,6 +361,58 @@ const codeRing = new Plugin({
     },
   },
 });
+// Backticks typed outside code show in the code font: in the note's font a
+// run of them (```) is drawn at uneven heights, and they are markup still
+// waiting to close. Only the text that changed is looked at again.
+const TICK = /`/g;
+function ticksIn(doc, from, to, out) {
+  doc.nodesBetween(from, to, (node, pos, parent) => {
+    if (node.type === S.code_block) return false;
+    if (!node.isText || inCode(node)) return true;
+    if (parent?.type === S.code_block) return false;
+    for (const m of node.text.matchAll(TICK)) {
+      const at = pos + m.index;
+      if (at >= from && at < to)
+        out.push(Decoration.inline(at, at + 1, { class: "rich-tick" }));
+    }
+    return false;
+  });
+  return out;
+}
+const tickFont = new Plugin({
+  state: {
+    init: (_, state) =>
+      DecorationSet.create(
+        state.doc,
+        ticksIn(state.doc, 0, state.doc.content.size, []),
+      ),
+    apply(tr, set) {
+      if (!tr.docChanged) return set;
+      set = set.map(tr.mapping, tr.doc);
+      const doc = tr.doc;
+      const ranges = [];
+      tr.mapping.maps.forEach((map, i) => {
+        const rest = tr.mapping.slice(i + 1);
+        map.forEach((_a, _b, start, end) =>
+          ranges.push([rest.map(start, -1), rest.map(end, 1)]),
+        );
+      });
+      for (const [a, b] of ranges) {
+        // The whole lines the change touched.
+        const from = doc.resolve(Math.min(a, doc.content.size)).start();
+        const to = doc.resolve(Math.min(b, doc.content.size)).end();
+        set = set.remove(set.find(from, to));
+        set = set.add(doc, ticksIn(doc, from, to, []));
+      }
+      return set;
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state);
+    },
+  },
+});
 const hardBreak = (state, dispatch) => {
   dispatch?.(
     state.tr.replaceSelectionWith(S.hard_break.create()).scrollIntoView(),
@@ -588,7 +640,7 @@ export function createRichEditor({
     raw_inline: (n, v, g) => new DrawnView(n, v, g, options()),
     image: (n) => new ImageView(n, current?.fileId),
     task_box: (n, v, g) => new TaskView(n, v, g),
-    code_block: (n) => new CodeView(n),
+    code_block: (n, v, g) => new CodeView(n, v, g),
     table: () => new TableView(),
   };
   const options = () => ({ fileId: current?.fileId, theme: getTheme() });
@@ -603,6 +655,7 @@ export function createRichEditor({
     finder.plugin,
     caretBlock,
     codeRing,
+    tickFont,
     closer,
     history(),
     ...linkPlugins({ follow: (href) => follow(href) }),

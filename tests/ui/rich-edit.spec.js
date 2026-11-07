@@ -321,3 +321,22 @@ test("a double click on a word while reading selects it in the editor", async ({
     "First line.\n\nSecond **strong** word here.\n",
   );
 });
+
+test("a code block's language: a click on it edits it", async ({ page }) => {
+  const text = "Intro\n\n```js\nconst a = 1;\n```\n";
+  await boot(page, text);
+  const label = editor(page).locator(".code-language");
+  await expect(label).toHaveText("js");
+  await label.click();
+  const field = editor(page).locator(".code-language-field");
+  await expect(field).toBeFocused();
+  await field.fill("python");
+  await field.press("Enter");
+  await expect(editor(page).locator(".code-language")).toHaveText("python");
+  expect(await saved(page)).toBe(text.replace("```js", "```python"));
+  // Esc keeps it.
+  await editor(page).locator(".code-language").click();
+  await editor(page).locator(".code-language-field").fill("go");
+  await editor(page).locator(".code-language-field").press("Escape");
+  await expect(editor(page).locator(".code-language")).toHaveText("python");
+});

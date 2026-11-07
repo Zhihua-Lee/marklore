@@ -344,6 +344,8 @@ export default {
   "字面输入（自动转义）": "Literal typing (escape symbols)",
   中文旁的粗体与斜体: "Bold and italic beside CJK text",
   属性: "Properties",
+  点击修改代码语言: "Click to change the code language",
+  代码语言: "Code language",
   "**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号":
     "Bold closed after punctuation and followed by CJK text shows as bold too; apps that follow CommonMark strictly still show the stars",
   "打出的 Markdown 符号按原样显示，写入文件时自动加反斜杠；关闭时像 Typora，打完 **粗体** 就变粗":

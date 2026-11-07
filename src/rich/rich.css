@@ -254,3 +254,32 @@
 #rich .rich-find-current {
   background-color: color-mix(in srgb, #e58a1f 70%, transparent);
 }
+/* A code block's language: a click edits it. */
+#rich .code-language {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: -4px;
+}
+#rich .code-language:is(:hover, :focus-visible) {
+  background: #ffffff14;
+  color: #e6e6e6;
+  outline: none;
+}
+#rich .code-language-field {
+  width: 12em;
+  font: inherit;
+  color: #e6e6e6;
+  background: #1b1b1c;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, #ffffff30);
+  border-radius: 4px;
+  padding: 1px 4px;
+  margin-left: -5px;
+  outline: none;
+}
+/* Backticks outside code: the code font (the note's font draws a run of
+   them at uneven heights). */
+#rich .rich-tick {
+  font-family: var(--font-code);
+  font-size: 0.88em;
+}

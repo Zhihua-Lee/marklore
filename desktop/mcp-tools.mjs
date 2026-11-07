@@ -228,6 +228,7 @@ const shown = (p, client) => ({
   ...(p.status === "accepted" ? { saved: p.saved === true } : {}),
   ...(p.error ? { error: p.error } : {}),
   ...(p.kind === "edit" ? { edits: p.edits.length } : {}),
+  ...(p.results ? { edit_results: p.results } : {}),
   yours: p.client === client,
 });
 
@@ -513,7 +514,7 @@ export function createTools({ store }) {
       name: "get_proposal",
       title: "Check a proposal",
       description:
-        'Whether a proposal is still waiting (pending), or was accepted, rejected, withdrawn, failed or lapsed (two weeks without a decision). "saved": false means the owner accepted it into a note with unsaved changes of their own, so it is not on disk until they save.',
+        'Whether a proposal is still waiting (pending), or was accepted, rejected, withdrawn, failed or lapsed (two weeks without a decision). "saved": false means the owner accepted it into a note with unsaved changes of their own, so it is not on disk until they save. The owner may decide an edit proposal edit by edit: "edit_results" then gives the decision on each edit (accepted, rejected or pending, in the order of your edits), and the proposal counts as accepted when any edit was.',
       inputSchema: {
         type: "object",
         properties: { id: { type: "string" } },

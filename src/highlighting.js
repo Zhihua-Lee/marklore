@@ -68,6 +68,33 @@ const aliases = new Map([
   ["jl", "julia"],
 ]);
 const cache = createBoundedCache();
+// The languages a fence can name, for the editor's language field: each
+// grammar's name, title and aliases, and the fences drawn without one.
+export async function codeLanguages() {
+  await loadHighlighter();
+  const list = hljs.listLanguages().map((name) => {
+    const language = hljs.getLanguage(name);
+    return {
+      name,
+      title: language.name || name,
+      aliases: (language.aliases || []).filter((a) => a !== name),
+    };
+  });
+  for (const [alias, name] of aliases) {
+    const entry = list.find((l) => l.name === name);
+    if (entry && !entry.aliases.includes(alias)) entry.aliases.push(alias);
+  }
+  // Plain text is written ```text more often than ```plaintext.
+  const plain = list.findIndex((l) => l.name === "plaintext");
+  if (plain >= 0) list.splice(plain, 1);
+  list.push(
+    { name: "mermaid", title: "Mermaid", aliases: [] },
+    { name: "text", title: "Plain text", aliases: ["plaintext", "txt"] },
+  );
+  if (!list.some((l) => l.name === "diff"))
+    list.push({ name: "diff", title: "Diff", aliases: ["patch"] });
+  return list;
+}
 export const MAX_HIGHLIGHT_CHARS = 100000;
 export function highlightCode(code, language = "") {
   const requested = language.trim().toLowerCase();

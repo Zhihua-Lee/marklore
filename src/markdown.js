@@ -8,6 +8,7 @@ import DOMPurify from "dompurify";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
 import { t } from "../desktop/i18n.mjs";
+import { propertiesCard } from "./properties.js";
 import { createSlugger } from "../desktop/slug.mjs";
 
 export function lineOffsets(source) {
@@ -795,33 +796,7 @@ function frontMatter(md) {
     },
   );
   md.renderer.rules.front_matter = (tokens, i, _o, _env, self) =>
-    frontMatterCard(tokens[i].content, self.renderAttrs(tokens[i]));
-}
-// Simple `key: value` lines; anything else shows as written.
-function frontMatterFields(yaml) {
-  const fields = [];
-  for (const line of yaml.split(/\r?\n/)) {
-    const m = /^([\w-]+)\s*:\s*(.*)$/.exec(line);
-    if (m) fields.push([m[1], m[2].replace(/^(["'])(.*)\1$/, "$2")]);
-    else if (fields.length && line.trim())
-      fields.at(-1)[1] += "\n" + line.trim();
-  }
-  return fields;
-}
-export function frontMatterCard(yaml, attrs = "", open = true) {
-  const fields = frontMatterFields(yaml);
-  const get = (k) => fields.find(([key]) => key === k)?.[1];
-  const brief = [get("title"), get("modified") || get("updated") || get("date")]
-    .filter(Boolean)
-    .map((v) => `<span>${escape(v)}</span>`)
-    .join("");
-  const line = `<span class="front-matter-label">${escape(t("属性"))}</span>${brief}`;
-  // In the editor: the one line; a click there opens the source.
-  if (!open) return `<div class="front-matter">${line}</div>`;
-  const rows = fields
-    .map(([k, v]) => `<dt>${escape(k)}</dt><dd>${escape(v)}</dd>`)
-    .join("");
-  return `<details class="front-matter"${attrs}><summary>${line}</summary><dl>${rows}</dl></details>\n`;
+    propertiesCard(tokens[i].content, { attrs: self.renderAttrs(tokens[i]) });
 }
 const parser = createParser().use(frontMatter);
 const outlineParser = createParser()

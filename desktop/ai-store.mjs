@@ -192,15 +192,27 @@ export function createAiStore(folder) {
     },
     // Changes a proposal still waiting: `change` returns the fields to set.
     async decide(id, change, now = new Date()) {
-      const value = await readJson(fileOf(id));
-      if (!value) throw Error(`There is no proposal ${id}.`);
-      if (value.status !== "pending" || isLapsed(value, now.getTime()))
-        throw Error(
-          `Proposal ${id} is already ${isLapsed(value, now.getTime()) ? "lapsed" : value.status}.`,
-        );
-      const next = { ...value, ...change(value), decided: now.toISOString() };
-      await writeJson(fileOf(id), next);
-      return next;
+      return settle(id, change, now, true);
+    },
+    // The same, the proposal still waiting after it (one of its edits
+    // decided).
+    async update(id, change, now = new Date()) {
+      return settle(id, change, now, false);
     },
   };
+  async function settle(id, change, now, decided) {
+    const value = await readJson(fileOf(id));
+    if (!value) throw Error(`There is no proposal ${id}.`);
+    if (value.status !== "pending" || isLapsed(value, now.getTime()))
+      throw Error(
+        `Proposal ${id} is already ${isLapsed(value, now.getTime()) ? "lapsed" : value.status}.`,
+      );
+    const next = {
+      ...value,
+      ...change(value),
+      ...(decided ? { decided: now.toISOString() } : {}),
+    };
+    await writeJson(fileOf(id), next);
+    return next;
+  }
 }

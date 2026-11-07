@@ -36,6 +36,8 @@ export function locateEdits(text, edits) {
       return { error: { edit: changes[i].edit, reason: "overlap" } };
   return {
     changes: changes.map(({ from, to, insert }) => ({ from, to, insert })),
+    // The edit (its index in `edits`) each change comes from.
+    order: changes.map((change) => change.edit),
   };
 }
 
@@ -82,6 +84,132 @@ export function changedRanges(text, changes) {
   return ranges;
 }
 
+// Words of a text for a word diff: runs of spaces, of letters and digits,
+// and single CJK characters and punctuation marks (a Chinese sentence has no
+// spaces, so its characters are compared one by one).
+const WORD =
+  /\s+|(?:(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}])[\p{L}\p{N}_])+|[\s\S]/gu;
+export const words = (text) => text.match(WORD) || [];
+// What two texts share at their start and end, in whole words: Friday →
+// Thursday is one word replaced, not "Fri" → "Thurs" before a kept "day".
+const LETTER =
+  /(?![\p{sc=Han}\p{sc=Hiragana}\p{sc=Katakana}\p{sc=Hangul}])[\p{L}\p{N}_]/u;
+const letter = (c) => c !== undefined && LETTER.test(c);
+function shared(a, b) {
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  while (
+    head > 0 &&
+    letter(a[head - 1]) &&
+    (letter(a[head]) || letter(b[head]))
+  )
+    head--;
+  let tail = 0;
+  while (
+    tail < a.length - head &&
+    tail < b.length - head &&
+    a[a.length - 1 - tail] === b[b.length - 1 - tail]
+  )
+    tail++;
+  while (
+    tail > 0 &&
+    letter(a[a.length - tail]) &&
+    (letter(a[a.length - 1 - tail]) || letter(b[b.length - 1 - tail]))
+  )
+    tail--;
+  return { head, tail };
+}
+// Above this many words a change is shown whole rather than word by word.
+const MAX_WORDS = 1200;
+
+// What each change does, word by word: the change's range in the new text
+// (`from`, `to`) and in the old (`oldFrom`, `oldTo`), and its pieces, each a
+// run of removed old text and the new text in its place. Changed words with
+// only spaces between them make one piece, so a rewritten phrase reads as
+// one struck run and one added run, not as alternating words.
+export function revisions(text, changes) {
+  const out = [];
+  let shift = 0;
+  for (const { from, to, insert } of changes) {
+    const { head, tail } = shared(text.slice(from, to), insert);
+    const oldFrom = from + head,
+      oldTo = to - tail,
+      newFrom = from + shift + head,
+      newTo = newFrom + insert.length - head - tail;
+    out.push({
+      from: newFrom,
+      to: newTo,
+      oldFrom,
+      oldTo,
+      pieces: wordPieces(
+        text.slice(oldFrom, oldTo),
+        insert.slice(head, insert.length - tail),
+        oldFrom,
+        newFrom,
+      ),
+    });
+    shift += insert.length - (to - from);
+  }
+  return out;
+}
+function wordPieces(a, b, oldAt, newAt) {
+  const one = () => [
+    {
+      oldFrom: oldAt,
+      oldTo: oldAt + a.length,
+      from: newAt,
+      to: newAt + b.length,
+    },
+  ];
+  if (!a || !b) return one();
+  const wa = words(a),
+    wb = words(b);
+  if (wa.length + wb.length > MAX_WORDS) return one();
+  const pieces = [];
+  let x = oldAt,
+    y = newAt,
+    piece = null,
+    gap = null;
+  for (const [kind, word] of diffSequence(wa, wb)) {
+    if (kind === "=") {
+      if (piece && !gap && /^\s+$/.test(word)) gap = { x, y };
+      else if (piece) {
+        pieces.push(piece);
+        piece = gap = null;
+      }
+      x += word.length;
+      y += word.length;
+      continue;
+    }
+    // Spaces between two changed runs join them.
+    if (piece) gap = null;
+    else piece = { oldFrom: x, oldTo: x, from: y, to: y };
+    if (kind === "-") x += word.length;
+    else y += word.length;
+    piece.oldTo = x;
+    piece.to = y;
+  }
+  if (piece) pieces.push(piece);
+  // What a piece keeps at its ends (a space removed and put back) is not
+  // part of it.
+  for (const p of pieces) {
+    const { head, tail } = shared(
+      a.slice(p.oldFrom - oldAt, p.oldTo - oldAt),
+      b.slice(p.from - newAt, p.to - newAt),
+    );
+    p.oldFrom += head;
+    p.from += head;
+    p.oldTo -= tail;
+    p.to -= tail;
+  }
+  return pieces.filter((p) => p.oldTo > p.oldFrom || p.to > p.from);
+}
+
+// Myers diff of two short lists: the operations that turn a into b, each
+// ["=" | "-" | "+", item].
+export function diffSequence(a, b) {
+  return diffLines(a, b);
+}
 // Line diff (Myers) of two short line lists: the operations that turn a into b.
 function diffLines(a, b) {
   const n = a.length,

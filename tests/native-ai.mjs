@@ -124,7 +124,12 @@ try {
   await page.getByRole("menuitem", { name: /Plan\.md/ }).click();
   const bar = page.locator("#proposal-bar");
   await bar.getByText("Earlier deadline").waitFor();
-  await page.locator("#content").getByText("Send it on Thursday.").waitFor();
+  // The changes view: the removed word struck through where it was.
+  await page.locator("#content del", { hasText: "Friday" }).waitFor();
+  await page
+    .locator("#content")
+    .getByText(/Send it on Friday\s*Thursday\./)
+    .waitFor();
   assert.equal(await fs.readFile(plan, "utf8"), note.text);
   await bar.getByRole("button", { name: "接受并保存" }).click();
   await bar.waitFor({ state: "hidden" });

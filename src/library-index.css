@@ -1,38 +1,91 @@
-/* A folder listed by its index file (desktop/folder-index.mjs): notes with
-   sub-pages fold like folders; the sub-pages sit indented under them. */
-#tree .page-row {
-  position: relative;
+/* The folder tree. Each row starts with one column for its fold arrow
+   (folders, and notes with sub-pages from an index file: the same arrow),
+   left empty on rows without one, so the names of one level line up. Each
+   level sits one step in, on a faint line down from its parent's arrow. */
+#tree {
+  --tree-step: 12px;
+  --tree-arrow: 16px;
+  --tree-guide: var(--line);
 }
-#tree .page-twisty {
-  position: absolute;
-  left: 2px;
-  top: 50%;
-  width: 16px;
-  height: 22px;
-  margin-top: -11px;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: var(--ink);
+#tree details.folder > summary {
+  display: block;
+  padding: 6px 4px 6px 3px;
+  list-style: none;
+  border-radius: 5px;
 }
+#tree details.folder > summary::-webkit-details-marker {
+  display: none;
+}
+#tree details.folder > summary::before,
 #tree .page-twisty::before {
   content: "";
-  position: absolute;
-  left: 5px;
-  top: 7px;
-  border-left: 6px solid currentColor;
-  border-top: 4px solid transparent;
-  border-bottom: 4px solid transparent;
+  display: inline-block;
+  width: var(--tree-arrow);
+  height: 14px;
+  margin-right: 2px;
+  vertical-align: -2px;
+  background: currentColor;
+  color: var(--muted);
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+}
+#tree details.folder[open] > summary::before,
+#tree .page:not(.closed) > .page-row > .page-twisty::before {
   transform: rotate(90deg);
 }
-#tree .page.closed > .page-row > .page-twisty::before {
-  transform: none;
+@media (prefers-reduced-motion: no-preference) {
+  #tree details.folder > summary::before,
+  #tree .page-twisty::before {
+    transition: transform 120ms ease;
+  }
 }
-#tree .page-twisty:hover {
-  color: var(--accent);
+#tree details.folder > summary:hover::before,
+#tree .page-twisty:hover::before {
+  color: var(--ink);
 }
+/* A note: its name where a folder's name starts. */
+#tree .file {
+  padding-left: calc(3px + var(--tree-arrow) + 2px);
+  border-radius: 5px;
+}
+/* One step in per level, on its parent's guide line. */
+#tree details.folder > :not(summary),
 #tree .pages {
-  margin-left: 12px;
+  margin-left: var(--tree-step);
+  border-left: 1px solid var(--tree-guide);
+}
+/* A note with sub-pages: its arrow in the same column. */
+#tree .page-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: 5px;
+}
+#tree .page-row:hover {
+  background: var(--hover);
+}
+#tree .page-twisty {
+  flex: none;
+  display: flex;
+  align-items: center;
+  width: calc(3px + var(--tree-arrow) + 2px);
+  min-height: 0;
+  padding: 0 0 0 3px;
+  border: 0;
+  background: none;
+}
+#tree .page-twisty::before {
+  margin-right: 0;
+}
+#tree .page-row > .file {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0;
+  background: none;
+}
+#tree .page-row:has(> .file[aria-current="page"]) {
+  background: var(--hover);
 }
 #tree .page.closed > .pages {
   display: none;

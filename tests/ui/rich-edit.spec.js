@@ -340,3 +340,43 @@ test("a code block's language: a click on it edits it", async ({ page }) => {
   await editor(page).locator(".code-language-field").press("Escape");
   await expect(editor(page).locator(".code-language")).toHaveText("python");
 });
+
+test("the language field lists matching languages", async ({ page }) => {
+  const text = "Intro\n\n```js\nconst a = 1;\n```\n";
+  await boot(page, text);
+  await editor(page).locator(".code-language").click();
+  const field = editor(page).locator(".code-language-field");
+  const menu = page.locator(".code-language-menu");
+  // Opened: every language, the current one picked.
+  await expect(menu.locator('[aria-selected="true"]')).toContainText(
+    "JavaScript",
+  );
+  expect(await menu.locator("li").count()).toBeGreaterThan(30);
+  // Typing narrows it; names starting with what was typed come first.
+  await field.fill("pyth");
+  await expect(menu.locator("li").first()).toContainText("Python");
+  await expect(menu.locator('[aria-selected="true"]')).toContainText("Python");
+  await field.press("Enter");
+  await expect(editor(page).locator(".code-language")).toHaveText("python");
+  await expect(menu).toHaveCount(0);
+  // Arrows move through the list; a click picks.
+  await editor(page).locator(".code-language").click();
+  await editor(page).locator(".code-language-field").fill("ru");
+  await expect(menu.locator("li").first()).toContainText("Ruby");
+  await editor(page).locator(".code-language-field").press("ArrowDown");
+  await expect(menu.locator('[aria-selected="true"]')).not.toContainText(
+    "Ruby",
+  );
+  await menu.locator("li", { hasText: "Rust" }).click();
+  await expect(editor(page).locator(".code-language")).toHaveText("rust");
+  // An alias typed in full is kept; an unknown name is taken as typed.
+  await editor(page).locator(".code-language").click();
+  await editor(page).locator(".code-language-field").fill("ts");
+  await editor(page).locator(".code-language-field").press("Enter");
+  await expect(editor(page).locator(".code-language")).toHaveText("ts");
+  await editor(page).locator(".code-language").click();
+  await editor(page).locator(".code-language-field").fill("zzlang");
+  await expect(menu).toBeHidden();
+  await editor(page).locator(".code-language-field").press("Enter");
+  await expect(editor(page).locator(".code-language")).toHaveText("zzlang");
+});

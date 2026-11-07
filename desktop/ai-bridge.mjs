@@ -129,19 +129,72 @@ export function createAiBridge({
     note: p.note,
     file: p.file,
     name: path.basename(p.file || p.note || ""),
-    ...(p.kind === "edit" ? { edits: p.edits } : { text: p.text }),
+    ...(p.kind === "edit"
+      ? { edits: p.edits, ...(p.results ? { results: p.results } : {}) }
+      : { text: p.text }),
   });
-  async function decide(id, { status, saved, error } = {}) {
+  // A whole proposal decided, or (with `edit`, its index) one of its edits:
+  // `results` keeps each edit's decision, and the proposal is decided when
+  // none waits any more (accepted when any edit was).
+  async function decide(id, { status, saved, error, edit } = {}) {
     if (!["accepted", "rejected", "failed"].includes(status))
       throw Error(t("无效操作"));
+    // Saved: every accepted edit is on disk.
+    const savedAfter = (p) =>
+      status === "accepted"
+        ? { saved: saved === true && p.saved !== false }
+        : p.saved === false
+          ? { saved: false }
+          : {};
+    if (edit !== undefined) {
+      if (status === "failed") throw Error(t("无效操作"));
+      const next = await store.update(id, (p) => {
+        if (
+          p.kind !== "edit" ||
+          !Number.isInteger(edit) ||
+          edit < 0 ||
+          edit >= p.edits.length
+        )
+          throw Error(t("无效操作"));
+        const results = p.results || p.edits.map(() => "pending");
+        if (results[edit] !== "pending") throw Error(t("无效操作"));
+        return {
+          results: results.map((r, i) => (i === edit ? status : r)),
+          ...savedAfter(p),
+        };
+      });
+      if (next.results.includes("pending")) return shown(next);
+      const accepted = next.results.includes("accepted");
+      return shown(
+        await store.decide(id, () => ({
+          status: accepted ? "accepted" : "rejected",
+          ...(accepted ? { saved: next.saved !== false } : {}),
+        })),
+      );
+    }
     return shown(
-      await store.decide(id, () => ({
-        status,
-        ...(status === "accepted" ? { saved: saved === true } : {}),
-        ...(status === "failed" && typeof error === "string"
-          ? { error: error.slice(0, 500) }
-          : {}),
-      })),
+      await store.decide(id, (p) => {
+        // The edits still waiting take this decision.
+        const results = p.results?.map((r) =>
+          r === "pending" && status !== "failed" ? status : r,
+        );
+        const final =
+          status === "rejected" && results?.includes("accepted")
+            ? "accepted"
+            : status;
+        return {
+          status: final,
+          ...(results ? { results } : {}),
+          ...(final === "accepted"
+            ? status === "accepted"
+              ? savedAfter(p)
+              : { saved: p.saved !== false }
+            : {}),
+          ...(status === "failed" && typeof error === "string"
+            ? { error: error.slice(0, 500) }
+            : {}),
+        };
+      }),
     );
   }
   // The note must still be in a library open to AI; otherwise the proposal

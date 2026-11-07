@@ -5,11 +5,7 @@
 // formula again. Raw blocks (HTML, diagrams, footnote definitions) open the
 // same way, as their source.
 import { NodeSelection, TextSelection, Plugin } from "prosemirror-state";
-import {
-  formulaFragmentFor,
-  renderMarkdown,
-  frontMatterCard,
-} from "../markdown.js";
+import { formulaFragmentFor, renderMarkdown } from "../markdown.js";
 import { renderDiagrams } from "../diagrams.js";
 import { composing, settled } from "../composing.js";
 import { t } from "../../desktop/i18n.mjs";
@@ -167,13 +163,6 @@ export class DrawnView {
         pre.append(code);
         dom.replaceChildren(pre);
         renderDiagrams(dom, theme);
-      } else if (kind === "frontmatter") {
-        // The note's properties as one line (as when read, folded).
-        const yaml = source.replace(
-          /^---[^\n]*\n|\n?(?:---|\.\.\.)[ \t]*$/g,
-          "",
-        );
-        dom.innerHTML = frontMatterCard(yaml, "", false);
       } else if (kind === "html") {
         dom.innerHTML = renderMarkdown(source, fileId).html;
       } else {

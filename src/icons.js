@@ -33,6 +33,14 @@ const paths = {
   sidebar:
     '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M5.7 8h.6m-.6 4h.6m-.6 4h.6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  // Note properties (properties.js): a date, a time, a tag, text, a notebook.
+  calendar:
+    '<rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 10h17M8 3v4m8-4v4"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  tag: '<path d="M3.5 12.5V4.5a1 1 0 0 1 1-1h8l8 8-9 9-8-8Z"/><circle cx="8.5" cy="8.5" r="1.3"/>',
+  text: '<path d="M5 7V5h14v2M12 5v14m-3 0h6"/>',
+  notebook:
+    '<path d="M6 3.5h12a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6Z"/><path d="M9 3.5v17M4 8h4m-4 4h4m-4 4h4"/>',
   minus: '<path d="M5 12h14"/>',
   // Links coming in from elsewhere: an arrow into a margin.
   backlink: '<path d="M20 12H9m4-5-5 5 5 5M4 5v14"/>',

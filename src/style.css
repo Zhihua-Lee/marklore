@@ -81,6 +81,7 @@ button {
   background: transparent;
   cursor: pointer;
   min-height: 30px;
+  line-height: 1.5;
   padding: 4px 9px;
   white-space: nowrap;
 }
@@ -315,9 +316,6 @@ button.primary {
   text-overflow: ellipsis;
   overflow: hidden;
   list-style-position: inside;
-}
-.folder .folder {
-  margin-left: 12px;
 }
 .file {
   display: block;
@@ -803,27 +801,35 @@ main[data-empty="true"] > #panes {
 .prose details[open] > summary::marker {
   content: "▾  ";
 }
-/* Front matter: one quiet line above the note, its fields when unfolded. */
-.prose .front-matter {
+/* Front matter (properties.js). Folded: one quiet line, as a page's date
+   under its title in OneNote. Unfolded: a row per property, a name with its
+   icon and the value beside it. */
+.prose details.front-matter {
   border: 0;
   background: none;
   padding: 0;
-  margin: 0 0 1em;
-  font-size: 0.8em;
-  color: var(--muted);
+  margin: 0 0 1.1em;
   box-shadow: none;
+  font-family: var(--font-ui);
+  font-size: 12.5px;
+  font-weight: 400;
+  color: var(--muted);
 }
-/* The note's first section starts right under it, as in the editor. */
 .prose > .front-matter + .note-section {
   margin-top: 0;
 }
-.prose .front-matter summary,
-.prose div.front-matter {
-  font-weight: 400;
+.prose .front-matter > summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25em 0.9em;
   align-items: baseline;
+  gap: 0.2em 1.1em;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 6px;
+  margin-left: -6px;
+  border-radius: 5px;
+  font-weight: 400;
+  list-style: none;
 }
 .prose .front-matter summary::marker {
   content: "";
@@ -831,43 +837,139 @@ main[data-empty="true"] > #panes {
 .prose .front-matter summary::-webkit-details-marker {
   display: none;
 }
-.prose .front-matter-label {
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 0 0.45em;
-}
-.prose .front-matter-label::before {
-  content: "▸ ";
-}
-.prose .front-matter[open] .front-matter-label::before {
-  content: "▾ ";
-}
-.prose div.front-matter .front-matter-label::before {
-  content: "";
-}
-.prose .front-matter dl {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 0.15em 1em;
-  margin: 0.5em 0 0;
-  padding: 0.5em 0.8em;
-  border-left: 2px solid var(--line);
-}
-.prose .front-matter dt {
-  font-family: var(--font-code);
-}
-.prose .front-matter dd {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+.prose .front-matter > summary:is(:hover, :focus-visible) {
+  background: var(--hover);
   color: var(--ink);
 }
-.prose details:not(.front-matter):not([open]):is(:hover, :focus-within),
-.prose details:not(.front-matter):has(> summary:is(:hover, :focus-visible)) {
+.prose .front-matter .fm-when {
+  color: var(--ink);
+  opacity: 0.78;
+  font-variant-numeric: tabular-nums;
+}
+.prose .front-matter .fm-count::after {
+  content: "";
+  display: inline-block;
+  width: 0.38em;
+  height: 0.38em;
+  margin: 0 0 0.18em 0.45em;
+  border-right: 1.3px solid currentColor;
+  border-bottom: 1.3px solid currentColor;
+  transform: rotate(-45deg);
+}
+.prose .front-matter[open] > summary .fm-count::after {
+  transform: rotate(45deg);
+  margin-bottom: 0.3em;
+}
+.prose .front-matter .fm-rows {
+  margin: 6px 0 0;
+  padding: 2px 0 6px;
+  border-bottom: 1px solid var(--line);
+}
+.prose .front-matter .fm-row {
+  display: grid;
+  grid-template-columns: minmax(7em, 11em) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  line-height: 1.5;
+  padding: 2px 6px;
+  margin: 0 -6px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.prose .front-matter .fm-row:hover {
+  background: var(--hover);
+}
+.prose .front-matter .fm-key {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+}
+.prose .front-matter .fm-key > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.prose .front-matter .fm-key .ui-icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+}
+.prose .front-matter .fm-value {
+  min-width: 0;
+  color: var(--ink);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.prose .front-matter .fm-empty {
+  color: var(--muted);
+  opacity: 0.7;
+}
+.prose .front-matter .fm-pill {
+  display: inline-block;
+  margin: 1px 4px 1px 0;
+  padding: 0 7px;
+  border-radius: 4px;
+  line-height: 1.6;
+  background: color-mix(in srgb, var(--accent) 13%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
+}
+.prose .front-matter .fm-place {
+  white-space: nowrap;
+}
+.prose .front-matter .fm-check {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+  border: 1.3px solid var(--muted);
+  border-radius: 3px;
+}
+.prose .front-matter .fm-check[data-on="true"] {
+  border-color: var(--accent);
+  background: var(--accent)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12 4 4L19 6'/%3E%3C/svg%3E")
+    center / 11px no-repeat;
+}
+/* Tools' keys (an exporter's ids): folded under "N more". */
+.prose .front-matter details.fm-more {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: none;
+  box-shadow: none;
+}
+.prose .front-matter details.fm-more > summary {
+  display: inline-block;
+  padding: 2px 6px;
+  margin: 2px 0 0 -6px;
+  border-radius: 5px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.prose .front-matter details.fm-more > summary::marker {
+  content: "";
+}
+.prose .front-matter details.fm-more > summary:hover {
+  background: var(--hover);
+}
+.prose .front-matter details.fm-more[open] > summary {
+  display: none;
+}
+.prose
+  details:not(.front-matter, .fm-more):not([open]):is(:hover, :focus-within),
+.prose
+  details:not(.front-matter, .fm-more):has(
+    > summary:is(:hover, :focus-visible)
+  ) {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
   box-shadow: 0 2px 9px #0000000a;
 }
-.prose details:not([open]):is(:hover, :focus-within) {
+.prose
+  details:not(.front-matter, .fm-more):not([open]):is(:hover, :focus-within) {
   background: color-mix(in srgb, var(--accent) 3%, var(--bg));
 }
 .prose details:not([open]):is(:hover, :focus-within) > summary::marker,

@@ -71,6 +71,7 @@ import { imageBox } from "./images.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 import { CodeView, TableView } from "./blocks.js";
+import { PropertiesView } from "./properties.js";
 
 const S = schema.nodes;
 const M = schema.marks;
@@ -636,7 +637,10 @@ export function createRichEditor({
   const nodeViews = {
     math_inline: (n, v, g) => new DrawnView(n, v, g, options()),
     math_display: (n, v, g) => new DrawnView(n, v, g, options()),
-    raw_block: (n, v, g) => new DrawnView(n, v, g, options()),
+    raw_block: (n, v, g) =>
+      n.attrs.kind === "frontmatter"
+        ? new PropertiesView(n, v, g)
+        : new DrawnView(n, v, g, options()),
     raw_inline: (n, v, g) => new DrawnView(n, v, g, options()),
     image: (n) => new ImageView(n, current?.fileId),
     task_box: (n, v, g) => new TaskView(n, v, g),

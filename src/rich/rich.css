@@ -277,6 +277,124 @@
   margin-left: -5px;
   outline: none;
 }
+/* The note's properties (properties.js): values change in place. */
+#rich .rich-properties .fm-value[role="button"] {
+  cursor: text;
+  border-radius: 4px;
+}
+#rich .rich-properties .fm-row[data-kind="bool"] .fm-value,
+#rich .rich-properties .fm-row[data-kind="complex"] .fm-value {
+  cursor: pointer;
+}
+#rich .rich-properties .fm-value:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+#rich .rich-properties .fm-input {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--line));
+  border-radius: 4px;
+  padding: 2px 6px;
+  outline: none;
+}
+#rich .rich-properties .fm-new {
+  grid-template-columns: minmax(7em, 11em) minmax(0, 1fr);
+}
+#rich .rich-properties .fm-delete {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  opacity: 0;
+  cursor: pointer;
+}
+#rich .rich-properties .fm-row:is(:hover, :focus-within) .fm-delete {
+  opacity: 1;
+}
+#rich .rich-properties .fm-delete:hover {
+  color: var(--danger);
+  background: var(--hover);
+}
+#rich .rich-properties .fm-delete .ui-icon {
+  width: 13px;
+  height: 13px;
+}
+#rich .rich-properties .fm-actions {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 0 -6px;
+}
+#rich .rich-properties .fm-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 12.5px var(--font-ui);
+  cursor: pointer;
+}
+#rich .rich-properties .fm-actions button:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+#rich .rich-properties .fm-actions .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+/* The languages under the field, narrowed as one types. */
+.code-language-menu {
+  position: fixed;
+  z-index: 70;
+  width: 260px;
+  max-height: 240px;
+  overflow: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--paper);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 6px 18px #0002;
+  font: 12px var(--font-ui);
+}
+.code-language-menu[hidden] {
+  display: none;
+}
+.code-language-menu li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.code-language-menu small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font: 11px var(--font-code);
+}
+.code-language-menu li:hover {
+  background: var(--hover);
+}
+.code-language-menu li[aria-selected="true"] {
+  background: color-mix(in srgb, var(--accent) 16%, var(--paper));
+}
 /* Backticks outside code: the code font (the note's font draws a run of
    them at uneven heights). */
 #rich .rich-tick {

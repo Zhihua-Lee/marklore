@@ -214,12 +214,17 @@ export function open(view, pos, side) {
     );
     inner = side > 0 ? pos + leadOf(text) : pos + text.length - closeOf(text);
   } else if (node.type === S.math_display || node.type === S.raw_block) {
-    const text =
-      node.type === S.math_display ? node.attrs.raw : node.attrs.source;
+    const parts =
+      node.type === S.math_display
+        ? displayParts(node.attrs.raw)
+        : { lead: "", text: node.attrs.source, tail: "" };
+    const { text } = parts;
     const block = S.code_block.create(
       {
         params:
           node.type === S.math_display ? OPEN_MATH : OPEN_RAW + node.attrs.kind,
+        lead: parts.lead,
+        tail: parts.tail,
       },
       text ? schema.text(text) : null,
     );
@@ -239,6 +244,21 @@ export function open(view, pos, side) {
   view.focus();
   return true;
 }
+// A display formula's source as its delimiters (`$$` or `\[` lines) and
+// the TeX between them: open for editing, only the TeX is text.
+export function displayParts(raw) {
+  const m =
+    /^(\$\$|\\\[)([ \t]*\r?\n)?([\s\S]*?)(\r?\n[ \t]*)?(\$\$|\\\])$/.exec(raw);
+  if (!m || (m[1] === "$$") !== (m[5] === "$$"))
+    return { lead: "", text: raw, tail: "" };
+  return { lead: m[1] + (m[2] || ""), text: m[3], tail: (m[4] || "") + m[5] };
+}
+// A new display formula, open for typing (`$$` lines around it).
+export const openMathBlock = (text = "") =>
+  S.code_block.create(
+    { params: OPEN_MATH, lead: "$$\n", tail: "\n$$" },
+    text ? schema.text(text) : null,
+  );
 const leadOf = (raw) => (raw.startsWith("$$") || raw.startsWith("\\(") ? 2 : 1);
 const closeOf = (raw) => (raw.endsWith("$$") || raw.endsWith("\\)") ? 2 : 1);
 
@@ -268,8 +288,8 @@ export const closer = new Plugin({
     const tr = state.tr;
     for (const run of runs.reverse()) {
       if (run.kind === "block") {
-        const text = run.node.textContent;
-        const params = run.node.attrs.params;
+        const { lead, tail, params } = run.node.attrs;
+        const text = lead + run.node.textContent + tail;
         let made;
         if (params.startsWith(OPEN_RAW))
           made = [

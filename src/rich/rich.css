@@ -56,6 +56,20 @@
   font-family: var(--font-code);
   font-size: 0.85em;
 }
+/* An open display formula: its `$$` lines are shown, not typed into. */
+#rich pre[data-lead]::before,
+#rich pre[data-tail]::after {
+  display: block;
+  color: var(--muted);
+  user-select: none;
+  pointer-events: none;
+}
+#rich pre[data-lead]::before {
+  content: attr(data-lead);
+}
+#rich pre[data-tail]::after {
+  content: attr(data-tail);
+}
 #rich .raw-inline {
   font-family: var(--font-code);
   font-size: 0.8em;
@@ -171,7 +185,9 @@
 #rich .ProseMirror > * {
   contain-intrinsic-size: auto 3em;
 }
-#rich .ProseMirror > :not(.rich-current, .ProseMirror-gapcursor) {
+/* Not lists: skipping contains them, and the margins of their items stop
+   collapsing through them (a list grew by 11px when the caret left it). */
+#rich .ProseMirror > :not(.rich-current, .ProseMirror-gapcursor, ul, ol) {
   content-visibility: auto;
 }
 /* The caret between two blocks (before or after a table, a formula...): a

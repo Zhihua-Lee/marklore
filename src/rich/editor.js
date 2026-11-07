@@ -61,6 +61,7 @@ import {
   grab,
   openSelected,
   watchFormulas,
+  openMathBlock,
 } from "./math.js";
 import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
@@ -69,6 +70,7 @@ import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
+import { CodeView, TableView } from "./blocks.js";
 
 const S = schema.nodes;
 const M = schema.marks;
@@ -167,6 +169,32 @@ const cellVert = (dir) => (state, dispatch, view) => {
   dispatch?.(state.tr.setSelection(next).scrollIntoView());
   return true;
 };
+// Out of a quote, a list or a fold with the arrows: from its last line
+// (first line, going up) the caret stops after (before) it when no line of
+// text follows (precedes) there, as between two tables; typing there
+// starts a paragraph. Without this only Enter twice got out of a quote at
+// the end of a note.
+const leaveBlock = (dir, side) => (state, dispatch, view) => {
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection) || !sel.empty) return false;
+  const $h = sel.$head;
+  if ($h.depth < 2) return false;
+  if (side === "left" || side === "right") {
+    if ($h.parentOffset !== (dir < 0 ? 0 : $h.parent.content.size))
+      return false;
+  } else if (!view.endOfTextblock(side)) return false;
+  for (let d = $h.depth - 1; d >= 1; d--) {
+    const node = $h.node(d);
+    if ($h.index(d) !== (dir < 0 ? 0 : node.childCount - 1)) return false;
+    const role = node.type.spec.tableRole;
+    if (role) return false;
+  }
+  const $out = state.doc.resolve(dir < 0 ? $h.before(1) : $h.after(1));
+  const beside = dir < 0 ? $out.nodeBefore : $out.nodeAfter;
+  if (beside?.isTextblock) return false;
+  dispatch?.(state.tr.setSelection(new GapCursor($out)).scrollIntoView());
+  return true;
+};
 // Enter in a table goes to the cell below (a new row after the last).
 const cellBelow = (state, dispatch, view) => {
   if (!isInTable(state)) return false;
@@ -250,12 +278,8 @@ const blockOnEnter = (state, dispatch) => {
     );
     tr.setSelection(TextSelection.create(tr.doc, from + 1));
   } else if (text === "$$") {
-    tr.replaceWith(
-      from,
-      to,
-      S.code_block.create({ params: "$$" }, schema.text("$$\n\n$$")),
-    );
-    tr.setSelection(TextSelection.create(tr.doc, from + 4));
+    tr.replaceWith(from, to, openMathBlock());
+    tr.setSelection(TextSelection.create(tr.doc, from + 1));
   } else if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(text)) {
     tr.replaceWith(from, to, [
       S.horizontal_rule.create({ markup: text }),
@@ -364,12 +388,8 @@ const rules = inputRules({
       )
         return null;
       const from = $start.before();
-      const block = S.code_block.create(
-        { params: "$$" },
-        schema.text("$$\n\n$$"),
-      );
-      const tr = state.tr.replaceWith(from, $start.after(), block);
-      return tr.setSelection(TextSelection.create(tr.doc, from + 4));
+      const tr = state.tr.replaceWith(from, $start.after(), openMathBlock());
+      return tr.setSelection(TextSelection.create(tr.doc, from + 1));
     }),
     wrappingInputRule(/^\s*([-+*])\s$/, S.bullet_list, (m) => ({
       bullet: m[1],
@@ -488,8 +508,43 @@ export function createRichEditor({
     );
     return tr;
   }
+  let composeStart = null;
   const typing = new Plugin({
     props: {
+      handleDOMEvents: {
+        compositionstart(view) {
+          composeStart = { state: view.state, doc: current };
+          return false;
+        },
+        compositionend(view) {
+          const begun = composeStart;
+          composeStart = null;
+          if (!begun || !typeMarkdown()) return false;
+          const start = begun.state;
+          setTimeout(() => {
+            if (view.composing || current !== begun.doc || !current?.rich)
+              return;
+            const now = view.state;
+            const from = start.selection.from;
+            const to = now.selection.from;
+            if (to <= from || to > now.doc.content.size) return;
+            const text = now.doc.textBetween(from, to, "\n", "");
+            const near =
+              now.doc.textBetween(Math.max(0, from - 1), from, "\n", "") +
+              now.doc.textBetween(
+                to,
+                Math.min(now.doc.content.size, to + 1),
+                "\n",
+                "",
+              );
+            if (!MARKUP.test(text) && !(/\S/.test(text) && MARKUP.test(near)))
+              return;
+            const fix = retype(start, now, { from, to: from, text });
+            if (fix) view.dispatch(fix);
+          }, 30);
+          return false;
+        },
+      },
       handleTextInput(view, from, to, text) {
         // Markup typed, or text typed next to markup (`x` typed between
         // two `$` makes a formula).
@@ -533,6 +588,8 @@ export function createRichEditor({
     raw_inline: (n, v, g) => new DrawnView(n, v, g, options()),
     image: (n) => new ImageView(n, current?.fileId),
     task_box: (n, v, g) => new TaskView(n, v, g),
+    code_block: (n) => new CodeView(n),
+    table: () => new TableView(),
   };
   const options = () => ({ fileId: current?.fileId, theme: getTheme() });
   const finder = findPlugin();
@@ -549,7 +606,10 @@ export function createRichEditor({
     closer,
     history(),
     ...linkPlugins({ follow: (href) => follow(href) }),
-    keymap({ ArrowUp: cellVert(-1), ArrowDown: cellVert(1) }),
+    keymap({
+      ArrowUp: chainCommands(cellVert(-1), leaveBlock(-1, "up")),
+      ArrowDown: chainCommands(cellVert(1), leaveBlock(1, "down")),
+    }),
     tableEditing(),
     gapCursor(),
     keymap({
@@ -568,8 +628,12 @@ export function createRichEditor({
       "Mod-b": toggleMark(M.strong),
       "Mod-i": toggleMark(M.em),
       "Mod-k": (_s, _d, view) => editLink(view),
-      ArrowLeft: chainCommands(codeEdge(-1), stepIn(-1)),
-      ArrowRight: chainCommands(codeEdge(1), stepIn(1)),
+      ArrowLeft: chainCommands(
+        codeEdge(-1),
+        stepIn(-1),
+        leaveBlock(-1, "left"),
+      ),
+      ArrowRight: chainCommands(codeEdge(1), stepIn(1), leaveBlock(1, "right")),
       Enter: chainCommands(openSelected, cellBelow, blockOnEnter, splitItem),
       "Shift-Enter": chainCommands(exitCode, hardBreak),
       Tab: chainCommands(

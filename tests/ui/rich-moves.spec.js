@@ -124,3 +124,29 @@ test("Up and Down in a table go to the cell above or below, then out", async ({
   expect(text).toMatch(/^Intro start\n\n\| a\? +\| b +\|\n/);
   expect(text).toMatch(/\| e1! +\| e2 +\|\n\ngo Outro\n$/);
 });
+
+test("Down out of a quote or a list at the end of the note", async ({
+  page,
+}) => {
+  await boot(page, "Intro\n\n> quoted\n");
+  await caretAfter(page, "quoted");
+  await page.keyboard.press("ArrowDown");
+  await expect(editor(page).locator(".ProseMirror-gapcursor")).toHaveCount(1);
+  await page.keyboard.type("after");
+  expect(await saved(page)).toBe("Intro\n\n> quoted\n\nafter\n");
+});
+
+test("Up before a list at the start, Right out of a quote before a quote", async ({
+  page,
+}) => {
+  await boot(page, "- one\n- two\n\n> q1\n\n> q2\n");
+  await caretAfter(page, "on");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.type("top");
+  await caretAfter(page, "q1");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.type("mid");
+  expect(await saved(page)).toBe(
+    "top\n\n- one\n- two\n\n> q1\n\nmid\n\n> q2\n",
+  );
+});

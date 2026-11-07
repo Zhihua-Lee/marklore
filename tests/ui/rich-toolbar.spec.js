@@ -219,3 +219,59 @@ test("an image dropped on the note goes where it was dropped", async ({
     text.indexOf("Third."),
   );
 });
+
+test("a text color stays visible under a highlight added after it", async ({
+  page,
+}) => {
+  await boot(page, "Paint this word.\n");
+  await selectText(page, "this");
+  await button(page, "文字颜色").click();
+  await selectText(page, "this");
+  await button(page, "文字高亮").click();
+  // The color inside the highlight, so the highlight's ink does not cover it.
+  await expect(editor(page).locator("mark span.rich-html")).toHaveText("this");
+  expect(await saved(page)).toMatch(
+    /^Paint <mark style="[^"]+"><span style="color: #[\da-f]{6}">this<\/span><\/mark> word\.\n$/,
+  );
+});
+
+test("a formula block from the toolbar: its $$ lines are not typed into", async ({
+  page,
+}) => {
+  await boot(page, "First.\n\nSecond.\n");
+  await caretAfter(page, "First.");
+  await button(page, "公式块").click();
+  const open = editor(page).locator('pre[data-params="$$"]');
+  await expect(open).toHaveAttribute("data-lead", "$$");
+  await expect(open.locator("code")).toHaveText("");
+  await page.keyboard.type("x^2");
+  // Up from its first line leaves it (the $$ line is not a place to type):
+  // it is drawn; Down picks it, Enter opens it again at its end.
+  await page.keyboard.press("ArrowUp");
+  await expect(editor(page).locator(".math-block .katex")).toBeVisible();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("3");
+  await expect(open.locator("code")).toHaveText("x^3");
+  await caretAfter(page, "Second.");
+  await expect(editor(page).locator(".math-block .katex")).toBeVisible();
+  expect(await saved(page)).toBe("First.\n\n$$\nx^3\n$$\n\nSecond.\n");
+});
+
+test("a highlight inside colored text shows the text's color", async ({
+  page,
+}) => {
+  await boot(
+    page,
+    'A <span style="color: #c0392b"><mark style="background-color: #f2d878; color: #1f1f1f">word</mark></span>.\n',
+  );
+  const color = (sel) =>
+    page.locator(sel).evaluate((el) => getComputedStyle(el).color);
+  const span = await color("#rich span.rich-html");
+  expect(await color("#rich mark")).toBe(span);
+  await page.keyboard.press("Control+1");
+  expect(await color("#content mark")).toBe(
+    await color("#content span[style]"),
+  );
+});

@@ -25,6 +25,7 @@ export function selectionBubble({ comment = null } = {}) {
         ["color", t("文字颜色"), icon("textColor")],
         ["link", t("链接"), icon("link")],
         ["inline", t("行内代码"), "&lt;/&gt;"],
+        ["inlineMath", t("行内公式"), icon("inlineMath")],
         ...(comment ? [["comment", t("添加批注"), icon("comment")]] : []),
       ];
       bar.innerHTML = `<div class="selection-actions">${actions.map(([action, label, body]) => `<button type="button" data-selection-action="${action}" aria-label="${label}" title="${label}">${body}</button>`).join("")}</div>`;

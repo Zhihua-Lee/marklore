@@ -76,9 +76,15 @@ export function wireEditing({
       t("文字样式"),
       [
         "select",
-        ...["bold", "italic", "strike", "highlight", "color", "inline"].map(
-          (id) => `[data-edit="${id}"]`,
-        ),
+        ...[
+          "bold",
+          "italic",
+          "strike",
+          "highlight",
+          "color",
+          "inline",
+          "inlineMath",
+        ].map((id) => `[data-edit="${id}"]`),
       ],
     ],
     [
@@ -88,7 +94,7 @@ export function wireEditing({
     [
       t("插入内容"),
       [
-        ...["link", "image", "table", "code", "math", "inlineMath", "rule"].map(
+        ...["link", "image", "table", "code", "math", "rule"].map(
           (id) => `[data-edit="${id}"]`,
         ),
       ],

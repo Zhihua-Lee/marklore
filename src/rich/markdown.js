@@ -129,7 +129,14 @@ export const schema = new Schema({
     })
     .update("code_block", {
       ...nodes.get("code_block"),
-      attrs: { params: { default: "" }, markup: { default: "```" } },
+      // lead and tail: the delimiters of a display formula open for editing
+      // (`$` lines), kept out of its text so they cannot be typed over.
+      attrs: {
+        params: { default: "" },
+        markup: { default: "```" },
+        lead: { default: "" },
+        tail: { default: "" },
+      },
       // Its edges are where the caret leaves it: Down at its end stops after
       // it, even when nothing follows (rich/editor.js, gap cursor).
       isolating: true,
@@ -664,8 +671,8 @@ const serializer = new MarkdownSerializer(
         node.attrs.params.startsWith("\u0000raw:")
       ) {
         // A display formula or raw block open for editing (math.js): its
-        // text is its source.
-        state.text(node.textContent, false);
+        // text is its source, between its delimiters.
+        state.text(node.attrs.lead + node.textContent + node.attrs.tail, false);
         state.closeBlock(node);
         return;
       }

@@ -205,3 +205,14 @@ test("a line starting with inline code: Left steps out before it", async ({
   await page.keyboard.type("x");
   expect(await saved(page)).toBe("x`a` b\n");
 });
+
+test("Markdown typed through the input method becomes formatting", async ({
+  page,
+}) => {
+  await boot(page, "Start\n");
+  await caretAfter(page, "Start");
+  // In Chinese mode, symbols come composed too, one by one.
+  for (const piece of ["*", "*", "粗体", "*", "*"]) await compose(page, piece);
+  await expect(editor(page).locator("strong")).toHaveText("粗体");
+  expect(await saved(page)).toBe("Start**粗体**\n");
+});

@@ -11,6 +11,7 @@ import { markdownEdit } from "../markdown-edits.js";
 import { highlightInk } from "../text-colors.js";
 import { schema, parseBlocks } from "./markdown.js";
 import { editLink } from "./links.js";
+import { openMathBlock } from "./math.js";
 
 const S = schema.nodes;
 const M = schema.marks;
@@ -103,6 +104,22 @@ function paint(action, color) {
             m,
           );
     });
+    // A text color stays inside a highlight (`<mark><span style="color">`):
+    // outside it, the highlight's own ink would cover it. Marks of one type
+    // nest in the order added, so colors are taken off and put back on.
+    const colors = [];
+    if (color && action === "highlight")
+      tr.doc.nodesBetween(from, to, (node, pos) => {
+        if (!node.isText) return;
+        for (const m of node.marks)
+          if (m.type === M.html && paints.color.is(m))
+            colors.push([
+              Math.max(from, pos),
+              Math.min(to, pos + node.nodeSize),
+              m,
+            ]);
+      });
+    for (const [a, b, m] of colors) tr.removeMark(a, b, m);
     if (color)
       tr.addMark(
         from,
@@ -113,6 +130,7 @@ function paint(action, color) {
           close: `</${kind.tag}>`,
         }),
       );
+    for (const [a, b, m] of colors) tr.addMark(a, b, m);
     dispatch?.(tr.scrollIntoView());
     return true;
   };
@@ -143,31 +161,62 @@ function insertMarkdown(action, options) {
     return true;
   };
 }
-// A display formula open for typing (as `$$` and a space do).
-function mathBlock(state, dispatch) {
-  const { from, to } = state.selection;
-  const selected = state.doc.textBetween(from, to, "\n");
-  const block = S.code_block.create(
-    { params: "$$" },
-    schema.text("$$\n" + selected + "\n$$"),
-  );
-  const tr = state.tr.replaceSelectionWith(block);
-  // The caret on the line between the two $$.
+// A new block at the caret: after the line the caret is in (before it with
+// the caret at its start; in its place when the line is empty), never
+// splitting the sentence the caret is in. A selection is replaced. Returns
+// the transaction and where the block starts, or null to let the
+// selection's replacement place it.
+function placeBlock(state, block) {
+  const { $from, empty } = state.selection;
+  if (!empty || !$from.parent.isTextblock || $from.depth < 1) return null;
+  const line = $from.parent;
+  const container = $from.node(-1);
+  const index = $from.index(-1);
+  const tr = state.tr;
+  if (line.type === S.paragraph && !line.content.size) {
+    if (!container.canReplaceWith(index, index + 1, block.type)) return null;
+    tr.replaceWith($from.before(), $from.after(), block);
+    return { tr, pos: $from.before() };
+  }
+  const at = $from.parentOffset === 0 ? index : index + 1;
+  if (!container.canReplaceWith(at, at, block.type)) return null;
+  const pos = at === index ? $from.before() : $from.after();
+  tr.insert(pos, block);
+  return { tr, pos };
+}
+// Where the block replacing the selection landed (the first such block
+// from the selection on).
+function landed(tr, from, test) {
   let at = null;
   tr.doc.nodesBetween(
     tr.mapping.map(from, -1),
     tr.doc.content.size,
     (node, pos) => {
-      if (
-        at === null &&
-        node.type === S.code_block &&
-        node.attrs.params === "$$"
-      )
-        at = pos + 1 + 3 + selected.length;
+      if (at === null && test(node)) at = pos;
       return at === null;
     },
   );
-  if (at !== null) tr.setSelection(TextSelection.create(tr.doc, at));
+  return at;
+}
+// A display formula open for typing (as `$$` and a space do).
+function mathBlock(state, dispatch) {
+  const { from, to } = state.selection;
+  const selected = state.doc.textBetween(from, to, "\n");
+  const block = openMathBlock(selected);
+  let placed = placeBlock(state, block);
+  if (!placed) {
+    const tr = state.tr.replaceSelectionWith(block);
+    const pos = landed(
+      tr,
+      from,
+      (node) => node.type === S.code_block && node.attrs.params === "$$",
+    );
+    placed = pos === null ? { tr, pos: null } : { tr, pos };
+  }
+  const { tr, pos } = placed;
+  // The caret at the end of its TeX (the $$ lines are not text).
+  if (pos !== null)
+    tr.setSelection(TextSelection.create(tr.doc, pos + 1 + selected.length));
   dispatch?.(tr.scrollIntoView());
   return true;
 }
@@ -177,18 +226,21 @@ function codeBlock(options) {
     if (!state.selection.empty)
       return insertMarkdown("code", options)(state, dispatch);
     const params = String(options.language || "").trim();
-    const tr = state.tr.replaceSelectionWith(S.code_block.create({ params }));
-    let at = null;
-    tr.doc.nodesBetween(
-      tr.mapping.map(state.selection.from, -1),
-      tr.doc.content.size,
-      (node, pos) => {
-        if (at === null && node.type === S.code_block && !node.content.size)
-          at = pos + 1;
-        return at === null;
-      },
-    );
-    if (at !== null) tr.setSelection(TextSelection.create(tr.doc, at));
+    const block = S.code_block.create({ params });
+    let placed = placeBlock(state, block);
+    if (!placed) {
+      const tr = state.tr.replaceSelectionWith(block);
+      placed = {
+        tr,
+        pos: landed(
+          tr,
+          state.selection.from,
+          (node) => node.type === S.code_block && !node.content.size,
+        ),
+      };
+    }
+    const { tr, pos } = placed;
+    if (pos !== null) tr.setSelection(TextSelection.create(tr.doc, pos + 1));
     dispatch?.(tr.scrollIntoView());
     return true;
   };

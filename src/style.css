@@ -1305,3 +1305,10 @@ dialog::backdrop {
     transition: none !important;
   }
 }
+
+/* A highlight inside colored text shows the text's color: the highlight's
+   own ink would cover it (`<span style="color">` around `<mark>`, as the
+   source pane writes a color added after a highlight). */
+.prose span[style^="color"] mark {
+  color: inherit !important;
+}

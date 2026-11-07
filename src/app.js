@@ -1251,6 +1251,7 @@ const linkPreview = createLinkPreview({
   },
 });
 wireCodeBlocks($("#content"), toast);
+wireCodeBlocks($("#rich"), toast);
 wireImageErrors(api, toast);
 let locationTimer;
 function highlightLocation(from, to = from + 1) {

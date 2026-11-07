@@ -90,3 +90,30 @@ test("with the setting off, typed symbols stay literal", async ({ page }) => {
   await expect(editor(page).locator("strong")).toHaveCount(0);
   expect(await saved(page)).toBe("Start \\*\\*x\\*\\*\n");
 });
+
+test("formulas wait while the input method composes", async ({ page }) => {
+  test.setTimeout(60000);
+  // Enough formulas that typesetting them all takes a while.
+  const formulas = Array.from(
+    { length: 600 },
+    (_, i) => `$\\frac{a_{${i}}}{b} + \\sqrt{c_{${i}}}$`,
+  ).join(" ");
+  await boot(page, "开头\n\n" + formulas + "\n");
+  const total = 600;
+  const count = () => page.locator("#rich .katex").count();
+  await caretAfter(page, "开头");
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.imeSetComposition", {
+    text: "zhong",
+    selectionStart: 5,
+    selectionEnd: 5,
+  });
+  const before = await count();
+  expect(before).toBeLessThan(total);
+  // Idle time passes mid-composition: the page around it is left alone.
+  await page.waitForTimeout(800);
+  expect(await count()).toBe(before);
+  await cdp.send("Input.insertText", { text: "中" });
+  await expect.poll(count, { timeout: 30000 }).toBe(total);
+  expect((await saved(page)).startsWith("开头中\n")).toBe(true);
+});

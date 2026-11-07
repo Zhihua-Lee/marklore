@@ -7,6 +7,7 @@
 import { NodeSelection, TextSelection, Plugin } from "prosemirror-state";
 import { formulaFragmentFor, renderMarkdown } from "../markdown.js";
 import { renderDiagrams } from "../diagrams.js";
+import { composing, settled } from "../composing.js";
 import { t } from "../../desktop/i18n.mjs";
 import { schema, parseBlocks } from "./markdown.js";
 
@@ -17,8 +18,28 @@ const OPEN_MATH = "$$";
 const OPEN_RAW = "\u0000raw:";
 
 // Formulas are typeset when they come near the screen (a long note holds
-// thousands); until then they show their TeX.
+// thousands); until then they show their TeX. Never while an input method
+// composes (see composing.js): changing the page around a composition can
+// end it halfway through the pinyin; they wait for it to end.
 const pending = new WeakMap();
+const later = new Set();
+function typesetLater(dom) {
+  if (!later.size) settled().then(() => requestAnimationFrame(flushLater));
+  later.add(dom);
+}
+function flushLater() {
+  if (composing()) {
+    settled().then(() => requestAnimationFrame(flushLater));
+    return;
+  }
+  for (const dom of [...later]) {
+    later.delete(dom);
+    const typeset = pending.get(dom);
+    pending.delete(dom);
+    waiting.delete(dom);
+    if (typeset && dom.isConnected) typeset();
+  }
+}
 let watcher = null;
 export function watchFormulas(root) {
   watcher?.disconnect();
@@ -26,8 +47,12 @@ export function watchFormulas(root) {
     (entries) => {
       for (const entry of entries) {
         if (!entry.isIntersecting) continue;
-        const typeset = pending.get(entry.target);
         watcher.unobserve(entry.target);
+        if (composing()) {
+          typesetLater(entry.target);
+          continue;
+        }
+        const typeset = pending.get(entry.target);
         pending.delete(entry.target);
         typeset?.();
       }
@@ -42,6 +67,10 @@ function scheduleBackfill() {
   if (backfill) return;
   backfill = requestIdleCallback((deadline) => {
     backfill = 0;
+    if (composing()) {
+      settled().then(scheduleBackfill);
+      return;
+    }
     for (const dom of [...waiting]) {
       if (deadline.timeRemaining() < 4) break;
       const typeset = pending.get(dom);
@@ -85,6 +114,7 @@ export class DrawnView {
     watcher?.unobserve(this.dom);
     pending.delete(this.dom);
     waiting.delete(this.dom);
+    later.delete(this.dom);
   }
   draw(node, { fileId, theme }) {
     const { dom } = this;

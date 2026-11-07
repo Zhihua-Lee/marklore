@@ -57,6 +57,7 @@ import {
   watchFormulas,
 } from "./math.js";
 import { linkPlugins, editLink } from "./links.js";
+import { details } from "./details.js";
 import { attachMenu } from "./menu.js";
 
 const S = schema.nodes;
@@ -349,6 +350,7 @@ export function createRichEditor({
   const plugins = [
     rules,
     typing,
+    details,
     caretBlock,
     closer,
     history(),

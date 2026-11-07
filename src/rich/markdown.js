@@ -184,6 +184,24 @@ export const schema = new Schema({
         attrs: { tex: {}, raw: {} },
         toDOM: () => ["div", { class: "math-block" }],
       },
+      // A `<details>` fold: its summary line, then Markdown blocks.
+      details: {
+        group: "block",
+        content: "details_summary block*",
+        defining: true,
+        attrs: {
+          head: { default: "<details>\n<summary>" },
+          tail: { default: "</summary>" },
+          close: { default: "</details>" },
+          open: { default: false },
+        },
+        toDOM: () => ["div", { class: "rich-details" }, 0],
+      },
+      details_summary: {
+        content: "inline*",
+        defining: true,
+        toDOM: () => ["div", { class: "rich-summary" }, 0],
+      },
       // Markdown the editor shows but does not take apart (HTML, footnote
       // definitions, link references, diagrams): written back as it was.
       raw_block: {
@@ -264,9 +282,62 @@ function restorePipes(tokens, marker) {
 }
 // Footnote definitions are written where they stand (raw blocks); the
 // list markdown-it gathers at the end of a parse is not part of a block.
+// `<details>` with its `<summary>` line, Markdown inside, then `</details>`
+// (each tag line an HTML block of its own): a fold the editor takes apart.
+// Its tags are kept as written (head, tail, close).
+const DETAILS_OPEN =
+  /^(<details(?:\s[^>]*)?>[ \t]*\n?[ \t]*<summary(?:\s[^>]*)?>)([^\n]*?)(<\/summary>[ \t]*)$/i;
+const DETAILS_CLOSE = /^<\/details>[ \t]*$/i;
+function foldDetails(tokens, env) {
+  const stack = [];
+  const pairs = [];
+  tokens.forEach((tok, i) => {
+    if (tok.type !== "html_block") return;
+    const text = tok.content.replace(/\n$/, "");
+    const open = DETAILS_OPEN.exec(text);
+    if (open) stack.push({ i, level: tok.level, open });
+    else if (DETAILS_CLOSE.test(text) && stack.at(-1)?.level === tok.level)
+      pairs.push({ ...stack.pop(), j: i, close: text });
+  });
+  if (!pairs.length) return tokens;
+  const Token = tokens[0].constructor;
+  const make = (type, nesting, level, extra = {}) =>
+    Object.assign(new Token(type, "", nesting), { level, block: true }, extra);
+  // From the last opening on: earlier openings keep their places; a pair
+  // around a replaced one has its end moved by the tokens added (3).
+  pairs.sort((a, b) => b.i - a.i);
+  let out = tokens;
+  for (const [n, { i, j, level, open, close }] of pairs.entries()) {
+    for (const outer of pairs.slice(n + 1)) if (outer.j > i) outer.j += 3;
+    const head = out[i];
+    const inline = md.parseInline(open[2], env)[0];
+    inline.level = level + 2;
+    for (let k = i + 1; k < j; k++) out[k].level += 1;
+    out = [
+      ...out.slice(0, i),
+      make("details_open", 1, level, {
+        map: [head.map[0], out[j].map[1]],
+        meta: {
+          head: open[1],
+          tail: open[3],
+          close,
+          open: /<details\s[^>]*\bopen\b/i.test(open[1]),
+        },
+      }),
+      make("details_summary_open", 1, level + 1),
+      inline,
+      make("details_summary_close", -1, level + 1),
+      ...out.slice(i + 1, j),
+      make("details_close", -1, level),
+      ...out.slice(j + 1),
+    ];
+  }
+  return out;
+}
+
 const tokenizer = {
   parse(src, env) {
-    const tokens = md.parse(src, env);
+    const tokens = foldDetails(md.parse(src, env), env);
     restorePipes(tokens, env.mathPipe);
     // Escaped characters ("\*") stay separate tokens for the reading view's
     // source positions; here they are text like any other.
@@ -404,6 +475,8 @@ const parser = new MarkdownParser(schema, tokenizer, {
     getAttrs: (tok) => ({ tex: tok.content, raw: tok.meta?.raw ?? null }),
   },
   html_mark: { mark: "html", getAttrs: (tok) => tok.meta },
+  details: { block: "details", getAttrs: (tok) => tok.meta },
+  details_summary: { block: "details_summary" },
   html_inline: {
     node: "raw_inline",
     getAttrs: (tok) => ({
@@ -554,6 +627,17 @@ const serializer = new MarkdownSerializer(
     },
     horizontal_rule(state, node) {
       state.write(node.attrs.markup || "---");
+      state.closeBlock(node);
+    },
+    details(state, node) {
+      const summary = node.firstChild;
+      state.write(node.attrs.head);
+      state.renderInline(summary);
+      state.write(node.attrs.tail);
+      state.closeBlock(summary);
+      for (let i = 1; i < node.childCount; i++)
+        state.render(node.child(i), node, i);
+      state.write(node.attrs.close);
       state.closeBlock(node);
     },
     task_box(state, node) {

@@ -177,3 +177,28 @@
   opacity: 0.6;
   padding: 0 1px;
 }
+/* <details> folds: the marker before the summary folds and unfolds. */
+#rich .rich-details {
+  position: relative;
+  margin: 0.6em 0;
+  padding: 0.1em 0 0.1em 1.3em;
+  border-left: 2px solid var(--line);
+}
+#rich .rich-summary {
+  position: relative;
+  font-weight: 600;
+}
+#rich .rich-summary::before {
+  content: "▾";
+  position: absolute;
+  left: -1.15em;
+  width: 1em;
+  color: var(--muted);
+  cursor: pointer;
+}
+#rich .rich-folded > .rich-summary::before {
+  content: "▸";
+}
+#rich .rich-folded > :not(.rich-summary) {
+  display: none;
+}

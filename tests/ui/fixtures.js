@@ -15,6 +15,7 @@ export const FOLIO_API = [
   "allowImage",
   "currentFolder",
   "list",
+  "reorderIndex",
   "search",
   "searchText",
   "openFromLibrary",

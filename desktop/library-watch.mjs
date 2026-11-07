@@ -4,6 +4,7 @@
 import { watch as fsWatch } from "node:fs";
 import path from "node:path";
 import { markdownPath, otherPath } from "./files.mjs";
+import { isIndexName } from "./folder-index.mjs";
 
 // Does a change to this entry (relative to the library folder) affect the
 // tree? Notes and folders do; hidden folders (.git, .obsidian), node_modules
@@ -42,11 +43,14 @@ export function createLibraryWatch({
       for (const folder of wanted) {
         if (watchers.has(folder)) continue;
         try {
-          // "change" events are edits to existing files: the tree is unchanged.
+          // "change" events are edits to existing files: the tree is
+          // unchanged, unless the file is a folder's index (its order).
           const watcher = watch(folder, { recursive: true }, (type, name) => {
             if (name && treeChange(name) && markdownPath(String(name)))
               noteChanged(path.join(folder, String(name)));
-            if (type !== "rename" || !treeChange(name)) return;
+            const order =
+              name && isIndexName(String(name).split(/[\\/]/).at(-1));
+            if ((type !== "rename" && !order) || !treeChange(name)) return;
             clearTimeout(timer);
             timer = setTimeout(notify, delay);
           });

@@ -1,0 +1,55 @@
+/* A folder listed by its index file (desktop/folder-index.mjs): notes with
+   sub-pages fold like folders; the sub-pages sit indented under them. */
+#tree .page-row {
+  position: relative;
+}
+#tree .page-twisty {
+  position: absolute;
+  left: 2px;
+  top: 50%;
+  width: 16px;
+  height: 22px;
+  margin-top: -11px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+}
+#tree .page-twisty::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 7px;
+  border-left: 6px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transform: rotate(90deg);
+}
+#tree .page.closed > .page-row > .page-twisty::before {
+  transform: none;
+}
+#tree .page-twisty:hover {
+  color: var(--accent);
+}
+#tree .pages {
+  margin-left: 12px;
+}
+#tree .page.closed > .pages {
+  display: none;
+}
+
+/* Dragging to reorder: a line before or after the entry, or a frame when
+   dropped onto a note (as its sub-page). */
+#tree .drop-target {
+  position: relative;
+}
+#tree .drop-target[data-drop="before"] {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+#tree .drop-target[data-drop="after"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+#tree .drop-target[data-drop="into"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+  background: var(--hover);
+}

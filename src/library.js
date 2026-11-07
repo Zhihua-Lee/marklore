@@ -53,6 +53,8 @@ export function snippetMarkdown(snippet) {
   }
   return out + plain(i, text.length);
 }
+// Notes with sub-pages the reader folded (by path), kept across rebuilds.
+const closedPages = new Set();
 export function createLibrary({
   api,
   roots,
@@ -63,6 +65,8 @@ export function createLibrary({
   report,
   changed,
   openResult,
+  // Whether a note (by path) is open with unsaved changes.
+  isUnsaved = () => false,
 }) {
   const $ = (s) => document.querySelector(s);
   let currentFolder = null;
@@ -139,10 +143,184 @@ export function createLibrary({
     for (const details of $("#tree").querySelectorAll("details.folder"))
       markExcluded(details, isExcluded);
   }
+  // A folder's entries. In a folder with an index file (desktop/
+  // folder-index.mjs) they come in the index's order, a note listed under
+  // another showing as its sub-item (depth); dragging rewrites the index.
+  async function fillFolder(details, entry, children, open) {
+    const indexFile = children.find((child) => child.index);
+    const stack = [{ depth: -1, box: details }];
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const depth = child.listed ? child.depth : 0;
+      while (stack.length > 1 && stack.at(-1).depth >= depth) stack.pop();
+      const box = stack.at(-1).box;
+      if (child.directory) {
+        const folder = await branch(child, open);
+        if (indexFile) draggable(folder.firstChild, entry, child, indexFile);
+        box.append(folder);
+        continue;
+      }
+      const b = document.createElement("button");
+      b.className = "file";
+      b.textContent = child.name;
+      b.title = child.path;
+      b.onclick = run(async () =>
+        add(await api.openChild(entry.id, child.name)),
+      );
+      if (indexFile) draggable(b, entry, child, indexFile);
+      const next = children[i + 1];
+      if (!(next?.listed && child.listed && next.depth > depth)) {
+        box.append(b);
+        continue;
+      }
+      // Sub-pages: under the note, folded like a folder.
+      const page = element("div", "page");
+      const row = element("div", "page-row");
+      const twisty = element("button", "page-twisty");
+      const pages = element("div", "pages");
+      pages.setAttribute("role", "group");
+      const fold = (closed) => {
+        page.classList.toggle("closed", closed);
+        twisty.setAttribute("aria-expanded", String(!closed));
+        if (closed) closedPages.add(child.path);
+        else closedPages.delete(child.path);
+      };
+      twisty.setAttribute(
+        "aria-label",
+        t("展开或折叠 {name} 的子页", { name: child.name }),
+      );
+      twisty.onclick = () => fold(!page.classList.contains("closed"));
+      fold(closedPages.has(child.path));
+      row.append(twisty, b);
+      page.append(row, pages);
+      box.append(page);
+      stack.push({ depth, box: pages });
+    }
+  }
+  // Dragging in a folder with an index file: a drop before, after or (on a
+  // note) into a listed entry moves the dragged one there in the index.
+  const DRAG_TYPE = "application/x-marklore-tree";
+  let dragging = null;
+  const placeOf = (event, target, child) => {
+    const box = target.getBoundingClientRect();
+    const y = (event.clientY - box.top) / box.height;
+    if (child.directory) return y < 0.5 ? "before" : "after";
+    return y < 0.3 ? "before" : y > 0.7 ? "after" : "into";
+  };
+  const clearDrop = () => {
+    for (const el of $("#tree").querySelectorAll(".drop-target")) {
+      el.classList.remove("drop-target");
+      delete el.dataset.drop;
+    }
+  };
+  function draggable(target, entry, child, indexFile) {
+    if (child.index) {
+      target.dataset.indexFile = "";
+      return;
+    }
+    target.dataset.indexName = child.name;
+    target.dataset.listed = String(Boolean(child.listed));
+    target.draggable = true;
+    target.addEventListener("dragstart", (event) => {
+      dragging = { folder: entry.id, name: child.name };
+      event.dataTransfer.setData(DRAG_TYPE, child.name);
+      event.dataTransfer.effectAllowed = "move";
+    });
+    target.addEventListener("dragend", () => {
+      dragging = null;
+      clearDrop();
+    });
+    if (!child.listed) return;
+    const accepts = () =>
+      dragging?.folder === entry.id && dragging.name !== child.name;
+    target.addEventListener("dragover", (event) => {
+      if (!accepts()) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      const place = placeOf(event, target, child);
+      if (target.dataset.drop === place) return;
+      clearDrop();
+      target.classList.add("drop-target");
+      target.dataset.drop = place;
+    });
+    target.addEventListener("dragleave", (event) => {
+      if (target.contains(event.relatedTarget)) return;
+      target.classList.remove("drop-target");
+      delete target.dataset.drop;
+    });
+    target.addEventListener("drop", (event) => {
+      if (!accepts()) return;
+      event.preventDefault();
+      const name = dragging.name;
+      const place = placeOf(event, target, child);
+      dragging = null;
+      clearDrop();
+      run(() => reorder(entry, indexFile, name, child.name, place))();
+    });
+  }
+  async function reorder(entry, indexFile, name, target, place) {
+    // An index open with unsaved changes is not rewritten under them.
+    if (isUnsaved(indexFile.path)) {
+      report(
+        t("{name} 有未保存的修改，请先保存，再在文件树中拖动排序", {
+          name: indexFile.name,
+        }),
+      );
+      return;
+    }
+    if (!api.reorderIndex) return;
+    await api.reorderIndex(entry.id, { name, target, place });
+    await refresh();
+  }
+  // Alt+↑/↓ on a listed entry: the same move by keyboard, past the entry
+  // before or after it at its level.
+  $("#tree").addEventListener("keydown", (event) => {
+    if (!event.altKey || !/^Arrow(Up|Down)$/.test(event.key)) return;
+    const item = event.target.closest?.("[data-index-name]");
+    if (!item) return;
+    const own =
+      item.matches("summary") || item.parentElement.matches(".page-row")
+        ? item.parentElement.closest("details, .page")
+        : item;
+    const level = [...own.parentElement.children]
+      .map((el) =>
+        el.matches(".page")
+          ? el.querySelector(".file")
+          : el.matches("details")
+            ? el.firstChild
+            : el,
+      )
+      .filter((el) => el?.dataset.listed === "true");
+    const at = level.indexOf(item);
+    const up = event.key === "ArrowUp";
+    const other = level[at + (up ? -1 : 1)];
+    if (at < 0 || !other) return;
+    event.preventDefault();
+    const folder = own.parentElement.closest("details.folder");
+    const indexFile = folder.querySelector(":scope > [data-index-file]");
+    run(async () => {
+      await reorder(
+        { id: folder.dataset.id },
+        { path: indexFile.title, name: indexFile.textContent },
+        item.dataset.indexName,
+        other.dataset.indexName,
+        up ? "before" : "after",
+      );
+      // The rebuilt folders load their entries a moment later.
+      for (let i = 0; i < 40; i++) {
+        const again = [
+          ...$("#tree").querySelectorAll("[data-index-name]"),
+        ].find((el) => el.title === item.title);
+        if (again) return again.focus();
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
+    })();
+  });
   async function branch(entry, open = null) {
     const details = document.createElement("details");
     details.className = "folder";
     details.dataset.path = entry.path;
+    details.dataset.id = entry.id;
     const summary = document.createElement("summary");
     summary.textContent = entry.name;
     summary.title = entry.path;
@@ -155,19 +333,7 @@ export function createLibrary({
         if (!details.open || loaded) return;
         loaded = true;
         try {
-          for (const child of await api.list(entry.id)) {
-            if (child.directory) details.append(await branch(child, open));
-            else {
-              const b = document.createElement("button");
-              b.className = "file";
-              b.textContent = child.name;
-              b.title = child.path;
-              b.onclick = run(async () =>
-                add(await api.openChild(entry.id, child.name)),
-              );
-              details.append(b);
-            }
-          }
+          await fillFolder(details, entry, await api.list(entry.id), open);
           markCurrentFile();
           const selected = details.querySelector('[aria-current="page"]');
           if (details.isConnected && selected)

@@ -205,4 +205,9 @@ export default {
     "the note is gone, or it is not in a library open to AI",
   // Comment threads.
   这条批注已不存在: "This comment no longer exists",
+  // A folder's index file (the tree's order).
+  目录文件过大: "The index file is too large",
+  这个文件夹没有目录文件: "This folder has no index file",
+  "目录文件刚被其他程序修改，请重试":
+    "Another program just changed the index file; try again",
 };

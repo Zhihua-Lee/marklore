@@ -1030,6 +1030,7 @@ else {
         return { images, errors };
       });
       api("list", (id) => files.list(id));
+      api("reorderIndex", (id, move) => files.reorderIndex(id, move));
       api("currentFolder", (id) => files.currentFolder(id));
       api("search", (ids, query) => {
         if (

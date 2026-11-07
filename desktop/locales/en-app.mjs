@@ -499,4 +499,8 @@ export default {
   "写下批注…（Ctrl+Enter 发送）": "Write a comment… (Ctrl+Enter sends)",
   已添加批注: "Comment added",
   "已解决 · ": "Resolved · ",
+  // A folder listed by its index file.
+  "展开或折叠 {name} 的子页": "Expand or collapse the sub-pages of {name}",
+  "{name} 有未保存的修改，请先保存，再在文件树中拖动排序":
+    "{name} has unsaved changes; save it before reordering in the file tree",
 };

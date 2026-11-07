@@ -58,6 +58,10 @@ test("follows exactly the library folders and debounces renames", async () => {
   fire("rename", "Topic\\inner.md");
   await new Promise((r) => setTimeout(r, 60));
   assert.equal(notified.length, 1, "a burst of changes refreshes once");
+  // A folder's index file orders the tree: an edit to it refreshes.
+  fire("change", "Topic\\_目录.md");
+  await new Promise((r) => setTimeout(r, 60));
+  assert.equal(notified.length, 2, "an edited index file refreshes");
   library.close();
   assert.equal(opened.get(b).closed, true);
 });

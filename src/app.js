@@ -80,6 +80,7 @@ import {
 import "./tables.css";
 import "./find-bar.css";
 import "./library-search.css";
+import "./library-index.css";
 import { createFindBar } from "./find-bar.js";
 import { wireSourceCopy } from "./copy-source.js";
 import { createSmoothScroll } from "./smooth-scroll.js";
@@ -1519,6 +1520,10 @@ const {
   report: toast,
   changed: scheduleSession,
   openResult: openSearchResult,
+  isUnsaved: (path) =>
+    tabs.some(
+      (doc) => doc.path?.toLowerCase() === path.toLowerCase() && dirty(doc),
+    ),
 });
 // A library search result: open the note at the hit's line and mark the word
 // there with the find bar (Enter steps to the next occurrence).

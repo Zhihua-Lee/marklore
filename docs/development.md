@@ -145,6 +145,7 @@ pnpm prune-releases --apply    # 移到回收站
 | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
 | [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)             | 窗口、隔离接口、文件监听与会话恢复。                                                         |
 | [`desktop/files.mjs`](../desktop/files.mjs)                                                            | 文件授权、编码、版本校验、备份与目录操作。                                                   |
+| [`desktop/folder-index.mjs`](../desktop/folder-index.mjs)、[`src/library.js`](../src/library.js)       | 文件树：目录文件（`_目录.md`、`SUMMARY.md`）决定文件夹的顺序与子页，拖动改写其中的列表。     |
 | [`desktop/integration.mjs`](../desktop/integration.mjs)                                                | Windows 系统集成。                                                                           |
 | [`src/app.js`](../src/app.js)                                                                          | 文档状态、编辑器和交互协调。                                                                 |
 | [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)                     | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。                                          |

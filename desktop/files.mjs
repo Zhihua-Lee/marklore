@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
 import { createNameWalks } from "./name-walk.mjs";
+import { findIndexName, indexOrder, moveInIndex } from "./folder-index.mjs";
 
 const walk = promisify(walkRealpath);
 // The canonical path (links resolved). Drives that cannot report a final
@@ -78,6 +79,8 @@ export class FileStore {
   imageDirectories = new Set();
   imageFiles = new Set();
   locks = new Set();
+  // Index files read for the tree's order: path → { key, text }.
+  indexes = new Map();
   // onNames: a background walk of a folder outside the library found more.
   constructor({ backups, onNames = null } = {}) {
     this.backups = backups;
@@ -229,11 +232,100 @@ export class FileStore {
       else
         result.push({ name: item.name, path: p, parent: id, directory: false });
     }
-    return result.sort(
+    result.sort(
       (a, b) =>
         Number(b.directory) - Number(a.directory) ||
         a.name.localeCompare(b.name, "zh-CN", { numeric: true }),
     );
+    return this.inIndexOrder(folder, result);
+  }
+  // A folder with an index file (folder-index.mjs): the index first, then
+  // the children it lists, in its order and nesting (depth), then the rest.
+  async inIndexOrder(folder, items) {
+    const name = findIndexName(
+      items.filter((item) => !item.directory).map((item) => item.name),
+    );
+    if (!name) return items;
+    let text;
+    try {
+      text = await this.indexText(path.join(folder, name));
+    } catch {
+      return items;
+    }
+    const byName = new Map(
+      items.map((item) => [item.name.toLowerCase(), item]),
+    );
+    const index = byName.get(name.toLowerCase());
+    const order = indexOrder(text, (child) => {
+      const item = byName.get(child.toLowerCase());
+      return item && item !== index ? item.name : null;
+    });
+    const taken = new Set([index]);
+    const listed = order.map(({ name: child, depth }) => {
+      const item = byName.get(child.toLowerCase());
+      taken.add(item);
+      return { ...item, depth, listed: true };
+    });
+    return [
+      { ...index, index: true },
+      ...listed,
+      ...items.filter((item) => !taken.has(item)),
+    ];
+  }
+  // An index file's text, kept while its size and time are unchanged (the
+  // tree is listed again on every change on disk).
+  async indexText(file) {
+    const stat = await fs.stat(file);
+    if (!stat.isFile() || stat.size > 4 * 1024 * 1024)
+      throw Error(t("目录文件过大"));
+    const key = stat.size + ":" + stat.mtimeMs;
+    const cached = this.indexes.get(file);
+    if (cached?.key === key) return cached.text;
+    const text = decode(await this.readBytes(file)).text;
+    this.indexes.set(file, { key, text });
+    if (this.indexes.size > 200)
+      this.indexes.delete(this.indexes.keys().next().value);
+    return text;
+  }
+  // Dragging in the tree: a child moved before, after or into (as a sub-item
+  // of) another child in the folder's index file, which is rewritten (a
+  // child not listed yet gets an entry). Returns the index's path, or null
+  // when nothing changed.
+  async reorderIndex(id, { name, target, place } = {}) {
+    const folder = this.directories.get(id);
+    if (!folder) throw Error(t("未授权的文件夹"));
+    await unchangedPath(folder);
+    for (const child of [name, target])
+      if (
+        typeof child !== "string" ||
+        !child ||
+        child === "." ||
+        child === ".." ||
+        path.basename(child) !== child
+      )
+        throw Error(t("未授权的文件"));
+    const indexName = findIndexName(await fs.readdir(folder));
+    if (!indexName) throw Error(t("这个文件夹没有目录文件"));
+    const file = path.join(folder, indexName);
+    if ((await realPath(file)) !== file) throw Error(t("未授权的文件"));
+    const moved = await fs.stat(path.join(folder, name));
+    const bytes = await this.readBytes(file);
+    const info = decode(bytes);
+    const text = moveInIndex(info.text, name, target, place, {
+      folder: moved.isDirectory(),
+    });
+    if (text === null) return null;
+    const temp = path.join(folder, `.folio-${randomUUID()}.tmp`);
+    try {
+      await fs.writeFile(temp, encode(text, info), { flag: "wx" });
+      if (hash(await this.readBytes(file)) !== hash(bytes))
+        throw Error(t("目录文件刚被其他程序修改，请重试"));
+      await fs.rename(temp, file);
+    } finally {
+      await fs.unlink(temp).catch(() => {});
+    }
+    this.indexes.delete(file);
+    return file;
   }
   async openChild(id, name) {
     const folder = this.directories.get(id);

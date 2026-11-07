@@ -29,6 +29,7 @@ for (const name of [
   "allowImage",
   "currentFolder",
   "list",
+  "reorderIndex",
   "search",
   "searchText",
   "openFromLibrary",

@@ -28,6 +28,9 @@ test("text styles and paragraph styles from the toolbar", async ({ page }) => {
   await button(page, "粗体").click();
   await selectText(page, "Make");
   await button(page, "斜体").click();
+  // The selection (and its small toolbar) goes with the caret moved.
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(".rich-bubble")).toBeHidden();
   await caretAfter(page, "A heading");
   await page.locator(".editing-tools select").selectOption({ label: "标题 2" });
   await caretAfter(page, "an item");
@@ -133,4 +136,22 @@ test("with the source pane shown, the toolbar acts where typed last", async ({
   await expect(page.locator("#editor .cm-content")).toContainText(
     "***Word* here.**",
   );
+});
+
+test("clicking into another block moves nothing", async ({ page }) => {
+  await boot(page, "# Plan\n\nSend it on Friday.\n\nAsk Ana.\n");
+  const tops = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll("#rich .ProseMirror > *")].map((el) =>
+        Math.round(el.getBoundingClientRect().top),
+      ),
+    );
+  const before = await tops();
+  const p = await editor(page).locator("p").first().boundingBox();
+  await page.mouse.move(p.x + 2, p.y + p.height / 2);
+  await page.mouse.down();
+  // The block the caret left is not drawn smaller or larger for a frame.
+  expect(await tops()).toEqual(before);
+  await page.mouse.up();
+  expect(await tops()).toEqual(before);
 });

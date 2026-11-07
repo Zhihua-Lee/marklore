@@ -45,8 +45,8 @@
   display: none;
 }
 /* The source pane's first line starts below the toolbar. */
-#panes .cm-content {
-  padding-top: 44px;
+#editor .cm-content {
+  padding-top: 48px !important;
 }
 .editing-tools button {
   display: inline-flex;

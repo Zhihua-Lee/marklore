@@ -58,6 +58,7 @@ import {
 } from "./math.js";
 import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
+import { selectionBubble } from "./bubble.js";
 import { attachMenu } from "./menu.js";
 
 const S = schema.nodes;
@@ -266,6 +267,8 @@ export function createRichEditor({
   onText,
   onFocus,
   typeMarkdown = () => true,
+  // Start a comment on the selection (comments.js); none without comments.
+  comment = null,
 }) {
   let current = null;
   // Text just typed (handleTextInput), for typing as Markdown.
@@ -351,6 +354,7 @@ export function createRichEditor({
     rules,
     typing,
     details,
+    selectionBubble({ comment }),
     caretBlock,
     closer,
     history(),
@@ -464,6 +468,32 @@ export function createRichEditor({
     view.state.doc.forEach((_n, p, i) => i === index && (pos = p));
     return { pos, from: starts.from[index], to: starts.to[index] };
   }
+  // Between offsets in the note and places in the editor, within a block:
+  // the block's text and its Markdown line up by their common characters
+  // (markup such as `**` falls between).
+  function offsetAt(pos, bias = 1) {
+    const starts = startsOf.get(view.state.doc);
+    if (!starts || !current) return null;
+    const doc = view.state.doc;
+    const index = Math.min(doc.resolve(pos).index(0), doc.childCount - 1);
+    let start = 0;
+    doc.forEach((_n, p, i) => i === index && (start = p));
+    const node = doc.child(index);
+    const source = current.text.slice(starts.from[index], starts.to[index]);
+    const inner = Math.max(0, Math.min(pos - start - 1, node.content.size));
+    return (
+      starts.from[index] +
+      mapText(flat(node), source, flat(node, inner).length, bias)
+    );
+  }
+  function posAt(offset, bias = 1) {
+    const hit = blockAt(offset);
+    if (!hit || !current) return null;
+    const node = view.state.doc.nodeAt(hit.pos);
+    const source = current.text.slice(hit.from, hit.to);
+    const k = mapText(source, flat(node), Math.max(0, offset - hit.from), bias);
+    return hit.pos + 1 + placeOfText(node, k);
+  }
   // For tests and debugging on the dev server only.
   if (import.meta.env?.DEV) window.__richView = view;
 
@@ -508,6 +538,29 @@ export function createRichEditor({
       view.focus();
     },
     hasFocus: () => view.hasFocus(),
+    // The selection as offsets in the note (null when nothing is selected).
+    selected() {
+      const { from, to, empty } = view.state.selection;
+      if (empty) return null;
+      const a = offsetAt(from);
+      const b = offsetAt(to, -1);
+      return a === null || b === null || b <= a ? null : { from: a, to: b };
+    },
+    // The text at note offsets from..to, as DOM ranges (comments).
+    ranges(from, to, out = []) {
+      const a = posAt(from);
+      const b = posAt(to, -1);
+      if (a === null || b === null || b <= a) return out;
+      try {
+        const start = view.domAtPos(a);
+        const end = view.domAtPos(b);
+        const range = document.createRange();
+        range.setStart(start.node, start.offset);
+        range.setEnd(end.node, end.offset);
+        out.push(range);
+      } catch {}
+      return out;
+    },
     // The caret at a note offset (the start of the block holding it).
     caretAt(from) {
       const hit = blockAt(from);

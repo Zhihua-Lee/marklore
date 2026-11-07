@@ -127,30 +127,37 @@ export async function compose(page, text) {
 
 // Select `text` with the mouse (a drag over it).
 export async function selectText(page, text) {
-  const box = await page.evaluate((text) => {
-    const root = document.querySelector("#rich .ProseMirror");
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-    let node;
-    while ((node = walker.nextNode())) {
-      const i = node.data.indexOf(text);
-      if (i < 0) continue;
-      node.parentElement.scrollIntoView({ block: "center" });
-      const range = document.createRange();
-      range.setStart(node, i);
-      range.setEnd(node, i + 1);
-      const first = range.getClientRects()[0];
-      range.setStart(node, i + text.length - 1);
-      range.setEnd(node, i + text.length);
-      const last = [...range.getClientRects()].at(-1);
-      return {
-        x1: first.left + 1,
-        y1: first.top + first.height / 2,
-        x2: last.right - 1,
-        y2: last.top + last.height / 2,
-      };
-    }
-    throw Error("no text " + text);
-  }, text);
+  const measure = (scroll) =>
+    page.evaluate(
+      ([text, scroll]) => {
+        const root = document.querySelector("#rich .ProseMirror");
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        let node;
+        while ((node = walker.nextNode())) {
+          const i = node.data.indexOf(text);
+          if (i < 0) continue;
+          if (scroll) node.parentElement.scrollIntoView({ block: "center" });
+          const range = document.createRange();
+          range.setStart(node, i);
+          range.setEnd(node, i + 1);
+          const first = range.getClientRects()[0];
+          range.setStart(node, i + text.length - 1);
+          range.setEnd(node, i + text.length);
+          const last = [...range.getClientRects()].at(-1);
+          return {
+            x1: first.left + 1,
+            y1: first.top + first.height / 2,
+            x2: last.right - 1,
+            y2: last.top + last.height / 2,
+          };
+        }
+        throw Error("no text " + text);
+      },
+      [text, scroll],
+    );
+  await measure(true);
+  await page.waitForTimeout(100);
+  const box = await measure(false);
   await page.mouse.move(box.x1, box.y1);
   await page.mouse.down();
   await page.mouse.move(box.x2, box.y2, { steps: 4 });

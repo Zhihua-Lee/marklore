@@ -1072,9 +1072,14 @@ export function asTyped(loaded, pos, before, after) {
 // Where an offset in text a falls in text b (b being a with characters
 // added or removed): kept text maps to itself; a removed character's place
 // to the end of the kept text before it.
-export function mapText(a, b, offset) {
+// With bias -1 an offset where kept text meets markup stays with the text
+// before it (the end of a range), else with the text after it.
+export function mapText(a, b, offset, bias = 1) {
   const runs = alignment(a, b);
   if (!runs) return Math.min(offset, b.length);
+  if (bias < 0)
+    for (const [aFrom, aTo, bFrom] of runs)
+      if (aFrom < offset && offset <= aTo) return bFrom + offset - aFrom;
   let best = 0;
   for (const [aFrom, aTo, bFrom] of runs)
     if (aFrom <= offset) best = bFrom + Math.min(offset - aFrom, aTo - aFrom);

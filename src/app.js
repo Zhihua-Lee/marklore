@@ -114,6 +114,7 @@ let active = null,
   directEditor,
   richEditor,
   richPushing = false,
+  richCommentsTimer = 0,
   view,
   switching = false,
   renderingTimer,
@@ -595,12 +596,16 @@ richEditor = createRichEditor({
   host: $("#rich"),
   getTheme: () => settings.theme,
   typeMarkdown: () => settings.typeMarkdown,
+  comment: () => comments?.startNew(),
   follow: (href) => run(() => navigateLink(href))(),
   onFocus: () => {
     if (active) active.pane = "preview";
   },
   onText: (doc, text) => {
     if (doc !== active || view.state.doc.toString() === text) return;
+    // The threads' places move with the text.
+    clearTimeout(richCommentsTimer);
+    richCommentsTimer = setTimeout(() => comments?.rendered(), 150);
     const old = view.state.doc.toString();
     let from = 0;
     while (from < old.length && from < text.length && old[from] === text[from])
@@ -692,6 +697,7 @@ function showRich(doc) {
     }
     if (active !== doc || !richActive(doc)) return;
     if (currentAnchor?.id === doc.id) richEditor.scrollTo(currentAnchor.anchor);
+    comments?.rendered();
   });
 }
 // Direct editing changed the blocks `olds` (siblings in one parent), now the
@@ -2008,6 +2014,14 @@ comments = createComments({
   report: toast,
   run,
   showContext,
+  surface: () =>
+    richActive()
+      ? {
+          ranges: (from, to, out) => richEditor.ranges(from, to, out),
+          selected: () => richEditor.selected(),
+          scroller: $("#rich-reader"),
+        }
+      : null,
 });
 proposals = createProposals({
   api,

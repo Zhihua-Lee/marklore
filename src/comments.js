@@ -31,8 +31,16 @@ export function createComments({
   report,
   run,
   showContext,
+  // The editor of Edit mode when it shows the note ({ ranges(from, to,
+  // out), selected(), scroller }), else null: threads are placed in it.
+  surface = () => null,
 }) {
   if (!api?.comments) return null;
+  // The text at note offsets from..to, as ranges, where the note shows.
+  const mark = (from, to, out) =>
+    surface()?.ranges(from, to, out) ?? markText(content, from, to, out);
+  const viewport = () =>
+    (surface()?.scroller ?? reader).getBoundingClientRect();
   let threads = [],
     loadedFor = null,
     // Thread id -> { from, to } in the rendered text.
@@ -71,13 +79,13 @@ export function createComments({
     placed = new Map();
     // A proposal under preview shows other text: its threads wait.
     if (!doc || doc.preview) return;
-    const text = doc.previewText ?? doc.text,
+    const text = surface() ? doc.text : (doc.previewText ?? doc.text),
       ranges = [];
     for (const thread of threads) {
       const at = locateAnchor(text, thread);
       if (!at) continue;
       placed.set(thread.id, at);
-      if (!thread.resolved) markText(content, at.from, at.to, ranges);
+      if (!thread.resolved) mark(at.from, at.to, ranges);
     }
     if (ranges.length && CSS.highlights)
       CSS.highlights.set("folio-comment", new Highlight(...ranges));
@@ -92,12 +100,12 @@ export function createComments({
   function place() {
     if (!card) return;
     const box = card.element,
-      view = reader.getBoundingClientRect();
+      view = viewport();
     let rect = null;
     const at = card.thread ? placed.get(card.thread.id) : card.at;
     if (at) {
       const ranges = [];
-      markText(content, at.from, at.to, ranges);
+      mark(at.from, at.to, ranges);
       const rects = ranges.flatMap((r) => [...r.getClientRects()]);
       rect = rects.at(-1) || null;
     }
@@ -233,14 +241,16 @@ export function createComments({
   }
 
   // A new comment on the selected text.
-  function startNew(selected = selectionSource(content)) {
+  function startNew(
+    selected = surface() ? surface().selected() : selectionSource(content),
+  ) {
     const doc = getActive();
     if (!doc) return;
     if (!doc.fileId) return report(t("请先保存笔记，再添加批注"));
     if (doc.preview) return report(t("预览 AI 提议时不能添加批注"));
     if (!selected || selected.to <= selected.from)
       return report(t("先选中要批注的文字"));
-    if (doc.previewText !== doc.text)
+    if (!surface() && doc.previewText !== doc.text)
       return report(t("预览正在更新，请稍后再试。"));
     if (selected.to - selected.from > MAX_QUOTE)
       return report(t("批注的文字太长，请选短一些"));
@@ -263,7 +273,9 @@ export function createComments({
   button.onclick = (event) => {
     const sorted = [...open(), ...threads.filter((x) => x.resolved)];
     // The selection stays while a toolbar button is clicked.
-    const selected = selectionSource(content),
+    const selected = surface()
+        ? surface().selected()
+        : selectionSource(content),
       doc = getActive();
     showContext(
       event,
@@ -328,7 +340,11 @@ export function createComments({
       startNew();
     }
   });
-  reader.addEventListener("scroll", () => card && place(), { passive: true });
+  // Either pane scrolling moves the card with its passage.
+  document.addEventListener("scroll", () => card && place(), {
+    passive: true,
+    capture: true,
+  });
   api.on("comments", () => run(() => load())());
   window.addEventListener("focus", () => run(() => load())());
 

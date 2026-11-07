@@ -153,7 +153,8 @@ try {
     document.querySelector("#content")?.textContent.includes("AI changed"),
   );
   await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await page.locator(".cm-content").click();
+  // Edit mode types into the drawn note (the source pane is off).
+  await page.locator("#rich .ProseMirror").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type(" LOCAL");
   await page.getByRole("button", { name: "保存", exact: true }).first().click();
@@ -161,7 +162,7 @@ try {
     () => document.querySelector("#status").textContent === "已保存",
   );
   assert.match(await fs.readFile(file, "utf8"), /LOCAL/);
-  await page.locator(".cm-content").click();
+  await page.locator("#rich .ProseMirror").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type(" UNSAVED RECOVERY");
   await page.waitForTimeout(1100);
@@ -184,9 +185,10 @@ try {
     timeout: 30000,
   });
   const restored = await instance.firstWindow();
-  await restored.locator("#content h1").waitFor();
+  // The tab comes back in Edit mode, holding the unsaved draft.
+  await restored.locator("#rich h1").waitFor();
   assert.match(
-    await restored.locator(".cm-content").innerText(),
+    await restored.locator("#rich .ProseMirror").innerText(),
     /UNSAVED RECOVERY/,
   );
   // Notes opened from the command line and via a link are remembered across the

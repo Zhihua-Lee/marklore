@@ -103,3 +103,24 @@ test("Page Down and Ctrl+Home move the caret through a long note", async ({
   await page.keyboard.type("A");
   expect((await saved(page)).startsWith("ALine 0")).toBe(true);
 });
+
+test("Up and Down in a table go to the cell above or below, then out", async ({
+  page,
+}) => {
+  const t3 = "| a | b |\n|---|---|\n| c1 | c2 |\n| e1 | e2 |\n";
+  await boot(page, "Intro\n\n" + t3 + "\nOutro\n");
+  await caretAfter(page, "c1");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.type("!");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.type("?");
+  await page.keyboard.press("ArrowUp");
+  await page.keyboard.type(" start");
+  await caretAfter(page, "e2");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.type("go ");
+  const text = await saved(page);
+  expect(text).toMatch(/^Intro start\n\n\| a\? +\| b +\|\n/);
+  expect(text).toMatch(/\| e1! +\| e2 +\|\n\ngo Outro\n$/);
+});

@@ -117,3 +117,91 @@ test("formulas wait while the input method composes", async ({ page }) => {
   await expect.poll(count, { timeout: 30000 }).toBe(total);
   expect((await saved(page)).startsWith("开头中\n")).toBe(true);
 });
+
+test("## and more: a heading's level is typed in full before the space", async ({
+  page,
+}) => {
+  await boot(page, "Start\n");
+  await caretAfter(page, "Start");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("### Third");
+  await expect(editor(page).locator("h3")).toHaveText("Third");
+  await page.keyboard.press("Enter");
+  // Alone, the symbols stay text: no heading, list or quote yet.
+  await page.keyboard.type("#x -y >z");
+  await expect(editor(page).locator("h1, ul, blockquote")).toHaveCount(0);
+  expect(await saved(page)).toBe("Start\n\n### Third\n\n#x -y >z\n");
+});
+
+test("x typed between two $ makes a formula, open until the caret leaves", async ({
+  page,
+}) => {
+  await boot(page, "Start\n");
+  await caretAfter(page, "Start");
+  await page.keyboard.type(" $$");
+  await page.keyboard.press("ArrowLeft");
+  await page.keyboard.type("x");
+  // Its source shows while the caret is in it; typing goes on in it.
+  await expect(editor(page).locator(".math-src")).toHaveText("$x$");
+  await page.keyboard.type("^2");
+  await expect(editor(page).locator(".math-src")).toHaveText("$x^2$");
+  await page.keyboard.press("End");
+  await expect(editor(page).locator(".formula .katex")).toBeVisible();
+  expect(await saved(page)).toBe("Start $x^2$\n");
+});
+
+test("Enter after ```, $$ or --- makes a code block, a formula or a rule", async ({
+  page,
+}) => {
+  await boot(page, "Start\n");
+  await caretAfter(page, "Start");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("```js");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("let a;");
+  await expect(editor(page).locator("pre")).toHaveText("let a;");
+  await page.keyboard.press("Control+End");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.type("---");
+  await page.keyboard.press("Enter");
+  await expect(editor(page).locator("hr")).toHaveCount(1);
+  await page.keyboard.type("$$");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("y");
+  await page.keyboard.press("Control+Home");
+  await expect(editor(page).locator(".math-block .katex")).toBeVisible();
+  expect(await saved(page)).toBe(
+    "Start\n\n```js\nlet a;\n```\n\n---\n\n$$\ny\n$$\n",
+  );
+});
+
+test("Left and Right step out of inline code and back in", async ({ page }) => {
+  await boot(page, "Use `code`\n");
+  await caretAfter(page, "code");
+  // At the end of the code, typing goes into it: its ring shows.
+  await expect(editor(page).locator(".rich-code-in")).toHaveCount(1);
+  await page.keyboard.press("ArrowRight");
+  await expect(editor(page).locator(".rich-code-in")).toHaveCount(0);
+  await page.keyboard.type("!");
+  expect(await saved(page)).toBe("Use `code`!\n");
+  await page.keyboard.press("ArrowLeft");
+  // Arrived from outside: still outside; one more step goes in.
+  await expect(editor(page).locator(".rich-code-in")).toHaveCount(0);
+  await page.keyboard.press("ArrowLeft");
+  await expect(editor(page).locator(".rich-code-in")).toHaveCount(1);
+  await page.keyboard.type("s");
+  expect(await saved(page)).toBe("Use `codes`!\n");
+});
+
+test("a line starting with inline code: Left steps out before it", async ({
+  page,
+}) => {
+  await boot(page, "`a` b\n");
+  await caretAfter(page, " b");
+  await page.keyboard.press("Home");
+  await expect(editor(page).locator(".rich-code-in")).toHaveCount(1);
+  await page.keyboard.press("ArrowLeft");
+  await expect(editor(page).locator(".rich-code-in")).toHaveCount(0);
+  await page.keyboard.type("x");
+  expect(await saved(page)).toBe("x`a` b\n");
+});

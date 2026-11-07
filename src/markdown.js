@@ -170,6 +170,48 @@ function math(source, display) {
   }
   return html;
 }
+// Bold and italic beside Chinese, Japanese or Korean text (Settings →
+// Reading): `**定义：**其中` is bold although CommonMark reads it as text (a
+// closing `**` after punctuation must be followed by a space or more
+// punctuation). With the setting on, a CJK character on the other side
+// counts as that space. Only `*` runs change; `_` stays as CommonMark has it.
+let cjkEmphasis = false;
+export function setCjkEmphasis(on) {
+  if (cjkEmphasis === !!on) return false;
+  cjkEmphasis = !!on;
+  return true;
+}
+const CJK =
+  /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}　-〿＀-￯]/u;
+function cjkFriendly(md) {
+  const Base = md.inline.State;
+  const { isWhiteSpace, isPunctChar, isMdAsciiPunct } = md.utils;
+  md.inline.State = class extends Base {
+    scanDelims(start, canSplitWord) {
+      const found = super.scanDelims(start, canSplitWord);
+      if (!cjkEmphasis || this.src.charCodeAt(start) !== 0x2a) return found;
+      const lastChar = start > 0 ? this.src.charCodeAt(start - 1) : 0x20;
+      const nextChar =
+        start + found.length < this.posMax
+          ? this.src.charCodeAt(start + found.length)
+          : 0x20;
+      const last = String.fromCharCode(lastChar);
+      const next = String.fromCharCode(nextChar);
+      const lastCjk = CJK.test(last);
+      const nextCjk = CJK.test(next);
+      if (!lastCjk && !nextCjk) return found;
+      const lastPunct = isMdAsciiPunct(lastChar) || isPunctChar(last);
+      const nextPunct = isMdAsciiPunct(nextChar) || isPunctChar(next);
+      const lastSpace = isWhiteSpace(lastChar);
+      const nextSpace = isWhiteSpace(nextChar);
+      const left =
+        !nextSpace && (!nextPunct || lastSpace || lastPunct || lastCjk);
+      const right =
+        !lastSpace && (!lastPunct || nextSpace || nextPunct || nextCjk);
+      return { ...found, can_open: left, can_close: right };
+    }
+  };
+}
 export function createParser() {
   const md = new MarkdownIt({
     html: true,
@@ -179,7 +221,8 @@ export function createParser() {
     highlight: highlightCode,
   })
     .use(footnote)
-    .use(tasks, { enabled: false });
+    .use(tasks, { enabled: false })
+    .use(cjkFriendly);
   // Keep table delimiters inside math away from the table tokenizer without changing offsets.
   // The private character is chosen absent from the source and removed inside math tokens.
   md.core.ruler.before("block", "folio_math_tables", (state) => {
@@ -730,8 +773,60 @@ function linkEnd(src, close, limit) {
 function attrs(t) {
   return (t.attrs || []).map(([k, v]) => `${k}="${escape(v)}"`).join(" ");
 }
-const parser = createParser();
-const outlineParser = createParser().set({ html: true, linkify: false });
+// Front matter at the very top (YAML between `---` lines) reads as a small
+// folded card of the note's properties, not as a rule and a heading.
+const FRONT = /^---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/;
+function frontMatter(md) {
+  md.block.ruler.before(
+    "table",
+    "front_matter",
+    (state, start, _end, silent) => {
+      if (start !== 0 || state.bMarks[0] !== 0) return false;
+      const m = FRONT.exec(state.src);
+      if (!m) return false;
+      if (silent) return true;
+      const lines = m[0].replace(/\r?\n$/, "").split("\n").length;
+      const token = state.push("front_matter", "details", 0);
+      token.content = m[1];
+      token.map = [0, lines];
+      token.block = true;
+      state.line = lines;
+      return true;
+    },
+  );
+  md.renderer.rules.front_matter = (tokens, i, _o, _env, self) =>
+    frontMatterCard(tokens[i].content, self.renderAttrs(tokens[i]));
+}
+// Simple `key: value` lines; anything else shows as written.
+function frontMatterFields(yaml) {
+  const fields = [];
+  for (const line of yaml.split(/\r?\n/)) {
+    const m = /^([\w-]+)\s*:\s*(.*)$/.exec(line);
+    if (m) fields.push([m[1], m[2].replace(/^(["'])(.*)\1$/, "$2")]);
+    else if (fields.length && line.trim())
+      fields.at(-1)[1] += "\n" + line.trim();
+  }
+  return fields;
+}
+export function frontMatterCard(yaml, attrs = "", open = true) {
+  const fields = frontMatterFields(yaml);
+  const get = (k) => fields.find(([key]) => key === k)?.[1];
+  const brief = [get("title"), get("modified") || get("updated") || get("date")]
+    .filter(Boolean)
+    .map((v) => `<span>${escape(v)}</span>`)
+    .join("");
+  const line = `<span class="front-matter-label">${escape(t("属性"))}</span>${brief}`;
+  // In the editor: the one line; a click there opens the source.
+  if (!open) return `<div class="front-matter">${line}</div>`;
+  const rows = fields
+    .map(([k, v]) => `<dt>${escape(k)}</dt><dd>${escape(v)}</dd>`)
+    .join("");
+  return `<details class="front-matter"${attrs}><summary>${line}</summary><dl>${rows}</dl></details>\n`;
+}
+const parser = createParser().use(frontMatter);
+const outlineParser = createParser()
+  .use(frontMatter)
+  .set({ html: true, linkify: false });
 outlineParser.renderer.rules.html_inline = () => "";
 outlineParser.renderer.rules.image = (tokens, i) => escape(tokens[i].content);
 // The outline is rebuilt on every tab switch; a long note's 100+ headings each

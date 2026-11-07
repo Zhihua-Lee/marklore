@@ -4,7 +4,12 @@
 // note's new text, which saves, undoes in the source pane and marks the tab
 // as before. Each tab keeps its own editor state, so its undo history and
 // caret survive switching tabs.
-import { EditorState, Plugin, TextSelection } from "prosemirror-state";
+import {
+  EditorState,
+  Plugin,
+  Selection,
+  TextSelection,
+} from "prosemirror-state";
 import { Slice, Fragment } from "prosemirror-model";
 import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
@@ -36,6 +41,7 @@ import {
   isInTable,
   selectedRect,
   addRowAfter,
+  TableMap,
 } from "prosemirror-tables";
 import { t } from "../../desktop/i18n.mjs";
 import { loadMath, mayContainMath } from "../markdown.js";
@@ -129,6 +135,38 @@ class TaskView {
   }
 }
 
+// Up and Down in a table go to the cell above or below (the table plugin
+// expects paragraphs in cells; a note's cells hold their text directly),
+// and from the first or last row out of the table.
+const cellVert = (dir) => (state, dispatch, view) => {
+  const sel = state.selection;
+  if (!(sel instanceof TextSelection) || !sel.empty) return false;
+  const $h = sel.$head;
+  const role = $h.parent.type.spec.tableRole;
+  if (role !== "cell" && role !== "header_cell") return false;
+  if (!view.endOfTextblock(dir < 0 ? "up" : "down")) return false;
+  const table = $h.node(-2);
+  const tableStart = $h.start(-2);
+  const map = TableMap.get(table);
+  const rect = map.findCell($h.before() - tableStart);
+  const row = dir < 0 ? rect.top - 1 : rect.bottom;
+  let next;
+  if (row >= 0 && row < map.height) {
+    const cell = tableStart + map.map[row * map.width + rect.left];
+    const size = state.doc.nodeAt(cell).content.size;
+    next = TextSelection.create(
+      state.doc,
+      cell + 1 + Math.min($h.parentOffset, size),
+    );
+  } else {
+    const $out = state.doc.resolve(dir < 0 ? $h.before(-2) : $h.after(-2));
+    next = GapCursor.valid($out)
+      ? new GapCursor($out)
+      : Selection.near($out, dir);
+  }
+  dispatch?.(state.tr.setSelection(next).scrollIntoView());
+  return true;
+};
 // Enter in a table goes to the cell below (a new row after the last).
 const cellBelow = (state, dispatch, view) => {
   if (!isInTable(state)) return false;
@@ -190,6 +228,115 @@ const edge = (dir) => (state, dispatch) => {
   dispatch?.(state.tr.setSelection(sel).scrollIntoView());
   return true;
 };
+// Enter at the end of a paragraph reading ```` ```js ````, `$$` or `---`
+// makes a code block, a display formula or a rule (as in Typora); typed
+// alone they stay text, so `---x` or `$$` within a line can be typed.
+const blockOnEnter = (state, dispatch) => {
+  const { $cursor } = state.selection;
+  const para = $cursor?.parent;
+  if (!para || para.type !== S.paragraph) return false;
+  if ($cursor.parentOffset !== para.content.size) return false;
+  if (para.childCount !== 1 || !para.firstChild.isText) return false;
+  const text = para.textContent;
+  const from = $cursor.before();
+  const to = $cursor.after();
+  const tr = state.tr;
+  let m;
+  if ((m = /^(```|~~~)([\w+#.-]*)$/.exec(text))) {
+    tr.replaceWith(
+      from,
+      to,
+      S.code_block.create({ markup: m[1], params: m[2] }),
+    );
+    tr.setSelection(TextSelection.create(tr.doc, from + 1));
+  } else if (text === "$$") {
+    tr.replaceWith(
+      from,
+      to,
+      S.code_block.create({ params: "$$" }, schema.text("$$\n\n$$")),
+    );
+    tr.setSelection(TextSelection.create(tr.doc, from + 4));
+  } else if (/^(?:-{3,}|\*{3,}|_{3,})$/.test(text)) {
+    tr.replaceWith(from, to, [
+      S.horizontal_rule.create({ markup: text }),
+      S.paragraph.create(),
+    ]);
+    tr.setSelection(TextSelection.create(tr.doc, from + 2));
+  } else return false;
+  dispatch?.(tr.scrollIntoView());
+  return true;
+};
+// Inline code: at the edge of a code span, typing goes into the code or
+// beside it. Left and Right first step out of the code or into it (the
+// span shows a ring while typing would go in), then move on; moving up to
+// an edge keeps the side the caret came from.
+const inCode = (node) => !!node && !!M.code.isInSet(node.marks);
+const codeEdge = (dir) => (state, dispatch) => {
+  const { $cursor } = state.selection;
+  if (!$cursor || !$cursor.parent.inlineContent) return false;
+  if ($cursor.parent.type === S.code_block) return false;
+  const before = $cursor.nodeBefore;
+  const after = $cursor.nodeAfter;
+  const tr = state.tr;
+  if (inCode(before) !== inCode(after)) {
+    const marks = state.storedMarks || $cursor.marks();
+    const inside = !!M.code.isInSet(marks);
+    const ahead = inCode(dir > 0 ? after : before);
+    if (ahead === inside) return false;
+    const code = inCode(before) ? before : after;
+    const plain = code === before ? after : before;
+    tr.setStoredMarks(
+      ahead ? code.marks : plain?.marks || M.code.removeFromSet(code.marks),
+    );
+  } else {
+    // One step up to an edge, along text: the side the caret came from.
+    const crossed = dir > 0 ? after : before;
+    if (!crossed?.isText) return false;
+    const $to = state.doc.resolve($cursor.pos + dir);
+    if ($to.parent !== $cursor.parent) return false;
+    const b = $to.nodeBefore;
+    const a = $to.nodeAfter;
+    if (inCode(b) === inCode(a)) return false;
+    const code = inCode(b) ? b : a;
+    const plain = code === b ? a : b;
+    tr.setSelection(TextSelection.create(state.doc, $to.pos));
+    tr.setStoredMarks(
+      inCode(crossed)
+        ? code.marks
+        : plain?.marks || M.code.removeFromSet(code.marks),
+    );
+  }
+  dispatch?.(tr.scrollIntoView());
+  return true;
+};
+// The code span the caret would type into, at its edge, shows a ring.
+const codeRing = new Plugin({
+  props: {
+    decorations(state) {
+      const { $cursor } = state.selection;
+      if (!$cursor || !$cursor.parent.inlineContent) return null;
+      const before = $cursor.nodeBefore;
+      const after = $cursor.nodeAfter;
+      if (inCode(before) === inCode(after)) return null;
+      const marks = state.storedMarks || $cursor.marks();
+      if (!M.code.isInSet(marks)) return null;
+      const parent = $cursor.parent;
+      const back = inCode(before);
+      let from = $cursor.pos;
+      let to = $cursor.pos;
+      for (
+        let i = back ? $cursor.index() - 1 : $cursor.index();
+        i >= 0 && i < parent.childCount && inCode(parent.child(i));
+        i += back ? -1 : 1
+      )
+        if (back) from -= parent.child(i).nodeSize;
+        else to += parent.child(i).nodeSize;
+      return DecorationSet.create(state.doc, [
+        Decoration.inline(from, to, { class: "rich-code-in" }),
+      ]);
+    },
+  },
+});
 const hardBreak = (state, dispatch) => {
   dispatch?.(
     state.tr.replaceSelectionWith(S.hard_break.create()).scrollIntoView(),
@@ -257,6 +404,24 @@ const rules = inputRules({
 // character, blocks parted by a line break) reaches `count` characters.
 const flat = (node, to = node.content.size) =>
   node.textBetween(0, to, "\n", "￼");
+// A formula in `next` whose source, in the typed text `text`, holds the
+// typed place `k` between its delimiters.
+function typedInFormula(next, text, k) {
+  let hit = null;
+  next.descendants((node, pos) => {
+    if (hit) return false;
+    if (node.type !== S.math_inline) return true;
+    const raw = node.attrs.raw;
+    for (let s = text.indexOf(raw); s >= 0; s = text.indexOf(raw, s + 1))
+      if (s < k && k < s + raw.length) {
+        hit = { node, pos, offset: k - s };
+        break;
+      }
+    return false;
+  });
+  return hit;
+}
+const MARKUP = /[^\p{L}\p{N}\s]/u;
 function placeOfText(node, count) {
   for (let r = 0; r <= node.content.size; r++)
     if (flat(node, r).length >= count) return r;
@@ -304,6 +469,16 @@ export function createRichEditor({
       next.content,
     );
     tr.setNodeMarkup(pos, next.type, next.attrs);
+    // Typed between a formula's delimiters (`$|$`, then `x`): it is a
+    // formula now, still open as its source, the caret where it was.
+    const inside = typedInFormula(next, flat(after), k);
+    if (inside) {
+      const at = pos + 1 + inside.pos;
+      const marks = M.math_src.create().addToSet(inside.node.marks);
+      tr.replaceWith(at, at + 1, schema.text(inside.node.attrs.raw, marks));
+      tr.setSelection(TextSelection.create(tr.doc, at + inside.offset));
+      return tr;
+    }
     const $at = tr.doc.resolve(Math.min(pos + 1 + r, tr.doc.content.size));
     tr.setSelection(TextSelection.near($at));
     // Typing on after a closed `**bold**` is plain again.
@@ -316,8 +491,15 @@ export function createRichEditor({
   const typing = new Plugin({
     props: {
       handleTextInput(view, from, to, text) {
+        // Markup typed, or text typed next to markup (`x` typed between
+        // two `$` makes a formula).
+        const { doc } = view.state;
+        const near =
+          doc.textBetween(Math.max(0, from - 1), from, "\n", "") +
+          doc.textBetween(to, Math.min(doc.content.size, to + 1), "\n", "");
         typed =
-          typeMarkdown() && /[^\p{L}\p{N}\s]/u.test(text)
+          typeMarkdown() &&
+          (MARKUP.test(text) || (/\S/.test(text) && MARKUP.test(near)))
             ? { from, to, text }
             : null;
         return false;
@@ -363,9 +545,11 @@ export function createRichEditor({
     imageBox,
     finder.plugin,
     caretBlock,
+    codeRing,
     closer,
     history(),
     ...linkPlugins({ follow: (href) => follow(href) }),
+    keymap({ ArrowUp: cellVert(-1), ArrowDown: cellVert(1) }),
     tableEditing(),
     gapCursor(),
     keymap({
@@ -384,9 +568,9 @@ export function createRichEditor({
       "Mod-b": toggleMark(M.strong),
       "Mod-i": toggleMark(M.em),
       "Mod-k": (_s, _d, view) => editLink(view),
-      ArrowLeft: stepIn(-1),
-      ArrowRight: stepIn(1),
-      Enter: chainCommands(openSelected, cellBelow, splitItem),
+      ArrowLeft: chainCommands(codeEdge(-1), stepIn(-1)),
+      ArrowRight: chainCommands(codeEdge(1), stepIn(1)),
+      Enter: chainCommands(openSelected, cellBelow, blockOnEnter, splitItem),
       "Shift-Enter": chainCommands(exitCode, hardBreak),
       Tab: chainCommands(
         goToNextCell(1),

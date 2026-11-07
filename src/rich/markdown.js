@@ -1063,10 +1063,20 @@ export function asTyped(loaded, pos, before, after) {
   if (text === null || text === source) return null;
   const back = parseBlocks(text, loaded.env);
   if (back.length !== 1 || back[0].eq(after)) return null;
-  // Only a change the typing made: the block reads as typed except where
-  // the typed text now means something.
-  if (back[0].type !== after.type && !after.isTextblock) return null;
+  // Only formatting within the text: the blocks stay what they were. A lone
+  // `#`, `-`, `>` or `$$` already reads as a heading, list, quote or formula;
+  // those start with a space or Enter (editor.js), so `##` can be typed.
+  if (!sameShape(back[0], after)) return null;
   return back[0];
+}
+function sameShape(a, b) {
+  if (a.type !== b.type) return false;
+  if (a.isTextblock)
+    return a.type !== schema.nodes.heading || a.attrs.level === b.attrs.level;
+  if (a.childCount !== b.childCount) return false;
+  for (let i = 0; i < a.childCount; i++)
+    if (!sameShape(a.child(i), b.child(i))) return false;
+  return true;
 }
 
 // Where an offset in text a falls in text b (b being a with characters

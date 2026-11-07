@@ -31,6 +31,7 @@ import {
   loadMath,
   mathReady,
   mayContainMath,
+  setCjkEmphasis,
 } from "./markdown.js";
 import {
   onHighlighterReady,
@@ -1664,6 +1665,15 @@ function applySettings() {
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? t("切换为窄版") : t("切换为宽版");
   applyAppearance(settings);
+  // Emphasis beside CJK text read differently: every note is read again.
+  if (setCjkEmphasis(settings.cjkEmphasis)) {
+    for (const doc of tabs) {
+      doc.htmlText = null;
+      doc.rich = null;
+    }
+    previewCache.clear();
+    if (active) render(true);
+  }
   paintAiSettings?.();
   refreshColorButtons();
   updateHistoryButtons();

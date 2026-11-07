@@ -341,9 +341,13 @@ export default {
   批注: "Annotation",
   编辑模式显示源码栏: "Show the source pane in Edit mode",
   在渲染后的正文里编辑: "Edit the note as it reads",
-  "打出的 Markdown 立即成为格式": "Typed Markdown becomes formatting",
-  "像 Typora：打完 **粗体** 就变粗；关掉后符号按字面保留":
-    "As in Typora: **bold** turns bold once typed; off, the symbols stay as typed",
+  "字面输入（自动转义）": "Literal typing (escape symbols)",
+  中文旁的粗体与斜体: "Bold and italic beside CJK text",
+  属性: "Properties",
+  "**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号":
+    "Bold closed after punctuation and followed by CJK text shows as bold too; apps that follow CommonMark strictly still show the stars",
+  "打出的 Markdown 符号按原样显示，写入文件时自动加反斜杠；关闭时像 Typora，打完 **粗体** 就变粗":
+    "Typed Markdown symbols stay as typed and are escaped with backslashes in the file; when off, as in Typora, **bold** turns bold once closed",
   "编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑":
     "In Edit mode, type right in the formatted note; formulas, tables and links are edited in place",
   "在正文旁同时显示 Markdown 源码，两边同步":

@@ -23,6 +23,7 @@ export function defaultSettings() {
     editSplit: false,
     richEdit: true,
     typeMarkdown: true,
+    cjkEmphasis: false,
     groupCounts: false,
     exportToc: true,
     outlineAnchors: "referenced",
@@ -65,6 +66,7 @@ export function normalizeSettings(saved = {}) {
   settings.editSplit = settings.editSplit === true;
   settings.richEdit = settings.richEdit !== false;
   settings.typeMarkdown = settings.typeMarkdown !== false;
+  settings.cjkEmphasis = settings.cjkEmphasis === true;
   settings.groupCounts = settings.groupCounts === true;
   settings.exportToc = settings.exportToc !== false;
   settings.outlineAnchors = ["off", "all"].includes(settings.outlineAnchors)

@@ -38,6 +38,7 @@ export const appearanceMarkup = `
     ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata / 思源黑体")}</option><option value="balanced">${t("思源黑体")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
     ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自然")}</option><option value="400">${t("标准")}</option><option value="450">${t("适中")}</option><option value="500">${t("较浓")}</option><option value="600">${t("浓")}</option></select>`)}
+    ${row("cjk-emphasis", t("中文旁的粗体与斜体"), '<input id="cjk-emphasis" type="checkbox" class="switch">', t("**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号"))}
     <div class="setting"><span class="setting-text"><span>${t("书页排版")}</span><small>${t("Literata 与自然浓度，保留字号和布局")}</small></span><span class="setting-actions"><button id="reading-preset" type="button">${t("恢复")}</button></span></div>
   </fieldset>
   <fieldset id="settings-theme"><legend>${t("主题与语言")}</legend>
@@ -69,7 +70,7 @@ export const appearanceMarkup = `
   </fieldset>
   <fieldset id="settings-editing"><legend>${t("编辑")}</legend>
     ${row("rich-edit", t("在渲染后的正文里编辑"), '<input id="rich-edit" type="checkbox" class="switch">', t("编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑"))}
-    ${row("type-markdown", t("打出的 Markdown 立即成为格式"), '<input id="type-markdown" type="checkbox" class="switch">', t("像 Typora：打完 **粗体** 就变粗；关掉后符号按字面保留"))}
+    ${row("literal-typing", t("字面输入（自动转义）"), '<input id="literal-typing" type="checkbox" class="switch">', t("打出的 Markdown 符号按原样显示，写入文件时自动加反斜杠；关闭时像 Typora，打完 **粗体** 就变粗"))}
     ${row("edit-split", t("编辑模式显示源码栏"), '<input id="edit-split" type="checkbox" class="switch">', t("在正文旁同时显示 Markdown 源码，两边同步"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
@@ -142,7 +143,7 @@ export function applyAppearance(settings) {
   $("#reading-format").checked = settings.readingFormat;
   $("#rich-edit").checked = settings.richEdit;
   $("#edit-split").checked = settings.editSplit;
-  $("#type-markdown").checked = settings.typeMarkdown;
+  $("#literal-typing").checked = !settings.typeMarkdown;
   $("#group-counts").checked = settings.groupCounts;
   $("#export-toc").checked = settings.exportToc;
   $("#outline-anchors").value = settings.outlineAnchors;
@@ -175,6 +176,7 @@ export function applyAppearance(settings) {
   );
   $("#interface-language").value = settings.language;
   $("#text-weight").value = String(settings.weight);
+  $("#cjk-emphasis").checked = settings.cjkEmphasis;
   $("#navigation-size").value = String(settings.navigationSize);
   $("#tab-size").value = String(settings.tabSize);
   $("#library-placement").value = settings.sidebar
@@ -257,8 +259,8 @@ export function wireAppearance(change) {
     change({ showHistoryButtons: event.target.value === "visible" });
   $("#edit-split").onchange = (event) =>
     change({ editSplit: event.target.checked });
-  $("#type-markdown").onchange = (event) =>
-    change({ typeMarkdown: event.target.checked });
+  $("#literal-typing").onchange = (event) =>
+    change({ typeMarkdown: !event.target.checked });
   $("#rich-edit").onchange = (event) =>
     change({ richEdit: event.target.checked });
   $("#reading-format").onchange = (event) =>
@@ -269,6 +271,8 @@ export function wireAppearance(change) {
     change({ exportToc: event.target.checked });
   $("#smooth-scroll").onchange = (event) =>
     change({ smoothScroll: event.target.value });
+  $("#cjk-emphasis").onchange = (event) =>
+    change({ cjkEmphasis: event.target.checked });
   $("#text-weight").onchange = (event) =>
     change({
       weight:

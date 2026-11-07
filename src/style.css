@@ -733,8 +733,11 @@ main[data-empty="true"] > #panes {
     "liga" 0,
     "calt" 0;
 }
+/* Inline code stands apart from the paper in both themes (the panel color
+   is too close to it). */
 .prose :not(pre) > code {
-  background: var(--panel);
+  background: color-mix(in srgb, var(--ink) 8%, var(--reading-paper));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 12%, transparent);
   padding: 0.1em 0.3em;
   border-radius: 3px;
   font-size: 0.88em;
@@ -800,8 +803,67 @@ main[data-empty="true"] > #panes {
 .prose details[open] > summary::marker {
   content: "▾  ";
 }
-.prose details:not([open]):is(:hover, :focus-within),
-.prose details:has(> summary:is(:hover, :focus-visible)) {
+/* Front matter: one quiet line above the note, its fields when unfolded. */
+.prose .front-matter {
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0 0 1em;
+  font-size: 0.8em;
+  color: var(--muted);
+  box-shadow: none;
+}
+/* The note's first section starts right under it, as in the editor. */
+.prose > .front-matter + .note-section {
+  margin-top: 0;
+}
+.prose .front-matter summary,
+.prose div.front-matter {
+  font-weight: 400;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25em 0.9em;
+  align-items: baseline;
+}
+.prose .front-matter summary::marker {
+  content: "";
+}
+.prose .front-matter summary::-webkit-details-marker {
+  display: none;
+}
+.prose .front-matter-label {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.45em;
+}
+.prose .front-matter-label::before {
+  content: "▸ ";
+}
+.prose .front-matter[open] .front-matter-label::before {
+  content: "▾ ";
+}
+.prose div.front-matter .front-matter-label::before {
+  content: "";
+}
+.prose .front-matter dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.15em 1em;
+  margin: 0.5em 0 0;
+  padding: 0.5em 0.8em;
+  border-left: 2px solid var(--line);
+}
+.prose .front-matter dt {
+  font-family: var(--font-code);
+}
+.prose .front-matter dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+}
+.prose details:not(.front-matter):not([open]):is(:hover, :focus-within),
+.prose details:not(.front-matter):has(> summary:is(:hover, :focus-visible)) {
   border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
   box-shadow: 0 2px 9px #0000000a;
 }
@@ -1210,7 +1272,9 @@ dialog::backdrop {
     padding: 0 7px;
     gap: 0;
   }
-  #panes[data-mode="edit"] .prose {
+  /* The source and preview side by side; the editor keeps the reading
+     view's padding (switching moves nothing; the toolbar floats above). */
+  #panes[data-mode="edit"]:not([data-rich="on"]) .prose {
     padding: 24px 30px 60px;
   }
 }

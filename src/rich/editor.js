@@ -59,6 +59,7 @@ import {
 import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
+import { codeColors } from "./code.js";
 import { attachMenu } from "./menu.js";
 
 const S = schema.nodes;
@@ -355,6 +356,7 @@ export function createRichEditor({
     typing,
     details,
     selectionBubble({ comment }),
+    codeColors,
     caretBlock,
     closer,
     history(),

@@ -252,3 +252,31 @@ test("a new note opens in the editor, not the source pane", async ({
     "Body",
   ]);
 });
+
+test("code blocks are colored as when read, and stay so while typed in", async ({
+  page,
+}) => {
+  const text = "Intro\n\n```js\nconst a = 1; // one\n```\n";
+  await boot(page, text);
+  const keyword = editor(page).locator("pre .hljs-keyword").first();
+  await expect(keyword).toHaveText("const");
+  const color = await keyword.evaluate((el) => getComputedStyle(el).color);
+  // (Colored, the code is several runs of text.)
+  await caretAfter(page, "// one");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("let b = 2;");
+  await expect(editor(page).locator("pre .hljs-keyword")).toHaveText([
+    "const",
+    "let",
+  ]);
+  await expect(editor(page).locator("pre .hljs-comment")).toHaveText("// one");
+  await page.keyboard.press("Control+1");
+  const read = await page
+    .locator("#content pre .hljs-keyword")
+    .first()
+    .evaluate((el) => getComputedStyle(el).color);
+  expect(read).toBe(color);
+  expect(await saved(page)).toBe(
+    text.replace("// one", "// one\nlet b = 2;"),
+  );
+});

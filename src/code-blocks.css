@@ -83,42 +83,42 @@
   color: var(--code-ink);
   background: transparent;
 }
-.code-block .hljs-attr,
-.code-block .hljs-variable {
+:is(.code-block, #rich pre) .hljs-attr,
+:is(.code-block, #rich pre) .hljs-variable {
   color: #9cdcfe;
 }
-.code-block .hljs-keyword,
-.code-block .hljs-selector-tag,
-.code-block .hljs-literal {
+:is(.code-block, #rich pre) .hljs-keyword,
+:is(.code-block, #rich pre) .hljs-selector-tag,
+:is(.code-block, #rich pre) .hljs-literal {
   color: var(--code-keyword);
 }
-.code-block .hljs-string,
-.code-block .hljs-regexp,
-.code-block .hljs-addition {
+:is(.code-block, #rich pre) .hljs-string,
+:is(.code-block, #rich pre) .hljs-regexp,
+:is(.code-block, #rich pre) .hljs-addition {
   color: var(--code-string);
 }
-.code-block .hljs-number,
-.code-block .hljs-symbol {
+:is(.code-block, #rich pre) .hljs-number,
+:is(.code-block, #rich pre) .hljs-symbol {
   color: var(--code-number);
 }
-.code-block .hljs-title,
-.code-block .hljs-built_in,
-.code-block .hljs-type,
-.code-block .hljs-selector-class {
+:is(.code-block, #rich pre) .hljs-title,
+:is(.code-block, #rich pre) .hljs-built_in,
+:is(.code-block, #rich pre) .hljs-type,
+:is(.code-block, #rich pre) .hljs-selector-class {
   color: var(--code-function);
 }
-.code-block .hljs-comment,
-.code-block .hljs-quote,
-.code-block .hljs-meta {
+:is(.code-block, #rich pre) .hljs-comment,
+:is(.code-block, #rich pre) .hljs-quote,
+:is(.code-block, #rich pre) .hljs-meta {
   color: var(--code-comment);
 }
-.code-block .hljs-deletion {
+:is(.code-block, #rich pre) .hljs-deletion {
   color: #f48771;
 }
-.code-block .hljs-emphasis {
+:is(.code-block, #rich pre) .hljs-emphasis {
   font-style: italic;
 }
-.code-block .hljs-strong {
+:is(.code-block, #rich pre) .hljs-strong {
   font-weight: 600;
 }
 
@@ -187,31 +187,31 @@
    of green or red on the dark code card, reaching the card's edges; headers
    and hunk lines step back. The text keeps the card's ink, so a long review
    reads calmly and the + and - columns still carry the meaning. */
-.code-block .diff-line {
+:is(.code-block, #rich pre) .diff-line {
   display: block;
   margin-inline: -16px;
   padding-inline: 16px;
 }
-.code-block .diff-add {
+:is(.code-block, #rich pre) .diff-add {
   background: rgb(87 171 90 / 17%);
   color: #d7e8cf;
 }
-.code-block .diff-del {
+:is(.code-block, #rich pre) .diff-del {
   background: rgb(240 98 86 / 16%);
   color: #f0d2cd;
 }
-.code-block .diff-hunk {
+:is(.code-block, #rich pre) .diff-hunk {
   margin-top: 0.35em;
   background: #ffffff0a;
   color: #8fb4c9;
 }
-.code-block .diff-hunk:first-child {
+:is(.code-block, #rich pre) .diff-hunk:first-child {
   margin-top: 0;
 }
-.code-block .diff-meta {
+:is(.code-block, #rich pre) .diff-meta {
   color: #9a9a9a;
 }
-.code-block .diff-note {
+:is(.code-block, #rich pre) .diff-note {
   color: #9a9a9a;
   font-style: italic;
 }

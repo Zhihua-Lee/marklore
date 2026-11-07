@@ -180,6 +180,7 @@ export default {
   编辑笔记: "Edit note",
   "这篇笔记含有编辑器还不能原样保留的写法，已改用源码栏编辑":
     "This note has writing the editor cannot keep exactly yet; it is edited in the source pane",
+  "锚点 {id}": "Anchor {id}",
   点击编辑源码: "Click to edit its source",
   编辑链接: "Edit link",
   打开链接: "Open link",

@@ -171,3 +171,9 @@
   border-top: 2px solid var(--accent);
   width: 24px;
 }
+#rich .raw-inline[data-kind="anchor"] {
+  font-size: 0.75em;
+  color: var(--muted);
+  opacity: 0.6;
+  padding: 0 1px;
+}

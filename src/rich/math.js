@@ -105,11 +105,19 @@ export class DrawnView {
     } else if (node.type === S.raw_inline) {
       dom.className = "raw-inline rich-drawn";
       dom.dataset.kind = node.attrs.kind;
-      dom.textContent =
-        node.attrs.kind === "footnote"
-          ? node.attrs.source.slice(1, -1)
-          : node.attrs.source;
       dom.title = t("点击编辑源码");
+      if (node.attrs.kind === "anchor") {
+        // A link target: a small mark, its name on hover.
+        const id = /\b(?:id|name)\s*=\s*["']?([^"'\s>]+)/i.exec(
+          node.attrs.source,
+        )?.[1];
+        dom.textContent = "#";
+        dom.title = t("锚点 {id}", { id: id || "" });
+      } else
+        dom.textContent =
+          node.attrs.kind === "footnote"
+            ? node.attrs.source.slice(1, -1)
+            : node.attrs.source;
     } else {
       const { kind, source } = node.attrs;
       dom.className = "raw-block rich-drawn";

@@ -18,6 +18,79 @@ import { tableNodes } from "prosemirror-tables";
 import { Transform } from "prosemirror-transform";
 import { createParser, lineOffsets } from "../markdown.js";
 
+// Inline HTML tags taken as formatting when they come in pairs around text.
+const HTML_TAGS = new Set(
+  "span mark u ins sub sup small kbd b i strong em s del font code a".split(
+    " ",
+  ),
+);
+// The style of an opening tag, only what changes how text looks.
+const STYLE_KEYS = new Set([
+  "color",
+  "background-color",
+  "background",
+  "font-weight",
+  "font-style",
+  "text-decoration",
+]);
+function safeStyle(open) {
+  const style = /\sstyle\s*=\s*(["'])(.*?)\1/i.exec(open)?.[2] || "";
+  const color = /\scolor\s*=\s*(["'])(.*?)\1/i.exec(open)?.[2];
+  const kept = style
+    .split(";")
+    .map((part) => part.split(":").map((x) => x.trim()))
+    .filter(
+      ([key, value]) =>
+        key &&
+        value &&
+        STYLE_KEYS.has(key.toLowerCase()) &&
+        !/url\s*\(|expression|[<>]/i.test(value),
+    )
+    .map(([key, value]) => `${key}: ${value}`);
+  if (color && /^[#\w(),.\s%]+$/.test(color)) kept.push(`color: ${color}`);
+  return kept.join("; ") || null;
+}
+// Pair the opening and closing tags among a line's tokens; a pair around
+// text becomes an html mark, anything else stays raw HTML.
+function pairTags(children) {
+  const stack = [];
+  children.forEach((child, i) => {
+    if (child.type !== "html_inline") return;
+    // An anchor (`<a id="x"></a>`) is one piece.
+    const prev = children[i - 1];
+    if (
+      /^<\/a\s*>$/i.test(child.content) &&
+      prev?.type === "html_inline" &&
+      /^<a\s[^>]*\b(?:id|name)\s*=/i.test(prev.content)
+    ) {
+      prev.content += child.content;
+      prev.meta = { anchor: true };
+      child.type = "folio_drop";
+      return;
+    }
+    const open = /^<([a-zA-Z][\w-]*)(?:\s[^>]*)?>$/.exec(child.content);
+    if (open && !child.content.endsWith("/>")) {
+      const tag = open[1].toLowerCase();
+      if (HTML_TAGS.has(tag)) stack.push({ i, tag });
+      else if (!/^(?:br|wbr|img|input|hr)$/.test(tag)) stack.length = 0;
+      return;
+    }
+    const close = /^<\/([a-zA-Z][\w-]*)\s*>$/.exec(child.content);
+    if (!close) return;
+    const top = stack.pop();
+    if (!top || top.tag !== close[1].toLowerCase() || top.i + 1 === i) {
+      stack.length = 0;
+      return;
+    }
+    const opener = children[top.i];
+    const meta = { tag: top.tag, open: opener.content, close: child.content };
+    opener.type = "html_mark_open";
+    opener.meta = meta;
+    child.type = "html_mark_close";
+    child.meta = meta;
+  });
+}
+
 const tables = tableNodes({
   tableGroup: "block",
   cellContent: "inline*",
@@ -151,6 +224,18 @@ export const schema = new Schema({
         parseDOM: [{ tag: "s" }, { tag: "del" }],
         toDOM: () => ["s", 0],
       },
+      // Text inside a pair of inline HTML tags (`<span style="color: …">`,
+      // `<mark>`, `<u>`, `<sub>`...): shown as the reading view shows it,
+      // written back with its tags exactly as they were.
+      html: {
+        attrs: { tag: {}, open: {}, close: {} },
+        excludes: "",
+        toDOM: (mark) => [
+          HTML_TAGS.has(mark.attrs.tag) ? mark.attrs.tag : "span",
+          { style: safeStyle(mark.attrs.open), class: "rich-html" },
+          0,
+        ],
+      },
       // The text of a formula open for editing (math.js).
       math_src: {
         inclusive: true,
@@ -200,6 +285,10 @@ const tokenizer = {
         tok.meta = { padded: /-{4,}/.test(lines[tok.map[0] + 1] || "") };
       else if (tok.type === "heading_open" && /[=-]/.test(tok.markup))
         tok.meta = { underline: (lines[tok.map[1] - 1] || "").trim() };
+      if (tok.children) {
+        pairTags(tok.children);
+        tok.children = tok.children.filter((c) => c.type !== "folio_drop");
+      }
       // The task plugin turns "[ ]" into an HTML checkbox: a box of our own.
       for (const child of tok.children || [])
         if (
@@ -314,9 +403,13 @@ const parser = new MarkdownParser(schema, tokenizer, {
     node: "math_display",
     getAttrs: (tok) => ({ tex: tok.content, raw: tok.meta?.raw ?? null }),
   },
+  html_mark: { mark: "html", getAttrs: (tok) => tok.meta },
   html_inline: {
     node: "raw_inline",
-    getAttrs: (tok) => ({ source: tok.content, kind: "html" }),
+    getAttrs: (tok) => ({
+      source: tok.content,
+      kind: tok.meta?.anchor ? "anchor" : "html",
+    }),
   },
   html_block: {
     node: "raw_block",
@@ -621,6 +714,11 @@ const serializer = new MarkdownSerializer(
       mixable: true,
     },
     math_src: { open: "", close: "", escape: false },
+    html: {
+      open: (_s, mark) => mark.attrs.open,
+      close: (_s, mark) => mark.attrs.close,
+      mixable: true,
+    },
     code: {
       open: (_s, mark, parent, index) =>
         codeFence(mark, parent.child(index), 1),

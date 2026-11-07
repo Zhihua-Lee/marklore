@@ -36,6 +36,8 @@ tables.table = {
   ...tables.table,
   attrs: { ...(tables.table.attrs || {}), padded: { default: false } },
 };
+// The caret never stops between two cells (only before or after a table).
+tables.table_row = { ...tables.table_row, allowGapCursor: false };
 const nodes = base.spec.nodes;
 const marks = base.spec.marks;
 export const schema = new Schema({
@@ -55,6 +57,9 @@ export const schema = new Schema({
     .update("code_block", {
       ...nodes.get("code_block"),
       attrs: { params: { default: "" }, markup: { default: "```" } },
+      // Its edges are where the caret leaves it: Down at its end stops after
+      // it, even when nothing follows (rich/editor.js, gap cursor).
+      isolating: true,
     })
     .update("bullet_list", {
       ...nodes.get("bullet_list"),

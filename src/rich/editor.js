@@ -7,6 +7,7 @@
 import { EditorState, Plugin, TextSelection } from "prosemirror-state";
 import { EditorView, Decoration, DecorationSet } from "prosemirror-view";
 import { keymap } from "prosemirror-keymap";
+import { gapCursor, GapCursor } from "prosemirror-gapcursor";
 import { history, undo, redo } from "prosemirror-history";
 import {
   baseKeymap,
@@ -155,6 +156,26 @@ const splitItem = (state, dispatch, view) => {
   }
   return true;
 };
+// Ctrl+Home/End: the note's first or last place; beside a block that takes
+// no caret of its own (a table, a formula, a diagram), the gap before or
+// after it, where typing starts a paragraph.
+const edge = (dir) => (state, dispatch) => {
+  const { doc } = state;
+  const block = dir < 0 ? doc.firstChild : doc.lastChild;
+  let sel;
+  if (block?.isTextblock)
+    sel = dir < 0 ? TextSelection.atStart(doc) : TextSelection.atEnd(doc);
+  else {
+    const $pos = doc.resolve(dir < 0 ? 0 : doc.content.size);
+    sel = GapCursor.valid($pos)
+      ? new GapCursor($pos)
+      : dir < 0
+        ? TextSelection.atStart(doc)
+        : TextSelection.atEnd(doc);
+  }
+  dispatch?.(state.tr.setSelection(sel).scrollIntoView());
+  return true;
+};
 const hardBreak = (state, dispatch) => {
   dispatch?.(
     state.tr.replaceSelectionWith(S.hard_break.create()).scrollIntoView(),
@@ -236,8 +257,10 @@ export function createRichEditor({ host, getTheme, follow, onText, onFocus }) {
     history(),
     ...linkPlugins({ follow: (href) => follow(href) }),
     tableEditing(),
-
+    gapCursor(),
     keymap({
+      "Mod-Home": edge(-1),
+      "Mod-End": edge(1),
       "Mod-z": undo,
       "Mod-y": redo,
       "Mod-Shift-z": redo,

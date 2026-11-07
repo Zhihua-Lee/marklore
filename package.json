@@ -57,6 +57,7 @@
     "mermaid": "12.2.0",
     "ondine": "0.0.3",
     "prosemirror-commands": "1.7.2",
+    "prosemirror-gapcursor": "1.4.1",
     "prosemirror-history": "1.5.1",
     "prosemirror-inputrules": "1.5.1",
     "prosemirror-keymap": "1.2.3",

@@ -166,3 +166,8 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 3em;
 }
+/* The caret between two blocks (before or after a table, a formula...). */
+#rich .ProseMirror-gapcursor:after {
+  border-top: 2px solid var(--accent);
+  width: 24px;
+}

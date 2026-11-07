@@ -98,6 +98,7 @@ import "./style.css";
 import "./diagrams.css";
 import "prosemirror-view/style/prosemirror.css";
 import "prosemirror-tables/style/tables.css";
+import "prosemirror-gapcursor/style/gapcursor.css";
 import "./rich/rich.css";
 import "./layout.css";
 import "./code-blocks.css";

@@ -16,7 +16,7 @@ export function createImageInsertion({
   function capture(event) {
     const doc = getDocument();
     if (!doc?.fileId) throw Error(t("请先保存笔记，再插入本地图片。"));
-    const local = getBlockEditor().imageInsertion();
+    const local = getBlockEditor().imageInsertion(event);
     if (local) return { doc, commit: local };
     const state = view.state;
     let { from, to } = state.selection.main;

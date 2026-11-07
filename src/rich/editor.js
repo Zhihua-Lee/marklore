@@ -60,6 +60,7 @@ import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
 import { codeColors } from "./code.js";
+import { imageBox } from "./images.js";
 import { attachMenu } from "./menu.js";
 
 const S = schema.nodes;
@@ -357,6 +358,7 @@ export function createRichEditor({
     details,
     selectionBubble({ comment }),
     codeColors,
+    imageBox,
     caretBlock,
     closer,
     history(),
@@ -540,6 +542,16 @@ export function createRichEditor({
       view.focus();
     },
     hasFocus: () => view.hasFocus(),
+    // The caret at a point of the page (a drop).
+    caretAtPoint(x, y) {
+      const hit = view.posAtCoords({ left: x, top: y });
+      if (!hit) return;
+      view.dispatch(
+        view.state.tr.setSelection(
+          TextSelection.near(view.state.doc.resolve(hit.pos)),
+        ),
+      );
+    },
     // The selection as offsets in the note (null when nothing is selected).
     selected() {
       const { from, to, empty } = view.state.selection;

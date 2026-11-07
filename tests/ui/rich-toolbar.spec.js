@@ -155,3 +155,67 @@ test("clicking into another block moves nothing", async ({ page }) => {
   await page.mouse.up();
   expect(await tops()).toEqual(before);
 });
+
+test("images from the toolbar and from the clipboard go to the caret", async ({
+  page,
+}) => {
+  await boot(page, "First.\n\nSecond.\n");
+  await caretAfter(page, "First.");
+  await button(page, "插入图片").click();
+  await expect(
+    editor(page).locator("img:not(.ProseMirror-separator)"),
+  ).toHaveCount(1);
+  await caretAfter(page, "Second.");
+  await page.evaluate(() => {
+    const data = new DataTransfer();
+    data.items.add(new File(["x"], "shot.png", { type: "image/png" }));
+    document
+      .querySelector("#rich .ProseMirror")
+      .dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: data, bubbles: true }),
+      );
+  });
+  await expect(
+    editor(page).locator("img:not(.ProseMirror-separator)"),
+  ).toHaveCount(2);
+  const text = await saved(page);
+  expect(text.indexOf("assets/pick.png")).toBeGreaterThan(
+    text.indexOf("First."),
+  );
+  expect(text.indexOf("assets/pick.png")).toBeLessThan(text.indexOf("Second."));
+  expect(text.indexOf("assets/pasted.png")).toBeGreaterThan(
+    text.indexOf("Second."),
+  );
+});
+
+test("an image dropped on the note goes where it was dropped", async ({
+  page,
+}) => {
+  await boot(page, "First.\n\nSecond.\n\nThird.\n");
+  await caretAfter(page, "Third.");
+  await page.evaluate(() => {
+    const target = [...document.querySelectorAll("#rich p")][1];
+    const box = target.getBoundingClientRect();
+    const data = new DataTransfer();
+    data.items.add(new File(["x"], "shot.png", { type: "image/png" }));
+    target.dispatchEvent(
+      new DragEvent("drop", {
+        dataTransfer: data,
+        bubbles: true,
+        cancelable: true,
+        clientX: box.right - 2,
+        clientY: box.top + box.height / 2,
+      }),
+    );
+  });
+  await expect(
+    editor(page).locator("img:not(.ProseMirror-separator)"),
+  ).toHaveCount(1);
+  const text = await saved(page);
+  expect(text.indexOf("assets/pasted.png")).toBeGreaterThan(
+    text.indexOf("Second."),
+  );
+  expect(text.indexOf("assets/pasted.png")).toBeLessThan(
+    text.indexOf("Third."),
+  );
+});

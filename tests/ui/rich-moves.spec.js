@@ -67,7 +67,8 @@ test("Down out of an open formula's source at the end of the note", async ({
 
 test("Down past a code block at the end of the note", async ({ page }) => {
   await boot(page, "Intro\n\n```js\nlet a = 1;\n```\n");
-  await caretAfter(page, "let a = 1;");
+  // (Colored, the code is several runs of text: its end is after ";".)
+  await caretAfter(page, ";");
   await page.keyboard.press("ArrowDown");
   await page.keyboard.type("after");
   expect(await saved(page)).toBe("Intro\n\n```js\nlet a = 1;\n```\n\nafter\n");

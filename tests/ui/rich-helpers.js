@@ -43,6 +43,12 @@ export async function boot(page, text = note, settings = {}) {
           window.mock.saved.push({ id, text });
           return { version: version + "s" };
         },
+        // An image picked or pasted: copied into the note's assets.
+        pickImage: async () => ({ url: "assets/pick.png", label: "Picked" }),
+        insertImages: async () => ({
+          images: [{ url: "assets/pasted.png", label: "Pasted" }],
+          errors: [],
+        }),
       });
     },
     { text, settings },

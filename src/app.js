@@ -542,9 +542,14 @@ imageInsertion = createImageInsertion({
   // Images go where the caret is in the editor of Edit mode, else to the
   // pencil's panel, else into the source.
   getBlockEditor: () => ({
-    imageInsertion: () => {
+    imageInsertion: (event) => {
       const target = richTarget();
-      if (target) return (images) => insertImages(target, images);
+      if (target) {
+        // Dropped on the note: where it was dropped.
+        if (event?.type === "drop" && event.target?.closest?.("#rich-reader"))
+          richEditor.caretAtPoint(event.clientX, event.clientY);
+        return (images) => insertImages(target, images);
+      }
       return blockEditor.imageInsertion();
     },
   }),

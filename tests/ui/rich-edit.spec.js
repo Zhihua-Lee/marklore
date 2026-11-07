@@ -276,7 +276,31 @@ test("code blocks are colored as when read, and stay so while typed in", async (
     .first()
     .evaluate((el) => getComputedStyle(el).color);
   expect(read).toBe(color);
-  expect(await saved(page)).toBe(
-    text.replace("// one", "// one\nlet b = 2;"),
+  expect(await saved(page)).toBe(text.replace("// one", "// one\nlet b = 2;"));
+});
+
+test("an image: a click shows its address and description to change", async ({
+  page,
+}) => {
+  const text = "Before ![A cat](assets/cat.png) after.\n";
+  await boot(page, text);
+  await editor(page).locator("img").click();
+  const box = page.locator(".rich-image-box");
+  await expect(box).toBeVisible();
+  await expect(box.getByLabel("图片地址")).toHaveValue("assets/cat.png");
+  await box.getByLabel("说明文字").fill("A sleeping cat");
+  await box.getByLabel("说明文字").press("Enter");
+  await expect(editor(page).locator("img")).toHaveAttribute(
+    "alt",
+    "A sleeping cat",
   );
+  await box.getByLabel("图片地址").fill("assets/dog.png");
+  await box.getByLabel("图片地址").press("Enter");
+  expect(await saved(page)).toBe(
+    "Before ![A sleeping cat](assets/dog.png) after.\n",
+  );
+  // Still selected, its box still open: remove it.
+  await expect(box).toBeVisible();
+  await box.getByRole("button", { name: "移除图片" }).click();
+  expect(await saved(page)).toBe("Before  after.\n");
 });

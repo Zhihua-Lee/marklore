@@ -92,7 +92,7 @@
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 /* The address box under a link, and the right-click menu. */
-.rich-link-box,
+:is(.rich-link-box, .rich-image-box),
 .rich-menu {
   position: fixed;
   z-index: 70;
@@ -103,12 +103,12 @@
   box-shadow: 0 6px 18px #0002;
   font: 12px var(--font-ui);
 }
-.rich-link-box {
+:is(.rich-link-box, .rich-image-box) {
   display: flex;
   gap: 4px;
   padding: 4px;
 }
-.rich-link-box input {
+:is(.rich-link-box, .rich-image-box) input {
   width: 260px;
   font: 12px var(--font-code);
   color: var(--ink);
@@ -117,7 +117,7 @@
   border-radius: 4px;
   padding: 3px 6px;
 }
-.rich-link-box button,
+:is(.rich-link-box, .rich-image-box) button,
 .rich-menu button {
   font: inherit;
   color: inherit;
@@ -127,7 +127,7 @@
   border-radius: 4px;
   cursor: pointer;
 }
-.rich-link-box button:hover,
+:is(.rich-link-box, .rich-image-box) button:hover,
 .rich-menu button:hover,
 .rich-menu button:focus-visible {
   background: var(--hover);
@@ -156,7 +156,7 @@
   margin: 4px 0;
 }
 /* Shown boxes are flex; hidden must still hide them. */
-.rich-link-box[hidden],
+:is(.rich-link-box, .rich-image-box)[hidden],
 .rich-menu[hidden] {
   display: none;
 }
@@ -207,4 +207,8 @@
 }
 #rich .rich-folded > :not(.rich-summary) {
   display: none;
+}
+/* An image's box: its address and its description side by side. */
+.rich-image-box input {
+  width: 200px;
 }

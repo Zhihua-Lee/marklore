@@ -181,6 +181,9 @@ export default {
   "这篇笔记含有编辑器还不能原样保留的写法，已改用源码栏编辑":
     "This note has writing the editor cannot keep exactly yet; it is edited in the source pane",
   "锚点 {id}": "Anchor {id}",
+  图片地址: "Image address",
+  说明文字: "Description",
+  移除图片: "Remove image",
   点击编辑源码: "Click to edit its source",
   编辑链接: "Edit link",
   打开链接: "Open link",

@@ -64,15 +64,12 @@ import { wireDesktopSettings } from "./desktop-settings.js";
 import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
 import { wireEditing, editingHighlight } from "./editing.js";
-import { createBlockEditor } from "./block-editing.js";
 import { createSelectionTools } from "./selection-tools.js";
-import { createDirectEditor } from "./direct-editing.js";
 import { createRichEditor } from "./rich/editor.js";
 import { insertImages } from "./rich/commands.js";
 import { createProposals } from "./proposals.js";
 import { createComments } from "./comments.js";
 import { wireAiSettings } from "./ai-settings.js";
-import { composing } from "./composing.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
 import {
@@ -111,7 +108,6 @@ const tabs = [],
 let active = null,
   lastScrollAt = 0,
   selectionTools,
-  directEditor,
   richEditor,
   richPushing = false,
   richCommentsTimer = 0,
@@ -138,13 +134,7 @@ configureColorTools(
   },
 );
 let editingKeys = [];
-let blockEditor,
-  imageInsertion,
-  backlinks,
-  linkHere,
-  proposals,
-  comments,
-  paintAiSettings;
+let imageInsertion, backlinks, linkHere, proposals, comments, paintAiSettings;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
@@ -261,7 +251,7 @@ releaseWhenQuiet(api?.releaseMemory);
 wireSourceCopy({
   host: $("#content"),
   source: () => active?.previewText,
-  skip: () => !active || blockEditor?.active,
+  skip: () => !active,
 });
 const findBar = createFindBar({
   panes: $("#panes"),
@@ -376,7 +366,6 @@ function stateFor(doc) {
         if (update.docChanged) {
           selectionTools?.hide();
           readingHistory.map(active.id, update.changes);
-          blockEditor?.sourceChanged();
           active.text = update.state.doc.toString();
           active.state = update.state;
           active.epoch++;
@@ -429,13 +418,6 @@ function stateFor(doc) {
           // still for as long as typing went on. The budget grows with the
           // note's own render cost, so rendering takes at most about a
           // quarter of the time while typing.
-          // Typing in the page itself (direct editing) already shows: render
-          // once typing stops, not during it.
-          if (directEditor?.patching) {
-            editsPendingSince = null;
-            renderingTimer = setTimeout(refreshEditedPreview, 600);
-            return;
-          }
           const now = performance.now(),
             cost = active.renderCost ?? 0;
           editsPendingSince ??= now;
@@ -500,47 +482,11 @@ editingKeys = wireEditing({
     api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
   rich: { target: richTarget },
 });
-blockEditor = createBlockEditor({
-  content: $("#content"),
-  reader: $("#reader"),
-  sourceView: view,
-  getDocument: () => active,
-  report: toast,
-  insertImage: () => imageInsertion.pick(),
-  enabled: () => !settings.richEdit,
-  onFinish: (anchor) => {
-    clearTimeout(renderingTimer);
-    render(false);
-    // `y` is where the editing panel's top was; the anchor lands by its first
-    // line of text, half a line lower than the block's top. Without this the
-    // block crept up a pixel or two on each Done or Esc.
-    const reader = $("#reader"),
-      block = [...$("#content").querySelectorAll("[data-from]")].find(
-        (el) => Number(el.dataset.from) === anchor.from,
-      ),
-      text = anchorOffset(reader, { from: anchor.from });
-    if (block && text !== null)
-      anchor = {
-        ...anchor,
-        y:
-          anchor.y +
-          text -
-          (block.getBoundingClientRect().top -
-            reader.getBoundingClientRect().top),
-      };
-    navigateToAnchor(reader, anchor, { expand: true });
-    if (active) {
-      active.anchor = anchor;
-      active.pane = "preview";
-    }
-    scheduleSession();
-  },
-});
 imageInsertion = createImageInsertion({
   view,
   getDocument: () => active,
-  // Images go where the caret is in the editor of Edit mode, else to the
-  // pencil's panel, else into the source.
+  // Images go where the caret is in the editor of Edit mode, else into the
+  // source.
   getBlockEditor: () => ({
     imageInsertion: (event) => {
       const target = richTarget();
@@ -550,7 +496,7 @@ imageInsertion = createImageInsertion({
           richEditor.caretAtPoint(event.clientX, event.clientY);
         return (images) => insertImages(target, images);
       }
-      return blockEditor.imageInsertion();
+      return null;
     },
   }),
   api,
@@ -561,7 +507,7 @@ selectionTools = createSelectionTools({
   reader: $("#reader"),
   view,
   getDocument: () => active,
-  blocked: () => blockEditor.active,
+  blocked: () => false,
   report: toast,
   getLinkTargets: (doc) =>
     api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
@@ -574,24 +520,6 @@ selectionTools = createSelectionTools({
     clearTimeout(renderingTimer);
     render(true);
   },
-  refocus: () => Boolean(directEditor?.active && directEditor.focus()),
-});
-directEditor = createDirectEditor({
-  content: $("#content"),
-  view,
-  getDocument: () => active,
-  enabled: (doc) =>
-    settings.directEdit &&
-    !settings.richEdit &&
-    doc?.mode === "edit" &&
-    !isDiffDocument(doc),
-  renderNow: () => {
-    clearTimeout(renderingTimer);
-    render(true);
-  },
-  report: toast,
-  patched: (node) => previewCache.taint($("#content"), node),
-  renderBlocks,
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
 // Markdown back and hands it here as the note's new text, through the
@@ -662,11 +590,7 @@ function richActive(doc = active) {
 // Edit mode shows the source pane when asked to (Settings → Editing), when
 // the editor is off, and for a note the editor does not take.
 function sourcePaneShown(doc = active) {
-  return (
-    settings.editSplit ||
-    (!settings.richEdit && !settings.directEdit) ||
-    Boolean(doc?.richBlocked)
-  );
+  return settings.editSplit || !settings.richEdit || Boolean(doc?.richBlocked);
 }
 function updateSplit() {
   $("#panes").dataset.split = sourcePaneShown() ? "on" : "off";
@@ -705,51 +629,6 @@ function showRich(doc) {
     comments?.rendered();
   });
 }
-// Direct editing changed the blocks `olds` (siblings in one parent), now the
-// source from..to: render that slice alone and put it in their place, so a
-// structural edit costs one block's render, not the note's. The full render
-// still follows once typing stops. Returns the new nodes, or null where a
-// slice could render differently from the whole note (headings, reference
-// definitions, footnotes, raw HTML blocks), or math has not loaded yet;
-// also when `accept` declines the new nodes (nothing changed). `prepare`
-// sees them before they enter the page.
-function renderBlocks(olds, from, to, { accept, prepare } = {}) {
-  const doc = active;
-  if (!doc || blockEditor?.active || isDiffDocument(doc)) return null;
-  const slice = doc.text.slice(from, to);
-  if (
-    /^ {0,3}(?:#{1,6}(?:\s|$)|=+\s*$|-{2,}\s*$|<)/m.test(slice) ||
-    /^ {0,3}\[[^\]]+\]:|\[\^/m.test(doc.text) ||
-    (mayContainMath(slice) && !mathReady())
-  )
-    return null;
-  const result = renderMarkdown(slice, doc.fileId, {
-    deferMath: true,
-    interactiveTasks: true,
-    progressive: false,
-    base: from,
-    open: directEditor?.caret() ?? null,
-  });
-  let nodes = [...result.fragment.childNodes];
-  while (nodes[0]?.nodeType === 3 && !nodes[0].textContent.trim())
-    nodes.shift();
-  while (nodes.at(-1)?.nodeType === 3 && !nodes.at(-1).textContent.trim())
-    nodes.pop();
-  if (!nodes.length || (accept && !accept(nodes))) return null;
-  prepare?.(nodes);
-  const container = $("#content");
-  // The block holding the focus may stay, taking the new content.
-  nodes = previewCache.place(container, olds, nodes, result.hydrate);
-  doc.partial = true;
-  renderDiagrams(container, settings.theme);
-  const has = (selector) =>
-    nodes.some((node) => node.querySelector?.(selector));
-  if (has("table")) scheduleTableLayout();
-  // Links to mark when they lead nowhere (badges sit on headings and
-  // anchors, which a full render brings).
-  if (has("a[href]")) backlinks?.refresh();
-  return nodes;
-}
 function editorAnchor() {
   if (view.scrollDOM.scrollTop < 2) return { from: 0, top: true };
   const r = view.contentDOM.getBoundingClientRect(),
@@ -767,11 +646,10 @@ function capture() {
   if (!active) return;
   active.state = view.state;
   active.anchor =
-    blockEditor?.anchor() ||
-    (active.mode === "source" ||
+    active.mode === "source" ||
     (active.mode === "edit" && active.pane === "editor" && sourcePaneShown())
       ? editorAnchor()
-      : paneAnchor());
+      : paneAnchor();
   active.folds = [
     ...$("#content").querySelectorAll(".note-section.collapsed"),
   ].map((el) => el.dataset.foldKey);
@@ -840,7 +718,6 @@ function updateHistoryButtons() {
 function travelHistory(direction) {
   if (!active || $("dialog[open]")) return;
   closeColorPicker();
-  blockEditor?.finish();
   const destination = readingHistory.go(
     direction,
     navigationSnapshot(),
@@ -932,7 +809,6 @@ function activateTab(doc, { revealGroup = true } = {}) {
   }
   selectionTools?.hide();
   closeColorPicker();
-  blockEditor?.finish();
   linkPreview.hide();
   proposals?.leave();
   comments?.close();
@@ -964,7 +840,6 @@ function setMode(mode, { anchor: destination } = {}) {
   const back = proposals?.leave();
   selectionTools?.hide();
   closeColorPicker();
-  blockEditor?.finish();
   linkPreview.hide();
   clearTimeout(renderingTimer);
   capture();
@@ -989,34 +864,18 @@ function render(preserve) {
   if (!active) return;
   if (richActive(active)) return showRich(active);
   $("#panes").dataset.rich = "off";
-  if (blockEditor?.active) return;
-  // An input method composes in the page, or is about to (composing.js):
-  // render once it is done.
-  if (directEditor?.composing || (directEditor?.active && composing())) {
-    clearTimeout(renderingTimer);
-    renderingTimer = setTimeout(() => render(preserve), 120);
-    return;
-  }
-  blockEditor?.resetHover();
   const doc = active,
     host = $("#reader");
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
   let fragment = null;
-  // Direct editing shows the formula holding the caret as its source: render
-  // again when that changes, too.
-  const open = directEditor?.opened() ?? null;
   // A proposal under preview shows the note as it would read (proposals.js).
   const shown = proposals?.shown(doc),
     text = shown?.text ?? doc.text;
-  if (doc.htmlText !== text || (doc.htmlOpen ?? null) !== open) {
+  if (doc.htmlText !== text) {
     const result = renderDocument(shown ? { ...doc, ...shown } : doc, {
       deferMath: true,
       interactiveTasks: true,
-      open: directEditor?.caret() ?? null,
     });
-    doc.htmlOpen = result.opened
-      ? result.opened.from + ":" + result.opened.to
-      : null;
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = text;
@@ -1053,7 +912,6 @@ function render(preserve) {
   });
   scheduleTableLayout();
   backlinks?.refresh();
-  directEditor?.rendered();
   proposals?.rendered();
   comments?.rendered();
   proposals?.paint();
@@ -1129,7 +987,6 @@ function setText(selector, text) {
   if (node.textContent !== text) node.textContent = text;
 }
 function showHome() {
-  blockEditor?.finish();
   clearTimeout(renderingTimer);
   linkPreview.hide();
   active = null;
@@ -1182,7 +1039,6 @@ $("#recent-clear").onclick = run(async () => {
 });
 async function closeTab(doc) {
   if (!doc || doc.closing) return;
-  if (doc === active) blockEditor?.finish();
   if (doc.saving) {
     toast(t("正在保存，请保存完成后再关闭。"));
     return;
@@ -1240,7 +1096,6 @@ const { save, checkDisk, showConflict } = createDocumentSync({
   report: toast,
   conflictBar: $("#conflict"),
   capture,
-  finishEditing: () => blockEditor?.finish(),
   redisplay: (doc) => {
     setEditorState(stateFor(doc));
     render(false);
@@ -1252,7 +1107,6 @@ const { save, checkDisk, showConflict } = createDocumentSync({
 });
 function jump(from, { record = true } = {}) {
   if (!active) return;
-  blockEditor?.finish();
   const origin = navigationSnapshot();
   const anchor = { from, y: 32 };
   restoreSoon(active, anchor, {
@@ -1452,7 +1306,6 @@ $("#content").addEventListener("change", (event) => {
     from = active.pending.mapPos(from, 1);
   const doc = view.state.doc;
   const match =
-    !blockEditor?.active &&
     Number.isInteger(from) &&
     from <= doc.length &&
     doc.sliceString(from, doc.lineAt(from).to).match(TASK_MARKER);
@@ -1468,8 +1321,6 @@ $("#content").addEventListener("change", (event) => {
   });
 });
 $("#content").addEventListener("dblclick", (event) => {
-  if (blockEditor?.active || event.target.closest(".block-editor")) return;
-  if (directEditor?.active && !event.altKey) return;
   // Without the source pane, a double click has no source to show.
   if (active.mode === "edit" && !sourcePaneShown()) return;
   if (event.target.closest("button,a,summary,input")) return;
@@ -1505,6 +1356,13 @@ $("#content").addEventListener("dblclick", (event) => {
   requestAnimationFrame(() => {
     if (active !== doc || doc.mode === "read") return;
     goToAnchor(doc, anchor, { expand: true });
+    // Into the editor: the word (or the place) selected there.
+    if (richActive(doc)) {
+      richEditor.selectSource(from, to);
+      active.anchor = anchor;
+      currentAnchor = { id: doc.id, anchor };
+      return;
+    }
     view.dispatch({
       selection: { anchor: from, head: to },
       effects: EditorView.scrollIntoView(from, { y: "center" }),
@@ -1521,10 +1379,6 @@ $("#content").addEventListener(
   run(async (event) => {
     const fold = event.target.closest(".fold, .section-rail, .section-summary");
     if (fold) {
-      if (blockEditor?.active) {
-        blockEditor.finish();
-        return;
-      }
       const section = fold.closest(".note-section"),
         collapsed = !section.classList.contains("collapsed");
       setSectionCollapsed(section, collapsed);
@@ -1535,8 +1389,6 @@ $("#content").addEventListener(
     const link = event.target.closest("a");
     if (!link) return;
     event.preventDefault();
-    // Typing into a link's text: Ctrl+click follows it.
-    if (directEditor?.active && !(event.ctrlKey || event.metaKey)) return;
     await navigateLink(link.getAttribute("href") || "");
   }),
 );
@@ -1747,7 +1599,7 @@ $("#tree").addEventListener("contextmenu", (event) => {
 // Right-click in the note: copy, and copy a link to the place under the
 // pointer (adding an anchor there if it has none).
 $("#content").addEventListener("contextmenu", (event) => {
-  if (!active || event.target.closest(".block-editor,input,textarea")) return;
+  if (!active || event.target.closest("input,textarea")) return;
   event.preventDefault();
   const selection = window.getSelection();
   const selected =
@@ -1846,7 +1698,6 @@ function changeSettings(patch) {
   if (geometryChanged) capture();
   Object.assign(settings, patch);
   applySettings();
-  if ("directEdit" in patch) directEditor?.rendered();
   if ("richEdit" in patch && active) render(false);
   if ("searchExclude" in patch) showExcluded();
   if ("groupCounts" in patch) updateTabs();
@@ -1920,11 +1771,7 @@ const commands = {
     if (!add({ name: t("未命名.md") }, { opener: active })) return;
     setMode("edit");
     requestAnimationFrame(() =>
-      richActive()
-        ? richEditor.focus()
-        : directEditor?.active && !settings.editSplit
-          ? directEditor.focus()
-          : view.focus(),
+      richActive() ? richEditor.focus() : view.focus(),
     );
   },
   save: () => save(),

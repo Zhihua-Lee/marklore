@@ -5,9 +5,7 @@ export function createPreviewCache({
   maxHtmlBytes = 4 * 1024 * 1024,
 } = {}) {
   const entries = new Map(),
-    signatures = new WeakMap(),
-    // Blocks typed into (direct editing) since they were last described.
-    typed = new WeakSet();
+    signatures = new WeakMap();
   let active = null,
     bytes = 0;
   // The source positions the renderer writes (markdown.js).
@@ -33,20 +31,14 @@ export function createPreviewCache({
     ]);
   const shellKey = (node) => JSON.stringify([kind(node), node.dataset.foldKey]);
 
-  // Without positions, and without what direct editing sets on blocks in the
-  // page (editing hosts, islands).
+  // Without positions.
   const plain = (raw) =>
     raw.replace(
-      / data-(?:text-|edit-|block-|src-(?:inner-)?)?(?:from|to)="\d+"| contenteditable="(?:true|false)"| data-direct-host=""| spellcheck="false"/g,
+      / data-(?:text-|edit-|block-|src-(?:inner-)?)?(?:from|to)="\d+"/g,
       "",
     );
   function describe(node) {
     let value = signatures.get(node);
-    if (value && typed.has(node)) {
-      typed.delete(node);
-      value = retyped(node, value);
-      if (value) signatures.set(node, value);
-    }
     if (!value) {
       const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
       value = {
@@ -59,29 +51,6 @@ export function createPreviewCache({
       signatures.set(node, value);
     }
     return value;
-  }
-  // A block typed into: as it was rendered, with the text its runs hold now.
-  // A render of the same text then keeps the block (only its positions
-  // change): it holds the caret, and an input method composing there on
-  // Windows ends the composition when the block is replaced. Null when the
-  // typing did more than change the runs' text.
-  function retyped(node, value) {
-    const template = node.ownerDocument.createElement("template");
-    template.innerHTML = value.raw;
-    const skeleton = template.content.firstElementChild,
-      runs = skeleton ? [...skeleton.querySelectorAll("[data-text-from]")] : [],
-      live = [...node.querySelectorAll("[data-text-from]")];
-    if (
-      runs.length !== live.length ||
-      live.some((run) => [...run.childNodes].some((n) => n.nodeType !== 3))
-    )
-      return null;
-    // A space typed at a run's edge shows as a no-break space.
-    runs.forEach((run, i) => {
-      run.textContent = live[i].textContent.replace(/\u00a0/g, " ");
-    });
-    const raw = skeleton.outerHTML;
-    return { raw, signature: plain(raw), ranges: value.ranges };
   }
   function identity(node) {
     return shell(node)
@@ -174,8 +143,8 @@ export function createPreviewCache({
       node.classList.contains("note-section") &&
       Boolean(
         node.firstElementChild &&
-        (typed.has(node.firstElementChild) ||
-          (active && node.firstElementChild.contains(active))),
+        active &&
+        node.firstElementChild.contains(active),
       );
     const buckets = new Map();
     for (const node of previous) {
@@ -212,13 +181,7 @@ export function createPreviewCache({
   // and islands, an open <details>, a broken link's mark; classes the
   // reader toggles or the page marks with; and what it adds (backlink
   // counts).
-  const own = [
-      "contenteditable",
-      "data-direct-host",
-      "spellcheck",
-      "open",
-      "data-broken",
-    ],
+  const own = ["open", "data-broken"],
     toggled = [
       "collapsed",
       "code-collapsed",
@@ -227,12 +190,7 @@ export function createPreviewCache({
       "link-broken",
     ],
     added = (node) =>
-      node.nodeType === 1 &&
-      (node.classList.contains("backlink-badge") ||
-        // A place direct editing made to type into, not typed into yet.
-        node.classList.contains("direct-empty") ||
-        (node.classList.contains("direct-empty-block") &&
-          Boolean(node.querySelector(".direct-empty"))));
+      node.nodeType === 1 && node.classList.contains("backlink-badge");
   // Typeset formulas and diagrams are taken whole from the new block (it was
   // hydrated); buttons showing a state the reader set (a folded section, an
   // expanded code block) are kept.
@@ -256,9 +214,6 @@ export function createPreviewCache({
     if (live.className !== className)
       if (className) live.className = className;
       else live.removeAttribute("class");
-    const anchor = live.ownerDocument.getSelection?.()?.anchorNode;
-    for (const empty of live.querySelectorAll(":scope > .direct-empty"))
-      if (!anchor || !empty.contains(anchor)) empty.remove();
     const a = [...live.childNodes].filter((node) => !added(node)),
       b = [...next.childNodes];
     if (
@@ -291,8 +246,6 @@ export function createPreviewCache({
         (node) => node.nodeType === 1 && !shell(node) && node.contains(active),
       );
     if (!focused || nodes.includes(focused)) return nodes;
-    // An empty paragraph direct editing made (Enter) is not in the source's
-    // render yet: it stays where it is, after the blocks before it.
     // The new block in its place: after as many kept blocks as preceded it
     // (the text between blocks aside).
     const old = new Set(previous),
@@ -373,55 +326,6 @@ export function createPreviewCache({
       )
         remove(entries.keys().next().value);
       return true;
-    },
-    // Typing in the page (direct editing) changed this node: read its text
-    // again at the next render, and render the next text even if it equals
-    // the cached one.
-    taint(container, node) {
-      for (let el = node; el && el !== container; el = el.parentNode)
-        if (el.parentNode === container || shell(el.parentNode)) {
-          typed.add(el);
-          break;
-        }
-      if (active) active.html = null;
-    },
-    // Direct editing rendered some blocks of the visible note on their own:
-    // they take the place of `olds` (siblings in one parent). They are
-    // described before their formulas expand, as a full render's are, so the
-    // next full render keeps them when it renders the same.
-    // Returns the nodes now in their place: the block holding the focus
-    // stays, taking the new content in its place (see keepFocused).
-    place(container, olds, nodes, hydrate) {
-      for (const node of nodes) describe(node);
-      for (const node of nodes) hydrate?.(node);
-      const focus = container.ownerDocument.activeElement,
-        elements = (list) => list.filter((node) => node.nodeType === 1);
-      const focused = elements(olds).find((node) => node.contains(focus));
-      const next = focused && elements(nodes)[elements(olds).indexOf(focused)];
-      if (next && next.tagName === focused.tagName) {
-        const value = describe(next);
-        morph(focused, next);
-        signatures.set(focused, value);
-        nodes = nodes.map((node) => (node === next ? focused : node));
-      }
-      const first = olds[0],
-        kept = nodes.indexOf(focused);
-      // Never moved: a focused element taken out of the page loses the focus.
-      if (kept >= 0) {
-        focused.before(...nodes.slice(0, kept));
-        focused.after(...nodes.slice(kept + 1));
-      } else first.before(...nodes);
-      for (const old of olds) if (old !== focused || kept < 0) old.remove();
-      if (!active) return nodes;
-      // Blocks before the first heading are the entry's own nodes.
-      const at = active.nodes.indexOf(first);
-      if (at >= 0) {
-        const rest = active.nodes.filter((node) => !olds.includes(node));
-        rest.splice(at, 0, ...nodes);
-        active.nodes = rest;
-      }
-      active.html = null;
-      return nodes;
     },
     release(key) {
       remove(key);

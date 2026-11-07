@@ -64,8 +64,6 @@ try {
         .evaluate((img) => img.naturalWidth),
     )
     .toBeGreaterThan(0);
-  await page.locator("#content p").first().hover();
-  await expect(page.locator("#block-edit-launch")).toBeHidden();
   await page.reload();
   await expect
     .poll(() =>
@@ -77,7 +75,7 @@ try {
     .toBeGreaterThan(0);
   assert.deepEqual(await fs.readFile(note), original);
   console.log(
-    "Image access passed: sibling-path denial explained, cancel preserved, consent enables decoding and survives reload; original note unchanged; no read-mode pencil.",
+    "Image access passed: sibling-path denial explained, cancel preserved, consent enables decoding and survives reload; original note unchanged.",
   );
 } finally {
   if (instance)

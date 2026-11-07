@@ -3,7 +3,6 @@
 // the count), the same counts in the outline, and broken links marked in
 // place. Nothing is shown where nothing links in.
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
-import { settled } from "./composing.js";
 import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
 import "./backlinks.css";
@@ -166,9 +165,6 @@ export function createBacklinks({
     const doc = getActive(),
       mine = ++epoch;
     const incoming = await load(doc);
-    // Counts go into headings (being typed into, maybe): not while an input
-    // method composes (see composing.js).
-    await settled();
     if (mine !== epoch || doc !== getActive()) return;
     const { groups, title, missing } = resolve(incoming);
     // Re-rendering the note often keeps the linked blocks: then the counts
@@ -304,10 +300,9 @@ export function createBacklinks({
         !/^#(L\d|fn)/i.test(href)
       );
     });
-    // Only what changes is written, and not while an input method composes
-    // (see composing.js): the note is checked again after each render.
-    await settled();
     if (doc !== getActive()) return;
+    // Only what changes is written; the note is checked again after each
+    // render.
     const mark = (a, status) => {
       const broken = status === "ok" ? undefined : status;
       if (a.dataset.broken === broken) return;
@@ -353,7 +348,6 @@ export function createBacklinks({
       .catch(() => null);
     if (!results) return;
     unknown.forEach((a, i) => statuses.set(key(a), results[i] || "ok"));
-    await settled();
     if (mine !== epoch || doc !== getActive()) return;
     unknown.forEach((a, i) => mark(a, results[i] || "ok"));
   }

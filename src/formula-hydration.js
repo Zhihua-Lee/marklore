@@ -4,7 +4,6 @@ import {
   navigationMoving,
   isCorrection,
 } from "./positions.js";
-import { composing } from "./composing.js";
 
 const selector = "[data-folio-math]";
 function markers(node) {
@@ -60,8 +59,8 @@ export function createFormulaHydrator(
     timer = null;
     if (!host?.isConnected || !host.getClientRects().length) return;
     // Do not grow content along an outline/link jump's path; expand on
-    // arrival. Nor while an input method composes (see composing.js).
-    if ((scroller && navigationMoving(scroller)) || composing()) {
+    // arrival.
+    if (scroller && navigationMoving(scroller)) {
       timer = setTimeout(work, 100);
       return;
     }
@@ -101,7 +100,6 @@ export function createFormulaHydrator(
       ready.size ||
       timer !== null ||
       (scroller && navigationMoving(scroller)) ||
-      composing() ||
       performance.now() - lastScroll < 250;
     if (busy) return scheduleBackfill();
     queue ??= markers(host);

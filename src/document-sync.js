@@ -10,7 +10,6 @@ export function createDocumentSync({
   report,
   conflictBar,
   capture,
-  finishEditing,
   redisplay,
   updateStatus,
   updateTabs,
@@ -80,10 +79,7 @@ export function createDocumentSync({
   // Replace a note's contents with a disk version, keeping the reading position.
   function loadFromDisk(doc, file) {
     const current = doc === getActive();
-    if (current) {
-      finishEditing();
-      capture();
-    }
+    if (current) capture();
     doc.text = file.text;
     doc.base = file.text;
     doc.version = file.version;

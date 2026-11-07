@@ -12,7 +12,7 @@ import "./selection-tools.css";
 const BLOCKS = "p,h1,h2,h3,h4,h5,h6,td,th,li,dt,dd";
 const INLINE =
   "strong,em,s,del,a,code,mark,span,u,sub,sup,kbd,ins,small,b,i,.formula";
-const OFF_LIMITS = "pre,button,summary,input,.block-editor,.math-block";
+const OFF_LIMITS = "pre,button,summary,input,.math-block";
 // What each action would nest inside itself: wrapping again is a toggle.
 const SAME_KIND = {
   bold: "strong,b",
@@ -349,9 +349,6 @@ export function createSelectionTools({
   report,
   editable = (doc) => doc.mode === "edit",
   getLinkTargets = null,
-  // After an undo: put the caret back at the source editor's (direct
-  // editing); false when it did not.
-  refocus = () => false,
 }) {
   const bar = document.createElement("div");
   bar.className = "selection-tools";
@@ -467,19 +464,10 @@ export function createSelectionTools({
     if (last.range) range.setEnd(last.range.endContainer, last.range.endOffset);
     else range.setEndAfter(last.element);
     const selected = window.getSelection();
-    editingFocus().focus({
-      preventScroll: true,
-    });
+    reader.focus({ preventScroll: true });
     selected.removeAllRanges();
     selected.addRange(range);
     refresh();
-  }
-  // Direct editing: the block holding the selection takes the focus back.
-  function editingFocus() {
-    const node = window.getSelection()?.anchorNode;
-    const el = node?.nodeType === 1 ? node : node?.parentElement;
-    const host = el?.closest('[contenteditable="true"]');
-    return host && content.contains(host) ? host : reader;
   }
   function apply(action, options = {}, s = snapshot) {
     if (!valid(s)) {
@@ -618,10 +606,7 @@ export function createSelectionTools({
       const focused = bar.contains(document.activeElement);
       hide();
       window.getSelection()?.removeAllRanges();
-      if (focused)
-        editingFocus().focus({
-          preventScroll: true,
-        });
+      if (focused) reader.focus({ preventScroll: true });
       return;
     }
     if (
@@ -646,10 +631,7 @@ export function createSelectionTools({
       hide();
       (key === "y" || event.shiftKey ? redo : undo)(view);
       render();
-      if (!refocus())
-        editingFocus().focus({
-          preventScroll: true,
-        });
+      reader.focus({ preventScroll: true });
       return;
     }
     const action = { b: "bold", i: "italic", e: "inline", k: "link" }[key];

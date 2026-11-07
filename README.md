@@ -87,17 +87,9 @@ Both write ordinary Markdown links and `<a id>` anchors, which other Markdown to
 
 ![Hovering the count beside a definition lists the two notes that cite it; one opens at the citing sentence, Alt+← returns, and an anchored paragraph is reached from the outline](docs/images/en/backlinks.gif)
 
-### Live preview while you edit
+### Edit the note as it reads
 
-In Edit mode the source is on the left and the preview on the right; formulas, tables and code render while you type. You can also edit a single block right in the preview: its source takes the block's place, and nothing around it moves. Double-clicking text in the reading view opens its source in Edit mode, with the clicked text staying where it was on screen.
-
-![Typing a sentence with a formula in Edit mode: the preview renders it as it is typed](docs/images/en/edit.gif)
-
-### Type right in the rendered note
-
-Prefer to write in the rendered note itself? Turn on `Settings → Edit → Type directly in the preview (experimental)`: you type, delete and press Enter on the rendered page, and each keystroke goes into the Markdown source at its exact place, so the rest of the file never changes and `Ctrl+Z` undoes as usual. A formula typesets the moment you type its closing `$`, click a formula to edit its source, and headings, code blocks and table cells take typing too; a table's structure keeps the pencil for editing in place. Turn off `Show the source pane in Edit mode` too, and Edit mode is the rendered note alone.
-
-![Typing on the rendered page: a sentence with a formula typesets after a pause, Enter adds a line to the tip with a bold lead, and Source mode shows the Markdown that was written](docs/images/en/direct.gif)
+Edit mode is the note as it reads, typed into in place: no source pane by default, and switching between Read and Edit keeps the note exactly where it is. A formula opens as its source where it stands and typesets again once the caret leaves; lists continue and renumber on Enter; table cells, links, images and `<details>` folds are edited in place; colored text and other inline HTML show as they read. Typed Markdown becomes formatting as in Typora (`**bold**` turns bold once closed), with nothing escaped in the file; saving changes only what was edited, so the rest of the file stays byte for byte. One formatting toolbar floats over the note, another over selected text. Double-clicking a word while reading opens Edit mode with that word selected; the source pane can be shown beside the note in Settings.
 
 ### Long documents: outline jumps glide
 

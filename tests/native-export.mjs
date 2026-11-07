@@ -53,7 +53,7 @@ try {
       cmd,
     );
   await command("edit");
-  await page.locator(".cm-content").click();
+  await page.locator("#rich .ProseMirror").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type("\nUNSAVED DRAFT INCLUDED");
   await command("read");

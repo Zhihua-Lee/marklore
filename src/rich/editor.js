@@ -555,6 +555,23 @@ export function createRichEditor({
     // Find in the note (Ctrl+F outside the editor itself).
     find: (text) => finder.open(text),
     finding: () => finder.isOpen(),
+    // Select note offsets from..to (a word double-clicked while reading).
+    selectSource(from, to) {
+      const a = posAt(from);
+      const b = to > from ? posAt(to, -1) : a;
+      if (a === null || b === null) return;
+      view.dispatch(
+        view.state.tr
+          .setSelection(
+            TextSelection.between(
+              view.state.doc.resolve(a),
+              view.state.doc.resolve(Math.max(a, b)),
+            ),
+          )
+          .scrollIntoView(),
+      );
+      view.focus();
+    },
     // The caret at a point of the page (a drop).
     caretAtPoint(x, y) {
       const hit = view.posAtCoords({ left: x, top: y });

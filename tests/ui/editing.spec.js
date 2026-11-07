@@ -251,39 +251,6 @@ test("table styles, adaptive measure and motion-free hover remain selectable and
   await page.screenshot({ path: ".local/tables-v018.png" });
 });
 
-test("read mode has no local editing entry; edit mode offers grouped local color tools", async ({
-  page,
-}) => {
-  await boot(page);
-  await page.getByRole("button", { name: "阅读", exact: true }).click();
-  await page.locator("#content p").hover();
-  await expect(page.locator("#block-edit-launch")).toBeHidden();
-  await expect(page.locator(".block-edit-hover")).toHaveCount(0);
-  await page.locator("#reader").focus();
-  await page.keyboard.press("Alt+Enter");
-  await expect(page.locator(".block-editor")).toHaveCount(0);
-  await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await page.locator("#content p").hover();
-  await page.getByRole("button", { name: "就地编辑此块", exact: true }).click();
-  await page.locator(".block-editor .cm-content").click();
-  await page.keyboard.press("Control+a");
-  await page
-    .getByRole("button", { name: "就地文字高亮", exact: true })
-    .click({ button: "right" });
-  await page.getByRole("button", { name: "粉色", exact: true }).click();
-  await expect(page.locator(".block-editor .cm-content")).toContainText(
-    "<mark",
-  );
-  await page
-    .getByRole("button", { name: "就地文字颜色", exact: true })
-    .click({ button: "right" });
-  await page.getByRole("button", { name: "绿色", exact: true }).click();
-  await page.getByRole("button", { name: "完成", exact: true }).click();
-  await expect(page.locator("#content mark")).toHaveText("Hello 中文");
-  await page.getByRole("button", { name: "阅读", exact: true }).click();
-  await page.locator("#content p").hover();
-  await expect(page.locator("#block-edit-launch")).toBeHidden();
-});
 test("color preserves heading structure, clean outline labels and literal code", async ({
   page,
 }) => {

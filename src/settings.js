@@ -20,7 +20,6 @@ export function defaultSettings() {
     showHistoryButtons: false,
     smoothScroll: "off",
     readingFormat: false,
-    directEdit: false,
     editSplit: false,
     richEdit: true,
     typeMarkdown: true,
@@ -63,7 +62,6 @@ export function normalizeSettings(saved = {}) {
     settings.navigationScope === "current" ? "current" : "all";
   settings.showHistoryButtons = settings.showHistoryButtons === true;
   settings.readingFormat = settings.readingFormat === true;
-  settings.directEdit = settings.directEdit === true;
   settings.editSplit = settings.editSplit === true;
   settings.richEdit = settings.richEdit !== false;
   settings.typeMarkdown = settings.typeMarkdown !== false;

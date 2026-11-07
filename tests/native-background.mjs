@@ -133,7 +133,7 @@ try {
     "External update while hidden",
   );
   await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await page.locator(".cm-content").click();
+  await page.locator("#rich .ProseMirror").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.insertText(" UNSAVED BACKGROUND DRAFT");
   await instance.evaluate(({ BrowserWindow }) =>
@@ -156,7 +156,7 @@ try {
       .click();
   });
   await expect.poll(visible).toBe(true);
-  await expect(page.locator(".cm-content")).toContainText(
+  await expect(page.locator("#rich .ProseMirror")).toContainText(
     "UNSAVED BACKGROUND DRAFT",
   );
   // Native tray settings route and explicit hide retain session and work even

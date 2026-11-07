@@ -1,8 +1,8 @@
 // Whether an input method is composing anywhere in the page. While it is,
-// background work (lazy formulas, diagrams, table widths, link marks, hover
-// marks, memory release) leaves the page alone: on Windows the input method is
-// told when the text around its composition changes, and some (Sogou Pinyin)
-// then end the composition halfway through the pinyin.
+// background work in the editor (formulas typeset as they come on screen,
+// diagrams drawn) and memory release leave the page alone: on Windows the
+// input method is told when the text around its composition changes, and
+// some (Sogou Pinyin) then end the composition halfway through the pinyin.
 //
 // It counts from the key that starts a composition: the input method takes
 // the key (keyCode 229) before the page hears of the composition, and a

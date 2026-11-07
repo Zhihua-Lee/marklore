@@ -77,7 +77,7 @@ pnpm dev
 
 - 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。
-- 直接编辑有一个随机编辑测试 [tests/ui/direct-edit-fuzz.spec.js](../tests/ui/direct-edit-fuzz.spec.js)：在一篇样样都有的笔记里随机点击、选择、打字、删除、回车、Tab、输入法组字（含暂停和 keyCode 229）、粘贴、剪切、撤销和重做。每批操作等页面安定后检查：页面无报错；每段文字与它声称来自的源码一致，且与重新渲染源码的结果相同；源码只在操作所在的块及其相邻块内变化；在光标处打的普通文字原样进入源码；光标仍在笔记里；组字期间正在组字的文本节点没有被替换。最后撤销到底必须逐字节回到原文件，再重做回到最终内容，且每次 Ctrl+Z 都用掉一步、没有别的修改插进来。默认 2 个种子各 30 批；`FOLIO_FUZZ_SEEDS=n` 跑种子 1..n，`FOLIO_FUZZ_SEED=k` 只跑种子 k（失败信息会给出种子和步数），`FOLIO_FUZZ_STEPS=m` 改批数，`FOLIO_FUZZ_TRACE=1` 在失败信息里附上每个动作前后源码选区与页面光标的位置。改直接编辑的逻辑后，先跑一轮更大的（如 `FOLIO_FUZZ_SEEDS=16 FOLIO_FUZZ_STEPS=60`）。发现的问题另写成 `direct-edit.spec.js` 里的固定用例。
+- 编辑模式的编辑器（`src/rich/`）由 `tests/ui/rich-*.spec.js` 覆盖：读入再写回逐字节不变、只改动打字处、输入法组字、公式、列表、表格、链接、图片、折叠块、行内 HTML、查找替换、格式工具栏、批注、光标在各种块之间移动，以及 Typora 式输入。共用的启动与选择工具在 `tests/ui/rich-helpers.js`。
 - 已有开发服务器时，设置 `FOLIO_BASE_URL`（如 `http://127.0.0.1:5173`）可跳过自动启动；`FOLIO_BROWSER_CHANNEL=""` 使用 Playwright 自带的 Chromium。
 
 ### 持续集成
@@ -141,27 +141,27 @@ pnpm prune-releases --apply    # 移到回收站
 
 ## 源码结构
 
-| 路径                                                                                                   | 职责                                                                 |
-| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)             | 窗口、隔离接口、文件监听与会话恢复。                                 |
-| [`desktop/files.mjs`](../desktop/files.mjs)                                                            | 文件授权、编码、版本校验、备份与目录操作。                           |
-| [`desktop/integration.mjs`](../desktop/integration.mjs)                                                | Windows 系统集成。                                                   |
-| [`src/app.js`](../src/app.js)                                                                          | 文档状态、编辑器和交互协调。                                         |
-| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)                     | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。                  |
-| [`src/render-cache.js`](../src/render-cache.js)                                                        | 有界的近期预览 DOM 复用。                                            |
-| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)                     | 标签交互、排序与分组。                                               |
-| [`src/editing.js`](../src/editing.js)、[`src/block-editing.js`](../src/block-editing.js)               | 源码格式工具与块级就地编辑。                                         |
-| [`src/direct-editing.js`](../src/direct-editing.js)、[`src/direct-hosts.js`](../src/direct-hosts.js)   | 在渲染后的笔记中直接编辑；每个块各自是编辑区，跨块的光标移动与选择。 |
-| [`src/memory-release.js`](../src/memory-release.js)                                                    | 繁重渲染结束、页面安静后请主进程回收内存。                           |
-| [`src/copy-source.js`](../src/copy-source.js)                                                          | 从阅读区复制对应的 Markdown 源码。                                   |
-| [`src/link-preview.js`](../src/link-preview.js)                                                        | 链接悬浮预览与异步状态管理。                                         |
-| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)                     | 内容快照、离线资源嵌入和 PDF／HTML 导出。                            |
-| [`desktop/mcp.mjs`](../desktop/mcp.mjs)、[`desktop/mcp-server.mjs`](../desktop/mcp-server.mjs)         | MCP 服务器入口（stdio JSON-RPC）与数据目录定位。                     |
-| [`desktop/mcp-tools.mjs`](../desktop/mcp-tools.mjs)                                                    | MCP 工具：读取开放的笔记库、提议修改、批注。                         |
-| [`desktop/ai-store.mjs`](../desktop/ai-store.mjs)、[`desktop/ai-bridge.mjs`](../desktop/ai-bridge.mjs) | 提议与批注的存储（`ai` 文件夹）及主进程一侧。                        |
-| [`src/proposals.js`](../src/proposals.js)、[`src/comments.js`](../src/comments.js)                     | 提议条、预览与接受；批注的标记与讨论卡片。                           |
-| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                  | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。        |
-| [`tests/`](../tests/)                                                                                  | 单元、浏览器与原生回归用例。                                         |
+| 路径                                                                                                   | 职责                                                                                         |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)             | 窗口、隔离接口、文件监听与会话恢复。                                                         |
+| [`desktop/files.mjs`](../desktop/files.mjs)                                                            | 文件授权、编码、版本校验、备份与目录操作。                                                   |
+| [`desktop/integration.mjs`](../desktop/integration.mjs)                                                | Windows 系统集成。                                                                           |
+| [`src/app.js`](../src/app.js)                                                                          | 文档状态、编辑器和交互协调。                                                                 |
+| [`src/markdown.js`](../src/markdown.js)、[`src/positions.js`](../src/positions.js)                     | Markdown／公式解析、HTML 清理、源码映射与阅读锚点。                                          |
+| [`src/render-cache.js`](../src/render-cache.js)                                                        | 有界的近期预览 DOM 复用。                                                                    |
+| [`src/tab-bar.js`](../src/tab-bar.js)、[`src/tab-groups.js`](../src/tab-groups.js)                     | 标签交互、排序与分组。                                                                       |
+| [`src/editing.js`](../src/editing.js)                                                                  | 顶部格式工具栏：两种编辑方式共用，作用于正在输入的那一栏。                                   |
+| [`src/rich/`](../src/rich/)                                                                            | 编辑模式的编辑器（ProseMirror）：读写 Markdown、公式、链接、图片、折叠块、查找、工具栏动作。 |
+| [`src/memory-release.js`](../src/memory-release.js)                                                    | 繁重渲染结束、页面安静后请主进程回收内存。                                                   |
+| [`src/copy-source.js`](../src/copy-source.js)                                                          | 从阅读区复制对应的 Markdown 源码。                                                           |
+| [`src/link-preview.js`](../src/link-preview.js)                                                        | 链接悬浮预览与异步状态管理。                                                                 |
+| [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)                     | 内容快照、离线资源嵌入和 PDF／HTML 导出。                                                    |
+| [`desktop/mcp.mjs`](../desktop/mcp.mjs)、[`desktop/mcp-server.mjs`](../desktop/mcp-server.mjs)         | MCP 服务器入口（stdio JSON-RPC）与数据目录定位。                                             |
+| [`desktop/mcp-tools.mjs`](../desktop/mcp-tools.mjs)                                                    | MCP 工具：读取开放的笔记库、提议修改、批注。                                                 |
+| [`desktop/ai-store.mjs`](../desktop/ai-store.mjs)、[`desktop/ai-bridge.mjs`](../desktop/ai-bridge.mjs) | 提议与批注的存储（`ai` 文件夹）及主进程一侧。                                                |
+| [`src/proposals.js`](../src/proposals.js)、[`src/comments.js`](../src/comments.js)                     | 提议条、预览与接受；批注的标记与讨论卡片。                                                   |
+| [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                  | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。                                |
+| [`tests/`](../tests/)                                                                                  | 单元、浏览器与原生回归用例。                                                                 |
 
 渲染进程没有直接的 Node／文件系统访问权限，本地文件操作经过主进程的授权接口。新增渲染能力应保持 HTML 清理、图表限制和本地资源授权边界，不通过放开远程加载来解决展示问题。
 
@@ -169,18 +169,11 @@ MCP 服务器就是 Marklore 程序本身：AI 工具以 `ELECTRON_RUN_AS_NODE=1
 
 长文相关改动需同时检查首次打开、编辑、切换模式／标签和阅读位置恢复。滚动路径上不要加非被动的 `wheel` 监听，也不要在滚动时逐次测量阅读锚点：渲染后的公式会让每次命中测试花费约 10 ms，直接造成滚轮卡顿（参见 `src/app.js` 中的滚动遮罩与 `src/table-layout.js` 的延迟锚点）。现有缓存减少重复工作，但首次解析仍有成本，不能仅凭小样本声称任意长文流畅。
 
-直接编辑时，笔记本身不可编辑，每个顶层块（段落、标题、列表、引用、表格）各自是一个编辑区：浏览器处理一次按键的开销随编辑区大小增长，1800 行的笔记上从每键约 40 ms 降到约 20 ms。把整篇笔记临时设为可编辑会让整篇重新计算样式（约 0.3 s），所以不在两种方式之间切换。浏览器把光标和选区限制在一个编辑区内，跨块的方向键、Shift 选择、拖选、Shift+点击、Ctrl+A、Ctrl+Home/End、PageUp/PageDown 和块之间的点击由 `src/direct-hosts.js` 处理；跨块选区的复制与剪切写入完整内容（浏览器自己只会复制第一个块的部分）。给块加 CSS `contain` 在这种方式下测不出收益，加在列表等块上还会改变外边距，所以没有使用。
+编辑模式的编辑器（`src/rich/`，基于 ProseMirror）把笔记读成文档树，打字改的是这棵树，再写回 Markdown：没有改动的顶层块原样写回自己的源码；改动过的块把“改前”和“改后”两次写出的差异对齐到原源码上（Myers 对齐），并重新解析确认含义不变，否则整块重写。打出的符号先不加转义地拼进源码再重新解析（Typora 式输入），读出格式时整块换成解析结果。一篇笔记读入后若不能逐字节写回，编辑器不改它，改用源码栏。
 
-输入法组字（拼音尚未上屏）期间，后台工作不改动页面：Windows 会把组字附近文字的变化通知输入法，搜狗拼音等因此提前结束组字。`src/composing.js` 记录是否在组字；公式补排、表格列宽、图表插入、链接标记、悬停标记和内存回收在组字时推迟到结束后（`tests/ui/direct-edit.spec.js` 检查组字期间页面没有其他变化）。新增会改动页面的后台工作也要这样做。
+公式、图表和原始 HTML 显示为整体；光标进入时在原处换成源码（公式块和原始块是一个特殊参数的代码块，行内公式是带标记的文字），离开后重新解析。长笔记里公式在接近屏幕时才排版，其余在空闲时补上；屏幕外的顶层块用 `content-visibility` 跳过排版，每个块都用 `contain-intrinsic-size: auto` 记住自己的高度，光标离开时不会跳动。
 
-组字从输入法接管的第一个键（keyCode 229）算起，而不是从 `compositionstart` 算起：两者之间页面若重新渲染，组字还没开始就被结束。停顿后的重新渲染也不能替换正在输入的那一块、不能让焦点离开它：焦点换到另一个元素，等于告诉输入法换了输入框。`src/render-cache.js` 因此按打字后的文字（`retyped`）比对被输入过的块，相同就只更新位置属性；块确实变了（新段落、形成了加粗）时，带焦点的块原地换上新内容（`keepFocused`）。比对时忽略所有源码位置属性（`data-*-from/to`，含 `data-src-*`、`data-block-*`）和直接编辑加在块上的属性。原地更新（`morph`）逐层对照新旧节点：结构相同就保留原节点、只改属性和变了的文字，正在输入的文字节点因此不变；公式与图表整个换成新的；页面自己加的东西（反向链接计数、折叠和换行状态、断链标记）保留。标题里打字会改变它的锚点 id，也就改变了所在章节的标识，这时沿用同一位置、同一级别的旧章节，标题和正文块都不重建。
-
-代码块在源码中原样出现时（顶层的围栏代码，不在列表或引用里，非空，不是 Mermaid）也可以直接编辑：`markdown.js` 给其中的 `<code>` 标上 `data-text-from/to`，`code-blocks.js` 给代码框加 `code-direct`，编辑区是其中的 `<pre>`，工具栏不可编辑。代码最后的换行属于结束围栏，打字和删除都停在它之前；`Enter` 保留当前行缩进，`Tab`／`Shift+Tab` 按代码已有的缩进单位增减；跨出代码块的选区一律拒绝，以免破坏围栏。
-
-公式平时是不可编辑的整体；光标在公式源码之内时（点击、方向键移入、正在输入），渲染把它换成源码文字（`renderMarkdown` 的 `open` 选项，行内为 `.formula-source`，独立公式为 `p.math-source`），光标离开后局部重绘恢复排版。`app.js` 把光标位置传给整篇渲染和局部渲染，并在应当展开的公式（`directEditor.opened()`）与上次渲染不同时重新渲染。光标恢复（`settle`）只在没有任何块包含该位置时才新建空段落；落在段内无文字处（公式、标记）就取同段最近的文字位置。独立公式（`$$`）不跨空行，与 TeX 一致：行首随手打出的 `$$` 不会吞掉下方笔记。局部重绘（`previewCache.place`）同样原地更新持有焦点的块，Enter 新建的空段落在整篇重绘时保留在原位。
-
-没有文字可放光标的块（空笔记、空标题、空列表项、空引用）由 `markEmpty` 补一个空文字段（`.direct-empty`，零宽字符，`data-text-from` 指向前缀之后），空笔记补一个 `p.direct-empty-block`。空段落一旦写入文字或输入法上屏（`unmarkEmpty`），就去掉 `direct-empty-block`：渲染缓存只把仍是空的这类段落当作页面自加的节点保留，否则新渲染出的同一段会与它并存。段首打出 `# `、`- `、`1. `、`> ` 等块前缀时立即局部重绘，不等停顿。
-
+输入法组字（拼音尚未上屏）期间，编辑器的后台工作（排版公式、画图表）不改动页面：Windows 会把组字附近文字的变化通知输入法，搜狗拼音等因此提前结束组字。`src/composing.js` 记录是否在组字，从输入法接管的第一个键（keyCode 229）算起，而不是从 `compositionstart` 算起。阅读视图不接受输入，那里的后台工作不需要等待。
 源码窗格（CodeMirror）只测量屏幕附近的行，其余按字数估算高度；自动换行的长行（中文尤甚）估算偏低 20–45%，滚动时滚动条会不断变短、跳动。`src/editor-heights.js` 在空闲时分片把整篇滚一遍并测量（用 CodeMirror 未公开的同步 `view.measure()`），每片结束前把屏幕顶部那一行放回原处；之后估算误差在 3% 以内。笔记大改或宽度变化后重新测量。
 
 长笔记渲染（公式、表格，尤其是 Mermaid 图）会留下大量垃圾，Chromium 要到内存紧张时才回收。页面出现超过 100 ms 的长任务后安静 5 秒且没有输入时，渲染进程请求主进程回收（`releaseMemory`）；主进程只在渲染进程超过 200 MB、且距上次至少 1 分钟时，通过调试接口执行 `HeapProfiler.collectGarbage`（V8 的低内存回收，同时整理 Blink 的堆）。1800 行的示例笔记上约减少 85–95 MB，耗时约 0.2 s。

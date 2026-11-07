@@ -304,3 +304,20 @@ test("an image: a click shows its address and description to change", async ({
   await box.getByRole("button", { name: "移除图片" }).click();
   expect(await saved(page)).toBe("Before  after.\n");
 });
+
+test("a double click on a word while reading selects it in the editor", async ({
+  page,
+}) => {
+  await boot(page, "First line.\n\nSecond **bold** word here.\n");
+  await page.keyboard.press("Control+1");
+  await page.locator("#content strong").dblclick();
+  await expect(page.locator("#panes")).toHaveAttribute("data-mode", "edit");
+  await expect(editor(page)).toBeFocused();
+  await expect
+    .poll(() => page.evaluate(() => window.getSelection().toString()))
+    .toBe("bold");
+  await page.keyboard.type("strong");
+  expect(await saved(page)).toBe(
+    "First line.\n\nSecond **strong** word here.\n",
+  );
+});

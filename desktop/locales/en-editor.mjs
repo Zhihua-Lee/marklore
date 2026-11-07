@@ -48,46 +48,10 @@ export default {
 
   // In-place block editing (block-editing.js)
   标题: "Heading",
-  列表: "List",
   表格: "Table",
-  公式: "Formula",
-  源码块: "Source block",
-  "就地编辑此块 · Alt+Enter": "Edit this block in place · Alt+Enter",
-  就地编辑此块: "Edit this block in place",
-  "这里不能直接编辑：公式、代码和表格结构请用铅笔就地编辑":
-    "This part can't be typed into directly: use the pencil for formulas, code and a table's structure",
-  "选区跨出了代码块；代码块的开头和结尾请用铅笔修改":
-    "The selection reaches past the code block; use the pencil to change where it starts and ends",
-  "表格单元格里不能换行；改表格结构请用铅笔":
-    "A table cell holds one line; use the pencil to change the table's structure",
   "预览正在更新，请稍后再试。":
     "The preview is updating. Try again in a moment.",
-  "就地编辑{block}": "Editing in place: {block}",
-  就地编辑格式: "In-place formatting",
-  "粗体 Ctrl+B": "Bold Ctrl+B",
-  就地加粗: "Bold (in place)",
-  "斜体 Ctrl+I": "Italic Ctrl+I",
-  就地斜体: "Italic (in place)",
-  "行内代码 Ctrl+E": "Inline code Ctrl+E",
-  就地行内代码: "Inline code (in place)",
-  "链接 Ctrl+K": "Link Ctrl+K",
-  就地插入链接: "Insert link (in place)",
-  就地撤销: "Undo (in place)",
-  就地重做: "Redo (in place)",
   链接: "Link",
-  "https://… 或 chapter.md": "https://… or chapter.md",
-  "完成 Ctrl+Enter": "Done (Ctrl+Enter)",
-  完成: "Done",
-  就地插入图片: "Insert image (in place)",
-  就地文字高亮: "Highlight (in place)",
-  就地文字颜色: "Text color (in place)",
-  "当前块 Markdown": "Current block Markdown",
-  "编辑内容或选区已改变，请重新选择文字。":
-    "The content or selection has changed. Select the text again.",
-  "笔记已发生其他修改，就地编辑已停止。":
-    "The note was changed elsewhere, so in-place editing stopped.",
-  "笔记已有其他修改，未覆盖当前内容。":
-    "The note has other changes, so the current content was not overwritten.",
 
   // Code blocks (code-blocks.js)
   换行: "Wrap",

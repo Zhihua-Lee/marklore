@@ -40,7 +40,7 @@ Not executed here: the pinned dependency build, the full existing Playwright sui
 
 ```sh
 pnpm test
-pnpm test:ui tests/ui/reading-enhancements.spec.js tests/ui/performance.spec.js tests/ui/math-compat.spec.js tests/ui/table-layout.spec.js tests/ui/block-editing.spec.js
+pnpm test:ui tests/ui/reading-enhancements.spec.js tests/ui/performance.spec.js tests/ui/math-compat.spec.js tests/ui/table-layout.spec.js
 pnpm build
 ```
 

@@ -64,39 +64,3 @@ test("a double click in Read mode keeps the clicked paragraph in place", async (
   await page.waitForTimeout(300);
   expect(Math.abs((await top(target)) - before)).toBeLessThan(1.5);
 });
-
-test("editing a paragraph in place moves nothing around it; Done and Esc bring it back exactly", async ({
-  page,
-}) => {
-  const target = await boot(page);
-  await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await page.waitForTimeout(300);
-  const next = page
-    .locator("#content p")
-    .filter({ hasText: "后续段落" })
-    .first();
-  const start = await top(target),
-    nextStart = await top(next);
-  for (const close of ["Control+Enter", "Escape"]) {
-    await target.hover();
-    await page
-      .getByRole("button", { name: "就地编辑此块", exact: true })
-      .click();
-    await expect(page.locator(".block-editor")).toHaveCount(1);
-    await page.waitForTimeout(200);
-    // The source starts where the text was, and the text below stays.
-    expect(
-      Math.abs((await top(page.locator(".block-editor"))) - start),
-    ).toBeLessThan(1.5);
-    expect(Math.abs((await top(next)) - nextStart)).toBeLessThan(1.5);
-    // The tools float: they take no room in the page.
-    await expect(page.locator(".block-edit-float")).toHaveCSS(
-      "position",
-      "absolute",
-    );
-    await page.keyboard.press(close);
-    await expect(page.locator(".block-editor")).toHaveCount(0);
-    await page.waitForTimeout(300);
-    expect(Math.abs((await top(target)) - start)).toBeLessThan(1);
-  }
-});

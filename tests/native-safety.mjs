@@ -100,7 +100,7 @@ try {
   // A dirty source triggers the real cancelled-quit flow; the clean target must
   // still receive filesystem notifications after Electron's before-quit event.
   await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await page.locator(".cm-content").click();
+  await page.locator("#rich .ProseMirror").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.type(" UNSAVED DRAFT");
   await instance.evaluate(({ BrowserWindow }, doc) => {

@@ -50,7 +50,7 @@ try {
   });
   assert.match(fake, /真实文件/);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
-  await page.locator(".cm-content").click();
+  await page.locator("#rich .ProseMirror").click();
   await page.keyboard.press("Control+End");
   await page.keyboard.insertText("UNSAVED KEEP");
   const cdp = await page.context().newCDPSession(page);
@@ -65,7 +65,9 @@ try {
   await expect(page.locator("#content h1")).toContainText("Dropped note");
   await expect(page.locator("#toast")).toContainText("不支持的文件类型");
   await page.getByRole("tab").filter({ hasText: "source.md" }).click();
-  await expect(page.locator(".cm-content")).toContainText("UNSAVED KEEP");
+  await expect(page.locator("#rich .ProseMirror")).toContainText(
+    "UNSAVED KEEP",
+  );
   assert.doesNotMatch(await fs.readFile(source, "utf8"), /UNSAVED KEEP/);
   await expect(page.locator("body")).not.toHaveClass(/file-drop/);
   await cdp.detach();

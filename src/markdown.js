@@ -781,12 +781,9 @@ export function renderMarkdown(
     mapPosition = null,
     // Long code blocks show in full instead of folded.
     expandCode = false,
-    // The source is a slice of a note starting here (direct editing renders
-    // the blocks it changed): positions point into the whole note.
+    // The source is a slice of a note starting here (a tab's preview card):
+    // positions point into the whole note.
     base = 0,
-    // Direct editing's caret (a position in the note): the formula around
-    // it shows its source.
-    open = null,
   } = {},
 ) {
   const env = { mathFragments: [], deferMath };
@@ -1040,50 +1037,9 @@ export function renderMarkdown(
         );
     for (const heading of env.headings || []) heading.from += base;
   }
-  // Direct editing: the formula holding the caret shows its source as text
-  // to type into (a display formula as a paragraph of its own); it is
-  // typeset again once the caret leaves it.
-  let opened = null;
-  if (open !== null && !mapPosition)
-    for (const formula of template.content.querySelectorAll(
-      ".formula[data-from][data-to],.math-block[data-from][data-to]",
-    )) {
-      const display = formula.classList.contains("math-block"),
-        from = Number(formula.dataset.from);
-      let text = source.slice(from - base, Number(formula.dataset.to) - base);
-      // A display formula's range runs to the next line.
-      if (display) text = text.replace(/\s+$/, "");
-      const to = from + text.length;
-      if (!(from < open && open < to)) continue;
-      // A display formula in a list or quote has their markers in its lines.
-      if (
-        display &&
-        !(
-          formula.parentNode === template.content ||
-          formula.parentElement.classList.contains("section-body")
-        )
-      )
-        break;
-      const run = document.createElement("span");
-      run.className = "formula-source";
-      run.dataset.textFrom = String(from);
-      run.dataset.textTo = String(to);
-      run.textContent = text;
-      if (display) {
-        const paragraph = document.createElement("p");
-        paragraph.className = "math-source";
-        paragraph.dataset.from = formula.dataset.from;
-        paragraph.dataset.to = formula.dataset.to;
-        paragraph.append(run);
-        formula.replaceWith(paragraph);
-      } else formula.replaceWith(run);
-      opened = { from, to };
-      break;
-    }
   const html = template.innerHTML;
   return {
     html,
-    opened,
     headings: env.headings || [],
     fragment: template.content,
     // Reconcile the small source-mapped skeleton before expanding formula DOM.

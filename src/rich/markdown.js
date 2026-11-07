@@ -416,7 +416,14 @@ export function load(src) {
       });
     });
   });
-  if (!docNodes.length) docNodes.push(S.paragraph.create());
+  // A blank note (a new one) is one empty paragraph standing for nothing,
+  // its blank lines kept after it.
+  if (!docNodes.length) {
+    const node = S.paragraph.create();
+    docNodes.push(node);
+    blocks.push({ node, text: "", from: 0, gap: src });
+    filled.push({ from: 0 });
+  }
   let at0 = 0;
   for (const b of blocks) {
     b.pos = at0;

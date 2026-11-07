@@ -26,6 +26,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600,
     assetsInlineLimit: 0,
   },
+  // Only the app's page is scanned for dependencies, not any other HTML file
+  // lying in the folder (a second copy of a library would be loaded).
+  optimizeDeps: { entries: ["index.html"] },
   server: {
     host: "127.0.0.1",
     watch: {

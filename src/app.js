@@ -503,6 +503,7 @@ blockEditor = createBlockEditor({
   getDocument: () => active,
   report: toast,
   insertImage: () => imageInsertion.pick(),
+  enabled: () => !settings.richEdit,
   onFinish: (anchor) => {
     clearTimeout(renderingTimer);
     render(false);

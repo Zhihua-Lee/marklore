@@ -24,6 +24,8 @@ const mermaidLoaded = (page) =>
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "新笔记", exact: true }).click();
+  // A new note opens in Edit mode; the diagram is drawn in the reading view.
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
 });
 
 test("a diagram is drawn by Ondine without loading mermaid.js", async ({

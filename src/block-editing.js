@@ -38,7 +38,10 @@ export function createBlockEditor({
   onFinish,
   report,
   insertImage,
+  // Off while the editor of Edit mode (src/rich) is on: no pencil at all.
+  enabled = () => true,
 }) {
+  const editable = () => enabled() && getDocument()?.mode === "edit";
   let session = null,
     target = null,
     pointer = null,
@@ -58,7 +61,7 @@ export function createBlockEditor({
       session ||
       !target?.isConnected ||
       !target.getClientRects().length ||
-      getDocument()?.mode !== "edit"
+      !editable()
     ) {
       launch.hidden = true;
       return;
@@ -74,7 +77,7 @@ export function createBlockEditor({
     launch.style.top = Math.max(viewport.top + 40, r.top) + "px";
   }
   function selectTarget(element) {
-    if (session || getDocument()?.mode !== "edit" || composing()) return;
+    if (session || !editable() || composing()) return;
     const next = element?.closest("[data-edit-from]");
     if (!next || !content.contains(next)) return;
     if (target !== next) {
@@ -146,7 +149,7 @@ export function createBlockEditor({
 
   function begin() {
     const doc = getDocument();
-    if (session || !doc || !target?.isConnected || doc.mode !== "edit") return;
+    if (session || !doc || !target?.isConnected || !editable()) return;
     if (doc.previewText !== doc.text) {
       report(t("预览正在更新，请稍后再试。"));
       return;

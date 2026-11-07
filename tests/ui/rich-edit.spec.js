@@ -344,3 +344,26 @@ test("the source pane is off by default in Edit mode", async ({ page }) => {
   await boot(page);
   await expect(page.locator("#editor-pane")).toBeHidden();
 });
+
+test("a new note opens in the editor, not the source pane", async ({
+  page,
+}) => {
+  await boot(page);
+  await page.evaluate(() => window.mock.handlers.command("new"));
+  await expect(page.getByRole("tab", { name: /未命名\.md/ })).toBeVisible();
+  await expect(editor(page)).toBeVisible();
+  await expect(page.locator("#editor-pane")).toBeHidden();
+  await expect(page.locator("#reader")).toBeHidden();
+  await expect(page.getByText(/还不能原样保留/)).toHaveCount(0);
+  await page.keyboard.type("# Title");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Body");
+  await expect(editor(page).locator("h1")).toHaveText("Title");
+  await expect(page.locator("#editor .cm-content")).toContainText("Body");
+  // The note's text is exactly what was typed.
+  await expect(page.locator("#editor .cm-line")).toHaveText([
+    "# Title",
+    "",
+    "Body",
+  ]);
+});

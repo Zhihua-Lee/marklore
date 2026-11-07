@@ -102,6 +102,8 @@ test("Mermaid renders offline SVG without exposing clickable external content", 
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "新笔记", exact: true }).click();
+  // A new note opens in Edit mode; the diagram is drawn in the reading view.
+  await page.getByRole("button", { name: "阅读", exact: true }).click();
   await page.evaluate(async () => {
     const { renderMarkdown } = await import("/src/markdown.js").then(
         async (m) => (await m.loadMath(), m),

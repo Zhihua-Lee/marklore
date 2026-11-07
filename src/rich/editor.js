@@ -61,6 +61,7 @@ import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
 import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
+import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 
 const S = schema.nodes;
@@ -352,6 +353,7 @@ export function createRichEditor({
     task_box: (n, v, g) => new TaskView(n, v, g),
   };
   const options = () => ({ fileId: current?.fileId, theme: getTheme() });
+  const finder = findPlugin();
   const plugins = [
     rules,
     typing,
@@ -359,6 +361,7 @@ export function createRichEditor({
     selectionBubble({ comment }),
     codeColors,
     imageBox,
+    finder.plugin,
     caretBlock,
     closer,
     history(),
@@ -367,6 +370,13 @@ export function createRichEditor({
     gapCursor(),
     keymap({
       "Mod-Home": edge(-1),
+      // Find (and replace) in the note, the selection as what to find.
+      "Mod-f": (state) => {
+        const { from, to } = state.selection;
+        const text = state.doc.textBetween(from, to);
+        finder.open(text.includes("\n") ? "" : text);
+        return true;
+      },
       "Mod-End": edge(1),
       "Mod-z": undo,
       "Mod-y": redo,
@@ -542,6 +552,9 @@ export function createRichEditor({
       view.focus();
     },
     hasFocus: () => view.hasFocus(),
+    // Find in the note (Ctrl+F outside the editor itself).
+    find: (text) => finder.open(text),
+    finding: () => finder.isOpen(),
     // The caret at a point of the page (a drop).
     caretAtPoint(x, y) {
       const hit = view.posAtCoords({ left: x, top: y });

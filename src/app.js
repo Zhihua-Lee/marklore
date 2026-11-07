@@ -2099,6 +2099,8 @@ document.addEventListener("keydown", (e) => {
     if (e.defaultPrevented || e.target.closest?.("#editor")) return;
     if (!active || active.mode === "source") return;
     e.preventDefault();
+    // Edit mode: find in the editor, with replace.
+    if (richActive()) return richEditor.find("");
     findBar.open();
     return;
   }

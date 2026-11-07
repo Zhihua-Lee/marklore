@@ -212,3 +212,10 @@
 .rich-image-box input {
   width: 200px;
 }
+/* Find in the editor (find.js): the same colors as find in the reading view. */
+#rich .rich-find {
+  background-color: color-mix(in srgb, #e5b93a 38%, transparent);
+}
+#rich .rich-find-current {
+  background-color: color-mix(in srgb, #e58a1f 70%, transparent);
+}

@@ -124,14 +124,17 @@ try {
   await page.getByRole("menuitem", { name: /Plan\.md/ }).click();
   const bar = page.locator("#proposal-bar");
   await bar.getByText("Earlier deadline").waitFor();
-  // The changes view: the removed word struck through where it was.
+  // Reviewing at once: the removed word struck through where it was.
   await page.locator("#content del", { hasText: "Friday" }).waitFor();
   await page
     .locator("#content")
     .getByText(/Send it on Friday\s*Thursday\./)
     .waitFor();
   assert.equal(await fs.readFile(plan, "utf8"), note.text);
-  await bar.getByRole("button", { name: "接受并保存" }).click();
+  // Nothing is written until the review is finished.
+  await bar.getByRole("button", { name: "接受这处", exact: true }).click();
+  assert.equal(await fs.readFile(plan, "utf8"), note.text);
+  await bar.getByRole("button", { name: "完成审阅", exact: true }).click();
   await bar.waitFor({ state: "hidden" });
   assert.equal(
     await fs.readFile(plan, "utf8"),
@@ -140,6 +143,7 @@ try {
   const decided = await ai.call("get_proposal", { id: proposal.proposal_id });
   assert.equal(decided.status, "accepted");
   assert.equal(decided.saved, true);
+  assert.deepEqual(decided.edit_results, ["accepted"]);
 
   // A new note is written only on accept.
   const fresh = await ai.call("propose_note", {
@@ -150,7 +154,8 @@ try {
   await button.waitFor({ state: "visible", timeout: 5000 });
   await button.click();
   await page.getByRole("menuitem", { name: /Meeting\.md/ }).click();
-  await bar.getByRole("button", { name: "接受并创建" }).click();
+  await bar.getByRole("button", { name: "全部接受", exact: true }).click();
+  await bar.getByRole("button", { name: "完成审阅", exact: true }).click();
   await bar.waitFor({ state: "hidden" });
   assert.equal(
     await fs.readFile(path.join(library, "Meeting.md"), "utf8"),

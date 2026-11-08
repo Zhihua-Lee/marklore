@@ -1,22 +1,70 @@
 /* AI proposals: a quiet strip above the note in the accent's tint; the
    changes themselves in fixed review colors (below). */
+/* Two rows while reviewing: who proposes what, with Finish and Exit at the
+   right end; then how it is shown on the left and the decisions on the
+   right (change by change, then all). Every control keeps its place: the
+   summary is cut short rather than pushing them. */
 #proposal-bar {
+  --bar-left: 14px;
+  --bar-right: 14px;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 10px;
-  padding: 7px 14px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 7px var(--bar-right) 7px var(--bar-left);
   border-bottom: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
   background: color-mix(in srgb, var(--accent) 8%, var(--paper));
   color: var(--ink);
   font-size: 12px;
 }
+/* The library and outline buttons float over the top corners when their
+   panels are closed: the bar keeps clear of them. */
+body:has(#sidebar[hidden]) #proposal-bar {
+  --bar-left: 44px;
+}
+body:has(#sidebar[hidden]):has(#panel-controls-left > button + button)
+  #proposal-bar {
+  --bar-left: 76px;
+}
+body:has(#right-sidebar[hidden]) #proposal-bar {
+  --bar-right: 50px;
+}
+body:has(#right-sidebar[hidden]):has(#panel-controls-right > button + button)
+  #proposal-bar {
+  --bar-right: 82px;
+}
+#proposal-bar :is(.proposal-head, .proposal-tools) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+#proposal-bar .proposal-tools {
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
 #proposal-bar .proposal-text {
-  flex: 1 1 260px;
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   align-items: center;
   gap: 2px;
+  white-space: nowrap;
+}
+#proposal-bar :is(.proposal-switch, .proposal-ends) {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#proposal-bar .proposal-gap {
+  flex: 1 1 0;
+}
+#proposal-bar .proposal-progress {
+  min-width: 6.5em;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 #proposal-bar .proposal-mark {
   display: inline-flex;
@@ -36,14 +84,14 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#proposal-bar .proposal-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 #proposal-bar .proposal-count {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+#proposal-bar .proposal-one .proposal-count {
+  min-width: 5.5em;
+  text-align: center;
 }
 #proposal-bar button[aria-pressed="true"] {
   background: color-mix(in srgb, var(--accent) 16%, var(--paper));
@@ -227,24 +275,6 @@
     border-top: 1px solid var(--line);
   }
 }
-/* The source diff of a proposal: plainer red and green lines, the words
-   that differ within a line stronger still. */
-#content.proposal-source .code-block .diff-add {
-  background: rgb(46 160 67 / 32%);
-  color: #e3f6e6;
-}
-#content.proposal-source .code-block .diff-del {
-  background: rgb(248 81 73 / 30%);
-  color: #fbe3e1;
-}
-#content.proposal-source .diff-add .proposal-word {
-  background: rgb(46 160 67 / 62%);
-  border-radius: 2px;
-}
-#content.proposal-source .diff-del .proposal-word {
-  background: rgb(248 81 73 / 58%);
-  border-radius: 2px;
-}
 /* Where each change is in the note, on the reader's right edge. */
 .proposal-rail {
   position: sticky;
@@ -282,29 +312,165 @@
   width: 9px;
   box-shadow: 0 0 0 1px var(--reading-paper, var(--paper));
 }
-/* The bar's view switch and change-by-change controls. */
-#proposal-bar :is(.proposal-views, .proposal-one) {
+/* The two choices of how it is shown, each a pair of segments; then the
+   decisions, change by change and all at once, as two framed groups. */
+#proposal-bar :is(.proposal-segment, .proposal-one, .proposal-all) {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-#proposal-bar .proposal-views {
+#proposal-bar .proposal-segment {
   padding: 2px;
   border-radius: 6px;
   background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
-#proposal-bar .proposal-views button {
+#proposal-bar .proposal-segment button {
   border-color: transparent;
   background: transparent;
-  padding-inline: 8px;
+  padding-inline: 9px;
 }
-#proposal-bar .proposal-views button[aria-pressed="true"] {
+#proposal-bar .proposal-segment button[aria-pressed="true"] {
   background: var(--paper);
   border-color: var(--line);
 }
-#proposal-bar .proposal-one {
-  padding-left: 8px;
-  border-left: 1px solid var(--line);
+#proposal-bar :is(.proposal-one, .proposal-all) {
+  padding: 2px 4px;
+  border: 1px solid color-mix(in srgb, var(--ink) 12%, transparent);
+  border-radius: 7px;
+}
+#proposal-bar button:disabled {
+  opacity: 0.45;
+}
+/* A decision taken: the button stays pressed in its review color. */
+#proposal-bar
+  :is(.proposal-one, .proposal-all)
+  button:first-of-type[aria-pressed="true"] {
+  background: var(--proposal-add-bg);
+  border-color: var(--proposal-add-bar);
+  color: var(--proposal-add-ink);
+}
+#proposal-bar
+  :is(.proposal-one, .proposal-all)
+  button:last-of-type[aria-pressed="true"] {
+  background: var(--proposal-del-bg);
+  border-color: var(--proposal-del-bar);
+  color: var(--proposal-del-ink);
+}
+
+/* Decided changes: accepted ones labelled, rejected ones greyed. */
+::highlight(folio-proposal-dropped) {
+  background-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--muted);
+  text-decoration: line-through 1px var(--muted);
+}
+.prose del.proposal-del.proposal-no {
+  background: color-mix(in srgb, var(--ink) 6%, transparent);
+  color: var(--muted);
+  text-decoration: none;
+}
+.prose .proposal-no::before {
+  background: var(--muted) !important;
+}
+.proposal-tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 0 6px;
+  border-radius: 9px;
+  font: 600 10.5px/17px var(--font-ui);
+  vertical-align: 2px;
+  user-select: none;
+  white-space: nowrap;
+}
+.proposal-tag.proposal-ok {
+  background: var(--proposal-add-bg);
+  color: var(--proposal-add-ink);
+}
+.proposal-tag.proposal-no {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--muted);
+}
+.proposal-card.proposal-no .proposal-sides {
+  opacity: 0.55;
+}
+.proposal-rail-mark.proposal-ok {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--proposal-add-bar);
+}
+.proposal-rail-mark.proposal-no {
+  background: var(--muted);
+  opacity: 0.6;
+}
+
+/* The source, whole or in hunks: line numbers of both texts, removed lines
+   red, added green, the words that differ stronger. */
+#content.proposal-sourcing > :not(.proposal-srcview) {
+  display: none !important;
+}
+.proposal-srcview {
+  margin: 0.5em 0 2em;
+  padding: 6px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  font: 12.5px/1.6 var(--font-mono, ui-monospace, monospace);
+  overflow-x: auto;
+}
+.proposal-srcview .src-row {
+  display: grid;
+  grid-template-columns: 3.2em 3.2em 1.4em minmax(0, 1fr);
+}
+.proposal-srcview .src-no {
+  padding-right: 8px;
+  color: var(--muted);
+  text-align: right;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+}
+.proposal-srcview .src-sign {
+  color: var(--muted);
+  user-select: none;
+}
+.proposal-srcview .src-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-right: 10px;
+}
+.proposal-srcview .src-add {
+  background: color-mix(in srgb, var(--proposal-add-bg) 70%, transparent);
+  color: var(--proposal-add-ink);
+}
+.proposal-srcview .src-del {
+  background: color-mix(in srgb, var(--proposal-del-bg) 70%, transparent);
+  color: var(--proposal-del-ink);
+}
+.proposal-srcview .src-add .proposal-word {
+  background: color-mix(in srgb, var(--proposal-add-bar) 35%, transparent);
+  border-radius: 2px;
+}
+.proposal-srcview .src-del .proposal-word {
+  background: color-mix(in srgb, var(--proposal-del-bar) 30%, transparent);
+  border-radius: 2px;
+}
+.proposal-srcview .src-hunk {
+  position: relative;
+  border-left: 3px solid transparent;
+}
+.proposal-srcview .src-hunk.proposal-current {
+  border-left-color: var(--ink);
+}
+.proposal-srcview .src-hunk.proposal-no > .src-row {
+  opacity: 0.5;
+}
+.proposal-srcview .src-hunk > .proposal-tag {
+  position: absolute;
+  top: 2px;
+  right: 8px;
+}
+.proposal-srcview .src-gap {
+  padding: 2px 0 2px 7.8em;
+  color: var(--muted);
+  user-select: none;
 }
 @media print {
   #proposal-bar {

@@ -160,7 +160,7 @@ pnpm prune-releases --apply    # 移到回收站
 | [`desktop/mcp.mjs`](../desktop/mcp.mjs)、[`desktop/mcp-server.mjs`](../desktop/mcp-server.mjs)         | MCP 服务器入口（stdio JSON-RPC）与数据目录定位。                                             |
 | [`desktop/mcp-tools.mjs`](../desktop/mcp-tools.mjs)                                                    | MCP 工具：读取开放的笔记库、提议修改、批注。                                                 |
 | [`desktop/ai-store.mjs`](../desktop/ai-store.mjs)、[`desktop/ai-bridge.mjs`](../desktop/ai-bridge.mjs) | 提议与批注的存储（`ai` 文件夹）及主进程一侧。                                                |
-| [`src/proposals.js`](../src/proposals.js)、[`src/comments.js`](../src/comments.js)                     | 提议条、预览与接受；批注的标记与讨论卡片。                                                   |
+| [`src/proposals.js`](../src/proposals.js)、[`src/comments.js`](../src/comments.js)                     | 提议条、审阅与写入；批注的标记与讨论卡片。                                                   |
 | [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                  | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。                                |
 | [`tests/`](../tests/)                                                                                  | 单元、浏览器与原生回归用例。                                                                 |
 

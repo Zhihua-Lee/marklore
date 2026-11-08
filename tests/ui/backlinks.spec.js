@@ -18,7 +18,9 @@ const note = [
   "",
   "## Parseval's identity",
   "",
-  "Energy is the same in both domains.",
+  '<a id="energy"></a>',
+  "",
+  "Energy is kept, up to $2\\pi$.",
 ].join("\n");
 
 const entry = (name, fragment, section, line) => ({
@@ -180,9 +182,11 @@ test("outline: anchored blocks and counts by setting", async ({ page }) => {
   ).toHaveText("1");
 
   await choice.selectOption("all");
+  // A formula in a label reads once, as drawn.
   await expect(labels).toHaveText([
     "Definition（Fourier transform）",
     "Lemma（Unused）",
+    "Energy is kept, up to 2π",
   ]);
   await page.getByRole("button", { name: "关闭设置" }).click();
   // Anchored entries sit under their section and jump there.

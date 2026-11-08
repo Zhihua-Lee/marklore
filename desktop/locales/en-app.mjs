@@ -495,11 +495,6 @@ export default {
   上一条提议: "Previous proposal",
   下一条提议: "Next proposal",
   关闭提议: "Dismiss",
-  预览: "Preview",
-  预览方式: "Preview as",
-  修订: "Changes",
-  前后对照: "Side by side",
-  逐处审阅: "Change by change",
   上一处修改: "Previous change",
   下一处修改: "Next change",
   "第 {i} / {n} 处": "Change {i} of {n}",
@@ -508,22 +503,11 @@ export default {
   拒绝这处: "Reject this",
   全部接受: "Accept all",
   全部拒绝: "Reject all",
-  接受全部修改并保存: "Accept every change and save",
-  已接受这处修改并保存: "Change accepted and saved",
-  已拒绝这处修改: "Change rejected",
   原文: "Before",
   修改后: "After",
   "（无）": "(nothing)",
-  接受并创建: "Accept and create",
-  接受到草稿: "Accept into draft",
-  接受并保存: "Accept and save",
-  "笔记有未保存的修改：AI 的修改写入草稿，按 Ctrl+S 一起保存":
-    "The note has unsaved changes: the AI's changes join the draft; save both with Ctrl+S",
-  拒绝: "Reject",
   已拒绝这条提议: "Proposal rejected",
   "已创建《{name}》": "Created {name}",
-  已接受并保存: "Accepted and saved",
-  "已写入草稿，按 Ctrl+S 保存": "Added to the draft; press Ctrl+S to save",
   "已写入草稿，但未能保存": "Added to the draft, but it couldn't be saved",
   // Comment threads.
   "添加批注… Ctrl+Alt+M": "Add comment… Ctrl+Alt+M",
@@ -550,4 +534,51 @@ export default {
   "展开或折叠 {name} 的子页": "Expand or collapse the sub-pages of {name}",
   "{name} 有未保存的修改，请先保存，再在文件树中拖动排序":
     "{name} has unsaved changes; save it before reordering in the file tree",
+  // The tree's own file operations.
+  不在笔记库中: "not in the library",
+  新文件夹名称: "New folder name",
+  新笔记名称: "New note name",
+  新名称: "New name",
+  "已重命名。{count} 篇笔记中的链接仍指向旧名称":
+    "Renamed. Links in {count} notes still use the old name",
+  "{name} 有未保存的修改，请先保存或关闭":
+    "{name} has unsaved changes; save or close it first",
+  "把文件夹“{name}”及其中的全部内容移到回收站？":
+    "Move the folder “{name}” and everything in it to the Recycle Bin?",
+  "把“{name}”移到回收站？": "Move “{name}” to the Recycle Bin?",
+  "重命名…": "Rename…",
+  在资源管理器中显示: "Show in File Explorer",
+  移到回收站: "Move to Recycle Bin",
+  新建文件夹: "New folder",
+  加入笔记库: "Add to library",
+  上移: "Move up",
+  下移: "Move down",
+  移出笔记库: "Remove from library",
+  "只是不再列出，文件不会删除": "Only no longer listed; no file is deleted",
+  // Reviewing a proposal: how it is shown, and the staged decisions.
+  渲染: "Rendered",
+  全文: "Whole note",
+  仅改动: "Changes only",
+  切换提议: "Switch proposal",
+  审阅: "Review",
+  "已决定 {done} / {count}": "Decided {done} / {count}",
+  完成审阅: "Finish review",
+  "笔记有未保存的修改：接受的修改写入草稿，按 Ctrl+S 一起保存":
+    "The note has unsaved changes: accepted changes go into the draft; Ctrl+S saves them together",
+  "写入接受的修改，并把每处的决定告诉 AI":
+    "Write the accepted changes and tell the AI each decision",
+  退出审阅: "Exit review",
+  "回到笔记；已做的决定会保留": "Back to the note; your decisions are kept",
+  呈现: "Show as",
+  范围: "Extent",
+  逐处: "Change by change",
+  全部: "All",
+  "还有 {count} 处没有决定，按拒绝处理并完成审阅？":
+    "{count} changes are undecided. Reject them and finish the review?",
+  "已接受 {accepted} 处并保存，拒绝 {rejected} 处":
+    "Accepted {accepted} and saved, rejected {rejected}",
+  "已接受 {accepted} 处，写入草稿，按 Ctrl+S 保存":
+    "Accepted {accepted} into the draft; press Ctrl+S to save",
+  已接受: "Accepted",
+  已拒绝: "Rejected",
 };

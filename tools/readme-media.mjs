@@ -5,7 +5,8 @@
 // Chinese (default): docs/sample-notebook -> docs/images; English:
 // docs/sample-notebook-en -> docs/images/en, with the interface in English.
 import { _electron as electron } from "@playwright/test";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -49,6 +50,39 @@ const L = english
         highlight: "Energy is the same in both domains",
         color: "the fast Fourier transform (FFT)",
         highlight2: "a quick check",
+      },
+      // An assistant proposes edits over MCP; they are reviewed in the note.
+      proposal: {
+        caption: "AI assistant (MCP): proposes three edits",
+        summary: "Tighten the Parseval section",
+        edits: [
+          {
+            old_text: "Energy is the same in both domains:",
+            new_text: "Energy is the same in both domains, up to $2\\pi$:",
+          },
+          {
+            old_text: "is a quick check that an FFT is normalized correctly.",
+            new_text:
+              "is a quick check that an FFT is normalized correctly: NumPy's `np.fft.fft` leaves the $1/N$ to you.",
+          },
+          {
+            old_text: "Computing it directly takes",
+            new_text: "Computing it straight from the definition takes",
+          },
+        ],
+        labels: {
+          accept: "Accept this",
+          reject: "Reject this",
+          source: "Source",
+          rendered: "Rendered",
+          changes: "Changes only",
+          finish: "Finish review",
+        },
+      },
+      // Edit mode: typed into the note as it reads.
+      edit: {
+        after: "normalized correctly.",
+        text: " For a sequence, $\\sum_n |x_n|^2 = \\frac{1}{N}\\sum_k |X_k|^2$: **mind the** $1/N$.",
       },
       agent: {
         file: "Laplace-transform.md",
@@ -101,6 +135,37 @@ const L = english
         highlight: "能量在两个域中守恒",
         color: "快速傅里叶变换（FFT）",
         highlight2: "检查 FFT 的归一化",
+      },
+      proposal: {
+        caption: "AI 助手（MCP）：提议三处修改",
+        summary: "补充 Parseval 一节",
+        edits: [
+          {
+            old_text: "能量在两个域中守恒：",
+            new_text: "能量在两个域中守恒（差一个因子 $2\\pi$）：",
+          },
+          {
+            old_text: "常被用来检查 FFT 的归一化是否正确。",
+            new_text:
+              "常被用来检查 FFT 的归一化是否正确：NumPy 的 `np.fft.fft` 不除以 $N$。",
+          },
+          {
+            old_text: "直接计算需要",
+            new_text: "按定义直接计算需要",
+          },
+        ],
+        labels: {
+          accept: "接受这处",
+          reject: "拒绝这处",
+          source: "源码",
+          rendered: "渲染",
+          changes: "仅改动",
+          finish: "完成审阅",
+        },
+      },
+      edit: {
+        after: "归一化是否正确。",
+        text: "对离散序列同样有 $\\sum_n |x_n|^2 = \\frac{1}{N}\\sum_k |X_k|^2$，**别忘了** $1/N$。",
       },
       agent: {
         file: "拉普拉斯变换.md",
@@ -156,6 +221,8 @@ async function session({ scale, theme = "light", record = false, extra = {} }) {
         // Settings → Annotation: the format bar also works in Read mode.
         readingFormat: true,
         ...extra,
+        // A scene with an assistant opens the sample library to AI.
+        ...(extra.aiLibraries && { aiLibraries: [notes] }),
       },
     }),
   );
@@ -255,7 +322,7 @@ async function session({ scale, theme = "light", record = false, extra = {} }) {
       steps: 24,
     });
   };
-  return { app, page, temp, notes, started, keys, caption, moveTo };
+  return { app, page, temp, notes, profile, started, keys, caption, moveTo };
 }
 
 // Record one scene and convert it to a looping GIF (palette per clip).
@@ -302,9 +369,9 @@ async function scene(name, theme, play, extra = {}) {
   await fs.rm(s.temp, { recursive: true, force: true });
 }
 
-async function still(name, theme, arrange) {
+async function still(name, theme, arrange, extra = {}) {
   if (only.size && !only.has(name)) return;
-  const s = await session({ scale: 2, theme });
+  const s = await session({ scale: 2, theme, extra });
   await arrange(s);
   await s.page.evaluate(() => document.querySelector("#demo-cursor").remove());
   await s.page.waitForTimeout(800);
@@ -314,132 +381,99 @@ async function still(name, theme, arrange) {
   await fs.rm(s.temp, { recursive: true, force: true });
 }
 
+// Marklore's MCP server as an assistant runs it (the setup the app shows in
+// Settings → AI assistant), speaking JSON-RPC over stdio.
+async function assistant(page, profile) {
+  // The app opens the ticked library to AI once it has started.
+  const access = path.join(profile, "ai", "access.json");
+  for (let i = 0; i < 100; i++) {
+    if (
+      await fs.stat(access).then(
+        () => true,
+        () => false,
+      )
+    )
+      break;
+    await page.waitForTimeout(100);
+  }
+  const setup = await page.evaluate(() => window.folio.aiSetup());
+  const child = spawn(setup.command, setup.args, {
+    env: { ...process.env, ...setup.env, FOLIO_DATA_DIR: profile },
+    stdio: ["pipe", "pipe", "inherit"],
+  });
+  const waiting = new Map();
+  let next = 1;
+  createInterface({ input: child.stdout }).on("line", (line) => {
+    const message = JSON.parse(line);
+    waiting.get(message.id)?.(message);
+  });
+  const request = (method, params) =>
+    new Promise((resolve, reject) => {
+      const id = next++;
+      waiting.set(id, resolve);
+      setTimeout(() => reject(Error(`No answer to ${method}`)), 15000);
+      child.stdin.write(
+        JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n",
+      );
+    });
+  await request("initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "claude-code", version: "1" },
+  });
+  return {
+    async call(name, args) {
+      const { result } = await request("tools/call", {
+        name,
+        arguments: args,
+      });
+      if (result.isError) throw Error(result.content[0].text);
+      return JSON.parse(result.content[0].text);
+    },
+    close: () => child.stdin.end(),
+  };
+}
+// Click the way a person would: move there, press, release.
+async function press(page, moveTo, locator, wait = 900) {
+  await moveTo(locator);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(wait);
+}
+
 await still("overview", "light", async ({ page }) => {
   await page.locator("#content .diagram svg").first().waitFor();
 });
+
+// Who links here: the count beside a definition, and the card listing the
+// notes that cite it, each with its sentence.
+await still(
+  "backlinks",
+  "light",
+  async ({ page, moveTo }) => {
+    const badge = page
+      .locator("#content p", { hasText: L.backlinks.definition })
+      .locator(".backlink-badge");
+    await badge.waitFor({ timeout: 15000 });
+    await badge.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(600);
+    await moveTo(badge);
+    await page.locator("#backlinks-card").waitFor();
+    await page.waitForTimeout(600);
+  },
+  { outlineAnchors: "all" },
+);
+
+// Edit mode in the dark theme: the note as it reads, the toolbar above it.
 await still("edit-dark", "dark", async ({ page }) => {
-  await page.locator("#sidebar-toggle").click();
-  await page.locator('.modes [data-mode="edit"]').click();
+  await page.keyboard.press("Control+2");
+  await page.locator("#rich .ProseMirror").waitFor();
   await page
     .locator("#outline")
     .getByRole("button", { name: L.darkHeading, exact: true })
     .click();
   await page.waitForTimeout(900);
 });
-
-await scene("outline", "light", async ({ page, moveTo }) => {
-  const outline = (name) =>
-    page.locator("#outline").getByRole("button", { name, exact: true });
-  for (const name of L.outline) {
-    await moveTo(outline(name));
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(1300);
-  }
-});
-
-await scene("preview", "light", async ({ page, keys, mark }) => {
-  const link = page.locator("#content a", { hasText: L.link }).first();
-  await link.scrollIntoViewIfNeeded();
-  // Measure only once the page is still: the smooth scroll has ended and idle
-  // table layout (which keeps the reading line, so content below it may move)
-  // has settled.
-  await page.waitForFunction(
-    () =>
-      new Promise((resolve) => {
-        const reader = document.querySelector("#reader"),
-          content = document.querySelector("#content"),
-          top = reader.scrollTop,
-          height = content.offsetHeight;
-        setTimeout(
-          () =>
-            resolve(
-              reader.scrollTop === top && content.offsetHeight === height,
-            ),
-          1200,
-        );
-      }),
-    null,
-    { timeout: 20000 },
-  );
-  // Idle table layout runs within its 3 s idle-callback timeout; recording
-  // keeps the page busy enough that it tends to wait that long.
-  await page.waitForTimeout(3500);
-  // Aim at the link's first line: a link that wraps has a bounding box whose
-  // centre lies between the lines, off the link.
-  const onLink = async () => {
-    const r = await link.evaluate((el) => el.getClientRects()[0].toJSON());
-    await page.mouse.move(r.x + Math.min(40, r.width / 2), r.y + r.height / 2, {
-      steps: 24,
-    });
-  };
-  await mark();
-  // Late layout (idle table sizing) can shift the link from under the
-  // pointer; aim again until the preview opens.
-  for (let tries = 0; ; tries++) {
-    await onLink();
-    const shown = await page
-      .locator("#link-preview")
-      .waitFor({ state: "visible", timeout: 1500 })
-      .then(
-        () => true,
-        () => false,
-      );
-    if (shown) break;
-    if (tries === 3) throw Error("The link preview did not open");
-  }
-  await page.waitForTimeout(1600);
-  await onLink();
-  await page.mouse.down();
-  await page.mouse.up();
-  await page.waitForTimeout(1400);
-  await keys("Alt + ←", "Alt+ArrowLeft");
-  await page.waitForTimeout(1000);
-});
-
-await scene("find", "light", async ({ page, keys }) => {
-  await keys("Ctrl + F", "Control+f");
-  await page.keyboard.type(L.find, { delay: 180 });
-  await page.waitForTimeout(700);
-  for (let i = 0; i < 3; i++) await keys("Enter", "Enter");
-  await keys("Esc", "Escape");
-});
-
-// Backlinks: the count beside a definition, the card of notes that link to
-// it, a jump to one of them and back, then an anchored block from the outline.
-await scene(
-  "backlinks",
-  "light",
-  async ({ page, keys, moveTo, mark }) => {
-    const badge = page
-      .locator("#content p", { hasText: L.backlinks.definition })
-      .locator(".backlink-badge");
-    await badge.waitFor({ timeout: 15000 });
-    await mark();
-    await moveTo(badge);
-    const card = page.locator("#backlinks-card");
-    await card.waitFor();
-    await page.waitForTimeout(1800);
-    const entry = card.locator(".backlink-entry", {
-      hasText: L.backlinks.source,
-    });
-    await moveTo(entry);
-    await page.waitForTimeout(400);
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(1600);
-    await keys("Alt + ←", "Alt+ArrowLeft");
-    await page.waitForTimeout(900);
-    const anchor = page
-      .locator("#outline .outline-anchor")
-      .filter({ hasText: L.backlinks.outline });
-    await moveTo(anchor);
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(1500);
-  },
-  { outlineAnchors: "all" },
-);
 
 // An AI agent writes a note into the library (simulated: the scene writes the
 // file in steps, as an agent's edits would land on disk). The tree shows the
@@ -464,9 +498,7 @@ await scene(
       .getByText(L.agent.file, { exact: true });
     await entry.waitFor();
     await page.waitForTimeout(900);
-    await moveTo(entry);
-    await page.mouse.down();
-    await page.mouse.up();
+    await press(page, moveTo, entry, 0);
     await page.locator("#content h1", { hasText: L.agent.title }).waitFor();
     await page.waitForTimeout(1200);
     for (const step of rest) await write(step, 1900);
@@ -475,15 +507,110 @@ await scene(
   },
 );
 
+// The assistant proposes instead of writing (MCP): the edits show in the note
+// in review colors. The first is accepted; the second is looked at as source,
+// changes only, and rejected; the last is accepted in the rendered changes,
+// and finishing the review writes the accepted ones.
+await scene(
+  "proposal",
+  "light",
+  async ({ page, notes, profile, caption, moveTo, mark }) => {
+    const P = L.proposal;
+    const ai = await assistant(page, profile);
+    try {
+      await page
+        .locator("#outline")
+        .getByRole("button", { name: L.editHeading, exact: true })
+        .click();
+      await page.waitForTimeout(1200);
+      await mark();
+      await caption(P.caption);
+      await ai.call("propose_edit", {
+        note: `${L.folder}/${L.note}`,
+        summary: P.summary,
+        edits: P.edits,
+      });
+      const button = page.locator("#proposals-button");
+      await button.waitFor({ state: "visible", timeout: 5000 });
+      await page.waitForTimeout(900);
+      await press(page, moveTo, button, 500);
+      await press(
+        page,
+        moveTo,
+        page.getByRole("menuitem", { name: new RegExp(L.note) }),
+        0,
+      );
+      await caption("");
+      const bar = page.locator("#proposal-bar");
+      await page.locator("#content .proposal-added").first().waitFor();
+      await page.waitForTimeout(1800);
+      const control = (name) => bar.getByRole("button", { name, exact: true });
+      await press(page, moveTo, control(P.labels.accept), 1400);
+      await press(page, moveTo, control(P.labels.source), 1400);
+      await press(page, moveTo, control(P.labels.changes), 1800);
+      await press(page, moveTo, control(P.labels.reject), 1400);
+      await press(page, moveTo, control(P.labels.rendered), 1800);
+      await press(page, moveTo, control(P.labels.accept), 1400);
+      await press(page, moveTo, control(P.labels.finish), 1800);
+      await bar.waitFor({ state: "hidden" });
+      await page.waitForTimeout(800);
+    } finally {
+      ai.close();
+    }
+  },
+  { aiLibraries: "__notes__" },
+);
+
+// Edit mode: type into the note as it reads. A formula typed as `$…$`
+// typesets once closed, `**…**` turns bold; Source mode then shows the
+// plain Markdown that was written.
+await scene("edit", "light", async ({ page, keys, mark }) => {
+  await page
+    .locator("#outline")
+    .getByRole("button", { name: L.editHeading, exact: true })
+    .click();
+  await page.waitForTimeout(900);
+  await keys("Ctrl + 2", "Control+2");
+  await page.locator("#rich .ProseMirror").waitFor();
+  await page.waitForTimeout(900);
+  await mark();
+  // Click just after the sentence, as a writer would.
+  const end = await page.evaluate((text) => {
+    const root = document.querySelector("#rich .ProseMirror");
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node; (node = walker.nextNode());) {
+      const at = node.data.indexOf(text);
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at + text.length - 1);
+      range.setEnd(node, at + text.length);
+      const rect = [...range.getClientRects()].at(-1);
+      return { x: rect.right - 1, y: rect.top + rect.height / 2 };
+    }
+    throw Error("Text not found: " + text);
+  }, L.edit.after);
+  await page.mouse.move(end.x, end.y, { steps: 24 });
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.keyboard.press("End");
+  // Out of the way of the text being typed.
+  await page.mouse.move(end.x + 140, end.y + 160, { steps: 12 });
+  await page.waitForTimeout(400);
+  await page.keyboard.type(L.edit.text, { delay: 65 });
+  await page.waitForTimeout(1800);
+  await keys("Ctrl + 3", "Control+3");
+  await page.waitForTimeout(2400);
+});
+
 // Mark up the page like a notebook, in Read mode: select text and highlight
-// or color it; Edit mode then shows what was written into the Markdown.
+// or color it; Source mode then shows what was written into the Markdown.
 await scene("annotate", "light", async ({ page, keys, moveTo, mark }) => {
   await page
     .locator("#outline")
     .getByRole("button", { name: L.editHeading, exact: true })
     .click();
   await page.waitForTimeout(1200);
-  // Drag across a phrase of the preview, as a reader would.
+  // Drag across a phrase of the page, as a reader would.
   const select = async (phrase) => {
     const box = await page.evaluate((phrase) => {
       const walker = document.createTreeWalker(
@@ -518,10 +645,7 @@ await scene("annotate", "light", async ({ page, keys, moveTo, mark }) => {
   const apply = async (action) => {
     const button = page.locator(`[data-selection-action="${action}"]`);
     await button.waitFor();
-    await moveTo(button);
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.waitForTimeout(1100);
+    await press(page, moveTo, button, 1100);
   };
   await mark();
   await select(L.annotate.highlight);
@@ -530,69 +654,10 @@ await scene("annotate", "light", async ({ page, keys, moveTo, mark }) => {
   await apply("color");
   await select(L.annotate.highlight2);
   await apply("highlight");
-  // Put the format bar away, then show the source beside the page.
+  // Put the format bar away, then show the source.
   await page.keyboard.press("Escape");
   await page.mouse.move(40, 560, { steps: 12 });
   await page.waitForTimeout(900);
-  await keys("Ctrl + 2", "Control+2");
-  await page.waitForTimeout(1800);
-});
-
-// Settings → Edit: type directly in the preview, without the source pane.
-// Typing goes into the Markdown at its place; after a pause the formula and
-// the bold lead render. Source mode then shows what was written.
-await scene(
-  "direct",
-  "light",
-  async ({ page, keys, mark }) => {
-    await page.keyboard.press("Control+2");
-    await page
-      .locator("#outline")
-      .getByRole("button", { name: L.editHeading, exact: true })
-      .click();
-    await page.waitForTimeout(1200);
-    await mark();
-    // Click just after the block's last character, as a writer would.
-    const end = await page
-      .locator("#content blockquote p", { hasText: L.direct.block })
-      .evaluate((p) => {
-        const range = document.createRange();
-        range.selectNodeContents(p);
-        const rects = range.getClientRects(),
-          last = rects[rects.length - 1];
-        return { x: last.right - 2, y: last.top + last.height / 2 };
-      });
-    await page.mouse.move(end.x, end.y, { steps: 24 });
-    await page.mouse.down();
-    await page.mouse.up();
-    await page.keyboard.press("End");
-    // Out of the way of the text being typed.
-    await page.mouse.move(end.x + 120, end.y + 150, { steps: 12 });
-    await page.waitForTimeout(400);
-    await page.keyboard.type(L.direct.text, { delay: 60 });
-    await page.waitForTimeout(1800);
-    await keys("Enter", "Enter");
-    await page.keyboard.type(L.direct.next, { delay: 60 });
-    await page.waitForTimeout(1800);
-    await keys("Ctrl + 3", "Control+3");
-    await page.waitForTimeout(2200);
-  },
-  { directEdit: true, editSplit: false },
-);
-
-await scene("edit", "light", async ({ page, mark }) => {
-  await page.keyboard.press("Control+2");
-  await page
-    .locator("#outline")
-    .getByRole("button", { name: L.editHeading, exact: true })
-    .click();
-  await page.waitForTimeout(900);
-  // Alt+double-click in the preview puts the editor cursor on that text.
-  await page
-    .locator("#content p", { hasText: L.editParagraph })
-    .dblclick({ modifiers: ["Alt"] });
-  await page.keyboard.press("End");
-  await mark();
-  await page.keyboard.type(L.editText, { delay: 55 });
-  await page.waitForTimeout(1800);
+  await keys("Ctrl + 3", "Control+3");
+  await page.waitForTimeout(2200);
 });

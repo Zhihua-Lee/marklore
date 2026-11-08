@@ -97,17 +97,21 @@ async function openFromToolbar(page, label) {
   await page.getByRole("menuitem", { name: label }).click();
 }
 
-test("a proposal previews the note as it would read, then is accepted and saved", async ({
+// The bar's controls by name, and whether a toggle is on.
+const control = (bar, name) => bar.getByRole("button", { name, exact: true });
+const pressed = (bar, name) =>
+  expect(control(bar, name)).toHaveAttribute("aria-pressed", "true");
+
+test("a proposal is reviewed in the note, then accepted and saved at the end", async ({
   page,
 }) => {
   await boot(page, { proposals: [edit] });
   await openFromToolbar(page, /Plan\.md\s*Claude Code：Earlier deadline/);
   const bar = page.locator("#proposal-bar");
   await expect(bar).toContainText("Claude Code 提议修改：Earlier deadline");
-  await expect(bar.getByRole("button", { name: "预览" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  // Reviewing: rendered, the whole note.
+  await pressed(bar, "渲染");
+  await pressed(bar, "全文");
   // The note shows the proposed text, the changed words marked (the
   // removed word struck through before the new ones).
   await expect(page.locator("#content")).toContainText(
@@ -119,19 +123,34 @@ test("a proposal previews the note as it would read, then is accepted and saved"
       [...CSS.highlights.get("folio-proposal-add")].map((r) => r.toString()),
     ),
   ).toEqual(["Thursday morning"]);
-  // The removed word stays in view, struck through.
   await expect(page.locator("#content del.proposal-del")).toHaveText("Friday");
-  // The source diff.
-  await bar.getByRole("button", { name: "源码" }).click();
-  await expect(page.locator("#content .diff-del")).toContainText(
-    "Send it on Friday.",
+  // Source, whole note: every line, the changed one in both versions.
+  await control(bar, "源码").click();
+  const source = page.locator("#content .proposal-srcview");
+  await expect(source.locator(".src-row")).toHaveCount(6);
+  await expect(source.locator(".src-del")).toHaveText(/Send it on Friday\./);
+  await expect(source.locator(".src-add")).toHaveText(
+    /Send it on Thursday morning\./,
   );
-  await expect(page.locator("#content .diff-add")).toContainText(
-    "Send it on Thursday morning.",
+  await expect(source.locator(".src-add .proposal-word")).toHaveText(
+    /Thursday morning/,
   );
-  // Nothing changed in the note yet.
+  // Source, changes only: the hunk and the lines around it.
+  await control(bar, "仅改动").click();
+  await expect(source.locator(".src-row")).toHaveCount(5);
+  // A single change: nothing to step through, the decision is the same.
+  await expect(control(bar, "上一处修改")).toBeDisabled();
+  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
+    "第 1 / 1 处",
+  );
+  await control(bar, "接受这处").click();
+  await pressed(bar, "接受这处");
+  await pressed(bar, "全部接受");
+  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 1 / 1");
+  // Nothing is written before the review is finished.
   expect(await page.evaluate(() => window.mock.saved)).toEqual([]);
-  await bar.getByRole("button", { name: "接受并保存" }).click();
+  expect(await page.evaluate(() => window.mock.decided)).toEqual([]);
+  await control(bar, "完成审阅").click();
   await expect(bar).toBeHidden();
   expect(await page.evaluate(() => window.mock.saved)).toEqual([
     {
@@ -140,7 +159,7 @@ test("a proposal previews the note as it would read, then is accepted and saved"
     },
   ]);
   expect(await page.evaluate(() => window.mock.decided)).toEqual([
-    { id: "p1", status: "accepted", saved: true },
+    { id: "p1", results: ["accepted"], saved: true },
   ]);
   await expect(page.locator("#content .proposal-added")).toHaveCount(0);
   await expect(page.locator("#content")).toContainText("Thursday morning");
@@ -153,14 +172,22 @@ test("into a note with unsaved changes, a proposal joins the draft and undoes wi
   await boot(page, { proposals: [edit] });
   await openFromToolbar(page, /Plan\.md/);
   const bar = page.locator("#proposal-bar");
-  await bar.getByRole("button", { name: "预览" }).click();
+  // Out of the review: the note itself, and a way back in.
+  await control(bar, "退出审阅").click();
   await expect(page.locator("#content .proposal-added")).toHaveCount(0);
+  await expect(control(bar, "审阅")).toBeVisible();
+  await expect(control(bar, "完成审阅")).toHaveCount(0);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+Home");
   await page.keyboard.type("Mine. ");
-  await expect(bar.getByRole("button", { name: "接受到草稿" })).toBeVisible();
-  await bar.getByRole("button", { name: "接受到草稿" }).click();
+  await control(bar, "审阅").click();
+  await control(bar, "全部接受").click();
+  await expect(control(bar, "完成审阅")).toHaveAttribute(
+    "title",
+    /未保存的修改/,
+  );
+  await control(bar, "完成审阅").click();
   await expect(bar).toBeHidden();
   const text = () =>
     page.evaluate(() =>
@@ -168,12 +195,13 @@ test("into a note with unsaved changes, a proposal joins the draft and undoes wi
         .map((line) => line.textContent)
         .join("\n"),
     );
+  await page.getByRole("button", { name: "编辑", exact: true }).click();
   expect(await text()).toBe(
     "Mine. # Plan\n\nWrite the draft.\n\nSend it on Thursday morning.\n",
   );
   expect(await page.evaluate(() => window.mock.saved)).toEqual([]);
   expect(await page.evaluate(() => window.mock.decided)).toEqual([
-    { id: "p1", status: "accepted", saved: false },
+    { id: "p1", results: ["accepted"], saved: false },
   ]);
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+z");
@@ -182,7 +210,7 @@ test("into a note with unsaved changes, a proposal joins the draft and undoes wi
   );
 });
 
-test("several changes: three views, review colors, and a decision per change", async ({
+test("several changes: two independent choices of view, review colors, and staged decisions", async ({
   page,
 }) => {
   const three = {
@@ -199,17 +227,22 @@ test("several changes: three views, review colors, and a decision per change", a
   await openFromToolbar(page, /Plan\.md/);
   const bar = page.locator("#proposal-bar");
   const content = page.locator("#content");
-  await expect(bar.getByRole("button", { name: "全部接受" })).toBeVisible();
-  await expect(bar.getByRole("button", { name: "全部拒绝" })).toBeVisible();
+  // The controls keep their places whatever is chosen.
+  const places = () =>
+    bar
+      .locator("button")
+      .evaluateAll((list) =>
+        list.map((b) => [
+          b.textContent,
+          Math.round(b.getBoundingClientRect().x),
+        ]),
+      );
+  const start = await places();
   await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
     "第 1 / 3 处",
   );
-  // Changes view: new words green and underlined, the removed paragraph
-  // struck through in red where it was, a mark per change on the edge.
-  await expect(bar.getByRole("button", { name: "修订" })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
+  // Rendered, whole note: new words green and underlined, the removed
+  // paragraph struck through in red where it was, a mark per change.
   expect(
     await page.evaluate(() =>
       [...CSS.highlights.get("folio-proposal-add")].map((r) =>
@@ -240,8 +273,8 @@ test("several changes: three views, review colors, and a decision per change", a
   expect(colors.ink).not.toBe(colors.accent);
   expect(colors.background).not.toBe(colors.accent);
   expect(colors.line).toBe("line-through");
-  // Side by side: one card per change, before and after.
-  await bar.getByRole("button", { name: "前后对照" }).click();
+  // Rendered, changes only: one card per change, before and after.
+  await control(bar, "仅改动").click();
   const cards = content.locator(".proposal-card");
   await expect(cards).toHaveCount(3);
   await expect(cards.nth(1).locator(".proposal-before")).toContainText(
@@ -256,44 +289,85 @@ test("several changes: three views, review colors, and a decision per change", a
       [...CSS.highlights.get("folio-proposal-del")].map((r) => r.toString()),
     ),
   ).toEqual(["Send it on Friday."]);
-  // Source: the words that differ within a changed line stand out.
-  await bar.getByRole("button", { name: "源码" }).click();
-  await expect(content.locator(".diff-add .proposal-word")).toHaveText([
-    " for the week",
+  // Source, changes only: the hunks, the words that differ standing out.
+  await control(bar, "源码").click();
+  await pressed(bar, "仅改动");
+  await expect(content.locator(".proposal-card")).toHaveCount(0);
+  await expect(content.locator(".src-hunk")).toHaveCount(3);
+  await expect(content.locator(".src-add .proposal-word")).toHaveText([
+    / ?for the week/,
     / ?first ?/,
   ]);
-  await expect(bar.locator(".proposal-one")).toHaveCount(0);
-  await expect(content.locator(".proposal-card")).toHaveCount(0);
-  // Change by change: accept the second, reject the third.
-  await bar.getByRole("button", { name: "修订" }).click();
-  await expect(content.locator("pre")).toHaveCount(0);
-  await bar.getByRole("button", { name: "下一处修改" }).click();
+  // Change by change works in every view; the places did not move.
+  expect(await places()).toEqual(start);
+  await control(bar, "下一处修改").click();
   await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
     "第 2 / 3 处",
   );
-  await bar.getByRole("button", { name: "接受这处" }).click();
-  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
-    "第 2 / 2 处",
+  await expect(content.locator(".src-hunk.proposal-current")).toContainText(
+    "Write the first draft.",
   );
+  // Accepted: marked, and on to the next undecided change.
+  await control(bar, "接受这处").click();
+  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
+    "第 3 / 3 处",
+  );
+  await expect(content.locator(".src-hunk.proposal-ok")).toContainText(
+    "Write the first draft.",
+  );
+  await control(bar, "拒绝这处").click();
+  await expect(content.locator(".src-hunk.proposal-no")).toContainText(
+    "Send it on Friday.",
+  );
+  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 2 / 3");
+  // Back to the rendered note: the decisions show there too.
+  await control(bar, "渲染").click();
+  await control(bar, "全文").click();
+  await expect(content.locator(".proposal-tag.proposal-ok")).toHaveText(
+    "已接受",
+  );
+  await expect(content.locator(".proposal-tag.proposal-no")).toHaveText(
+    "已拒绝",
+  );
+  await expect(content.locator("del.proposal-del-block")).toHaveClass(
+    /proposal-no/,
+  );
+  // After the last change it went back to the first undecided one.
+  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
+    "第 1 / 3 处",
+  );
+  // A decision taken back, then made again; nothing was written meanwhile.
+  await control(bar, "下一处修改").click();
+  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
+    "第 2 / 3 处",
+  );
+  await pressed(bar, "接受这处");
+  await control(bar, "接受这处").click();
+  await expect(control(bar, "接受这处")).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 1 / 3");
+  await control(bar, "接受这处").click();
+  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 2 / 3");
+  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
+    "第 1 / 3 处",
+  );
+  expect(await page.evaluate(() => window.mock.saved)).toEqual([]);
+  expect(await page.evaluate(() => window.mock.decided)).toEqual([]);
+  expect(await places()).toEqual(start);
+  // Finished with the first undecided: it counts as rejected, after asking.
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toBe("还有 1 处没有决定，按拒绝处理并完成审阅？");
+    dialog.accept();
+  });
+  await control(bar, "完成审阅").click();
+  await expect(bar).toBeHidden();
   expect((await page.evaluate(() => window.mock.saved)).at(-1).text).toBe(
     "# Plan\n\nWrite the first draft.\n\nSend it on Friday.\n",
   );
-  await expect(content.locator("del.proposal-del-block")).toHaveText(
-    "Send it on Friday.",
-  );
-  await bar.getByRole("button", { name: "拒绝这处" }).click();
-  // One change left: the plain buttons again.
-  await expect(bar.locator(".proposal-one")).toHaveCount(0);
-  await expect(content.locator("del.proposal-del")).toHaveCount(0);
-  await bar.getByRole("button", { name: "接受并保存" }).click();
-  await expect(bar).toBeHidden();
-  expect((await page.evaluate(() => window.mock.saved)).at(-1).text).toBe(
-    "# Plan for the week\n\nWrite the first draft.\n\nSend it on Friday.\n",
-  );
   expect(await page.evaluate(() => window.mock.decided)).toEqual([
-    { id: "p4", status: "accepted", saved: true, edit: 1 },
-    { id: "p4", status: "rejected", edit: 2 },
-    { id: "p4", status: "accepted", saved: true },
+    { id: "p4", results: ["rejected", "accepted", "rejected"], saved: true },
   ]);
   await expect(page.locator(".proposal-rail")).toHaveCount(0);
 });
@@ -311,15 +385,18 @@ test("a rejected proposal changes nothing; a stale one can only be dismissed", a
   await page.locator("#proposals-button").click();
   await page.getByRole("menuitem", { name: /Earlier deadline/ }).click();
   const bar = page.locator("#proposal-bar");
-  await expect(bar.locator(".proposal-count")).toHaveText("1 / 2");
-  await bar.getByRole("button", { name: "拒绝" }).click();
+  await expect(bar.locator(".proposal-switch .proposal-count")).toHaveText(
+    "1 / 2",
+  );
+  await control(bar, "全部拒绝").click();
+  await control(bar, "完成审阅").click();
   await expect(bar).toContainText("的提议与笔记当前内容对不上");
   await expect(bar).toContainText("第 1 处修改的原文已改变");
-  await expect(bar.getByRole("button", { name: "接受并保存" })).toHaveCount(0);
-  await bar.getByRole("button", { name: "关闭提议" }).click();
+  await expect(control(bar, "完成审阅")).toHaveCount(0);
+  await control(bar, "关闭提议").click();
   await expect(bar).toBeHidden();
   const decided = await page.evaluate(() => window.mock.decided);
-  expect(decided.map((d) => [d.id, d.status])).toEqual([
+  expect(decided.map((d) => [d.id, d.status || d.results.join()])).toEqual([
     ["p1", "rejected"],
     ["p2", "failed"],
   ]);
@@ -328,7 +405,7 @@ test("a rejected proposal changes nothing; a stale one can only be dismissed", a
   await expect(page.locator("#content")).toContainText("Send it on Friday.");
 });
 
-test("a proposed new note previews in its own tab and is created on accept", async ({
+test("a proposed new note is reviewed in its own tab and created on finishing", async ({
   page,
 }) => {
   await boot(page, {
@@ -349,7 +426,13 @@ test("a proposed new note previews in its own tab and is created on accept", asy
   const bar = page.locator("#proposal-bar");
   await expect(bar).toContainText("Codex 提议新建这篇笔记：Meeting notes");
   await expect(page.locator("#content h1")).toContainText("Meeting");
-  await bar.getByRole("button", { name: "接受并创建" }).click();
+  // A new note is one whole: nothing to step through or narrow down.
+  await expect(control(bar, "接受这处")).toBeDisabled();
+  await expect(control(bar, "仅改动")).toBeDisabled();
+  await control(bar, "源码").click();
+  await expect(page.locator("#content .src-add")).toHaveCount(3);
+  await control(bar, "全部接受").click();
+  await control(bar, "完成审阅").click();
   await expect(bar).toBeHidden();
   expect(await page.evaluate(() => window.mock.created)).toEqual(["p3"]);
   await expect(page.getByRole("tab")).toHaveCount(1);

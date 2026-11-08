@@ -150,6 +150,11 @@
 #context button {
   overflow-wrap: anywhere;
 }
+#context .menu-separator {
+  margin: 4px 6px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
 .history-controls {
   display: flex;
   flex: none;

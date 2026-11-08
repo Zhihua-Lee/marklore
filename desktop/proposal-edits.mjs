@@ -313,3 +313,64 @@ export function unifiedDiff(before, after, name = "note.md") {
   }
   return out.join("\n") + "\n";
 }
+
+// Line starts of a text, and the line holding a position.
+const lineStarts = (text) => {
+  const starts = [0];
+  for (let i = 0; i < text.length; i++)
+    if (text.charCodeAt(i) === 10) starts.push(i + 1);
+  return starts;
+};
+const lineAt = (starts, pos) => {
+  let lo = 0,
+    hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= pos) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+};
+
+// The lines a review's changes touch, as hunks: each change widened to whole
+// lines in both texts (the rest of those lines is the same on both sides),
+// changes sharing a line in one hunk, each hunk's lines diffed.
+export function sourceHunks(before, after, revs) {
+  const oldLines = before.split("\n"),
+    newLines = after.split("\n");
+  const os = lineStarts(before),
+    ns = lineStarts(after);
+  const hunks = [];
+  revs.forEach((rev, i) => {
+    const span = {
+      changes: [i],
+      o1: lineAt(os, rev.oldFrom),
+      o2: lineAt(os, rev.oldTo),
+      n1: lineAt(ns, rev.from),
+      n2: lineAt(ns, rev.to),
+    };
+    const last = hunks.at(-1);
+    if (last && span.o1 <= last.o2) {
+      last.changes.push(i);
+      last.o2 = Math.max(last.o2, span.o2);
+      last.n2 = Math.max(last.n2, span.n2);
+    } else hunks.push(span);
+  });
+  for (const hunk of hunks) {
+    let o = hunk.o1,
+      n = hunk.n1;
+    hunk.rows = diffSequence(
+      oldLines.slice(hunk.o1, hunk.o2 + 1),
+      newLines.slice(hunk.n1, hunk.n2 + 1),
+    ).map(([kind, line]) => {
+      const row = {
+        kind,
+        line,
+        old: kind === "+" ? null : ++o,
+        new: kind === "-" ? null : ++n,
+      };
+      return row;
+    });
+  }
+  return { oldLines, newLines, hunks };
+}

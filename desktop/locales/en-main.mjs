@@ -210,4 +210,9 @@ export default {
   这个文件夹没有目录文件: "This folder has no index file",
   "目录文件刚被其他程序修改，请重试":
     "Another program just changed the index file; try again",
+  // The tree's own file operations.
+  '名称无效：不能为空，不能以点开头，也不能含有 \\ / : * ? " < > |':
+    'Invalid name: it cannot be empty, start with a dot, or contain \\ / : * ? " < > |',
+  "笔记名称须以 .md 结尾": "A note's name must end in .md",
+  已有同名的文件或文件夹: "A file or folder with this name already exists",
 };

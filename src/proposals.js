@@ -3,8 +3,8 @@ import {
   locateEdits,
   applyChanges,
   revisions,
-  unifiedDiff,
   diffSequence,
+  sourceHunks,
   words,
 } from "../desktop/proposal-edits.mjs";
 import { renderDocument } from "./document-render.js";
@@ -12,15 +12,21 @@ import { icon } from "./icons.js";
 import "./proposals.css";
 
 // Changes proposed by AI assistants through Marklore's MCP server
-// (desktop/mcp.mjs). A note with proposals shows a bar above it. Preview
-// shows the note as it would read in one of three ways: with the changes
-// marked in it (removed words struck in red, new words underlined in green),
-// each change's passage before and after side by side, or the source diff.
-// Each change can be accepted or rejected on its own, or all at once; an
-// accepted change is applied to the note as one undoable change and saved,
-// unless the note has unsaved changes of the reader's own: those are not
-// saved behind their back, so the change stays in the draft for Ctrl+S.
-// Nothing else changes the note: the preview is read-only.
+// (desktop/mcp.mjs). A note with proposals shows a bar above it; "Review"
+// enters the review and "Exit review" leaves it, the decisions kept.
+//
+// A review is shown along two independent choices: rendered or source, and
+// the whole note or only the changed passages. Rendered and whole is the
+// note with the changes marked in it (removed words struck in red, new words
+// underlined in green); rendered and changed passages is each passage before
+// and after, side by side; source is the Markdown, whole or in hunks.
+//
+// Decisions are staged: each change is accepted or rejected (or all at
+// once), can be taken back, and nothing is written until "Finish review",
+// which applies the accepted changes as one undoable change, saves unless
+// the note has unsaved changes of the reader's own (those are not saved
+// behind their back: the changes stay in the draft for Ctrl+S), and tells
+// the assistant every decision at once.
 
 // Assistants by the names they give in MCP's clientInfo.
 const clients = {
@@ -47,12 +53,27 @@ const reasons = {
   unchanged: "an edit changes nothing",
 };
 
-// The ways a preview shows the proposal.
-const views = () => [
-  ["revise", t("修订")],
-  ["compare", t("前后对照")],
+// The two choices of how a review is shown.
+const renders = () => [
+  ["rendered", t("渲染")],
   ["source", t("源码")],
 ];
+const scopes = () => [
+  ["full", t("全文")],
+  ["changes", t("仅改动")],
+];
+// The last choice made, for the next review.
+let lastLook = { render: "rendered", scope: "full" };
+const lookOf = (shown) =>
+  shown.kind === "note"
+    ? shown.render === "source"
+      ? "source"
+      : "note"
+    : shown.render === "rendered"
+      ? shown.scope === "full"
+        ? "revise"
+        : "compare"
+      : "source";
 
 // The edits still waiting (the others were decided one by one), each with
 // its index in the proposal.
@@ -96,6 +117,7 @@ export function createProposals({
   report,
   run,
   showContext,
+  confirm = (question) => window.confirm(question),
 }) {
   if (!api?.proposals) return null;
   let list = [],
@@ -103,6 +125,13 @@ export function createProposals({
     seen = null,
     // The proposal shown in the bar, per tab.
     current = new Map();
+  // Decisions staged until the review is finished: proposal → (edit index,
+  // or 0 for a new note) → "accepted" | "rejected".
+  const staged = new Map();
+  const decisionsOf = (p) => {
+    if (!staged.has(p.id)) staged.set(p.id, new Map());
+    return staged.get(p.id);
+  };
 
   const forDoc = (doc) =>
     !doc
@@ -115,6 +144,8 @@ export function createProposals({
     list = await api.proposals();
     const fresh = seen ? list.filter((p) => !seen.has(p.id)) : [];
     seen = new Set(list.map((p) => p.id));
+    for (const id of staged.keys())
+      if (!list.some((p) => p.id === id)) staged.delete(id);
     if (fresh.length === 1)
       report(
         t("{client} 提议修改《{name}》", {
@@ -124,7 +155,7 @@ export function createProposals({
       );
     else if (fresh.length > 1)
       report(t("收到 {count} 条 AI 提议", { count: fresh.length }));
-    // A proposal withdrawn (or decided elsewhere) while it was previewed.
+    // A proposal withdrawn (or decided elsewhere) while it was reviewed.
     const doc = getActive();
     if (doc?.preview && !list.some((p) => p.id === doc.preview.id)) {
       leave();
@@ -152,8 +183,12 @@ export function createProposals({
     const id = current.get(doc.id);
     return mine.find((p) => p.id === id) || mine[0] || null;
   }
+  // The changes under review, by their edit index (one for a new note).
+  const itemsOf = (shown) => (shown.kind === "note" ? [0] : shown.indexes);
 
-  // The bar of the active note: who proposes what, and the actions.
+  // The bar of the active note. Its controls keep their places: a control
+  // that does not apply is disabled, not taken away, and labels do not
+  // change with the state.
   function paint() {
     paintButton();
     const doc = getActive(),
@@ -161,29 +196,67 @@ export function createProposals({
       p = doc && chosen(doc);
     const located = p?.kind === "edit" ? locate(doc.text, p) : null;
     const shown = p && doc.preview?.id === p.id ? doc.preview : null;
+    const decisions = p ? decisionsOf(p) : null;
     // Rendering repaints after each pause in typing: rebuild only on change.
     const state = JSON.stringify([
       doc?.id,
       p?.id,
       mine.length,
       p?.results,
-      shown && [shown.view, shown.at],
+      shown && [shown.render, shown.scope, shown.at, itemsOf(shown)],
+      decisions && [...decisions],
       p && dirty(doc),
       located?.error?.edit,
-      located?.changes?.length,
     ]);
     if (state === painted) return;
     painted = state;
     bar.replaceChildren();
     bar.hidden = !p;
+    bar.classList.toggle("reviewing", !!shown);
     if (!p) return;
-    const text = document.createElement("span");
-    text.className = "proposal-text";
+    const element = (tag, className, label) => {
+      const el = document.createElement(tag);
+      if (className) el.className = className;
+      if (label) {
+        el.setAttribute("role", "group");
+        el.setAttribute("aria-label", label);
+      }
+      return el;
+    };
+    const action = (into, label, fn, { primary, pressed, disabled } = {}) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      if (primary) b.className = "primary";
+      if (pressed !== undefined)
+        b.setAttribute("aria-pressed", String(pressed));
+      b.disabled = !!disabled;
+      b.onclick = run(fn);
+      into.append(b);
+      return b;
+    };
+    const arrow = (into, name, label, fn, disabled) => {
+      const b = action(into, "", fn, { disabled });
+      b.innerHTML = icon(name);
+      b.className = "icon";
+      b.setAttribute("aria-label", label);
+      b.title = label;
+      return b;
+    };
+    const counter = (into, value, className = "proposal-count") => {
+      const count = element("span", className);
+      count.textContent = value;
+      into.append(count);
+      return count;
+    };
+
+    // First row: who proposes what; enter or leave the review, or finish it.
+    const head = element("div", "proposal-head");
+    const text = element("span", "proposal-text");
+    const mark = element("span", "proposal-mark");
+    mark.innerHTML = icon("spark");
     const who = document.createElement("strong");
     who.textContent = clientName(p.client);
-    const mark = document.createElement("span");
-    mark.className = "proposal-mark";
-    mark.innerHTML = icon("spark");
     text.append(
       mark,
       who,
@@ -195,41 +268,13 @@ export function createProposals({
             : t(" 提议修改："),
       ),
     );
-    const summary = document.createElement("span");
-    summary.className = "proposal-summary";
+    const summary = element("span", "proposal-summary");
     summary.textContent = located?.error
       ? t("第 {n} 处修改的原文已改变", { n: located.error.edit + 1 })
       : p.summary;
     summary.title = p.summary;
     text.append(summary);
-    bar.append(text);
-    const actions = document.createElement("span");
-    actions.className = "proposal-actions";
-    const action = (label, fn, { primary = false, pressed, into } = {}) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = label;
-      if (primary) b.className = "primary";
-      if (pressed !== undefined)
-        b.setAttribute("aria-pressed", String(pressed));
-      b.onclick = run(fn);
-      (into || actions).append(b);
-      return b;
-    };
-    const arrow = (name, label, fn, into) => {
-      const b = action("", fn, { into });
-      b.innerHTML = icon(name);
-      b.className = "icon";
-      b.setAttribute("aria-label", label);
-      b.title = label;
-      return b;
-    };
-    const counter = (value, into = actions) => {
-      const count = document.createElement("span");
-      count.className = "proposal-count";
-      count.textContent = value;
-      into.append(count);
-    };
+    head.append(text);
     if (mine.length > 1) {
       const at = mine.indexOf(p);
       const step = (d) => () => {
@@ -237,73 +282,108 @@ export function createProposals({
         current.set(doc.id, mine[(at + d + mine.length) % mine.length].id);
         paint();
       };
-      arrow("chevronLeft", t("上一条提议"), step(-1));
-      counter(`${at + 1} / ${mine.length}`);
-      arrow("chevronRight", t("下一条提议"), step(1));
+      const switcher = element("span", "proposal-switch", t("切换提议"));
+      arrow(switcher, "chevronLeft", t("上一条提议"), step(-1));
+      counter(switcher, `${at + 1} / ${mine.length}`);
+      arrow(switcher, "chevronRight", t("下一条提议"), step(1));
+      head.append(switcher);
     }
+    const ends = element("span", "proposal-ends");
+    head.append(ends);
+    bar.append(head);
     if (located?.error) {
-      action(t("关闭提议"), () =>
+      action(ends, t("关闭提议"), () =>
         decide(p, {
           status: "failed",
           error: `Not applied: ${reasons[located.error.reason]} (edit ${located.error.edit + 1}). Read the note again and propose anew.`,
         }),
       );
-      bar.append(actions);
       return;
     }
-    action(t("预览"), () => (shown ? leave() : preview(doc, p)), {
-      pressed: !!shown,
-    });
-    if (shown && p.kind === "edit") {
-      const group = document.createElement("span");
-      group.className = "proposal-views";
-      group.setAttribute("role", "group");
-      group.setAttribute("aria-label", t("预览方式"));
-      for (const [name, label] of views())
-        action(label, () => show(doc, name), {
-          pressed: shown.view === name,
-          into: group,
-        });
-      actions.append(group);
+    if (!shown) {
+      action(ends, t("审阅"), () => preview(doc, p), { primary: true });
+      return;
     }
-    const count = located?.changes.length ?? 1;
+    const items = itemsOf(shown);
+    const decidedCount = items.filter((ix) => decisions.has(ix)).length;
+    counter(
+      ends,
+      t("已决定 {done} / {count}", { done: decidedCount, count: items.length }),
+      "proposal-progress",
+    );
     const own = p.kind === "edit" && dirty(doc);
-    const draftTip = t(
-      "笔记有未保存的修改：AI 的修改写入草稿，按 Ctrl+S 一起保存",
+    action(ends, t("完成审阅"), () => finish(doc, p), {
+      primary: true,
+    }).title = own
+      ? t("笔记有未保存的修改：接受的修改写入草稿，按 Ctrl+S 一起保存")
+      : t("写入接受的修改，并把每处的决定告诉 AI");
+    action(ends, t("退出审阅"), () => leave(doc)).title =
+      t("回到笔记；已做的决定会保留");
+
+    // Second row: how the review is shown, then the decisions: change by
+    // change on the left, all at once on the right.
+    const tools = element("div", "proposal-tools");
+    const segment = (label, options, value, pick, disabled) => {
+      const group = element("span", "proposal-segment", label);
+      for (const [name, text] of options)
+        action(group, text, () => pick(name), {
+          pressed: value === name,
+          disabled,
+        });
+      tools.append(group);
+    };
+    segment(t("呈现"), renders(), shown.render, (name) =>
+      look(doc, { render: name }),
     );
-    // One change at a time, while its place is shown.
-    if (shown && count > 1 && shown.view !== "source") {
-      const one = document.createElement("span");
-      one.className = "proposal-one";
-      one.setAttribute("role", "group");
-      one.setAttribute("aria-label", t("逐处审阅"));
-      arrow("chevronLeft", t("上一处修改"), () => go(doc, shown.at - 1), one);
-      counter(t("第 {i} / {n} 处", { i: shown.at + 1, n: count }), one);
-      arrow("chevronRight", t("下一处修改"), () => go(doc, shown.at + 1), one);
-      action(t("接受这处"), () => acceptOne(doc, p), { into: one }).title = own
-        ? draftTip
-        : "";
-      action(t("拒绝这处"), () => rejectOne(doc, p), { into: one });
-      actions.append(one);
-    }
-    action(
-      p.kind === "note"
-        ? t("接受并创建")
-        : count > 1
-          ? t("全部接受")
-          : own
-            ? t("接受到草稿")
-            : t("接受并保存"),
-      () => accept(doc, p),
-      { primary: true },
-    ).title = own ? draftTip : count > 1 ? t("接受全部修改并保存") : "";
-    action(count > 1 ? t("全部拒绝") : t("拒绝"), () =>
-      decide(p, { status: "rejected" }),
+    segment(
+      t("范围"),
+      scopes(),
+      shown.kind === "note" ? "full" : shown.scope,
+      (name) => look(doc, { scope: name }),
+      shown.kind === "note",
     );
-    bar.append(actions);
+    tools.append(element("span", "proposal-gap"));
+    const single = shown.kind === "note";
+    const one = element("span", "proposal-one", t("逐处"));
+    const n = items.length;
+    arrow(
+      one,
+      "chevronLeft",
+      t("上一处修改"),
+      () => go(doc, shown.at - 1),
+      single || n < 2,
+    );
+    counter(one, t("第 {i} / {n} 处", { i: shown.at + 1, n }));
+    arrow(
+      one,
+      "chevronRight",
+      t("下一处修改"),
+      () => go(doc, shown.at + 1),
+      single || n < 2,
+    );
+    const here = decisions.get(items[shown.at]);
+    action(one, t("接受这处"), () => decideOne(doc, p, "accepted"), {
+      pressed: here === "accepted",
+      disabled: single,
+    });
+    action(one, t("拒绝这处"), () => decideOne(doc, p, "rejected"), {
+      pressed: here === "rejected",
+      disabled: single,
+    });
+    tools.append(one);
+    const all = element("span", "proposal-all", t("全部"));
+    const every = (status) => items.every((ix) => decisions.get(ix) === status);
+    action(all, t("全部接受"), () => decideAll(doc, p, "accepted"), {
+      pressed: every("accepted"),
+    });
+    action(all, t("全部拒绝"), () => decideAll(doc, p, "rejected"), {
+      pressed: every("rejected"),
+    });
+    tools.append(all);
+    bar.append(tools);
   }
 
-  // Show the note as the proposal would leave it (read mode, read-only),
+  // Review: the note as the proposal would leave it (read mode, read-only),
   // at change `at`.
   function preview(doc, p, { at = 0 } = {}) {
     if (doc !== getActive()) return;
@@ -327,12 +407,14 @@ export function createProposals({
       id: p.id,
       kind: p.kind,
       text,
-      before: doc.text,
+      before: p.kind === "note" ? "" : doc.text,
       name: p.name,
-      view: before?.view || "revise",
+      render: before?.render || lastLook.render,
+      scope: before?.scope || lastLook.scope,
       at: Math.max(0, Math.min(at, revs.length - 1)),
       revs,
       indexes,
+      targets: [],
       anchor: before ? before.anchor : doc.anchor,
     };
     doc.htmlText = null;
@@ -340,12 +422,16 @@ export function createProposals({
     focus(doc);
     paint();
   }
-  function show(doc, name) {
+  // Another way of showing the review (render, scope or both).
+  function look(doc, choice) {
     const shown = doc.preview;
-    if (!shown || shown.view === name) return;
-    shown.view = name;
-    doc.htmlText = null;
-    render();
+    if (!shown) return;
+    const next = { render: shown.render, scope: shown.scope, ...choice };
+    if (next.render === shown.render && next.scope === shown.scope) return;
+    Object.assign(shown, next);
+    lastLook = next;
+    // The rendered note itself is the same: only the marks over it change.
+    marks();
     focus(doc);
     paint();
   }
@@ -363,15 +449,12 @@ export function createProposals({
     const shown = doc.preview,
       rev = shown?.revs[shown.at];
     if (!rev) return;
-    if (shown.view === "compare")
-      content
-        .querySelector(`.proposal-card[data-change="${shown.at}"]`)
-        ?.scrollIntoView({ block: "center" });
-    else if (shown.view === "revise")
+    if (lookOf(shown) === "revise")
       restore(doc, { from: rev.from, y: 120 }, { expand: true });
+    else shown.targets[shown.at]?.el?.scrollIntoView({ block: "center" });
   }
-  // Back to the note itself, where it was read before the preview; returns
-  // that place (nothing when there was no preview).
+  // Back to the note itself, where it was read before the review; returns
+  // that place (nothing when there was no review). Decisions stay staged.
   function leave(doc = getActive()) {
     if (!doc?.preview) return null;
     const anchor = doc.preview.anchor;
@@ -384,23 +467,54 @@ export function createProposals({
     }
     return anchor;
   }
-  // The text the reader shows for a note under preview; a source diff
-  // renders as a .diff document (by its name, which the path would override).
+  // The text the reader shows for a note under review.
   function shown(doc) {
     const p = doc.preview;
-    if (!p) return null;
-    if (p.view !== "source" || p.kind === "note") return { text: p.text };
-    return {
-      text: unifiedDiff(p.before, p.text, p.name) || " ",
-      name: (p.name || "note") + ".diff",
-      path: (p.name || "note") + ".diff",
-    };
+    return p ? { text: p.text } : null;
+  }
+
+  // One change accepted or rejected (again: taken back), then on to the next
+  // one not decided yet.
+  function decideOne(doc, p, status) {
+    const shown = doc.preview;
+    if (!shown) return;
+    const items = itemsOf(shown),
+      decisions = decisionsOf(p),
+      ix = items[shown.at];
+    if (decisions.get(ix) === status) decisions.delete(ix);
+    else {
+      decisions.set(ix, status);
+      for (let k = 1; k < items.length; k++) {
+        const j = (shown.at + k) % items.length;
+        if (!decisions.has(items[j])) {
+          shown.at = j;
+          break;
+        }
+      }
+    }
+    marks();
+    focus(doc);
+    paint();
+  }
+  // All changes one way; pressed again, all taken back.
+  function decideAll(doc, p, status) {
+    const shown = doc.preview;
+    if (!shown) return;
+    const items = itemsOf(shown),
+      decisions = decisionsOf(p);
+    const undo = items.every((ix) => decisions.get(ix) === status);
+    for (const ix of items)
+      if (undo) decisions.delete(ix);
+      else decisions.set(ix, status);
+    marks();
+    paint();
   }
 
   async function decide(p, decision) {
     const doc = getActive();
     if (doc?.preview?.id === p.id) leave(doc);
     await api.decideProposal(p.id, decision);
+    staged.delete(p.id);
     if (decision.status === "rejected") report(t("已拒绝这条提议"));
     if (p.kind === "note" && doc?.proposalNote === p.id) {
       doc.proposalNote = null;
@@ -421,18 +535,28 @@ export function createProposals({
     const saved = !own && (await save(false, doc)) && !dirty(doc);
     return { saved, own };
   }
-  const applied = ({ saved, own }, done) =>
-    report(
-      saved
-        ? done
-        : own
-          ? t("已写入草稿，按 Ctrl+S 保存")
-          : t("已写入草稿，但未能保存"),
-    );
 
-  async function accept(doc, p) {
+  // The review finished: changes not decided count as rejected (after
+  // asking), the accepted ones are applied at once, and the assistant hears
+  // every decision in one answer.
+  async function finish(doc, p) {
+    const shown = doc.preview;
+    if (!shown) return;
+    const items = itemsOf(shown),
+      decisions = decisionsOf(p);
+    const open = items.filter((ix) => !decisions.has(ix)).length;
+    if (
+      open &&
+      !confirm(
+        t("还有 {count} 处没有决定，按拒绝处理并完成审阅？", { count: open }),
+      )
+    )
+      return;
     if (p.kind === "note") {
+      if (decisions.get(0) !== "accepted")
+        return decide(p, { status: "rejected" });
       const file = await api.createProposedNote(p.id);
+      staged.delete(p.id);
       doc.preview = null;
       doc.proposalNote = null;
       await closeTab(doc);
@@ -442,53 +566,38 @@ export function createProposals({
     }
     const located = locate(doc.text, p);
     if (located.error) return paint();
+    const taken = located.changes.filter(
+      (_, k) => decisions.get(located.indexes[k]) === "accepted",
+    );
+    const results = p.edits.map((_, i) =>
+      p.results && p.results[i] !== "pending"
+        ? p.results[i]
+        : decisions.get(i) || "rejected",
+    );
     leave(doc);
-    // One transaction: one Ctrl+Z takes the whole proposal back.
-    const result = await apply(doc, located.changes);
-    await api.decideProposal(p.id, { status: "accepted", saved: result.saved });
-    applied(result, t("已接受并保存"));
+    // One transaction: one Ctrl+Z takes all the accepted changes back.
+    const result = taken.length
+      ? await apply(doc, taken)
+      : { saved: true, own: false };
+    await api.decideProposal(p.id, { results, saved: result.saved });
+    staged.delete(p.id);
+    const counts = {
+      accepted: taken.length,
+      rejected: items.length - taken.length,
+    };
+    report(
+      !taken.length
+        ? t("已拒绝这条提议")
+        : result.saved
+          ? t("已接受 {accepted} 处并保存，拒绝 {rejected} 处", counts)
+          : result.own
+            ? t("已接受 {accepted} 处，写入草稿，按 Ctrl+S 保存", counts)
+            : t("已写入草稿，但未能保存"),
+    );
     await refresh();
   }
 
-  // The change shown as current: its change in the note and its edit.
-  function currentChange(doc, p) {
-    const shown = doc.preview;
-    if (shown?.id !== p.id) return null;
-    const located = locate(doc.text, p);
-    if (located.error) return null;
-    const at = Math.min(shown.at, located.changes.length - 1);
-    return { at, change: located.changes[at], edit: located.indexes[at] };
-  }
-  async function acceptOne(doc, p) {
-    const one = currentChange(doc, p);
-    if (!one) return paint();
-    const result = await apply(doc, [one.change]);
-    await api.decideProposal(p.id, {
-      status: "accepted",
-      saved: result.saved,
-      edit: one.edit,
-    });
-    applied(result, t("已接受这处修改并保存"));
-    await next(doc, p, one.at);
-  }
-  async function rejectOne(doc, p) {
-    const one = currentChange(doc, p);
-    if (!one) return paint();
-    await api.decideProposal(p.id, { status: "rejected", edit: one.edit });
-    report(t("已拒绝这处修改"));
-    await next(doc, p, one.at);
-  }
-  // After one change was decided: the rest of the proposal, from the change
-  // that took its place.
-  async function next(doc, p, at) {
-    list = await api.proposals();
-    const fresh = list.find((x) => x.id === p.id);
-    if (fresh && doc === getActive()) return preview(doc, fresh, { at });
-    if (doc.preview?.id === p.id) leave(doc);
-    await refresh();
-  }
-
-  // Opens a proposal from the toolbar's list: its note, then the preview.
+  // Opens a proposal from the toolbar's list: its note, then the review.
   async function open(p) {
     if (p.kind === "note") {
       let doc = tabs.find((tab) => tab.proposalNote === p.id);
@@ -508,23 +617,45 @@ export function createProposals({
     preview(doc, p);
   }
 
-  // The marks of the shown preview, drawn again.
+  // The marks of the shown review, drawn again.
   function marks() {
     unmark(content);
     const doc = getActive(),
       shown = doc?.preview;
-    if (!shown || shown.kind === "note") return;
-    if (shown.view === "source") return markSource(content);
-    const targets =
-      shown.view === "compare" ? compare(doc, shown) : revise(shown);
-    rail(targets, shown, (i) => go(doc, i));
+    if (!shown) return;
+    const p = list.find((x) => x.id === shown.id);
+    const decisions = p ? decisionsOf(p) : new Map();
+    shown.states = itemsOf(shown).map((ix) => decisions.get(ix) || "pending");
+    const kind = lookOf(shown);
+    if (kind === "note") return;
+    shown.targets =
+      kind === "revise"
+        ? revise(shown)
+        : kind === "compare"
+          ? compare(doc, shown)
+          : source(shown, (i) => go(doc, i));
+    if (shown.kind !== "note") rail(shown.targets, shown, (i) => go(doc, i));
   }
+  const stateClass = (state) =>
+    state === "accepted"
+      ? "proposal-ok"
+      : state === "rejected"
+        ? "proposal-no"
+        : null;
+  const stateLabel = (state) =>
+    state === "accepted"
+      ? t("已接受")
+      : state === "rejected"
+        ? t("已拒绝")
+        : "";
 
   // Revision marks in the note: new words washed green and underlined,
   // removed words struck through in red where they were, a bar beside each
-  // changed block. Returns each change's first element and kind.
+  // changed block; a rejected change greyed, a decided one labelled. Returns
+  // each change's first element and kind.
   function revise(shown) {
     const added = [],
+      dropped = [],
       found = shown.revs.map(() => ({ first: null, kinds: new Set() }));
     const earliest = (i, el) => {
       const f = found[i];
@@ -545,6 +676,7 @@ export function createProposals({
           piece.to > piece.from,
         );
         if (!el) continue;
+        if (shown.states[i] === "rejected") el.classList.add("proposal-no");
         found[i].kinds.add("del");
         const block = el.matches(".proposal-del-block")
           ? el
@@ -557,18 +689,34 @@ export function createProposals({
     shown.revs.forEach((rev, i) => {
       for (const piece of rev.pieces)
         if (piece.to > piece.from) {
-          const block = markText(content, piece.from, piece.to, added, [
-            "proposal-added",
-            ...(i === shown.at ? ["proposal-current"] : []),
-          ]);
+          const block = markText(
+            content,
+            piece.from,
+            piece.to,
+            shown.states[i] === "rejected" ? dropped : added,
+            ["proposal-added", ...(i === shown.at ? ["proposal-current"] : [])],
+          );
           earliest(i, block);
           found[i].kinds.add("add");
         }
     });
     highlight("folio-proposal-add", added);
-    return found.map(({ first, kinds }) => ({
+    highlight("folio-proposal-dropped", dropped);
+    // Labels last: they are not part of the note's text runs.
+    found.forEach(({ first }, i) => {
+      const state = shown.states[i];
+      if (!first || state === "pending") return;
+      first.classList.add(stateClass(state));
+      const tag = document.createElement("span");
+      tag.className = `proposal-tag ${stateClass(state)}`;
+      tag.textContent = stateLabel(state);
+      tag.contentEditable = "false";
+      first.append(tag);
+    });
+    return found.map(({ first, kinds }, i) => ({
       el: first,
       kind: kinds.size === 1 ? [...kinds][0] : "mix",
+      state: shown.states[i],
     }));
   }
 
@@ -584,13 +732,21 @@ export function createProposals({
       targets = [],
       sides = [];
     shown.revs.forEach((rev, i) => {
+      const state = shown.states[i];
       const card = document.createElement("section");
       card.className = "proposal-card";
       if (i === shown.at) card.classList.add("proposal-current");
+      if (stateClass(state)) card.classList.add(stateClass(state));
       card.dataset.change = String(i);
       const head = document.createElement("div");
       head.className = "proposal-card-head";
       head.textContent = t("第 {n} 处", { n: i + 1 });
+      if (state !== "pending") {
+        const tag = document.createElement("span");
+        tag.className = `proposal-tag ${stateClass(state)}`;
+        tag.textContent = stateLabel(state);
+        head.append(tag);
+      }
       const side = (label, kind, host, from, to) => {
         const col = document.createElement("div");
         col.className = `proposal-side proposal-${kind}`;
@@ -640,6 +796,7 @@ export function createProposals({
       targets.push({
         el: card,
         kind: kinds.size === 1 ? [...kinds][0] : "mix",
+        state,
       });
     });
     content.classList.add("proposal-comparing");
@@ -663,8 +820,36 @@ export function createProposals({
     return host;
   }
 
+  // The Markdown, in place of the note: every line (whole) or each change's
+  // lines with three around them (changes), removed lines red and added
+  // green, the words that differ stronger. Returns each change's hunk.
+  function source(shown, goTo) {
+    const box = sourceLines(shown);
+    content.classList.add("proposal-sourcing");
+    content.prepend(box);
+    const hunks = [...box.querySelectorAll(".src-hunk")];
+    return shown.revs.map((rev, i) => {
+      const hunk = hunks.find((el) =>
+        el.dataset.changes.split(" ").includes(String(i)),
+      );
+      if (hunk) hunk.onclick = () => shown.at !== i && goTo(i);
+      const kinds = new Set(
+        rev.pieces.flatMap((piece) => [
+          ...(piece.to > piece.from ? ["add"] : []),
+          ...(piece.oldTo > piece.oldFrom ? ["del"] : []),
+        ]),
+      );
+      return {
+        el: hunk,
+        kind: kinds.size === 1 ? [...kinds][0] : "mix",
+        state: shown.states[i],
+      };
+    });
+  }
+
   // Marks on the reader's right edge, one per change, where it is in the
-  // note; a click goes to it.
+  // note; a click goes to it. A decided change's mark is hollow (accepted)
+  // or grey (rejected).
   function rail(targets, shown, goTo) {
     const reader = content.parentElement;
     if (!reader || !targets.length) return;
@@ -680,11 +865,12 @@ export function createProposals({
         top = reader.getBoundingClientRect().top - reader.scrollTop;
       track.style.height = height + "px";
       track.replaceChildren(
-        ...targets.map(({ el, kind }, i) => {
+        ...targets.map(({ el, kind, state }, i) => {
           const mark = document.createElement("button");
           mark.type = "button";
           mark.tabIndex = -1;
           mark.className = `proposal-rail-mark proposal-rail-${kind}`;
+          if (stateClass(state)) mark.classList.add(stateClass(state));
           if (i === shown.at) mark.classList.add("proposal-current");
           mark.title = t("第 {n} 处", { n: i + 1 });
           mark.setAttribute("aria-hidden", "true");
@@ -734,13 +920,13 @@ export function createProposals({
     paint,
     shown,
     leave,
-    // After the reader rendered a note: mark what a preview changes, or
-    // take the marks of an earlier preview away.
+    // After the reader rendered a note: mark what a review changes, or
+    // take the marks of an earlier review away.
     rendered() {
       railPlace = null;
       marks();
     },
-    // Read-only while previewing.
+    // Read-only while reviewing.
     previewing: (doc = getActive()) => !!doc?.preview,
   };
 }
@@ -751,41 +937,47 @@ const highlight = (name, ranges) => {
   else CSS.highlights.delete(name);
 };
 
-// Takes a preview's marks out of the reader (the rendered note is kept and
+// Takes a review's marks out of the reader (the rendered note is kept and
 // reused, so they must not stay in it).
 function unmark(content) {
-  CSS.highlights?.delete("folio-proposal-add");
-  CSS.highlights?.delete("folio-proposal-del");
+  for (const name of [
+    "folio-proposal-add",
+    "folio-proposal-del",
+    "folio-proposal-dropped",
+  ])
+    CSS.highlights?.delete(name);
   content.parentElement
     ?.querySelectorAll(":scope > .proposal-rail")
     .forEach((el) => el.remove());
-  content.classList.remove("proposal-comparing", "proposal-source");
-  content.querySelector(":scope > .proposal-compare")?.remove();
+  content.classList.remove("proposal-comparing", "proposal-sourcing");
+  content
+    .querySelectorAll(":scope > .proposal-compare, :scope > .proposal-srcview")
+    .forEach((el) => el.remove());
+  content.querySelectorAll(".proposal-tag").forEach((el) => el.remove());
   const parents = new Set();
   for (const el of content.querySelectorAll(".proposal-del")) {
     parents.add(el.parentNode);
     el.remove();
   }
   for (const parent of parents) parent?.normalize();
+  const classes = [
+    "proposal-added",
+    "proposal-removed",
+    "proposal-current",
+    "proposal-ok",
+    "proposal-no",
+  ];
   for (const el of content.querySelectorAll(
-    ".proposal-added, .proposal-removed, .proposal-current",
+    classes.map((name) => "." + name).join(","),
   ))
-    el.classList.remove(
-      "proposal-added",
-      "proposal-removed",
-      "proposal-current",
-    );
-  for (const el of content.querySelectorAll("[data-proposal-text]")) {
-    el.textContent = el.dataset.proposalText;
-    delete el.dataset.proposalText;
-  }
+    el.classList.remove(...classes);
 }
 
-// The text nodes of a run of rendered text, without removed text a preview
-// put in.
+// The text nodes of a run of rendered text, without removed text or labels
+// a review put in.
 const shownText = (leaf) =>
   document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT, (node) =>
-    node.parentElement?.closest(".proposal-del")
+    node.parentElement?.closest(".proposal-del, .proposal-tag")
       ? NodeFilter.FILTER_REJECT
       : NodeFilter.FILTER_ACCEPT,
   );
@@ -932,40 +1124,130 @@ function nearestBlock(host, from) {
   );
 }
 
-// The source diff: in each removed line and the added line that replaced
-// it, the words that differ stand out from the rest of the line.
-function markSource(content) {
-  content.classList.add("proposal-source");
-  const lines = [...content.querySelectorAll(".diff-line")];
-  for (let i = 0; i < lines.length;) {
-    if (!lines[i].matches(".diff-del")) {
-      i++;
-      continue;
+// The source of a review: every line, or each hunk with three lines around
+// it and a gap mark between; each hunk knows its changes.
+function sourceLines(shown) {
+  const box = document.createElement("div");
+  box.className = "proposal-srcview";
+  const row = ({ kind, line, old, new: now }) => {
+    const el = document.createElement("div");
+    el.className =
+      "src-row " +
+      (kind === "+" ? "src-add" : kind === "-" ? "src-del" : "src-ctx");
+    for (const number of [old, now]) {
+      const no = document.createElement("span");
+      no.className = "src-no";
+      no.textContent = number ?? "";
+      el.append(no);
     }
-    const dels = [];
-    while (i < lines.length && lines[i].matches(".diff-del"))
-      dels.push(lines[i++]);
-    const adds = [];
-    while (i < lines.length && lines[i].matches(".diff-add"))
-      adds.push(lines[i++]);
-    for (let k = 0; k < Math.min(dels.length, adds.length); k++)
-      markWords(dels[k], adds[k]);
+    const sign = document.createElement("span");
+    sign.className = "src-sign";
+    sign.textContent = kind === "=" ? " " : kind;
+    const text = document.createElement("span");
+    text.className = "src-text";
+    text.textContent = line;
+    el.append(sign, text);
+    return el;
+  };
+  const gap = () => {
+    const el = document.createElement("div");
+    el.className = "src-gap";
+    el.textContent = "⋯";
+    return el;
+  };
+  if (shown.kind === "note") {
+    const hunk = document.createElement("div");
+    hunk.className = "src-hunk";
+    hunk.dataset.changes = "";
+    const lines = shown.text.split("\n");
+    if (lines.length > 1 && lines.at(-1) === "") lines.pop();
+    lines.forEach((line, i) =>
+      hunk.append(row({ kind: "+", line, old: null, new: i + 1 })),
+    );
+    box.append(hunk);
+    return box;
   }
+  const { oldLines, hunks } = sourceHunks(shown.before, shown.text, shown.revs);
+  const whole = shown.scope === "full",
+    around = 3;
+  // The empty line after a final newline is not a line of the note.
+  const last = oldLines.length - (shown.before.endsWith("\n") ? 1 : 0);
+  let o = 0,
+    shift = 0;
+  const context = (from, to) => {
+    for (let k = from; k < to; k++)
+      box.append(
+        row({ kind: "=", line: oldLines[k], old: k + 1, new: k + 1 + shift }),
+      );
+  };
+  hunks.forEach((hunk, h) => {
+    // Unchanged lines before the hunk: all, or the last few after a gap.
+    if (whole) context(o, hunk.o1);
+    else {
+      const start = Math.max(o, hunk.o1 - around);
+      if (start > o) box.append(gap());
+      context(start, hunk.o1);
+    }
+    const el = document.createElement("div");
+    el.className = "src-hunk";
+    el.dataset.changes = hunk.changes.join(" ");
+    const states = new Set(hunk.changes.map((i) => shown.states[i]));
+    if (hunk.changes.includes(shown.at)) el.classList.add("proposal-current");
+    if (states.size === 1) {
+      const [state] = states;
+      if (state !== "pending") {
+        el.classList.add(state === "accepted" ? "proposal-ok" : "proposal-no");
+        const tag = document.createElement("span");
+        tag.className = `proposal-tag ${state === "accepted" ? "proposal-ok" : "proposal-no"}`;
+        tag.textContent = state === "accepted" ? t("已接受") : t("已拒绝");
+        el.append(tag);
+      }
+    }
+    const rows = hunk.rows.map((r) => {
+      const line = row(r);
+      el.append(line);
+      return [r.kind, line];
+    });
+    // The words that differ, in each removed line and the added line that
+    // took its place.
+    for (let i = 0; i < rows.length;) {
+      if (rows[i][0] !== "-") {
+        i++;
+        continue;
+      }
+      const dels = [];
+      while (i < rows.length && rows[i][0] === "-") dels.push(rows[i++][1]);
+      const adds = [];
+      while (i < rows.length && rows[i][0] === "+") adds.push(rows[i++][1]);
+      for (let k = 0; k < Math.min(dels.length, adds.length); k++)
+        markWords(
+          dels[k].querySelector(".src-text"),
+          adds[k].querySelector(".src-text"),
+        );
+    }
+    box.append(el);
+    shift += hunk.n2 - hunk.n1 - (hunk.o2 - hunk.o1);
+    o = hunk.o2 + 1;
+    // A few lines after it, up to the next hunk.
+    if (!whole) {
+      const end = Math.min(hunks[h + 1]?.o1 ?? last, last, o + around);
+      context(o, end);
+      o = end;
+    }
+  });
+  if (whole) context(o, last);
+  else if (o < last) box.append(gap());
+  return box;
 }
 function markWords(del, add) {
-  const body = (el) => el.textContent.slice(1).replace(/\n$/, "");
-  const a = body(del),
-    b = body(add);
+  const a = del.textContent,
+    b = add.textContent;
   if (a.length + b.length > 4000) return;
-  const wa = words(a),
-    wb = words(b);
-  const ops = diffSequence(wa, wb);
+  const ops = diffSequence(words(a), words(b));
   // Mostly rewritten: the whole line is the change.
   if (ops.filter(([kind]) => kind === "=").length < 1) return;
   const paint = (el, keep) => {
-    const text = el.textContent;
-    el.dataset.proposalText = text;
-    el.replaceChildren(text[0]);
+    el.replaceChildren();
     let run = "",
       changed = false;
     const flush = () => {
@@ -988,7 +1270,6 @@ function markWords(del, add) {
       run += word;
     }
     flush();
-    if (text.endsWith("\n")) el.append("\n");
   };
   paint(del, "-");
   paint(add, "+");

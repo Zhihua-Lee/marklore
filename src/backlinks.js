@@ -36,23 +36,31 @@ export function markedBlock(anchor, content) {
   return null;
 }
 // A short name for an anchored block: its bold lead, or its first words.
+// Text as read: a typeset formula once (its drawn text, not also the
+// MathML KaTeX keeps for screen readers).
+const readText = (el) => {
+  if (!el.querySelector(".katex-mathml")) return el.textContent;
+  const copy = el.cloneNode(true);
+  for (const hidden of copy.querySelectorAll(".katex-mathml")) hidden.remove();
+  return copy.textContent;
+};
 export function blockLabel(block) {
   if (block.matches(HEADINGS)) {
     // Without the fold control, the folded-section summary and our count.
     const copy = block.cloneNode(true);
     for (const extra of copy.querySelectorAll("button,.section-summary"))
       extra.remove();
-    return copy.textContent.replace(/\s+/g, " ").trim();
+    return readText(copy).replace(/\s+/g, " ").trim();
   }
   // Our own count may already sit first in the block: look past it.
   const first = [...block.children].find(
     (child) => !child.matches(".backlink-badge"),
   );
+  const whole = readText(block);
   const lead =
-    first?.matches("strong,b") &&
-    !block.textContent.trim().indexOf(first.textContent.trim())
-      ? first.textContent
-      : block.textContent;
+    first?.matches("strong,b") && !whole.trim().indexOf(readText(first).trim())
+      ? readText(first)
+      : whole;
   const text = lead
     .replace(/\s+/g, " ")
     .trim()

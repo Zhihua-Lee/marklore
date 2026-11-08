@@ -150,8 +150,41 @@ try {
       box.bottom <= reader.bottom
     );
   });
+  // The tree's own operations: a new note named in place, and the open note
+  // renamed (its tab follows and saves at the new path).
+  await filter.fill("");
+  const topic = tree.locator("details.folder > summary", { hasText: "Topic" });
+  await topic.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "新建笔记" }).click();
+  const box = tree.getByRole("textbox", { name: "新笔记名称" });
+  await box.fill("Tree note");
+  await box.press("Enter");
+  await page.locator(".tab.active", { hasText: "Tree note.md" }).waitFor();
+  assert.equal(
+    await fs.readFile(path.join(library, "Topic", "Tree note.md"), "utf8"),
+    "",
+  );
+  await tree
+    .getByText("Laplace.md", { exact: true })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "重命名…" }).click();
+  const rename = tree.getByRole("textbox", { name: "新名称" });
+  await rename.pressSequentially("Laplace transform");
+  await rename.press("Enter");
+  await page
+    .locator(".tab", { hasText: "Laplace transform.md" })
+    .waitFor({ timeout: 5000 });
+  const moved = path.join(library, "Topic", "Laplace transform.md");
+  assert.match(await fs.readFile(moved, "utf8"), /## Definition/);
+  await assert.rejects(fs.stat(renamed), { code: "ENOENT" });
+  await page.locator(".tab", { hasText: "Laplace transform.md" }).click();
+  await page.locator("#content h1", { hasText: "Agent note" }).waitFor();
+  await fs.appendFile(moved, "\n## After the rename\n");
+  await page.locator("#content h2", { hasText: "After the rename" }).waitFor({
+    timeout: 5000,
+  });
   console.log(
-    "Native library passed: notes written and renamed by another program appear in the tree with folders kept open; an open note re-renders as it is extended; full-text search finds a note written twice quickly and opens it at the hit, marked.",
+    "Native library passed: notes written and renamed by another program appear in the tree with folders kept open; an open note re-renders as it is extended; full-text search finds a note written twice quickly and opens it at the hit, marked; the tree creates a note and renames the open one, whose tab follows the file.",
   );
   console.log(`[library] search results on screen ${latency} ms after typing`);
 } finally {

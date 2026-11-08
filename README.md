@@ -25,7 +25,7 @@ More and more notes start as an AI draft. That is where the work begins: you che
 
 **Your notes are the database.** A knowledge base in Marklore is a folder of ordinary `.md` files. Nothing is imported, there is no vault format, and Marklore keeps nothing of its own in your folders: drafts, backups and settings stay in your user profile. Git, a sync folder, any text editor, a script and any AI agent all work on the same files.
 
-**AI drafts, you refine.** Let Claude Code, Codex or any agent that edits files write first drafts and reorganize notes in the folder. Marklore shows each change as it lands: an open note re-renders within a fraction of a second, and new notes appear in the library. Then the note is yours to correct, in the editor or right in the rendered preview. The agent never overwrites your unsaved edits; Marklore shows a conflict instead.
+**AI drafts, you refine.** Let Claude Code, Codex or any agent that edits files write first drafts and reorganize notes in the folder. Marklore shows each change as it lands: an open note re-renders within a fraction of a second, and new notes appear in the library. Then the note is yours to correct, typing straight into it as it reads. Or have the agent propose instead, and accept its changes one by one. The agent never overwrites your unsaved edits; Marklore shows a conflict instead.
 
 **Mark it up like a notebook.** Select text on the rendered page and highlight it, color it or make it bold, as you would in OneNote. Turn this on for Read mode too, if you like, in `Settings → Annotation`; it is off by default, so reading stays undisturbed. The marks are saved in the Markdown file itself, as standard inline HTML, so they travel with the note.
 
@@ -48,7 +48,19 @@ More and more notes start as an AI draft. That is where the work begins: you che
 2. Run your agent in the same folder, for example `claude` in a terminal there, and ask it to write, split, link or tidy notes.
 3. Read and refine: new files appear in the library, and open notes re-render as they change. Rewrite, correct and highlight by hand whenever you like; nothing is saved until you press `Ctrl+S`.
 
-Or let the agent propose instead of write: add Marklore as an MCP server (`Settings → AI assistant` copies the setup for Claude Code, Codex or any MCP client) and tick the libraries it may read. Its edits then wait in Marklore: preview the note as it would read, with removed words struck in red and new ones underlined in green, each change's passage before and after side by side, or the source diff, and accept or reject the changes one by one or all at once. Comments go both ways too: select a passage and comment on it, and the agent reads, answers and resolves; it can start threads of its own. Proposals and comments stay in your user profile, not in the notes.
+### Or let it propose, and review each change
+
+Add Marklore as an MCP server (`Settings → AI assistant` copies the setup for Claude Code, Codex or any MCP client) and tick the libraries it may read. The agent then proposes instead of writing, and its edits wait in Marklore:
+
+- **In the note, as it would read:** removed words struck through in red, new ones underlined in green, and marks on the right edge for each change.
+- **Rendered or source, the whole note or only the changes:** two independent switches, so the source diff can show every line or only the changed ones.
+- **Accept or reject each change**, or all at once, and change your mind until you finish the review. Only then are the accepted changes written, in one step, and the agent can read the decision on each of its changes.
+
+![An assistant proposes three edits over MCP. They show in the note in review colors; one is accepted, one is checked in the source diff and rejected, the last is accepted, and finishing the review writes the accepted ones](docs/images/en/proposal.gif)
+
+Comments go both ways too: select a passage and comment on it, and the agent reads, answers and resolves; it can start threads of its own. Proposals and comments stay in your user profile, not in the notes.
+
+### Conventions for the agent
 
 To keep what the agent writes rendering correctly, you can put a few conventions in the folder's `AGENTS.md` or `CLAUDE.md`:
 
@@ -68,9 +80,9 @@ Notes here are plain Markdown, read in Marklore.
 
 ### Highlight and color, right on the page
 
-Select text on the rendered page and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. It is always there in Edit mode's preview; turn on `Settings → Annotation → Format bar in Read mode` to mark up while reading, where double-clicking a word selects it and `Alt`+double-click opens its source. The highlight and color buttons apply your last color; right-click either for the palette.
+Select text on the rendered page and a small format bar appears: bold, italic, strikethrough, highlight, text color, link and inline code. It is always there in Edit mode; turn on `Settings → Annotation → Format bar in Read mode` to mark up while reading, where double-clicking a word selects it and `Alt`+double-click opens its source. The highlight and color buttons apply your last color; right-click either for the palette.
 
-![In Read mode, phrases are highlighted and colored on the page; Edit mode then shows the marks written into the Markdown](docs/images/en/annotate.gif)
+![In Read mode, phrases are highlighted and colored on the page; Source mode then shows the marks written into the Markdown](docs/images/en/annotate.gif)
 
 ### Who links here, right where it is linked
 
@@ -85,23 +97,17 @@ Linking without typing paths:
 
 Both write ordinary Markdown links and `<a id>` anchors, which other Markdown tools read too.
 
-![Hovering the count beside a definition lists the two notes that cite it; one opens at the citing sentence, Alt+← returns, and an anchored paragraph is reached from the outline](docs/images/en/backlinks.gif)
+![Hovering the count beside a definition lists the notes that cite it, each with its section and the sentence with the link](docs/images/en/backlinks.png)
 
 ### Edit the note as it reads
 
 Edit mode is the note as it reads, typed into in place: no source pane by default, and switching between Read and Edit keeps the note exactly where it is. A formula opens as its source where it stands and typesets again once the caret leaves; lists continue and renumber on Enter; table cells, links, images and `<details>` folds are edited in place; colored text and other inline HTML show as they read. Typed Markdown becomes formatting as in Typora (`**bold**` turns bold once closed), with nothing escaped in the file; saving changes only what was edited, so the rest of the file stays byte for byte. One formatting toolbar floats over the note, another over selected text. Double-clicking a word while reading opens Edit mode with that word selected; the source pane can be shown beside the note in Settings.
 
-### Long documents: outline jumps glide
+![Typing into the note in Edit mode: a formula typed between dollar signs typesets once closed and bold text turns bold; Source mode then shows the plain Markdown written](docs/images/en/edit.gif)
 
-Click an outline entry and the note scrolls smoothly to the heading. Mouse side buttons or `Alt+←` / `Alt+→` go back and forth through the jump history.
+### Long documents and links: never lose your place
 
-![Clicking the outline: the note glides to each section](docs/images/en/outline.gif)
-
-### Link previews: read without leaving your place
-
-Hover a link to a local note to read the target in a popup, where you can scroll, select and copy. Click to open it, and `Alt+←` brings you back.
-
-![Hovering a link shows the linked note in a preview; clicking opens it; Alt+← returns](docs/images/en/preview.gif)
+Click an outline entry and the note glides to the heading. Hover a link to a local note to read the target in a popup, where you can scroll, select and copy; click to open it. Mouse side buttons or `Alt+←` / `Alt+→` go back and forth through the jump history.
 
 ### Search all notes, find in this one
 
@@ -109,7 +115,9 @@ Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above th
 
 `Ctrl+F` highlights every match in the rendered text of the open note, and `Enter` steps through them. In the editor, `Ctrl+F` opens a compact find bar with match case, whole word, regular expressions and replace.
 
-![Ctrl+F finds "convolution" and steps through the matches](docs/images/en/find.gif)
+### The library tree
+
+The library lists the folders you opened, and the open note's folder opens where it sits in them. Right-click to create a note or folder (named in place), rename (`F2`), show it in File Explorer or move it to the Recycle Bin (`Delete`); an open note's tab follows a rename. A library folder can move up or down, or leave the library without touching its files. A folder with an index file (`_目录.md` from a OneNote export, or `SUMMARY.md`) lists its notes in the index's order, with sub-pages; drag to reorder.
 
 ### More
 
@@ -125,7 +133,7 @@ Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above th
 | Diffs, if you want them    | Turn on `Settings → Background & system → Other formats` to open `.diff` and `.patch` files to read, one foldable section per changed file, listed in the outline.                                                                                                                                                        |
 | Portable and bilingual     | Portable mode keeps everything in a `data` folder beside the program; English and Chinese interface.                                                                                                                                                                                                                      |
 
-![Edit mode in the dark theme: Markdown source on the left, rendered preview on the right](docs/images/en/edit-dark.png)
+![Edit mode in the dark theme: the note as it reads, with the formatting toolbar above it](docs/images/en/edit-dark.png)
 
 ## Install
 
@@ -152,11 +160,11 @@ Want to try it first? The [sample notebook](docs/sample-notebook-en) has formula
 
 Use **Open file** to open Markdown files, or **Open folder** to add a folder to the library; you can also drag Markdown files into the window. `Ctrl+N` creates a note and `Ctrl+S` saves.
 
-| Mode   | Use                                                                                               | Shortcut |
-| ------ | ------------------------------------------------------------------------------------------------- | -------- |
-| Read   | The rendered note, outline, folding and link previews.                                            | `Ctrl+1` |
-| Edit   | Markdown on the left, live preview on the right; you can also edit a single block in the preview. | `Ctrl+2` |
-| Source | The full Markdown editor for content and structure.                                               | `Ctrl+3` |
+| Mode   | Use                                                                              | Shortcut |
+| ------ | -------------------------------------------------------------------------------- | -------- |
+| Read   | The rendered note, outline, folding and link previews.                           | `Ctrl+1` |
+| Edit   | The note as it reads, typed into in place; a source pane can be shown beside it. | `Ctrl+2` |
+| Source | The full Markdown editor for content and structure.                              | `Ctrl+3` |
 
 | Action                      | Shortcut                                      |
 | --------------------------- | --------------------------------------------- |

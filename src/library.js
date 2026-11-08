@@ -67,6 +67,16 @@ export function createLibrary({
   openResult,
   // Whether a note (by path) is open with unsaved changes.
   isUnsaved = () => false,
+  // Open notes at or under a path that have unsaved changes (names).
+  unsavedUnder = () => [],
+  // Notes renamed or moved on disk by the tree: [{ id, path, name }].
+  renamed = () => {},
+  // A note or folder went to the Recycle Bin: close its tabs.
+  trashed = () => {},
+  copyLink = () => {},
+  changeSettings = () => {},
+  // A note just created in the tree: open it for writing.
+  openNew = (doc) => add(doc),
 }) {
   const $ = (s) => document.querySelector(s);
   let currentFolder = null;
@@ -74,19 +84,35 @@ export function createLibrary({
   let treeEpoch = 0;
   let searchTimer,
     searchEpoch = 0;
+  const within = (p, folder) => {
+    const a = p.toLowerCase().replace(/[\\/]+$/, ""),
+      b = folder.toLowerCase().replace(/[\\/]+$/, "");
+    return a === b || a.startsWith(b + "\\") || a.startsWith(b + "/");
+  };
+  const samePath = (a, b) =>
+    a.toLowerCase().replace(/[\\/]+$/, "") ===
+    b.toLowerCase().replace(/[\\/]+$/, "");
+  const inLibrary = (folder) =>
+    roots.some((root) => within(folder.path, root.path));
   async function openFolder() {
     if (!api) return report(t("请运行桌面版以访问文件夹"));
     const root = await api.pickFolder(getActive()?.fileId || null);
-    if (root && !roots.some((r) => r.path === root.path)) {
-      roots.push(root);
-      await renderTree();
-      changed();
-    }
+    if (root) await addRoot(root);
+  }
+  async function addRoot(root) {
+    if (roots.some((r) => samePath(r.path, root.path))) return;
+    roots.push(root);
+    await refresh();
+    changed();
+  }
+  // The open note's folder heads the tree only when the library does not
+  // hold it; a folder inside the library is shown where it is.
+  function outsideFolder() {
+    return currentFolder && !inLibrary(currentFolder) ? currentFolder : null;
   }
   function browsingRoots() {
-    return currentFolder
-      ? [currentFolder, ...roots.filter((r) => r.path !== currentFolder.path)]
-      : roots;
+    const outside = outsideFolder();
+    return outside ? [outside, ...roots] : roots;
   }
   function markCurrentFile() {
     const current = getActive()?.path?.toLowerCase();
@@ -111,21 +137,46 @@ export function createLibrary({
       markCurrentFile();
       return;
     }
-    if (currentFolder?.path !== folder.path) {
-      currentFolder = folder;
+    const before = outsideFolder()?.path;
+    currentFolder = folder;
+    // Only a change of the folder shown on top rebuilds the tree.
+    if (before !== outsideFolder()?.path) {
       $("#file-filter").value = "";
       ++searchEpoch;
       clearTimeout(searchTimer);
-      await renderTree();
+      await refresh();
+      if (epoch !== folderEpoch) return;
     }
-    const currentBranch = [...$("#tree").children].find(
-      (el) => el.dataset.path === folder.path,
-    );
-    if (currentBranch) currentBranch.open = true;
+    await revealFolder(folder.path);
+    if (epoch !== folderEpoch) return;
     markCurrentFile();
-    $("#tree")
-      .querySelector('[aria-current="page"]')
-      ?.scrollIntoView({ block: "nearest" });
+    const current = $("#tree").querySelector('[aria-current="page"]');
+    // A note under a folded sub-page: unfold the pages above it.
+    for (let page = current?.closest(".page.closed"); page;) {
+      page.querySelector(":scope > .page-row > .page-twisty").click();
+      page = page.parentElement.closest(".page.closed");
+    }
+    current?.scrollIntoView({ block: "nearest" });
+  }
+  // Open the folders down to this one (each loads its entries first).
+  async function revealFolder(target) {
+    const tops = [...$("#tree").children].filter(
+      (el) => el.matches("details.folder") && within(target, el.dataset.path),
+    );
+    let details = tops.sort(
+      (a, b) => b.dataset.path.length - a.dataset.path.length,
+    )[0];
+    while (details) {
+      await details.load();
+      if (samePath(details.dataset.path, target)) return details;
+      const parent = details;
+      details = [...parent.querySelectorAll("details.folder")].find(
+        (el) =>
+          el.parentElement.closest("details.folder") === parent &&
+          within(target, el.dataset.path),
+      );
+    }
+    return null;
   }
   // open: folder paths to reopen, so a rebuild keeps what the reader expanded.
   // Folders left out of search and backlinks (Settings; right-click a folder).
@@ -321,27 +372,34 @@ export function createLibrary({
     details.className = "folder";
     details.dataset.path = entry.path;
     details.dataset.id = entry.id;
+    details.dataset.name = entry.name;
     const summary = document.createElement("summary");
     summary.textContent = entry.name;
     summary.title = entry.path;
     details.append(summary);
     markExcluded(details, excludedNow());
-    let loaded = false;
+    // Entries load once, when the folder is first opened.
+    let loading = null;
+    const load = () =>
+      (loading ??= (async () => {
+        await fillFolder(details, entry, await api.list(entry.id), open);
+        markCurrentFile();
+      })().catch((e) => {
+        loading = null;
+        throw e;
+      }));
+    details.load = async () => {
+      details.open = true;
+      await load();
+    };
     details.addEventListener(
       "toggle",
       run(async () => {
-        if (!details.open || loaded) return;
-        loaded = true;
-        try {
-          await fillFolder(details, entry, await api.list(entry.id), open);
-          markCurrentFile();
-          const selected = details.querySelector('[aria-current="page"]');
-          if (details.isConnected && selected)
-            selected.scrollIntoView({ block: "nearest" });
-        } catch (e) {
-          loaded = false;
-          throw e;
-        }
+        if (!details.open) return;
+        await load();
+        const selected = details.querySelector('[aria-current="page"]');
+        if (details.isConnected && selected)
+          selected.scrollIntoView({ block: "nearest" });
       }),
     );
     if (open?.has(entry.path)) details.open = true;
@@ -361,6 +419,12 @@ export function createLibrary({
     }
     for (const root of displayedRoots) {
       const el = await branch(root, open);
+      el.classList.add("root");
+      // The open note's folder outside the library: said so beside its name.
+      if (root === outsideFolder()) {
+        el.classList.add("outside");
+        el.firstChild.dataset.note = t("不在笔记库中");
+      }
       fragment.append(el);
       el.open = true;
     }
@@ -444,11 +508,6 @@ export function createLibrary({
   }
   // Folders shown in the tree that the library does not cover (the open
   // note's folder elsewhere): searched by file name on disk, which is slower.
-  const within = (p, folder) => {
-    const a = p.toLowerCase().replace(/[\\/]+$/, ""),
-      b = folder.toLowerCase().replace(/[\\/]+$/, "");
-    return a === b || a.startsWith(b + "\\") || a.startsWith(b + "/");
-  };
   const outsideLibrary = () =>
     browsingRoots().filter(
       (folder) => !roots.some((root) => within(folder.path, root.path)),
@@ -614,6 +673,233 @@ export function createLibrary({
     // Reopened folders load their entries a moment later.
     setTimeout(() => (tree.scrollTop = top), 150);
   }
+  // ── The tree's own file operations (right-click, F2, Delete) ──
+  // A name typed in place: in a new row at the top of a folder, or over the
+  // entry being renamed. Enter or leaving the box takes it, Esc cancels.
+  function askName({ place, value = "", label, selectTo = value.length }) {
+    return new Promise((resolve) => {
+      const input = element("input", "tree-name");
+      input.value = value;
+      input.setAttribute("aria-label", label);
+      input.spellcheck = false;
+      const restore = place(input);
+      let done = false;
+      const finish = (name) => {
+        if (done) return;
+        done = true;
+        restore();
+        resolve(name);
+      };
+      input.addEventListener("keydown", (event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          finish(input.value.trim() || null);
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          finish(null);
+        }
+      });
+      // Inside a folder's name: clicks stay in the box.
+      input.addEventListener("click", (event) => event.preventDefault());
+      input.addEventListener("blur", () => finish(input.value.trim() || null));
+      input.focus();
+      input.setSelectionRange(0, selectTo);
+    });
+  }
+  const folderOf = (el) => el.closest("details.folder");
+  const parentFolderOf = (details) =>
+    details.parentElement.closest("details.folder");
+  const baseLength = (name) => {
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? dot : name.length;
+  };
+  async function create(details, kind) {
+    await details.load();
+    const name = await askName({
+      label: kind === "folder" ? t("新文件夹名称") : t("新笔记名称"),
+      place: (input) => {
+        const row = element("div", "tree-new");
+        row.dataset.kind = kind;
+        row.append(input);
+        details.querySelector(":scope > summary").after(row);
+        return () => row.remove();
+      },
+    });
+    if (!name) return;
+    const full =
+      kind === "folder" || /\.[a-z0-9]+$/i.test(name) ? name : name + ".md";
+    const made = await api.createEntry(details.dataset.id, full, kind);
+    await refresh();
+    if (kind === "folder") await revealFolder(made.path);
+    else openNew(made);
+  }
+  async function rename(target) {
+    const isFolder = target.matches("summary");
+    const details = folderOf(target);
+    const folder = isFolder ? parentFolderOf(details) : details;
+    const old = isFolder ? details.dataset.name : target.textContent;
+    const name = await askName({
+      value: old,
+      selectTo: isFolder ? old.length : baseLength(old),
+      label: t("新名称"),
+      place: (input) => {
+        if (isFolder) {
+          const text = target.textContent;
+          target.replaceChildren(input);
+          return () => (target.textContent = text);
+        }
+        target.hidden = true;
+        target.after(input);
+        return () => {
+          input.remove();
+          target.hidden = false;
+        };
+      },
+    });
+    if (!name || name === old) return;
+    const full = isFolder || /\.[a-z0-9]+$/i.test(name) ? name : name + ".md";
+    const result = await api.renameEntry(folder.dataset.id, old, full);
+    renamed(result.files);
+    await refresh();
+    if (result.links)
+      report(
+        t("已重命名。{count} 篇笔记中的链接仍指向旧名称", {
+          count: result.links,
+        }),
+      );
+  }
+  async function trash(target) {
+    const isFolder = target.matches("summary");
+    const details = folderOf(target);
+    const folder = isFolder ? parentFolderOf(details) : details;
+    const name = isFolder ? details.dataset.name : target.textContent;
+    const at = isFolder ? details.dataset.path : target.title;
+    const unsaved = unsavedUnder(at);
+    if (unsaved.length) {
+      report(t("{name} 有未保存的修改，请先保存或关闭", { name: unsaved[0] }));
+      return;
+    }
+    const question = isFolder
+      ? t("把文件夹“{name}”及其中的全部内容移到回收站？", { name })
+      : t("把“{name}”移到回收站？", { name });
+    if (!window.confirm(question)) return;
+    const result = await api.trashEntry(folder.dataset.id, name);
+    trashed(result.path);
+    await refresh();
+  }
+  async function moveRoot(details, step) {
+    const at = roots.findIndex((root) => root.id === details.dataset.id);
+    const to = at + step;
+    if (at < 0 || to < 0 || to >= roots.length) return;
+    [roots[at], roots[to]] = [roots[to], roots[at]];
+    await refresh();
+    changed();
+  }
+  async function removeRoot(details) {
+    const at = roots.findIndex((root) => root.id === details.dataset.id);
+    if (at < 0) return;
+    roots.splice(at, 1);
+    await refresh();
+    changed();
+  }
+  function exclusionItem(path) {
+    const list = getSettings().searchExclude || [];
+    const own = list.some((p) => samePath(p, path));
+    if (own)
+      return [
+        t("恢复参与搜索和反向链接"),
+        () =>
+          changeSettings({
+            searchExclude: list.filter((p) => !samePath(p, path)),
+          }),
+      ];
+    if (excludedBy(list)(path))
+      return [t("上级文件夹已不参与搜索"), () => {}, true];
+    return [
+      t("不参与搜索和反向链接"),
+      () => changeSettings({ searchExclude: [...list, path] }),
+    ];
+  }
+  // The right-click menu for an entry of the tree, or null.
+  function menuFor(el) {
+    const file = el.closest("#tree button.file");
+    if (file) {
+      const folder = folderOf(file);
+      return [
+        [t("打开"), () => file.click()],
+        [t("复制链接"), () => copyLink(file.title)],
+        null,
+        [t("重命名…"), run(() => rename(file)), !folder],
+        [
+          t("在资源管理器中显示"),
+          run(() => api.revealEntry(folder.dataset.id, file.textContent)),
+          !folder,
+        ],
+        null,
+        [t("移到回收站"), run(() => trash(file)), !folder],
+      ];
+    }
+    const summary = el.closest("#tree details.folder > summary");
+    if (!summary) return null;
+    const details = summary.parentElement;
+    const own = [
+      [t("新建笔记"), run(() => create(details, "note"))],
+      [t("新建文件夹"), run(() => create(details, "folder"))],
+      null,
+    ];
+    const reveal = [
+      t("在资源管理器中显示"),
+      run(() => api.revealEntry(details.dataset.id)),
+    ];
+    if (details.classList.contains("outside"))
+      return [
+        ...own,
+        reveal,
+        [t("加入笔记库"), run(() => addRoot(outsideFolder()))],
+      ];
+    if (details.classList.contains("root")) {
+      const at = roots.findIndex((root) => root.id === details.dataset.id);
+      return [
+        ...own,
+        reveal,
+        null,
+        [t("上移"), run(() => moveRoot(details, -1)), at <= 0],
+        [t("下移"), run(() => moveRoot(details, 1)), at >= roots.length - 1],
+        [
+          t("移出笔记库"),
+          run(() => removeRoot(details)),
+          false,
+          t("只是不再列出，文件不会删除"),
+        ],
+      ];
+    }
+    return [
+      ...own,
+      [t("重命名…"), run(() => rename(summary))],
+      reveal,
+      exclusionItem(details.dataset.path),
+      null,
+      [t("移到回收站"), run(() => trash(summary))],
+    ];
+  }
+  // F2 renames the entry in focus, Delete moves it to the Recycle Bin.
+  $("#tree").addEventListener("keydown", (event) => {
+    if (event.key !== "F2" && event.key !== "Delete") return;
+    const target = event.target.closest?.(
+      "#tree button.file, #tree details.folder > summary",
+    );
+    if (!target) return;
+    // A library folder itself is neither renamed nor deleted here.
+    if (
+      target.matches("summary")
+        ? folderOf(target).classList.contains("root")
+        : !folderOf(target)
+    )
+      return;
+    event.preventDefault();
+    run(() => (event.key === "F2" ? rename(target) : trash(target)))();
+  });
   $("#tree-refresh").onclick = run(async () => {
     $("#file-filter").value = "";
     searchEpoch++;
@@ -627,5 +913,6 @@ export function createLibrary({
     focusSearch,
     researchText,
     showExcluded,
+    menuFor,
   };
 }

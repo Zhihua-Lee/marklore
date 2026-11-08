@@ -7,7 +7,18 @@ export function createMenus({ run, appMenuEntries }) {
     const menu = $("#context");
     menu.replaceChildren();
     menu.classList.toggle("wide", wide);
-    for (const [name, fn, disabled, detail] of actions) {
+    // null between actions: a separator (none at either end or doubled).
+    const list = actions.filter(
+      (action, i, all) => action || (i > 0 && all[i - 1] && all[i + 1]),
+    );
+    for (const action of list) {
+      if (!action) {
+        const line = document.createElement("hr");
+        line.className = "menu-separator";
+        menu.append(line);
+        continue;
+      }
+      const [name, fn, disabled, detail] = action;
       const b = document.createElement("button");
       b.textContent = name;
       if (detail) {

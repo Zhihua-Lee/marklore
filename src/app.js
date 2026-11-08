@@ -7,7 +7,6 @@ import { createTabPreview } from "./tab-preview.js";
 import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
 import { defaultSettings, normalizeSettings } from "./settings.js";
-import { excludedBy } from "../desktop/excluded.mjs";
 import { createLibrary } from "./library.js";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
@@ -1512,6 +1511,7 @@ const {
   focusSearch,
   researchText,
   showExcluded,
+  menuFor: treeMenu,
 } = createLibrary({
   api,
   roots,
@@ -1526,7 +1526,46 @@ const {
     tabs.some(
       (doc) => doc.path?.toLowerCase() === path.toLowerCase() && dirty(doc),
     ),
+  unsavedUnder: (path) =>
+    tabsUnder(path)
+      .filter((doc) => dirty(doc) || doc.saving)
+      .map((doc) => doc.name),
+  renamed: (moved) => {
+    for (const file of moved)
+      for (const doc of tabs)
+        if (doc.fileId === file.id) {
+          doc.path = file.path;
+          doc.name = file.name;
+        }
+    if (moved.length) {
+      updateTabs();
+      scheduleSession();
+    }
+  },
+  trashed: (path) => {
+    // Checked unsaved first; closing asks nothing.
+    for (const doc of tabsUnder(path)) run(() => closeTab(doc))();
+  },
+  copyLink: (path) => linkHere.copyNote(path),
+  changeSettings: (patch) => changeSettings(patch),
+  openNew: (file) => {
+    if (!add(file)) return;
+    setMode("edit");
+    requestAnimationFrame(() =>
+      richActive() ? richEditor.focus() : view.focus(),
+    );
+  },
 });
+// Open tabs of this note, or of the notes under this folder.
+function tabsUnder(path) {
+  const key = path.toLowerCase().replace(/[\\/]+$/, "");
+  return tabs.filter((doc) => {
+    const p = doc.path?.toLowerCase();
+    return (
+      p && (p === key || p.startsWith(key + "\\") || p.startsWith(key + "/"))
+    );
+  });
+}
 // A library search result: open the note at the hit's line and mark the word
 // there with the find bar (Enter steps to the next occurrence).
 async function openSearchResult(path, hit, terms) {
@@ -1564,44 +1603,13 @@ const { showContext, dismiss: dismissMenus } = createMenus({
     [t("导出 HTML…"), "", commands.exportHTML, !active || exporting],
   ],
 });
-// Right-click a note in the library: open it, or copy a link to it.
-// Right-click a folder in it: leave it out of search and backlinks, or back.
+// Right-click in the library: new, rename, reveal, Recycle Bin; a library
+// folder moves up or down or leaves the library (src/library.js).
 $("#tree").addEventListener("contextmenu", (event) => {
-  const summary = event.target.closest("details.folder > summary");
-  const folder = summary?.parentElement;
-  // A library folder itself is removed from the library instead.
-  if (folder && folder.parentElement !== $("#tree")) {
-    event.preventDefault();
-    const list = settings.searchExclude,
-      path = folder.dataset.path,
-      own = list.some((p) => p.toLowerCase() === path.toLowerCase());
-    showContext(event, [
-      own
-        ? [
-            t("恢复参与搜索和反向链接"),
-            () =>
-              changeSettings({
-                searchExclude: list.filter(
-                  (p) => p.toLowerCase() !== path.toLowerCase(),
-                ),
-              }),
-          ]
-        : excludedBy(list)(path)
-          ? [t("上级文件夹已不参与搜索"), () => {}, true]
-          : [
-              t("不参与搜索和反向链接"),
-              () => changeSettings({ searchExclude: [...list, path] }),
-            ],
-    ]);
-    return;
-  }
-  const file = event.target.closest("button.file");
-  if (!file) return;
+  const items = treeMenu(event.target);
+  if (!items) return;
   event.preventDefault();
-  showContext(event, [
-    [t("打开"), () => file.click()],
-    [t("复制链接"), () => linkHere.copyNote(file.title)],
-  ]);
+  showContext(event, items);
 });
 // Right-click in the note: copy, and copy a link to the place under the
 // pointer (adding an anchor there if it has none).

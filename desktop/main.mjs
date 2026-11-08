@@ -1032,6 +1032,44 @@ else {
       api("list", (id) => files.list(id));
       api("reorderIndex", (id, move) => files.reorderIndex(id, move));
       api("currentFolder", (id) => files.currentFolder(id));
+      // The tree's own file operations, inside folders it lists.
+      api("createEntry", async (id, name, kind) => {
+        const created = await files.createEntry(id, name, kind);
+        return created.directory ? created : openFile(created.path);
+      });
+      api("renameEntry", async (id, name, newName) => {
+        const source = await files.childPath(id, name);
+        // Links elsewhere in the library that still name the old note.
+        let links = 0;
+        if (files.openable(source))
+          links = await linkIndex
+            .backlinks(source)
+            .then(
+              (list) =>
+                new Set(
+                  list
+                    .filter(
+                      (link) =>
+                        link.source.toLowerCase() !== source.toLowerCase(),
+                    )
+                    .map((link) => link.source.toLowerCase()),
+                ).size,
+            )
+            .catch(() => 0);
+        const result = await files.renameEntry(id, name, newName);
+        for (const file of result.files) watchFile(file.id);
+        return { ...result, links };
+      });
+      api("trashEntry", async (id, name) => {
+        const target = await files.childPath(id, name);
+        await shell.trashItem(target);
+        return { path: target };
+      });
+      api("revealEntry", async (id, name = null) =>
+        shell.showItemInFolder(
+          name ? await files.childPath(id, name) : files.folderPath(id),
+        ),
+      );
       api("search", (ids, query) => {
         if (
           !Array.isArray(ids) ||

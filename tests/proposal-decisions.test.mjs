@@ -11,6 +11,7 @@ import {
   applyChanges,
   revisions,
   words,
+  sourceHunks,
 } from "../desktop/proposal-edits.mjs";
 
 // The owner decides an edit proposal edit by edit (src/proposals.js): each
@@ -177,4 +178,77 @@ test("a changed word is shown whole, not cut where it matches", () => {
     ]),
   );
   assert.deepEqual(pairs, [[["Friday", "Thursday"]]]);
+});
+
+// A review finished in Marklore (src/proposals.js): every decision in one
+// answer, edits decided earlier keeping theirs.
+test("a finished review decides every edit at once", async () => {
+  const { call, bridge } = await setup();
+  const id = await propose(call, two);
+  await bridge.handlers.decideProposal(id, {
+    results: ["rejected", "accepted"],
+    saved: true,
+  });
+  let seen = await call("get_proposal", { id });
+  assert.equal(seen.status, "accepted");
+  assert.equal(seen.saved, true);
+  assert.deepEqual(seen.edit_results, ["rejected", "accepted"]);
+  // All rejected; and an edit decided before keeps its decision.
+  const other = await propose(call, two);
+  await bridge.handlers.decideProposal(other, {
+    status: "accepted",
+    edit: 1,
+    saved: false,
+  });
+  await bridge.handlers.decideProposal(other, {
+    results: ["rejected", "rejected"],
+  });
+  seen = await call("get_proposal", { id: other });
+  assert.equal(seen.status, "accepted");
+  assert.equal(seen.saved, false);
+  assert.deepEqual(seen.edit_results, ["rejected", "accepted"]);
+  const third = await propose(call, two);
+  await assert.rejects(
+    bridge.handlers.decideProposal(third, { results: ["accepted"] }),
+  );
+  await assert.rejects(
+    bridge.handlers.decideProposal(third, { results: ["accepted", "maybe"] }),
+  );
+  await bridge.handlers.decideProposal(third, {
+    results: ["rejected", "rejected"],
+  });
+  assert.equal((await call("get_proposal", { id: third })).status, "rejected");
+});
+
+// The source view's hunks: each change widened to whole lines on both
+// sides, changes sharing a line in one hunk, lines numbered in both texts.
+test("source hunks pair the changed lines of both texts", () => {
+  const note = "# Plan\n\nWrite the draft.\n\nSend it on Friday.\nThen rest.\n";
+  const edits = [
+    { old_text: "draft", new_text: "first draft" },
+    { old_text: "Send it on Friday.\n", new_text: "" },
+    { old_text: "Then rest", new_text: "Then rest a while" },
+  ];
+  const { changes } = locateEdits(note, edits);
+  const after = applyChanges(note, changes);
+  const { hunks } = sourceHunks(note, after, revisions(note, changes));
+  assert.deepEqual(
+    hunks.map((h) => h.changes),
+    [[0], [1, 2]],
+  );
+  assert.deepEqual(
+    hunks[0].rows.map((r) => [r.kind, r.line, r.old, r.new]),
+    [
+      ["-", "Write the draft.", 3, null],
+      ["+", "Write the first draft.", null, 3],
+    ],
+  );
+  assert.deepEqual(
+    hunks[1].rows.map((r) => [r.kind, r.line, r.old, r.new]),
+    [
+      ["-", "Send it on Friday.", 5, null],
+      ["-", "Then rest.", 6, null],
+      ["+", "Then rest a while.", null, 5],
+    ],
+  );
 });

@@ -386,3 +386,81 @@ test("diff and patch files open and list only while other formats are on", async
   // Previews of links stay for notes.
   await assert.rejects(store.preview(doc.id, "0001-x.patch"), /仅预览/);
 });
+
+// The tree's own file operations: new notes and folders never replace an
+// entry; a rename keeps the handles of open notes and listed folders inside.
+test("the tree creates and renames entries inside authorized folders", async (t) => {
+  const { root, store } = await fixture(t);
+  const folder = await store.directory(root);
+  const made = await store.createEntry(folder.id, "Draft.md", "note");
+  assert.equal(made.path, path.join(root, "Draft.md"));
+  assert.equal(await fs.readFile(made.path, "utf8"), "");
+  await assert.rejects(
+    store.createEntry(folder.id, "Draft.md", "note"),
+    /同名/,
+  );
+  await assert.rejects(
+    store.createEntry(folder.id, "Draft.png", "note"),
+    /\.md/,
+  );
+  for (const bad of [
+    "",
+    " a.md",
+    ".hidden.md",
+    "a/b.md",
+    "..",
+    "a:b.md",
+    "CON.md",
+    "a.",
+  ])
+    await assert.rejects(
+      store.createEntry(folder.id, bad, "note"),
+      /名称无效/,
+      bad,
+    );
+  const topic = await store.createEntry(folder.id, "Topic", "folder");
+  assert.equal(topic.directory, true);
+  await fs.writeFile(path.join(root, "Topic", "Inside.md"), "# Inside\n");
+  const inside = await store.openChild(topic.id, "Inside.md");
+  const draft = await store.open(made.path);
+
+  // A note renamed: its handle saves at the new path.
+  const renamed = await store.renameEntry(folder.id, "Draft.md", "Plan.md");
+  assert.deepEqual(renamed.files, [
+    { id: draft.id, path: path.join(root, "Plan.md"), name: "Plan.md" },
+  ]);
+  const saved = await store.save(draft.id, "# Plan\n", draft.version);
+  assert.ok(saved.version);
+  assert.equal(
+    await fs.readFile(path.join(root, "Plan.md"), "utf8"),
+    "# Plan\n",
+  );
+  // A change of case only, and no overwriting another entry.
+  await store.renameEntry(folder.id, "Plan.md", "plan.md");
+  assert.ok((await fs.readdir(root)).includes("plan.md"));
+  await assert.rejects(
+    store.renameEntry(folder.id, "Topic", "plan.md"),
+    /同名/,
+  );
+
+  // A folder renamed: the notes and folders inside follow.
+  const moved = await store.renameEntry(folder.id, "Topic", "Subject");
+  assert.deepEqual(moved.files, [
+    {
+      id: inside.id,
+      path: path.join(root, "Subject", "Inside.md"),
+      name: "Inside.md",
+    },
+  ]);
+  assert.equal(store.directories.get(topic.id), path.join(root, "Subject"));
+  assert.deepEqual(
+    (await store.list(topic.id)).map((item) => item.name),
+    ["Inside.md"],
+  );
+  // Only entries of the folder itself, by plain name.
+  await assert.rejects(
+    store.renameEntry(folder.id, "../x.md", "y.md"),
+    /未授权/,
+  );
+  await assert.rejects(store.childPath("nope", "plan.md"), /未授权/);
+});

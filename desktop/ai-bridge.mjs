@@ -136,7 +136,27 @@ export function createAiBridge({
   // A whole proposal decided, or (with `edit`, its index) one of its edits:
   // `results` keeps each edit's decision, and the proposal is decided when
   // none waits any more (accepted when any edit was).
-  async function decide(id, { status, saved, error, edit } = {}) {
+  async function decide(id, { status, saved, error, edit, results } = {}) {
+    // A review finished: every edit's decision at once (edits decided
+    // earlier keep theirs); accepted when any edit was.
+    if (Array.isArray(results)) {
+      const next = await store.decide(id, (p) => {
+        if (p.kind !== "edit" || results.length !== p.edits.length)
+          throw Error(t("无效操作"));
+        const final = results.map((r, i) => {
+          if (p.results && p.results[i] !== "pending") return p.results[i];
+          if (r !== "accepted" && r !== "rejected") throw Error(t("无效操作"));
+          return r;
+        });
+        const accepted = final.includes("accepted");
+        return {
+          status: accepted ? "accepted" : "rejected",
+          results: final,
+          ...(accepted ? { saved: saved === true && p.saved !== false } : {}),
+        };
+      });
+      return shown(next);
+    }
     if (!["accepted", "rejected", "failed"].includes(status))
       throw Error(t("无效操作"));
     // Saved: every accepted edit is on disk.

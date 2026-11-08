@@ -785,6 +785,15 @@ export function createRichEditor({
   const detachMenu = attachMenu(view, { follow: (href) => follow(href) });
   const scroller = host.parentElement;
   watchFormulas(scroller);
+  // How far down the format toolbar covers the pane, when it shows.
+  function covered() {
+    const bar = scroller.closest("#panes")?.querySelector(".editing-tools");
+    if (!bar?.offsetParent) return 0;
+    return Math.max(
+      0,
+      bar.getBoundingClientRect().bottom - scroller.getBoundingClientRect().top,
+    );
+  }
   // The top-level block holding a note offset: its position and source span.
   function blockAt(from) {
     const starts = startsOf.get(view.state.doc);
@@ -968,7 +977,7 @@ export function createRichEditor({
           r.top -
           box.top +
           fraction * r.height -
-          (anchor.y ?? 32),
+          Math.max(anchor.y ?? 32, covered() + 16),
         behavior,
       });
     },

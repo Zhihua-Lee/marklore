@@ -327,6 +327,100 @@ export class FileStore {
     this.indexes.delete(file);
     return file;
   }
+  // A name the tree may give a new or renamed entry: one plain segment that
+  // Windows accepts and the tree shows (no leading dot).
+  static checkName(name) {
+    if (
+      typeof name !== "string" ||
+      !name ||
+      name.length > 200 ||
+      name !== name.trim() ||
+      name.startsWith(".") ||
+      /[\\/:*?"<>|\x00-\x1f]/.test(name) ||
+      /[. ]$/.test(name) ||
+      /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(name)
+    )
+      throw Error(
+        t('名称无效：不能为空，不能以点开头，也不能含有 \\ / : * ? " < > |'),
+      );
+    return name;
+  }
+  // An entry of an authorized folder, by its name there.
+  async childPath(id, name) {
+    const folder = this.directories.get(id);
+    if (!folder || typeof name !== "string" || path.basename(name) !== name)
+      throw Error(t("未授权的文件"));
+    await unchangedPath(folder);
+    const child = path.join(folder, name);
+    if ((await realPath(child)) !== child || !within(folder, child))
+      throw Error(t("文件位于所选文件夹之外"));
+    return child;
+  }
+  folderPath(id) {
+    const folder = this.directories.get(id);
+    if (!folder) throw Error(t("未授权的文件夹"));
+    return folder;
+  }
+  // A new empty note or folder in an authorized folder; never replaces one.
+  async createEntry(id, name, kind) {
+    const folder = this.folderPath(id);
+    await unchangedPath(folder);
+    FileStore.checkName(name);
+    if (kind !== "folder" && !markdownPath(name))
+      throw Error(t("笔记名称须以 .md 结尾"));
+    const target = path.join(folder, name);
+    try {
+      if (kind === "folder") await fs.mkdir(target);
+      else await fs.writeFile(target, "", { flag: "wx" });
+    } catch (e) {
+      if (e.code === "EEXIST") throw Error(t("已有同名的文件或文件夹"));
+      throw e;
+    }
+    return kind === "folder"
+      ? { ...(await this.directory(target)), directory: true }
+      : { path: target };
+  }
+  // Rename an entry in its folder. Open notes and listed folders inside it
+  // keep their handles, now at the new path. Returns the notes moved.
+  async renameEntry(id, name, newName) {
+    const source = await this.childPath(id, name);
+    FileStore.checkName(newName);
+    const stat = await fs.stat(source);
+    if (!stat.isDirectory() && !this.openable(newName))
+      throw Error(t("笔记名称须以 .md 结尾"));
+    const target = path.join(path.dirname(source), newName);
+    if (target === source) return { path: source, files: [] };
+    // A change of case only is the same entry on Windows.
+    if (target.toLowerCase() !== source.toLowerCase()) {
+      const taken = await fs.lstat(target).then(
+        () => true,
+        (e) => e.code !== "ENOENT",
+      );
+      if (taken) throw Error(t("已有同名的文件或文件夹"));
+    }
+    if ([...this.locks].some((p) => p === source || within(source, p)))
+      throw Error(t("正在保存，请稍候"));
+    await fs.rename(source, target);
+    const moved = (p) =>
+      p === source
+        ? target
+        : stat.isDirectory() && within(source, p)
+          ? path.join(target, path.relative(source, p))
+          : null;
+    const files = [];
+    for (const [fileId, file] of this.files) {
+      const next = moved(file.path);
+      if (!next) continue;
+      file.path = next;
+      files.push({ id: fileId, path: next, name: path.basename(next) });
+    }
+    for (const [folderId, folder] of this.directories) {
+      const next = moved(folder);
+      if (next) this.directories.set(folderId, next);
+    }
+    this.indexes.clear();
+    return { path: target, files };
+  }
   async openChild(id, name) {
     const folder = this.directories.get(id);
     if (!folder || path.basename(name) !== name) throw Error(t("未授权的文件"));

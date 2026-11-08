@@ -77,7 +77,7 @@ pnpm dev
 
 - 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。
-- 编辑模式的编辑器（`src/rich/`）由 `tests/ui/rich-*.spec.js` 覆盖：读入再写回逐字节不变、只改动打字处、输入法组字、公式、列表、表格、链接、图片、折叠块、行内 HTML、查找替换、格式工具栏、批注、光标在各种块之间移动，以及 Typora 式输入。共用的启动与选择工具在 `tests/ui/rich-helpers.js`。
+- 编辑模式的编辑器（`src/rich/`）由 `tests/ui/rich-*.spec.js` 覆盖：读入再写回逐字节不变、只改动打字处、输入法组字、公式、列表、表格、链接、图片、折叠块、行内 HTML、查找替换、格式工具栏、标记、光标在各种块之间移动，以及 Typora 式输入。共用的启动与选择工具在 `tests/ui/rich-helpers.js`。
 - 已有开发服务器时，设置 `FOLIO_BASE_URL`（如 `http://127.0.0.1:5173`）可跳过自动启动；`FOLIO_BROWSER_CHANNEL=""` 使用 Playwright 自带的 Chromium。
 
 ### 持续集成
@@ -158,15 +158,16 @@ pnpm prune-releases --apply    # 移到回收站
 | [`src/link-preview.js`](../src/link-preview.js)                                                        | 链接悬浮预览与异步状态管理。                                                                 |
 | [`src/export.js`](../src/export.js)、[`desktop/export.mjs`](../desktop/export.mjs)                     | 内容快照、离线资源嵌入和 PDF／HTML 导出。                                                    |
 | [`desktop/mcp.mjs`](../desktop/mcp.mjs)、[`desktop/mcp-server.mjs`](../desktop/mcp-server.mjs)         | MCP 服务器入口（stdio JSON-RPC）与数据目录定位。                                             |
-| [`desktop/mcp-tools.mjs`](../desktop/mcp-tools.mjs)                                                    | MCP 工具：读取开放的笔记库、提议修改、批注。                                                 |
-| [`desktop/ai-store.mjs`](../desktop/ai-store.mjs)、[`desktop/ai-bridge.mjs`](../desktop/ai-bridge.mjs) | 提议与批注的存储（`ai` 文件夹）及主进程一侧。                                                |
-| [`src/proposals.js`](../src/proposals.js)、[`src/comments.js`](../src/comments.js)                     | 提议条、审阅与写入；批注的标记与讨论卡片。                                                   |
+| [`desktop/mcp-tools.mjs`](../desktop/mcp-tools.mjs)                                                    | MCP 工具：读取开放的笔记库、提议修改、读取并回复标记。                                       |
+| [`desktop/ai-store.mjs`](../desktop/ai-store.mjs)、[`desktop/ai-bridge.mjs`](../desktop/ai-bridge.mjs) | 提议、标记、会话的存储（`ai` 文件夹）及主进程一侧。                                          |
+| [`src/proposals.js`](../src/proposals.js)、[`src/marks.js`](../src/marks.js)                           | 提议条、审阅与写入；给 AI 的标记、标记列表与发送。                                           |
+| [`desktop/mcp-channel.mjs`](../desktop/mcp-channel.mjs)                                                | 服务器一侧的会话登记，以及向 Claude Code 推送审阅结果和标记（channel 事件）。                |
 | [`tools/readme-media.mjs`](../tools/readme-media.mjs)                                                  | 用示例笔记库重新生成 README 截图与动图（需要构建与 ffmpeg）。                                |
 | [`tests/`](../tests/)                                                                                  | 单元、浏览器与原生回归用例。                                                                 |
 
 渲染进程没有直接的 Node／文件系统访问权限，本地文件操作经过主进程的授权接口。新增渲染能力应保持 HTML 清理、图表限制和本地资源授权边界，不通过放开远程加载来解决展示问题。
 
-MCP 服务器就是 Marklore 程序本身：AI 工具以 `ELECTRON_RUN_AS_NODE=1` 运行 `Marklore.exe <app.asar>/desktop/mcp.mjs`（`设置 → AI 助手` 给出完整命令），不开窗口、不取单实例锁，按与主进程相同的规则找到数据目录（`FOLIO_DATA_DIR`、便携版的 `data`、用户目录）。没有用 MCP SDK：协议只用到 `initialize`、`tools/list`、`tools/call`，手写的 JSON-RPC 省去一串依赖。服务器与应用通过数据目录的 `ai` 文件夹交换：`access.json` 由应用在会话保存时按 `settings.aiLibraries` 与当前笔记库写入，服务器每次调用都重读，路径检查（`mcp-tools.mjs` 的 `locate`）先解析真实路径再判断是否在开放的笔记库内，隐藏文件夹和不参与搜索的文件夹一律拒绝；提议每条一个文件，服务器只新建，应用只裁决；批注每篇笔记一个文件，双方都写，写入前取锁（锁目录，10 秒后视为失效）。服务器从不写笔记：接受修改时由页面把修改作为一次编辑应用到编辑器（可撤销），再走正常的保存与版本校验；新建笔记由主进程以 `wx` 写入。修改用“原文 → 新文”表示，原文须在笔记中恰好出现一次（`proposal-edits.mjs`），提议时与接受时各检查一次；批注按原文加前后各 32 字的上下文定位（`comment-anchors.mjs`）。`tests/native-ai.mjs` 用应用给出的命令启动真实服务器，走完提议、接受、双向批注和关闭访问。
+MCP 服务器就是 Marklore 程序本身：AI 工具以 `ELECTRON_RUN_AS_NODE=1` 运行 `Marklore.exe <app.asar>/desktop/mcp.mjs`（`设置 → AI 助手` 给出完整命令），不开窗口、不取单实例锁，按与主进程相同的规则找到数据目录（`FOLIO_DATA_DIR`、便携版的 `data`、用户目录）。没有用 MCP SDK：协议只用到 `initialize`、`tools/list`、`tools/call`，手写的 JSON-RPC 省去一串依赖。服务器与应用通过数据目录的 `ai` 文件夹交换：`access.json` 由应用在会话保存时按 `settings.aiLibraries` 与当前笔记库写入，服务器每次调用都重读，路径检查（`mcp-tools.mjs` 的 `locate`）先解析真实路径再判断是否在开放的笔记库内，隐藏文件夹和不参与搜索的文件夹一律拒绝；提议每条一个文件，服务器只新建，应用只裁决；标记每篇笔记一个文件，只由应用写；发送的一批标记一个文件，应用新建和完成，服务器记下已读和回复，双方写入前取锁（锁目录，10 秒后视为失效）。每个运行中的服务器在 `sessions` 里登记一个会话（AI 名称、工作目录、进程号、最近活动时间，每分钟一次心跳，结束时删除），应用据此列出可以发送的对象。服务器对 Claude Code 声明 `claude/channel` 能力，监视提议与批次，在这个会话的提议被裁决、或有标记发给它时发出 `notifications/claude/channel`；Claude Code 只有用 `--dangerously-load-development-channels server:marklore` 启动时才接收，其他客户端从工具读取同样的状态。事件只说明发生了什么和去哪里读，不带笔记正文。服务器从不写笔记：接受修改时由页面把修改作为一次编辑应用到编辑器（可撤销），再走正常的保存与版本校验；新建笔记由主进程以 `wx` 写入。修改用“原文 → 新文”表示，原文须在笔记中恰好出现一次（`proposal-edits.mjs`），提议时与接受时各检查一次；标记按原文加前后各 32 字的上下文定位（`comment-anchors.mjs`）。`tests/native-ai.mjs` 用应用给出的命令启动真实服务器，走完提议、接受、推送事件、标记的发送与回复，以及关闭访问。
 
 长文相关改动需同时检查首次打开、编辑、切换模式／标签和阅读位置恢复。滚动路径上不要加非被动的 `wheel` 监听，也不要在滚动时逐次测量阅读锚点：渲染后的公式会让每次命中测试花费约 10 ms，直接造成滚轮卡顿（参见 `src/app.js` 中的滚动遮罩与 `src/table-layout.js` 的延迟锚点）。现有缓存减少重复工作，但首次解析仍有成本，不能仅凭小样本声称任意长文流畅。
 

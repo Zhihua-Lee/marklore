@@ -64,8 +64,11 @@ for (const name of [
   "decideProposal",
   "createProposedNote",
   "aiSetup",
-  "comments",
-  "changeComment",
+  "marks",
+  "changeMark",
+  "sendMarks",
+  "finishBatch",
+  "openMarked",
 ])
   api[name] = invoke(name);
 api.on = (name, callback) => {
@@ -81,7 +84,7 @@ api.on = (name, callback) => {
       "names",
       "update",
       "proposals",
-      "comments",
+      "marks",
     ].includes(name)
   )
     throw Error("Invalid event");

@@ -1,8 +1,10 @@
-// AI proposals end to end in the real app: an assistant starts Marklore's MCP
-// server with the setup the app shows in Settings, reads a note of a library
-// opened to AI and proposes an edit and a new note; the app shows them, and
-// accepting writes them to disk. Closing the library to AI shuts the server
-// out at once.
+// AI proposals and marks end to end in the real app: an assistant starts
+// Marklore's MCP server with the setup the app shows in Settings, reads a
+// note of a library opened to AI and proposes an edit and a new note; the app
+// shows them, and accepting writes them to disk, the assistant hearing it at
+// once (Claude Code's channel events). The reader marks a passage and sends
+// it to that session, which reads and answers it. Closing the library to AI
+// shuts the server out at once.
 import { _electron as electron } from "@playwright/test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -43,11 +45,14 @@ function connect(setup) {
     },
     stdio: ["pipe", "pipe", "inherit"],
   });
-  const waiting = new Map();
+  const waiting = new Map(),
+    events = [];
   let next = 1;
   createInterface({ input: child.stdout }).on("line", (line) => {
     const message = JSON.parse(line);
-    waiting.get(message.id)?.(message);
+    if (message.method === "notifications/claude/channel")
+      events.push(message.params);
+    else waiting.get(message.id)?.(message);
   });
   const request = (method, params) =>
     new Promise((resolve, reject) => {
@@ -60,6 +65,17 @@ function connect(setup) {
     });
   return {
     request,
+    notify: (method) =>
+      child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method }) + "\n"),
+    // The next event pushed into the session, of a kind.
+    async event(kind) {
+      for (let i = 0; i < 100; i++) {
+        const found = events.findIndex((e) => e.meta.event === kind);
+        if (found >= 0) return events.splice(found, 1)[0];
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      throw Error(`No ${kind} event`);
+    },
     async call(name, args = {}) {
       const { result } = await request("tools/call", {
         name,
@@ -108,6 +124,10 @@ try {
     clientInfo: { name: "claude-code", version: "1" },
   });
   assert.equal(init.result.serverInfo.name, "marklore");
+  assert.deepEqual(init.result.capabilities.experimental, {
+    "claude/channel": {},
+  });
+  ai.notify("notifications/initialized");
   const note = await ai.call("read_note", { note: "kb/Plan.md" });
   assert.equal(note.text, "# Plan\n\nSend it on Friday.\n");
   const proposal = await ai.call("propose_edit", {
@@ -144,6 +164,10 @@ try {
   assert.equal(decided.status, "accepted");
   assert.equal(decided.saved, true);
   assert.deepEqual(decided.edit_results, ["accepted"]);
+  // The session heard it without asking.
+  const heard = await ai.event("proposal");
+  assert.equal(heard.meta.proposal_id, proposal.proposal_id);
+  assert.match(heard.content, /accepted edit 1/);
 
   // A new note is written only on accept.
   const fresh = await ai.call("propose_note", {
@@ -166,49 +190,65 @@ try {
     "accepted",
   );
 
-  // Comments both ways: the AI comments on a passage, the reader sees it
-  // underlined in the open note, answers it there, and the AI reads that.
-  const comment = await ai.call("add_comment", {
-    note: "kb/Plan.md",
-    quote: "Thursday",
-    text: "Morning or afternoon?",
-  });
-  assert.equal(comment.line, 3);
+  // Marks: the reader marks a passage, sends it to this session (chosen
+  // the first time), the session hears and reads it, and answers.
   await page.locator("#tree").getByText("Plan.md", { exact: true }).click();
+  await page.locator("#content").getByText("Send it on Thursday.").waitFor();
+  await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.querySelector("#content"),
+      NodeFilter.SHOW_TEXT,
+    );
+    for (let node; (node = walker.nextNode());) {
+      const at = node.data.indexOf("Thursday");
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + "Thursday".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      return;
+    }
+  });
+  await page.keyboard.press("Control+Alt+m");
+  const card = page.locator(".mark-card");
+  await card.getByRole("textbox").fill("Morning or afternoon?");
+  await card.getByRole("textbox").press("Control+Enter");
   await page.waitForFunction(
     () =>
-      [...(CSS.highlights.get("folio-comment") || [])].map(String).join() ===
+      [...(CSS.highlights.get("folio-mark") || [])].map(String).join() ===
       "Thursday",
     null,
     { timeout: 5000 },
   );
-  await page
-    .locator("#content")
-    .getByText("Send it on Thursday.")
-    .click({ position: { x: 100, y: 8 } });
-  const card = page.locator(".comment-card");
-  await card.getByText("Morning or afternoon?").waitFor();
-  await card.getByRole("textbox").fill("Morning.");
-  await card.getByRole("button", { name: "回复" }).click();
-  await card.locator(".comment-messages li").nth(1).waitFor();
-  const [answered] = await ai.call("list_comments");
-  assert.equal(answered.comment_id, comment.comment_id);
+  const marksButton = page.locator("#marks-button");
+  await marksButton.click();
+  const panel = page.locator(".marks-panel");
+  await panel.getByRole("button", { name: "发送 1 条" }).click();
+  await panel.getByRole("button", { name: /^Claude Code · / }).click();
+  const sent = await ai.event("marks");
+  const [batch] = await ai.call("get_marks", { batch_id: sent.meta.batch_id });
   assert.deepEqual(
-    answered.messages.map((m) => [m.from, m.text]),
-    [
-      ["claude-code", "Morning or afternoon?"],
-      ["owner", "Morning."],
-    ],
+    batch.marks.map((m) => [m.note, m.quote, m.line, m.text]),
+    [["kb/Plan.md", "Thursday", 3, "Morning or afternoon?"]],
   );
-  assert.equal(answered.needs_reply, true);
-  // The AI settles it; the app drops the underline by itself.
-  await ai.call("resolve_comment", { id: comment.comment_id });
-  await page.keyboard.press("Escape");
+  await panel.locator(".marks-status", { hasText: "AI 已读" }).waitFor();
+  await ai.call("reply_marks", {
+    batch_id: batch.batch_id,
+    text: "Noted: morning.",
+  });
+  await panel.locator(".marks-reply", { hasText: "Noted: morning." }).waitFor();
+  // Finished: the mark leaves the note.
+  await panel.getByRole("button", { name: "完成", exact: true }).click();
   await page.waitForFunction(
-    () => !CSS.highlights.get("folio-comment")?.size,
+    () =>
+      !CSS.highlights.get("folio-mark")?.size &&
+      !CSS.highlights.get("folio-mark-sent")?.size,
     null,
     { timeout: 5000 },
   );
+  assert.deepEqual(await ai.call("get_marks"), []);
+  await page.keyboard.press("Escape");
 
   // Closed to AI in Settings: the server can no longer read it.
   await page.locator("#weight").click();
@@ -225,7 +265,7 @@ try {
   }
   assert.match(closed, /not opened any library/);
   console.log(
-    "Native AI passed: the server started with the app's setup reads an opened library; an edit and a new note proposed over MCP show in the app, and accepting writes them; comments go both ways; closing the library to AI shuts the server out.",
+    "Native AI passed: the server started with the app's setup reads an opened library; an edit and a new note proposed over MCP show in the app, and accepting writes them and tells the session; a mark sent from the app reaches the session, which reads and answers it; closing the library to AI shuts the server out.",
   );
 } finally {
   ai?.close();

@@ -34,6 +34,8 @@ export function defaultSettings() {
     searchExclude: [],
     // Library folders an AI may read (Settings → AI assistant).
     aiLibraries: [],
+    // Where marks are sent: an assistant in a folder (src/marks.js).
+    aiTarget: null,
   };
 }
 
@@ -100,5 +102,18 @@ export function normalizeSettings(saved = {}) {
   settings.theme = settings.theme === "dark" ? "dark" : "light";
   settings.searchExclude = normalizeExcluded(settings.searchExclude);
   settings.aiLibraries = normalizeExcluded(settings.aiLibraries);
+  const target = settings.aiTarget;
+  settings.aiTarget =
+    target &&
+    typeof target.client === "string" &&
+    typeof target.cwd === "string" &&
+    target.client.length <= 100 &&
+    target.cwd.length <= 2000
+      ? {
+          client: target.client,
+          cwd: target.cwd,
+          folder: typeof target.folder === "string" ? target.folder : "",
+        }
+      : null;
   return settings;
 }

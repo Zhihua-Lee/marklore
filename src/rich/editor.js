@@ -508,7 +508,7 @@ export function createRichEditor({
   onText,
   onFocus,
   typeMarkdown = () => true,
-  // Start a comment on the selection (comments.js); none without comments.
+  // Mark the selection for the AI (marks.js); none without marks.
   comment = null,
 }) {
   let current = null;
@@ -913,7 +913,7 @@ export function createRichEditor({
       const b = offsetAt(to, -1);
       return a === null || b === null || b <= a ? null : { from: a, to: b };
     },
-    // The text at note offsets from..to, as DOM ranges (comments).
+    // The text at note offsets from..to, as DOM ranges (marks).
     ranges(from, to, out = []) {
       const a = posAt(from);
       const b = posAt(to, -1);

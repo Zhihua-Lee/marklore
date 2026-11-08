@@ -6,8 +6,16 @@
 // - proposals/<id>.json: one file per proposal, so the server and the app
 //   never rewrite each other's files. The server creates them; the app
 //   decides them; the AI that made one may withdraw it.
-// - comments/<key>.json: the comment threads on one note, by the owner and
-//   by AI, both ways. Both sides write these, so a change takes a lock.
+// - marks/<key>.json: the owner's marks on one note: a passage and what they
+//   want of the AI about it. Only the app writes these.
+// - batches/<id>.json: marks the owner sent together to an AI session, with
+//   the AI's replies. The app creates and finishes them; the server notes
+//   that they were read or answered. Both write, so a change takes a lock.
+// - sessions/<id>.json: one per running server (one per assistant session):
+//   which assistant, in which folder, when last active. The app lists them
+//   as the places marks can be sent to.
+// (comments/, from earlier versions, is read once: open comments by the
+// owner become marks.)
 // No Electron here: the MCP server runs in Node mode.
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -18,6 +26,8 @@ export const AI_FOLDER = "ai";
 // ones are kept a month for get_proposal and list_proposals.
 export const LAPSE_DAYS = 14;
 export const KEEP_DAYS = 30;
+// A session that has not said it is alive within this time is gone.
+export const SESSION_STALE = 150e3;
 const DAY = 864e5;
 const ID = /^[a-z0-9]{6,20}-[a-f0-9]{6}$/;
 
@@ -84,65 +94,171 @@ async function readJson(file) {
 export function createAiStore(folder) {
   const proposals = path.join(folder, "proposals"),
     comments = path.join(folder, "comments"),
+    marks = path.join(folder, "marks"),
+    batches = path.join(folder, "batches"),
+    sessions = path.join(folder, "sessions"),
     accessFile = path.join(folder, "access.json");
-  // A note's comment file, by its path (any case, either slash).
-  const commentFile = (file) =>
+  // A note's marks file, by its path (any case, either slash).
+  const marksFile = (file) =>
     path.join(
-      comments,
+      marks,
       createHash("sha256")
         .update(path.resolve(file).toLowerCase())
         .digest("hex")
         .slice(0, 16) + ".json",
     );
-  const readComments = async (file) =>
-    (await readJson(commentFile(file))) || { file, threads: [] };
-  const fileOf = (id) => {
+  const readMarks = async (file) =>
+    (await readJson(marksFile(file))) || { file, marks: [] };
+  const named = (kind) => (id) => {
     if (typeof id !== "string" || !ID.test(id))
-      throw Error(`There is no proposal ${id}.`);
-    return path.join(proposals, id + ".json");
+      throw Error(`There is no ${kind} ${id}.`);
+    return id + ".json";
   };
-  return {
+  const fileOf = (id) => path.join(proposals, named("proposal")(id));
+  const batchFile = (id) => path.join(batches, named("batch")(id));
+  const sessionFile = (id) => path.join(sessions, named("session")(id));
+  // The JSON files of a folder whose names match, read; unreadable ones are
+  // left out.
+  async function readAll(dir, pattern) {
+    let names = [];
+    try {
+      names = await fs.readdir(dir);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    const out = [];
+    for (const name of names)
+      if (pattern.test(name)) {
+        const value = await readJson(path.join(dir, name));
+        if (value) out.push({ name, value });
+      }
+    return out;
+  }
+  const byId = /^[a-z0-9]{6,20}-[a-f0-9]{6}\.json$/;
+  const store = {
     folder,
     proposals,
-    comments,
-    // The threads on one note: { file, threads }.
-    commentsOf: readComments,
-    // Every note's threads.
-    async allComments() {
-      let names = [];
-      try {
-        names = await fs.readdir(comments);
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
-      const out = [];
-      for (const name of names)
-        if (/^[a-f0-9]{16}\.json$/.test(name)) {
-          const value = await readJson(path.join(comments, name));
-          if (value?.threads?.length) out.push(value);
-        }
-      return out;
+    marks,
+    batches,
+    sessions,
+    // The marks on one note: { file, marks }.
+    marksOf: readMarks,
+    // Every note's marks.
+    async allMarks() {
+      return (await readAll(marks, /^[a-f0-9]{16}\.json$/))
+        .map((x) => x.value)
+        .filter((v) => v.marks?.length);
     },
-    // Changes a note's threads under the lock: `change` edits the value
-    // in place and returns the result to give back.
-    async changeComments(file, change) {
-      const target = commentFile(file);
+    // Changes a note's marks under the lock: `change` edits the value in
+    // place and returns the result to give back.
+    async changeMarks(file, change) {
+      const target = marksFile(file);
       return withLock(target, async () => {
-        const value = await readComments(file);
+        const value = await readMarks(file);
         value.file = file;
         const result = await change(value);
         await writeJson(target, value);
         return result;
       });
     },
-    // A thread by its id, wherever it is: { file, thread } or null.
-    async findThread(id) {
-      if (typeof id !== "string" || !ID.test(id)) return null;
-      for (const value of await this.allComments()) {
-        const thread = value.threads.find((t) => t.id === id);
-        if (thread) return { file: value.file, thread };
+    async createBatch(batch, now = new Date()) {
+      const value = {
+        ...batch,
+        id: newId(now.getTime()),
+        created: now.toISOString(),
+        status: "sent",
+        replies: [],
+      };
+      await writeJson(batchFile(value.id), value);
+      return value;
+    },
+    getBatch: (id) => readJson(batchFile(id)),
+    // Every batch kept, newest first; finished ones past a month go.
+    async listBatches(now = Date.now()) {
+      const out = [];
+      for (const { name, value } of await readAll(batches, byId)) {
+        if (value.done && now - Date.parse(value.done) > KEEP_DAYS * DAY) {
+          await fs.rm(path.join(batches, name), { force: true });
+          continue;
+        }
+        out.push(value);
       }
-      return null;
+      return out.sort((a, b) => b.created.localeCompare(a.created));
+    },
+    // Changes a batch under the lock: `change` edits it in place and returns
+    // the result to give back.
+    async changeBatch(id, change) {
+      const file = batchFile(id);
+      return withLock(file, async () => {
+        const value = await readJson(file);
+        if (!value) throw Error(`There is no batch ${id}.`);
+        const result = await change(value);
+        await writeJson(file, value);
+        return result;
+      });
+    },
+    // A running server says who it is and that it is alive.
+    writeSession: (id, value) => writeJson(sessionFile(id), value),
+    removeSession: (id) => fs.rm(sessionFile(id), { force: true }),
+    // The servers alive now, most recently active first. `alive(pid)` checks
+    // the process where the caller can; files long stale are removed.
+    async liveSessions(now = Date.now(), alive = () => true) {
+      const out = [];
+      for (const { name, value } of await readAll(sessions, byId)) {
+        const age = now - Date.parse(value.active || 0);
+        if (age > SESSION_STALE || !alive(value.pid)) {
+          if (!(age <= 10 * SESSION_STALE))
+            await fs.rm(path.join(sessions, name), { force: true });
+          continue;
+        }
+        out.push(value);
+      }
+      return out.sort((a, b) => b.active.localeCompare(a.active));
+    },
+    // Open comments of earlier versions, started by the owner, become marks
+    // not sent yet. Once: a file in marks/ remembers it was done.
+    async carryComments() {
+      const done = path.join(marks, "from-comments");
+      if (
+        await fs.stat(done).then(
+          () => true,
+          () => false,
+        )
+      )
+        return 0;
+      let count = 0;
+      for (const { value } of await readAll(comments, /^[a-f0-9]{16}\.json$/)) {
+        const open = (value.threads || []).filter(
+          (t) =>
+            t.by === "owner" &&
+            !t.resolved &&
+            typeof t.quote === "string" &&
+            Array.isArray(t.messages),
+        );
+        if (!open.length || typeof value.file !== "string") continue;
+        await store.changeMarks(value.file, (doc) => {
+          for (const t of open) {
+            if (doc.marks.some((m) => m.id === t.id)) continue;
+            doc.marks.push({
+              id: t.id,
+              quote: t.quote,
+              prefix: t.prefix || "",
+              suffix: t.suffix || "",
+              text: t.messages
+                .filter((m) => m.by === "owner")
+                .map((m) => m.text)
+                .join("\n\n")
+                .slice(0, 5000),
+              created: t.created,
+              batch: null,
+            });
+            count++;
+          }
+        });
+      }
+      await fs.mkdir(marks, { recursive: true });
+      await fs.writeFile(done, "");
+      return count;
     },
     async access() {
       const value = await readJson(accessFile);
@@ -168,17 +284,8 @@ export function createAiStore(folder) {
     // Every proposal kept, oldest first. Decided ones past a month are
     // removed on the way.
     async list(now = Date.now()) {
-      let names = [];
-      try {
-        names = await fs.readdir(proposals);
-      } catch (error) {
-        if (error.code !== "ENOENT") throw error;
-      }
       const out = [];
-      for (const name of names) {
-        if (!name.endsWith(".json") || !ID.test(name.slice(0, -5))) continue;
-        const value = await readJson(path.join(proposals, name));
-        if (!value) continue;
+      for (const { name, value } of await readAll(proposals, byId)) {
         const done = Date.parse(value.decided || value.created);
         if (value.status !== "pending" || isLapsed(value, now)) {
           if (now - done > KEEP_DAYS * DAY) {
@@ -200,6 +307,7 @@ export function createAiStore(folder) {
       return settle(id, change, now, false);
     },
   };
+  return store;
   async function settle(id, change, now, decided) {
     const value = await readJson(fileOf(id));
     if (!value) throw Error(`There is no proposal ${id}.`);

@@ -53,8 +53,11 @@ export const FOLIO_API = [
   "decideProposal",
   "createProposedNote",
   "aiSetup",
-  "comments",
-  "changeComment",
+  "marks",
+  "changeMark",
+  "sendMarks",
+  "finishBatch",
+  "openMarked",
   "language",
   "platform",
 ];

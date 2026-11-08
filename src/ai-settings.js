@@ -1,17 +1,24 @@
 import { t } from "../desktop/i18n.mjs";
 
 // Settings → AI assistant: which library folders an AI may read through
-// Marklore's MCP server, and the lines that add the server to an assistant.
-// Desktop only (the browser preview has no server).
+// Marklore's MCP server, the lines that add the server to an assistant, and
+// the command that starts Claude Code listening to it (events pushed into
+// the session: desktop/mcp-channel.mjs). Desktop only (the browser preview
+// has no server).
 export const aiSettingsMarkup = `
 <fieldset id="settings-ai" hidden><legend>${t("AI 助手")}</legend>
   <div class="setting setting-list"><span class="setting-text"><span id="ai-libraries-label">${t("AI 可以读取的笔记库")}</span><small>${t("AI 助手通过 MCP 读取勾选的笔记库并提出修改；修改要你在 Marklore 中预览并接受才会写入")}</small></span></div>
   <ul id="ai-libraries" class="ai-libraries" aria-labelledby="ai-libraries-label"></ul>
   <div class="setting"><span class="setting-text"><span>${t("连接 AI 助手")}</span><small>${t("把 Marklore 添加为 MCP 服务器；移动程序位置后需重新添加")}</small></span><span class="setting-actions"><button id="ai-copy-claude" type="button">Claude Code</button><button id="ai-copy-codex" type="button">Codex</button><button id="ai-copy-json" type="button">JSON</button></span></div>
+  <div class="setting"><span class="setting-text"><span>${t("让 Claude Code 自动收到")}</span><small>${t("审阅结果和发送的标记直接进入正在运行的 Claude Code 会话。这是 Claude Code 的研究预览功能：用这条命令启动，每次启动时确认一次提示。其他 AI 需要你提醒它查看。")}</small></span><span class="setting-actions"><button id="ai-copy-listen" type="button">${t("复制启动命令")}</button></span></div>
   <p id="ai-setup" class="setting-footnote"></p>
 </fieldset>`;
 
 const quote = (s) => `"${s}"`;
+// Starts Claude Code listening to Marklore's server (a channel in its
+// research preview; a server of one's own needs the development flag).
+export const LISTEN_COMMAND =
+  "claude --dangerously-load-development-channels server:marklore";
 // The three forms assistants take a stdio server in.
 export function setupText(kind, { command, args, env }) {
   const envPairs = Object.entries(env);
@@ -108,6 +115,11 @@ export function wireAiSettings({ api, getRoots, getSettings, change, report }) {
   for (const kind of ["claude", "codex", "json"])
     $(`#ai-copy-${kind}`).onclick = () =>
       copy(kind).catch((error) => report(error.message));
+  $("#ai-copy-listen").onclick = () =>
+    api
+      .copyText(LISTEN_COMMAND)
+      .then(() => report(t("已复制，在项目文件夹的终端里用它启动 Claude Code")))
+      .catch((error) => report(error.message));
   api.aiSetup().then(
     (value) => {
       setup = value;

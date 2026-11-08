@@ -8,8 +8,8 @@ import { realPath, within, decode, hash } from "./files.mjs";
 import { NOTE, skippedName, isEnvironment } from "./scan-rules.mjs";
 import { excludedBy } from "./excluded.mjs";
 import { searchNotes } from "./note-search.mjs";
-import { isLapsed, newId } from "./ai-store.mjs";
-import { anchorOf, locateAnchor, lineAt } from "./comment-anchors.mjs";
+import { isLapsed } from "./ai-store.mjs";
+import { locateAnchor, lineAt } from "./comment-anchors.mjs";
 import { locateEdits, MAX_EDITS } from "./proposal-edits.mjs";
 
 const MAX_READ = 4 * 1024 * 1024,
@@ -17,7 +17,7 @@ const MAX_READ = 4 * 1024 * 1024,
   MAX_WALK = 5000,
   MAX_SEARCH = 3000;
 
-export const INSTRUCTIONS = `Marklore is the owner's Markdown notebook. You can read the notes in the libraries (folders) the owner opened to AI in Marklore, and propose changes: edits to a note (propose_edit) or a new note (propose_note). Nothing changes until the owner previews the proposal in Marklore and accepts it, so do not claim a change is made until get_proposal says it was accepted. Name a note as "<library>/<path inside it>", as list_notes and search_notes return it. Edits replace exact text: read_note first and copy old_text from it exactly, with enough around it to occur once. Put related edits to one note in one proposal; list_proposals shows what is still waiting (look before proposing again), and withdraw_proposal takes back one of yours. The owner and you can also comment on a passage of a note, both ways: list_comments shows the threads (needs_reply marks the owner's comments waiting for you); answer with reply_comment, propose an edit if one is asked for, and resolve_comment when it is settled. add_comment starts a thread of your own on a passage, for a question or a remark that is not an edit.`;
+export const INSTRUCTIONS = `Marklore is the owner's Markdown notebook. You can read the notes in the libraries (folders) the owner opened to AI in Marklore, and propose changes: edits to a note (propose_edit) or a new note (propose_note). Nothing changes until the owner previews the proposal in Marklore and accepts it, so do not claim a change is made until get_proposal says it was accepted. Name a note as "<library>/<path inside it>", as list_notes and search_notes return it. Edits replace exact text: read_note first and copy old_text from it exactly, with enough around it to occur once. Put related edits to one note in one proposal; list_proposals shows what is still waiting (look before proposing again), and withdraw_proposal takes back one of yours. When the owner rejects an edit, get_proposal may give their reason. The owner also marks passages in Marklore with what they want about each, and sends the marks to you in batches: get_marks reads them; make the changes asked for with propose_edit (one proposal per note), and answer the batch once with reply_marks (questions, or what you did and did not do).`;
 
 const fail = (message) => {
   throw Error(message);
@@ -193,26 +193,52 @@ async function walk(list, excluded, limit) {
   return notes;
 }
 
-const MAX_COMMENT = 5000,
-  MAX_THREADS = 500,
-  MAX_MESSAGES = 200;
-const who = (by) => (by === "owner" ? "owner" : by);
-// A thread as the AI sees it, placed in the note's current text.
-function thread(t, note, text) {
-  const at = text == null ? null : locateAnchor(text, t);
-  return {
-    comment_id: t.id,
-    note,
-    quote: t.quote.length > 300 ? t.quote.slice(0, 300) + "…" : t.quote,
-    ...(at ? { line: lineAt(text, at.from) } : { anchor: "lost" }),
-    resolved: t.resolved === true,
-    started_by: who(t.by),
-    needs_reply: t.resolved !== true && t.messages.at(-1)?.by === "owner",
-    messages: t.messages.map((m) => ({
-      from: who(m.by),
+const MAX_REPLY = 5000,
+  MAX_REPLIES = 20;
+// A batch of marks as the AI sees it: each mark placed in its note's current
+// text; a note no longer open to AI shows only the owner's words.
+async function batchShown(store, batch) {
+  const texts = new Map();
+  const marks = [];
+  for (const [i, m] of batch.marks.entries()) {
+    let found = null;
+    try {
+      found = await locate(store, m.file);
+    } catch {
+      /* Not open to AI any more, or gone. */
+    }
+    if (!found) {
+      marks.push({
+        n: i + 1,
+        unavailable: "This note is not in a library open to AI.",
+        text: m.text,
+      });
+      continue;
+    }
+    if (!texts.has(found.file))
+      texts.set(
+        found.file,
+        await readNote(found.file).then(
+          (c) => c.text,
+          () => null,
+        ),
+      );
+    const content = texts.get(found.file);
+    const at = content == null ? null : locateAnchor(content, m);
+    marks.push({
+      n: i + 1,
+      note: found.note,
+      quote: m.quote.length > 500 ? m.quote.slice(0, 500) + "…" : m.quote,
+      ...(at ? { line: lineAt(content, at.from) } : { anchor: "lost" }),
       text: m.text,
-      at: m.at,
-    })),
+    });
+  }
+  return {
+    batch_id: batch.id,
+    sent_at: batch.created,
+    status: batch.done ? "finished" : batch.status,
+    marks,
+    replies: batch.replies.map((r) => ({ from: r.by, text: r.text, at: r.at })),
   };
 }
 
@@ -229,6 +255,8 @@ const shown = (p, client) => ({
   ...(p.error ? { error: p.error } : {}),
   ...(p.kind === "edit" ? { edits: p.edits.length } : {}),
   ...(p.results ? { edit_results: p.results } : {}),
+  ...(p.reasons?.some(Boolean) ? { edit_reasons: p.reasons } : {}),
+  ...(p.ownerNote ? { owner_note: p.ownerNote } : {}),
   yours: p.client === client,
 });
 
@@ -408,7 +436,7 @@ export function createTools({ store }) {
         required: ["note", "summary", "edits"],
       },
       annotations: propose,
-      async run({ note, summary, edits }, { client }) {
+      async run({ note, summary, edits }, { client, session }) {
         text(summary, "summary", { max: 300 });
         if (!Array.isArray(edits) || !edits.length || edits.length > MAX_EDITS)
           fail(`edits must hold 1 to ${MAX_EDITS} edits.`);
@@ -434,6 +462,7 @@ export function createTools({ store }) {
         const proposal = await store.create({
           kind: "edit",
           client,
+          session,
           summary: summary.trim(),
           note: found.note,
           file: found.file,
@@ -467,13 +496,14 @@ export function createTools({ store }) {
         required: ["note", "summary", "text"],
       },
       annotations: propose,
-      async run({ note, summary, text: content }, { client }) {
+      async run({ note, summary, text: content }, { client, session }) {
         text(summary, "summary", { max: 300 });
         text(content, "text", { max: MAX_WRITE });
         const found = await locate(store, note, { exists: false });
         const proposal = await store.create({
           kind: "note",
           client,
+          session,
           summary: summary.trim(),
           note: found.note,
           file: found.file,
@@ -514,7 +544,7 @@ export function createTools({ store }) {
       name: "get_proposal",
       title: "Check a proposal",
       description:
-        'Whether a proposal is still waiting (pending), or was accepted, rejected, withdrawn, failed or lapsed (two weeks without a decision). "saved": false means the owner accepted it into a note with unsaved changes of their own, so it is not on disk until they save. The owner may decide an edit proposal edit by edit: "edit_results" then gives the decision on each edit (accepted, rejected or pending, in the order of your edits), and the proposal counts as accepted when any edit was.',
+        'Whether a proposal is still waiting (pending), or was accepted, rejected, withdrawn, failed or lapsed (two weeks without a decision). "saved": false means the owner accepted it into a note with unsaved changes of their own, so it is not on disk until they save. The owner may decide an edit proposal edit by edit: "edit_results" then gives the decision on each edit (accepted, rejected or pending, in the order of your edits), and the proposal counts as accepted when any edit was. "edit_reasons" gives the reason the owner wrote for a rejected edit, if any, and "owner_note" their note on the whole proposal.',
       inputSchema: {
         type: "object",
         properties: { id: { type: "string" } },
@@ -558,155 +588,80 @@ export function createTools({ store }) {
       },
     },
     {
-      name: "list_comments",
-      title: "List comments",
+      name: "get_marks",
+      title: "Read the owner's marks",
       description:
-        "Comment threads on notes in the open libraries (or on one note), by the owner and by AI, each placed by the passage it is about. needs_reply: the owner's comment is waiting for an answer. Resolved threads only with include_resolved.",
+        "Marks the owner made on passages of notes in Marklore and sent to you, in batches: each mark is a passage (quote, with its line) and what the owner wants about it. With batch_id, that batch; without, every batch not finished yet, newest first. Make the changes asked for with propose_edit, one proposal per note; answer a batch once with reply_marks.",
       inputSchema: {
         type: "object",
-        properties: {
-          note: { type: "string" },
-          include_resolved: { type: "boolean" },
-        },
+        properties: { batch_id: { type: "string" } },
       },
       annotations: read,
-      async run({ note, include_resolved }) {
-        const files = [];
-        if (note !== undefined) files.push(await locate(store, note));
-        else
-          for (const value of await store.allComments())
-            try {
-              files.push(await locate(store, value.file));
-            } catch {
-              /* A note no longer open to AI, or gone. */
-            }
+      async run({ batch_id }, { client }) {
+        let batches;
+        if (batch_id !== undefined) {
+          const one = await store
+            .getBatch(text(batch_id, "batch_id", { max: 100 }))
+            .catch(() => null);
+          if (!one) fail(`There is no batch ${batch_id}.`);
+          batches = [one];
+        } else batches = (await store.listBatches()).filter((b) => !b.done);
         const out = [];
-        for (const found of files) {
-          const { threads } = await store.commentsOf(found.file);
-          const open = threads.filter((t) => include_resolved || !t.resolved);
-          if (!open.length) continue;
-          const text = await readNote(found.file).then(
-            (c) => c.text,
-            () => null,
-          );
-          for (const t of open) out.push(thread(t, found.note, text));
+        for (const batch of batches) {
+          // Read: the owner sees that the marks reached an assistant.
+          if (batch.status === "sent" && !batch.done)
+            await store
+              .changeBatch(batch.id, (b) => {
+                if (b.status !== "sent") return;
+                b.status = "read";
+                b.readBy = client;
+                b.read = new Date().toISOString();
+              })
+              .catch(() => {});
+          out.push(await batchShown(store, batch));
         }
         return out;
       },
     },
     {
-      name: "add_comment",
-      title: "Comment on a passage",
+      name: "reply_marks",
+      title: "Answer a batch of marks",
       description:
-        "Start a comment thread of your own on a passage of a note, for a question or a remark that is not an edit (to change the note, use propose_edit). quote is the passage, copied exactly from read_note, occurring once in the note. The owner sees it beside the passage in Marklore and can answer.",
+        "Answer the owner's batch of marks (batch_id from get_marks) in one message: answers to their questions, and what you proposed or did not do, by mark number where it helps. The owner reads it in Marklore beside the batch. Changes themselves go in proposals (propose_edit).",
       inputSchema: {
         type: "object",
         properties: {
-          note: { type: "string" },
-          quote: { type: "string" },
+          batch_id: { type: "string" },
           text: { type: "string" },
         },
-        required: ["note", "quote", "text"],
+        required: ["batch_id", "text"],
       },
       annotations: propose,
-      async run({ note, quote, text: body }, { client }) {
-        text(quote, "quote", { max: 1000, blank: true });
-        text(body, "text", { max: MAX_COMMENT });
-        const found = await locate(store, note);
-        const content = (await readNote(found.file)).text;
-        quote = quote.replace(/\r\n?/g, "\n");
-        const at = content.indexOf(quote);
-        if (at < 0)
-          fail(
-            "The quote is not in the note (read_note gives the current text; copy it exactly).",
-          );
-        let count = 0;
-        for (let i = at; i >= 0; i = content.indexOf(quote, i + 1)) count++;
-        if (count > 1)
-          fail(
-            `The quote occurs ${count} times; quote more of the passage so it occurs once.`,
-          );
-        const now = new Date().toISOString();
-        const value = {
-          id: newId(),
-          ...anchorOf(content, at, at + quote.length),
-          by: client,
-          created: now,
-          resolved: false,
-          messages: [{ by: client, text: body.trim(), at: now }],
-        };
-        await store.changeComments(found.file, (doc) => {
-          if (doc.threads.length >= MAX_THREADS)
-            fail(`This note has ${MAX_THREADS} comment threads already.`);
-          doc.threads.push(value);
-        });
-        return thread(value, found.note, content);
-      },
-    },
-    {
-      name: "reply_comment",
-      title: "Reply to a comment",
-      description:
-        "Answer in a comment thread (comment_id from list_comments). If the owner asked for a change, propose it with propose_edit and say so here.",
-      inputSchema: {
-        type: "object",
-        properties: { id: { type: "string" }, text: { type: "string" } },
-        required: ["id", "text"],
-      },
-      annotations: propose,
-      async run({ id, text: body }, { client }) {
-        text(body, "text", { max: MAX_COMMENT });
-        return change(store, id, (t) => {
-          if (t.messages.length >= MAX_MESSAGES)
-            fail("This thread is full; start a new one.");
-          t.messages.push({
-            by: client,
-            text: body.trim(),
-            at: new Date().toISOString(),
+      async run({ batch_id, text: body }, { client }) {
+        text(batch_id, "batch_id", { max: 100 });
+        text(body, "text", { max: MAX_REPLY });
+        const next = await store
+          .changeBatch(batch_id, (b) => {
+            if (b.done) fail("The owner has finished this batch already.");
+            if (b.replies.length >= MAX_REPLIES)
+              fail(
+                "This batch has enough replies; the owner can send more marks.",
+              );
+            b.replies.push({
+              by: client,
+              text: body.trim(),
+              at: new Date().toISOString(),
+            });
+            b.status = "replied";
+            return b;
+          })
+          .catch((error) => {
+            if (/^There is no batch/.test(error.message))
+              fail(`There is no batch ${batch_id}.`);
+            throw error;
           });
-        });
-      },
-    },
-    {
-      name: "resolve_comment",
-      title: "Resolve a comment",
-      description:
-        "Mark a comment thread as settled, for example after answering it or after the owner accepted the edit it asked for. The owner can reopen it.",
-      inputSchema: {
-        type: "object",
-        properties: { id: { type: "string" } },
-        required: ["id"],
-      },
-      annotations: {
-        readOnlyHint: false,
-        destructiveHint: false,
-        idempotentHint: true,
-        openWorldHint: false,
-      },
-      async run({ id }, { client }) {
-        return change(store, id, (t) => {
-          t.resolved = true;
-          t.resolvedBy = client;
-        });
+        return batchShown(store, next);
       },
     },
   ];
-}
-
-// Changes one thread by its id, in a note still open to AI.
-async function change(store, id, edit) {
-  const found = await store.findThread(text(id, "id", { max: 100 }));
-  if (!found) fail(`There is no comment ${id}.`);
-  const place = await locate(store, found.file);
-  const value = await store.changeComments(place.file, (doc) => {
-    const t = doc.threads.find((x) => x.id === id);
-    if (!t) fail(`There is no comment ${id}.`);
-    edit(t);
-    return t;
-  });
-  const content = await readNote(place.file).then(
-    (c) => c.text,
-    () => null,
-  );
-  return thread(value, place.note, content);
 }

@@ -68,7 +68,7 @@ import { createSelectionTools } from "./selection-tools.js";
 import { createRichEditor } from "./rich/editor.js";
 import { insertImages } from "./rich/commands.js";
 import { createProposals } from "./proposals.js";
-import { createComments } from "./comments.js";
+import { createMarks } from "./marks.js";
 import { wireAiSettings } from "./ai-settings.js";
 import { createImageInsertion } from "./image-insertion.js";
 import { wireImageErrors } from "./image-errors.js";
@@ -135,11 +135,11 @@ configureColorTools(
   },
 );
 let editingKeys = [];
-let imageInsertion, backlinks, linkHere, proposals, comments, paintAiSettings;
+let imageInsertion, backlinks, linkHere, proposals, marks, paintAiSettings;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
-<main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="comments-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
+<main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="marks-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
 <div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div><div id="rich-reader"><article id="rich" class="prose"></article></div></div>
 <span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="${t("右侧栏")}"></aside></div>
@@ -530,7 +530,7 @@ richEditor = createRichEditor({
   host: $("#rich"),
   getTheme: () => settings.theme,
   typeMarkdown: () => settings.typeMarkdown,
-  comment: () => comments?.startNew(),
+  comment: () => marks?.startNew(),
   follow: (href) => run(() => navigateLink(href))(),
   onFocus: () => {
     if (active) active.pane = "preview";
@@ -539,7 +539,7 @@ richEditor = createRichEditor({
     if (doc !== active || view.state.doc.toString() === text) return;
     // The threads' places move with the text.
     clearTimeout(richCommentsTimer);
-    richCommentsTimer = setTimeout(() => comments?.rendered(), 150);
+    richCommentsTimer = setTimeout(() => marks?.rendered(), 150);
     const old = view.state.doc.toString();
     let from = 0;
     while (from < old.length && from < text.length && old[from] === text[from])
@@ -627,7 +627,7 @@ function showRich(doc) {
     }
     if (active !== doc || !richActive(doc)) return;
     if (currentAnchor?.id === doc.id) richEditor.scrollTo(currentAnchor.anchor);
-    comments?.rendered();
+    marks?.rendered();
   });
 }
 function editorAnchor() {
@@ -812,7 +812,7 @@ function activateTab(doc, { revealGroup = true } = {}) {
   closeColorPicker();
   linkPreview.hide();
   proposals?.leave();
-  comments?.close();
+  marks?.close();
   clearTimeout(renderingTimer);
   const origin = navigationSnapshot();
   active = doc;
@@ -914,7 +914,7 @@ function render(preserve) {
   scheduleTableLayout();
   backlinks?.refresh();
   proposals?.rendered();
-  comments?.rendered();
+  marks?.rendered();
   proposals?.paint();
 }
 let outlineSignature = "";
@@ -1624,15 +1624,15 @@ $("#content").addEventListener("contextmenu", (event) => {
   showContext(event, [
     ...(selected ? [[t("复制"), () => document.execCommand("copy")]] : []),
     [t("复制指向这里的链接"), () => linkHere.copy(event.target), !active.path],
-    ...(selected && comments
+    ...(selected && marks
       ? (() => {
           // The selection as it is now: the menu click may change it.
           const source = selectionSource($("#content"));
           return [
             [
-              t("添加批注… Ctrl+Alt+M"),
-              () => comments.startNew(source),
-              !comments.available(),
+              t("标记给 AI… Ctrl+Alt+M"),
+              () => marks.startNew(source),
+              !marks.available(),
             ],
           ];
         })()
@@ -1880,16 +1880,18 @@ paintAiSettings = wireAiSettings({
   change: changeSettings,
   report: toast,
 });
-comments = createComments({
+marks = createMarks({
   api,
   content: $("#content"),
   reader: $("#reader"),
-  button: $("#comments-button"),
+  button: $("#marks-button"),
   getActive: () => active,
+  add: (file) => add(file),
   jump: (from) => jump(from),
   report: toast,
   run,
-  showContext,
+  getSettings: () => settings,
+  changeSettings: (patch) => changeSettings(patch),
   surface: () =>
     richActive()
       ? {

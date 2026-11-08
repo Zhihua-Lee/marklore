@@ -95,10 +95,8 @@ test("an AI reads the opened library over stdio and proposes an edit", async () 
         "list_proposals",
         "get_proposal",
         "withdraw_proposal",
-        "list_comments",
-        "add_comment",
-        "reply_comment",
-        "resolve_comment",
+        "get_marks",
+        "reply_marks",
       ],
     );
     assert.deepEqual(

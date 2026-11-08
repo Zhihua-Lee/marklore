@@ -2,25 +2,32 @@ import { test, expect } from "@playwright/test";
 import { installFolio } from "./fixtures.js";
 import { editor, caretAfter, selectText } from "./rich-helpers.js";
 
-// In Edit mode: comment threads are underlined in the editor and follow
-// the text as it is typed; selected text gets the small toolbar, with
-// "Add comment" among its buttons.
+// In Edit mode: marks for the AI are underlined in the editor and follow the
+// text as it is typed; selected text gets the small toolbar, with "Mark for
+// AI" among its buttons.
 const text = "# Plan\n\nSend it on **Friday**.\n\nAsk Ana about the budget.\n";
-const thread = {
-  id: "t-ai",
+const mark = {
+  id: "m1",
+  file: "C:/synthetic/Notes/Plan.md",
+  name: "Plan.md",
   quote: "the budget",
   prefix: "\n\nAsk Ana about ",
   suffix: ".\n",
-  by: "claude-code",
-  resolved: false,
-  messages: [{ by: "claude-code", text: "Which?", at: "2026-10-23T10:00:00Z" }],
+  text: "Which?",
+  created: "2026-11-07T09:00:00.000Z",
+  batch: null,
 };
 
 async function boot(page) {
   await installFolio(page);
   await page.addInitScript(
-    ({ text, thread }) => {
-      window.mock = { handlers: {}, threads: [thread], changes: [] };
+    ({ text, mark }) => {
+      window.mock = {
+        handlers: {},
+        state: { marks: [mark], batches: [], sessions: [] },
+        changes: [],
+      };
+      const state = () => structuredClone(window.mock.state);
       window.folio = folioTest.mock({
         ready: async () => ({
           incoming: [
@@ -36,24 +43,22 @@ async function boot(page) {
           roots: [],
           settings: { richEdit: true, sidebar: false, outline: false },
         }),
-        comments: async () => structuredClone(window.mock.threads),
-        changeComment: async (id, action, args) => {
-          window.mock.changes.push({ id, action, args });
+        marks: async () => state(),
+        changeMark: async (action, args) => {
+          window.mock.changes.push({ action, args });
           if (action === "add")
-            window.mock.threads.push({
-              id: "t-new",
-              quote: args.quote,
-              prefix: args.prefix,
-              suffix: args.suffix,
-              by: "owner",
-              resolved: false,
-              messages: [{ by: "owner", text: args.text, at: "x" }],
+            window.mock.state.marks.push({
+              ...args,
+              id: "m-new",
+              file: "C:/synthetic/Notes/Plan.md",
+              name: "Plan.md",
+              batch: null,
             });
-          return structuredClone(window.mock.threads);
+          return state();
         },
       });
     },
-    { text, thread },
+    { text, mark },
   );
   await page.goto("/");
   await page.keyboard.press("Control+2");
@@ -61,10 +66,10 @@ async function boot(page) {
 }
 const highlighted = (page) =>
   page.evaluate(() =>
-    [...(CSS.highlights.get("folio-comment") || [])].map((r) => r.toString()),
+    [...(CSS.highlights.get("folio-mark") || [])].map((r) => r.toString()),
   );
 
-test("threads are underlined in the editor and follow typing", async ({
+test("marks are underlined in the editor and follow typing", async ({
   page,
 }) => {
   await boot(page);
@@ -74,18 +79,18 @@ test("threads are underlined in the editor and follow typing", async ({
   await expect.poll(() => highlighted(page)).toEqual(["the budget"]);
 });
 
-test("the selection toolbar formats and starts a comment", async ({ page }) => {
+test("the selection toolbar formats and marks for the AI", async ({ page }) => {
   await boot(page);
   await selectText(page, "Send");
   const bar = page.locator(".rich-bubble");
   await expect(bar).toBeVisible();
   await bar.getByRole("button", { name: "加粗" }).click();
   await expect(editor(page).locator("strong").first()).toHaveText("Send");
-  // A comment on formatted text quotes the note's own text.
+  // A mark on formatted text quotes the note's own text.
   await selectText(page, "Friday");
-  await bar.getByRole("button", { name: "添加批注" }).click();
-  const card = page.locator(".comment-card");
-  await expect(card.locator(".comment-quote")).toHaveText("Friday");
+  await bar.getByRole("button", { name: "标记给 AI…" }).click();
+  const card = page.locator(".mark-card");
+  await expect(card.locator(".mark-quote")).toHaveText("Friday");
   await card.locator("textarea").fill("Or Monday?");
   await card.locator("textarea").press("Control+Enter");
   await expect

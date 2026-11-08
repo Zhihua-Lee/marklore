@@ -106,6 +106,39 @@ body:has(#right-sidebar[hidden]):has(#panel-controls-right > button + button)
   width: 15px;
   height: 15px;
 }
+/* A rejection's other choice: a narrow arrow against its button. */
+#proposal-bar button.icon.proposal-more {
+  width: 16px;
+  margin-left: -3px;
+  border-color: transparent;
+  background: transparent;
+}
+#proposal-bar button.icon.proposal-more .ui-icon {
+  width: 11px;
+  height: 11px;
+  transform: rotate(90deg);
+}
+/* What to tell the AI with a rejection: one line under the button. */
+.proposal-reason {
+  position: fixed;
+  z-index: 45;
+  box-sizing: border-box;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 0 4px 16px #0002;
+}
+.proposal-reason input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 400 13px/1.4 var(--font-ui);
+}
 #appearance .ai-libraries {
   margin: 0;
   padding: 0;
@@ -343,16 +376,12 @@ body:has(#right-sidebar[hidden]):has(#panel-controls-right > button + button)
   opacity: 0.45;
 }
 /* A decision taken: the button stays pressed in its review color. */
-#proposal-bar
-  :is(.proposal-one, .proposal-all)
-  button:first-of-type[aria-pressed="true"] {
+#proposal-bar .proposal-accept[aria-pressed="true"] {
   background: var(--proposal-add-bg);
   border-color: var(--proposal-add-bar);
   color: var(--proposal-add-ink);
 }
-#proposal-bar
-  :is(.proposal-one, .proposal-all)
-  button:last-of-type[aria-pressed="true"] {
+#proposal-bar .proposal-reject[aria-pressed="true"] {
   background: var(--proposal-del-bg);
   border-color: var(--proposal-del-bar);
   color: var(--proposal-del-ink);

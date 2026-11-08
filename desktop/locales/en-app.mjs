@@ -509,27 +509,73 @@ export default {
   已拒绝这条提议: "Proposal rejected",
   "已创建《{name}》": "Created {name}",
   "已写入草稿，但未能保存": "Added to the draft, but it couldn't be saved",
-  // Comment threads.
-  "添加批注… Ctrl+Alt+M": "Add comment… Ctrl+Alt+M",
-  你: "You",
-  "批注（{count}）": "Comments ({count})",
-  批注的原文已改动或删除: "The commented text was changed or removed",
-  重新打开: "Reopen",
-  解决: "Resolve",
+  // Marks for the AI.
+  "标记给 AI… Ctrl+Alt+M": "Mark for AI… Ctrl+Alt+M",
+  "标记给 AI…": "Mark for AI…",
+  标记: "Marks",
+  "标记（{count} 条未发送）": "Marks ({count} not sent)",
+  "标记（{count} 条未发送；AI 已回复）":
+    "Marks ({count} not sent; the AI replied)",
   删除: "Delete",
-  "删除这条批注及其回复？": "Delete this comment and its replies?",
-  回复: "Reply",
-  "回复…（Ctrl+Enter 发送）": "Reply… (Ctrl+Enter sends)",
-  "请先保存笔记，再添加批注": "Save the note first, then add comments",
-  "预览 AI 提议时不能添加批注":
-    "Comments can't be added while previewing an AI proposal",
-  先选中要批注的文字: "Select the text to comment on first",
-  "批注的文字太长，请选短一些":
-    "The selection is too long for a comment; select less",
-  添加批注: "Comment",
-  "写下批注…（Ctrl+Enter 发送）": "Write a comment… (Ctrl+Enter sends)",
-  已添加批注: "Comment added",
-  "已解决 · ": "Resolved · ",
+  "想让 AI 做什么…（Ctrl+Enter 保存）":
+    "What should the AI do here?… (Ctrl+Enter saves)",
+  保存标记: "Save mark",
+  "已存为标记，{count} 条待发送": "Mark saved; {count} waiting to be sent",
+  "请先保存笔记，再标记": "Save the note first, then mark it",
+  "审阅 AI 提议时不能标记": "Marks can't be added while reviewing a proposal",
+  先选中要标记的文字: "Select the text to mark first",
+  "标记的文字太长，请选短一些":
+    "The selection is too long for a mark; select less",
+  未发送: "Not sent",
+  "AI 已回复，回复在标记列表中":
+    "The AI replied; the reply is in the marks list",
+  "AI 已读": "Read by the AI",
+  "已发送，等 AI 读取": "Sent; waiting for the AI to read it",
+  "已发送。{target} 下次启动时会收到":
+    "Sent. {target} gets it the next time it starts",
+  "已发送给 {target}": "Sent to {target}",
+  "已发送。{client} 收不到推送：在 {client} 里让它读取 Marklore 的标记":
+    "Sent. {client} isn't notified: ask it in {client} to read Marklore's marks",
+  "未发送（{count}）": "Not sent ({count})",
+  "选中文字，右键“标记给 AI…”。标好几处后一起发送。":
+    "Select text and right-click “Mark for AI…”. Mark several places, then send them together.",
+  删除这条标记: "Delete this mark",
+  发送给: "Send to",
+  "（未运行）": " (not running)",
+  "选择…": "Choose…",
+  更改发送对象: "Change where marks go",
+  "发送 {count} 条": "Send {count}",
+  已发送: "Sent",
+  "{count} 条": "{count} marks",
+  "AI 已回复": "Replied",
+  "等 AI 读取": "Waiting for the AI",
+  "AI 还没有回复这批标记。仍然完成，去掉这些标记？":
+    "The AI hasn't replied to these marks. Finish anyway and remove them?",
+  "这批处理完了：去掉正文里的这些标记":
+    "These are dealt with: remove the marks from the notes",
+  "发送给哪个 AI 会话？": "Which AI session gets the marks?",
+  "以后都发给它，直到你更改。":
+    "Marks go there from now on, until you change it.",
+  "没有正在运行的 AI 会话：先在终端里启动 Claude Code 或 Codex。":
+    "No AI session is running: start Claude Code or Codex in a terminal first.",
+  收不到推送: "not notified",
+  返回: "Back",
+  // A rejection, and what to tell the AI with it.
+  "理由：{reason}": "Reason: {reason}",
+  拒绝这处的选项: "More ways to reject this change",
+  拒绝: "Reject",
+  "拒绝并说明…": "Reject and say why…",
+  全部拒绝的选项: "More ways to reject all",
+  "全部拒绝并说明…": "Reject all and say why…",
+  "告诉 AI 为什么（Enter 确定，Esc 取消）":
+    "Tell the AI why (Enter keeps it, Esc cancels)",
+  // Settings → AI assistant: Claude Code listening.
+  "让 Claude Code 自动收到": "Let Claude Code hear at once",
+  "审阅结果和发送的标记直接进入正在运行的 Claude Code 会话。这是 Claude Code 的研究预览功能：用这条命令启动，每次启动时确认一次提示。其他 AI 需要你提醒它查看。":
+    "Finished reviews and sent marks go straight into the running Claude Code session. This uses a research preview of Claude Code: start it with this command and confirm the prompt each time. Other assistants need to be asked to look.",
+  复制启动命令: "Copy start command",
+  "已复制，在项目文件夹的终端里用它启动 Claude Code":
+    "Copied: start Claude Code with it in a terminal in your project folder",
   // A folder listed by its index file.
   "展开或折叠 {name} 的子页": "Expand or collapse the sub-pages of {name}",
   "{name} 有未保存的修改，请先保存，再在文件树中拖动排序":

@@ -1,0 +1,269 @@
+/* Marks for the AI: a marked passage gets an ochre underline (apart from the
+   find bar's yellow wash and the proposals' review colors), solid with a
+   soft wash until sent, dotted after. A mark opens in a card like the
+   selection tools; the toolbar's mark button opens the list. */
+:root {
+  --mark: #8f6119;
+}
+:root[data-theme="dark"] {
+  --mark: #e0b25c;
+}
+::highlight(folio-mark) {
+  background-color: color-mix(in srgb, var(--mark) 12%, transparent);
+  text-decoration: underline 2px
+    color-mix(in srgb, var(--mark) 75%, transparent);
+  text-underline-offset: 3px;
+}
+::highlight(folio-mark-sent) {
+  text-decoration: underline dotted 2px
+    color-mix(in srgb, var(--mark) 70%, transparent);
+  text-underline-offset: 3px;
+}
+#marks-button {
+  position: relative;
+}
+#marks-button[hidden] {
+  display: none;
+}
+#marks-button::after {
+  content: attr(data-count);
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--mark);
+  color: var(--paper);
+  font: 600 9px/13px var(--font-ui);
+  text-align: center;
+}
+#marks-button.settled::after {
+  display: none;
+}
+/* An answer waiting in the list: a dot. */
+#marks-button.answered.settled::after {
+  content: "";
+  display: block;
+  top: 4px;
+  right: 3px;
+  min-width: 7px;
+  height: 7px;
+  padding: 0;
+  background: var(--accent);
+}
+:is(.mark-card, .marks-panel) {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 4px 16px #0002;
+  font: 400 13px/1.45 var(--font-ui);
+}
+.mark-card {
+  max-height: min(70vh, 520px);
+}
+.mark-card .mark-quote {
+  margin: 0;
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--mark) 70%, transparent);
+  color: var(--muted);
+  font-size: 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-wrap;
+}
+.mark-card :is(.mark-text, .mark-status) {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.mark-card .mark-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+.mark-card textarea {
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+:is(.mark-card, .marks-panel) .mark-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+:is(.mark-card, .marks-panel) .mark-actions button {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+:is(.mark-card, .marks-panel) .mark-close {
+  margin-left: auto;
+  width: 26px;
+  height: 26px;
+  padding: 0 !important;
+}
+:is(.mark-card, .marks-panel) :is(.mark-close, .mark-remove) .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+
+/* The list. */
+.marks-panel {
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(75vh, 640px);
+  overflow-y: auto;
+  gap: 6px;
+}
+.marks-panel .marks-head {
+  display: flex;
+  align-items: center;
+}
+.marks-panel h3 {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font: 600 11px/1.4 var(--font-ui);
+  letter-spacing: 0.02em;
+}
+.marks-panel .marks-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.marks-panel .marks-note {
+  margin-top: 2px;
+  font-weight: 600;
+  font-size: 12px;
+}
+.marks-panel :is(.marks-list, .marks-batch-list) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.marks-panel .marks-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+}
+.marks-panel .mark-item {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: none;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+}
+.marks-panel .mark-item:hover {
+  background: var(--hover);
+}
+.marks-panel .mark-item-quote {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11.5px;
+}
+.marks-panel .mark-item-text {
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.marks-panel .mark-remove {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  opacity: 0.6;
+}
+.marks-panel .mark-remove:hover {
+  opacity: 1;
+}
+.marks-panel .marks-send {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.marks-panel .marks-to {
+  color: var(--muted);
+  font-size: 12px;
+}
+.marks-panel .marks-target {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 12px;
+}
+.marks-panel .marks-send .primary {
+  font-size: 12px;
+  padding: 4px 10px;
+}
+.marks-panel .marks-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 0 2px;
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+}
+.marks-panel .marks-batch-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.marks-panel .marks-batch[data-status="replied"] .marks-status {
+  color: var(--accent);
+}
+.marks-panel .marks-batch-list .mark-item-text {
+  font-size: 12px;
+}
+.marks-panel .marks-reply {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+}
+.marks-panel .marks-reply strong {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 12px;
+}
+.marks-panel .marks-reply p {
+  margin: 2px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media print {
+  :is(.mark-card, .marks-panel) {
+    display: none;
+  }
+}

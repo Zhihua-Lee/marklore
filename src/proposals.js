@@ -132,6 +132,19 @@ export function createProposals({
     if (!staged.has(p.id)) staged.set(p.id, new Map());
     return staged.get(p.id);
   };
+  // What the reader tells the AI with a rejection, staged the same way: a
+  // reason per change (edit index → text), a note on the whole proposal.
+  const why = new Map(),
+    notes = new Map();
+  const reasonsOf = (p) => {
+    if (!why.has(p.id)) why.set(p.id, new Map());
+    return why.get(p.id);
+  };
+  const forget = (id) => {
+    staged.delete(id);
+    why.delete(id);
+    notes.delete(id);
+  };
 
   const forDoc = (doc) =>
     !doc
@@ -144,8 +157,8 @@ export function createProposals({
     list = await api.proposals();
     const fresh = seen ? list.filter((p) => !seen.has(p.id)) : [];
     seen = new Set(list.map((p) => p.id));
-    for (const id of staged.keys())
-      if (!list.some((p) => p.id === id)) staged.delete(id);
+    for (const id of [...staged.keys(), ...why.keys(), ...notes.keys()])
+      if (!list.some((p) => p.id === id)) forget(id);
     if (fresh.length === 1)
       report(
         t("{client} 提议修改《{name}》", {
@@ -205,6 +218,8 @@ export function createProposals({
       p?.results,
       shown && [shown.render, shown.scope, shown.at, itemsOf(shown)],
       decisions && [...decisions],
+      p && [...reasonsOf(p)],
+      p && notes.get(p.id),
       p && dirty(doc),
       located?.error?.edit,
     ]);
@@ -241,6 +256,23 @@ export function createProposals({
       b.className = "icon";
       b.setAttribute("aria-label", label);
       b.title = label;
+      return b;
+    };
+    // A rejection's other choice, on a small arrow beside its button: to
+    // reject and say why.
+    const options = (into, label, disabled, items) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "icon proposal-more";
+      b.innerHTML = icon("chevronRight");
+      b.setAttribute("aria-label", label);
+      b.title = label;
+      b.disabled = !!disabled;
+      b.onclick = (event) => {
+        const at = b.previousElementSibling.getBoundingClientRect();
+        showContext(event, items(at));
+      };
+      into.append(b);
       return b;
     };
     const counter = (into, value, className = "proposal-count") => {
@@ -365,20 +397,53 @@ export function createProposals({
     action(one, t("接受这处"), () => decideOne(doc, p, "accepted"), {
       pressed: here === "accepted",
       disabled: single,
-    });
-    action(one, t("拒绝这处"), () => decideOne(doc, p, "rejected"), {
-      pressed: here === "rejected",
-      disabled: single,
-    });
+    }).classList.add("proposal-accept");
+    const reason = reasonsOf(p).get(items[shown.at]);
+    const rejectHere = action(
+      one,
+      t("拒绝这处"),
+      () => decideOne(doc, p, "rejected"),
+      { pressed: here === "rejected", disabled: single },
+    );
+    rejectHere.classList.add("proposal-reject");
+    if (here === "rejected" && reason)
+      rejectHere.title = t("理由：{reason}", { reason });
+    options(one, t("拒绝这处的选项"), single, (at) => [
+      [t("拒绝"), () => decideOne(doc, p, "rejected", { keep: true })],
+      [
+        t("拒绝并说明…"),
+        () =>
+          ask(at, reason, (text) =>
+            decideOne(doc, p, "rejected", { reason: text }),
+          ),
+      ],
+    ]);
     tools.append(one);
     const all = element("span", "proposal-all", t("全部"));
     const every = (status) => items.every((ix) => decisions.get(ix) === status);
     action(all, t("全部接受"), () => decideAll(doc, p, "accepted"), {
       pressed: every("accepted"),
-    });
-    action(all, t("全部拒绝"), () => decideAll(doc, p, "rejected"), {
-      pressed: every("rejected"),
-    });
+    }).classList.add("proposal-accept");
+    const note = notes.get(p.id);
+    const rejectAll = action(
+      all,
+      t("全部拒绝"),
+      () => decideAll(doc, p, "rejected"),
+      { pressed: every("rejected") },
+    );
+    rejectAll.classList.add("proposal-reject");
+    if (every("rejected") && note)
+      rejectAll.title = t("理由：{reason}", { reason: note });
+    options(all, t("全部拒绝的选项"), false, (at) => [
+      [t("全部拒绝"), () => decideAll(doc, p, "rejected", { keep: true })],
+      [
+        t("全部拒绝并说明…"),
+        () =>
+          ask(at, note, (text) =>
+            decideAll(doc, p, "rejected", { note: text }),
+          ),
+      ],
+    ]);
     tools.append(all);
     bar.append(tools);
   }
@@ -473,17 +538,70 @@ export function createProposals({
     return p ? { text: p.text } : null;
   }
 
+  // A line under a button for what to tell the AI: Enter keeps it, Escape
+  // or a click elsewhere drops it.
+  function ask(at, initial, done) {
+    document.querySelector(".proposal-reason")?.remove();
+    const box = document.createElement("div");
+    box.className = "proposal-reason";
+    const field = document.createElement("input");
+    field.type = "text";
+    field.maxLength = 1000;
+    field.value = initial || "";
+    const hint = t("告诉 AI 为什么（Enter 确定，Esc 取消）");
+    field.placeholder = hint;
+    field.setAttribute("aria-label", hint);
+    box.append(field);
+    document.body.append(box);
+    const width = Math.min(360, innerWidth - 16);
+    box.style.width = width + "px";
+    box.style.top = at.bottom + 6 + "px";
+    box.style.left =
+      Math.max(8, Math.min(at.left, innerWidth - width - 8)) + "px";
+    const end = () => {
+      box.remove();
+      document.removeEventListener("pointerdown", outside, true);
+    };
+    const outside = (event) => !box.contains(event.target) && end();
+    document.addEventListener("pointerdown", outside, true);
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.isComposing) {
+        event.preventDefault();
+        const text = field.value.trim();
+        end();
+        run(() => done(text))();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        end();
+      }
+    });
+    field.focus();
+  }
+
   // One change accepted or rejected (again: taken back), then on to the next
-  // one not decided yet.
-  function decideOne(doc, p, status) {
+  // one not decided yet. A rejection from its menu stays a rejection: with
+  // `reason`, the reason given (none when empty); with `keep`, none.
+  function decideOne(doc, p, status, { reason, keep = false } = {}) {
     const shown = doc.preview;
     if (!shown) return;
     const items = itemsOf(shown),
       decisions = decisionsOf(p),
+      reasons = reasonsOf(p),
       ix = items[shown.at];
-    if (decisions.get(ix) === status) decisions.delete(ix);
-    else {
+    const told = reason !== undefined || keep;
+    if (decisions.get(ix) === status && !told) {
+      decisions.delete(ix);
+      reasons.delete(ix);
+    } else {
+      if (status === "rejected" && reason) reasons.set(ix, reason);
+      else reasons.delete(ix);
+      const again = decisions.get(ix) === status;
       decisions.set(ix, status);
+      if (again) {
+        marks();
+        return paint();
+      }
       for (let k = 1; k < items.length; k++) {
         const j = (shown.at + k) % items.length;
         if (!decisions.has(items[j])) {
@@ -496,16 +614,21 @@ export function createProposals({
     focus(doc);
     paint();
   }
-  // All changes one way; pressed again, all taken back.
-  function decideAll(doc, p, status) {
+  // All changes one way; pressed again, all taken back. From the menu, a
+  // rejection stays one, with `note` for the whole proposal.
+  function decideAll(doc, p, status, { note, keep = false } = {}) {
     const shown = doc.preview;
     if (!shown) return;
     const items = itemsOf(shown),
       decisions = decisionsOf(p);
-    const undo = items.every((ix) => decisions.get(ix) === status);
+    const told = note !== undefined || keep;
+    const undo = !told && items.every((ix) => decisions.get(ix) === status);
     for (const ix of items)
       if (undo) decisions.delete(ix);
       else decisions.set(ix, status);
+    if (status === "rejected" && !undo && note) notes.set(p.id, note);
+    else notes.delete(p.id);
+    if (status === "accepted") reasonsOf(p).clear();
     marks();
     paint();
   }
@@ -514,7 +637,7 @@ export function createProposals({
     const doc = getActive();
     if (doc?.preview?.id === p.id) leave(doc);
     await api.decideProposal(p.id, decision);
-    staged.delete(p.id);
+    forget(p.id);
     if (decision.status === "rejected") report(t("已拒绝这条提议"));
     if (p.kind === "note" && doc?.proposalNote === p.id) {
       doc.proposalNote = null;
@@ -554,9 +677,12 @@ export function createProposals({
       return;
     if (p.kind === "note") {
       if (decisions.get(0) !== "accepted")
-        return decide(p, { status: "rejected" });
+        return decide(p, {
+          status: "rejected",
+          ...(notes.get(p.id) ? { note: notes.get(p.id) } : {}),
+        });
       const file = await api.createProposedNote(p.id);
-      staged.delete(p.id);
+      forget(p.id);
       doc.preview = null;
       doc.proposalNote = null;
       await closeTab(doc);
@@ -579,8 +705,20 @@ export function createProposals({
     const result = taken.length
       ? await apply(doc, taken)
       : { saved: true, own: false };
-    await api.decideProposal(p.id, { results, saved: result.saved });
-    staged.delete(p.id);
+    const reasons = reasonsOf(p);
+    await api.decideProposal(p.id, {
+      results,
+      saved: result.saved,
+      ...(results.some((r, i) => r === "rejected" && reasons.get(i))
+        ? {
+            reasons: results.map((r, i) =>
+              r === "rejected" ? (reasons.get(i) ?? null) : null,
+            ),
+          }
+        : {}),
+      ...(notes.get(p.id) ? { note: notes.get(p.id) } : {}),
+    });
+    forget(p.id);
     const counts = {
       accepted: taken.length,
       rejected: items.length - taken.length,

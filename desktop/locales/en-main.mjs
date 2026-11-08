@@ -204,7 +204,9 @@ export default {
   "笔记已不存在，或不在开放给 AI 的笔记库中":
     "the note is gone, or it is not in a library open to AI",
   // Comment threads.
-  这条批注已不存在: "This comment no longer exists",
+  这条标记已不存在: "This mark no longer exists",
+  "这条标记已发送，不能再改": "This mark has been sent and can't be changed",
+  没有要发送的标记: "There are no marks to send",
   // A folder's index file (the tree's order).
   目录文件过大: "The index file is too large",
   这个文件夹没有目录文件: "This folder has no index file",

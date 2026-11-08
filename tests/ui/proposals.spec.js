@@ -372,6 +372,94 @@ test("several changes: two independent choices of view, review colors, and stage
   await expect(page.locator(".proposal-rail")).toHaveCount(0);
 });
 
+test("a rejection can say why: per change, or for the whole proposal", async ({
+  page,
+}) => {
+  const two = {
+    ...edit,
+    id: "p5",
+    summary: "Tidy the plan",
+    edits: [
+      { old_text: "# Plan", new_text: "# Plan for the week" },
+      { old_text: "on Friday", new_text: "on Thursday" },
+    ],
+  };
+  await boot(page, { proposals: [two] });
+  await openFromToolbar(page, /Plan\.md/);
+  const bar = page.locator("#proposal-bar");
+  // The arrow beside "reject this" offers to reject and say why.
+  await control(bar, "拒绝这处的选项").click();
+  await page.getByRole("menuitem", { name: "拒绝并说明…" }).click();
+  const reason = page.locator(".proposal-reason input");
+  await expect(reason).toBeFocused();
+  await reason.fill("Keep the title short");
+  await reason.press("Enter");
+  await expect(reason).toHaveCount(0);
+  // Rejected, the reason kept, on to the next change.
+  await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
+    "第 2 / 2 处",
+  );
+  await control(bar, "上一处修改").click();
+  await pressed(bar, "拒绝这处");
+  await expect(control(bar, "拒绝这处")).toHaveAttribute(
+    "title",
+    "理由：Keep the title short",
+  );
+  // Escape drops what was typed; the reason stays as it was.
+  await control(bar, "拒绝这处的选项").click();
+  await page.getByRole("menuitem", { name: "拒绝并说明…" }).click();
+  await expect(reason).toHaveValue("Keep the title short");
+  await reason.fill("Something else");
+  await reason.press("Escape");
+  await expect(control(bar, "拒绝这处")).toHaveAttribute(
+    "title",
+    "理由：Keep the title short",
+  );
+  await control(bar, "下一处修改").click();
+  await control(bar, "接受这处").click();
+  await control(bar, "完成审阅").click();
+  await expect(bar).toBeHidden();
+  expect(await page.evaluate(() => window.mock.decided)).toEqual([
+    {
+      id: "p5",
+      results: ["rejected", "accepted"],
+      saved: true,
+      reasons: ["Keep the title short", null],
+    },
+  ]);
+});
+
+test("a whole new note rejected with a note for the AI", async ({ page }) => {
+  await boot(page, {
+    proposals: [
+      {
+        id: "p6",
+        kind: "note",
+        client: "codex-mcp-client",
+        summary: "Meeting notes",
+        created: "2026-10-23T10:00:00.000Z",
+        note: "Notes/Meeting.md",
+        name: "Meeting.md",
+        text: "# Meeting\n",
+      },
+    ],
+  });
+  await openFromToolbar(page, /Meeting\.md/);
+  const bar = page.locator("#proposal-bar");
+  // Per change: nothing to choose for a whole note.
+  await expect(control(bar, "拒绝这处的选项")).toBeDisabled();
+  await control(bar, "全部拒绝的选项").click();
+  await page.getByRole("menuitem", { name: "全部拒绝并说明…" }).click();
+  await page.locator(".proposal-reason input").fill("Use the existing note");
+  await page.locator(".proposal-reason input").press("Enter");
+  await pressed(bar, "全部拒绝");
+  await control(bar, "完成审阅").click();
+  await expect(bar).toBeHidden();
+  expect(await page.evaluate(() => window.mock.decided)).toEqual([
+    { id: "p6", status: "rejected", note: "Use the existing note" },
+  ]);
+});
+
 test("a rejected proposal changes nothing; a stale one can only be dismissed", async ({
   page,
 }) => {

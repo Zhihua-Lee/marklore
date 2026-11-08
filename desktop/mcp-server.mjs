@@ -4,6 +4,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createTools, INSTRUCTIONS } from "./mcp-tools.mjs";
+import { createChannel, pushes, CHANNEL_INSTRUCTIONS } from "./mcp-channel.mjs";
 import { isPortable, portableDir } from "./portable.mjs";
 import { profileName, legacyProfileName } from "./profile-folder.mjs";
 
@@ -39,9 +40,12 @@ export function dataFolder({
 // The versions of the protocol this server speaks, newest first.
 const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
-export function createServer({ store, version, write }) {
+// channel: options for createChannel (tests pass a folder and a clock); the
+// session it stands for starts once the assistant says it is ready.
+export function createServer({ store, version, write, channel: options = {} }) {
   const tools = createTools({ store });
-  let client = "unknown";
+  let client = "unknown",
+    channel = null;
   const reply = (id, result) => write({ jsonrpc: "2.0", id, result });
   const error = (id, code, message) =>
     write({ jsonrpc: "2.0", id, error: { code, message } });
@@ -50,14 +54,34 @@ export function createServer({ store, version, write }) {
     const request = id !== undefined && id !== null;
     if (method === "initialize") {
       client = String(params?.clientInfo?.name || "unknown").slice(0, 100);
+      channel ??= createChannel({
+        store,
+        client,
+        ...options,
+        notify: ({ content, meta }) =>
+          write({
+            jsonrpc: "2.0",
+            method: "notifications/claude/channel",
+            params: { content, meta },
+          }),
+      });
       return reply(id, {
         protocolVersion: VERSIONS.includes(params?.protocolVersion)
           ? params.protocolVersion
           : VERSIONS[0],
-        capabilities: { tools: { listChanged: false } },
+        capabilities: {
+          tools: { listChanged: false },
+          // Claude Code: events pushed into the session (desktop/mcp-channel.mjs).
+          ...(pushes(client) ? { experimental: { "claude/channel": {} } } : {}),
+        },
         serverInfo: { name: "marklore", title: "Marklore", version },
-        instructions: INSTRUCTIONS,
+        instructions:
+          INSTRUCTIONS + (pushes(client) ? " " + CHANNEL_INSTRUCTIONS : ""),
       });
+    }
+    if (method === "notifications/initialized") {
+      await channel?.start().catch(() => {});
+      return;
     }
     if (method === "ping") return request && reply(id, {});
     if (method === "tools/list")
@@ -68,7 +92,11 @@ export function createServer({ store, version, write }) {
       const tool = tools.find((t) => t.name === params?.name);
       if (!tool) return error(id, -32602, `Unknown tool: ${params?.name}`);
       try {
-        const result = await tool.run(params.arguments || {}, { client });
+        const result = await tool.run(params.arguments || {}, {
+          client,
+          session: channel?.id ?? null,
+        });
+        channel?.touch();
         return reply(id, {
           content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
         });
@@ -83,6 +111,9 @@ export function createServer({ store, version, write }) {
     if (request) error(id, -32601, `Unknown method: ${method}`);
   }
   return {
+    // The assistant has gone: the session is no longer offered.
+    stop: () => channel?.stop(),
+    channel: () => channel,
     async receive(line) {
       let message;
       try {

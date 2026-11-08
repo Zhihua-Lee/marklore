@@ -3,8 +3,9 @@
 //   ELECTRON_RUN_AS_NODE=1 Marklore.exe <app>/desktop/mcp.mjs
 // (Settings → AI assistant shows the exact command). It speaks JSON-RPC over
 // stdin and stdout, one message per line; nothing else may go to stdout.
-// It reads only the libraries access.json opens, and writes only proposals
-// (desktop/ai-store.mjs); the app applies them when the owner accepts.
+// It reads only the libraries access.json opens, and writes only proposals,
+// its session and what it read or answered of the owner's marks
+// (desktop/ai-store.mjs); the app applies proposals when the owner accepts.
 import fs from "node:fs";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -26,7 +27,14 @@ const server = createServer({
 });
 // One message at a time, in order.
 let queue = Promise.resolve();
-createInterface({ input: process.stdin }).on("line", (line) => {
-  if (!line.trim()) return;
-  queue = queue.then(() => server.receive(line).catch((e) => console.error(e)));
-});
+createInterface({ input: process.stdin })
+  .on("line", (line) => {
+    if (!line.trim()) return;
+    queue = queue.then(() =>
+      server.receive(line).catch((e) => console.error(e)),
+    );
+  })
+  // The assistant closed the connection: its session is gone.
+  .on("close", () => {
+    queue.then(() => server.stop()).finally(() => process.exit(0));
+  });

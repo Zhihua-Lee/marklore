@@ -41,9 +41,17 @@ export function dataFolder({
 const VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 
 // channel: options for createChannel (tests pass a folder and a clock); the
-// session it stands for starts once the assistant says it is ready.
-export function createServer({ store, version, write, channel: options = {} }) {
-  const tools = createTools({ store });
+// session it stands for starts once the assistant says it is ready. run: the
+// background run (desktop/ai-runs.mjs) this server was started for, which
+// works on its own marks and is no session to list or push to.
+export function createServer({
+  store,
+  version,
+  write,
+  channel: options = {},
+  run = null,
+}) {
+  const tools = createTools({ store, run });
   let client = "unknown",
     channel = null;
   const reply = (id, result) => write({ jsonrpc: "2.0", id, result });
@@ -54,17 +62,18 @@ export function createServer({ store, version, write, channel: options = {} }) {
     const request = id !== undefined && id !== null;
     if (method === "initialize") {
       client = String(params?.clientInfo?.name || "unknown").slice(0, 100);
-      channel ??= createChannel({
-        store,
-        client,
-        ...options,
-        notify: ({ content, meta }) =>
-          write({
-            jsonrpc: "2.0",
-            method: "notifications/claude/channel",
-            params: { content, meta },
-          }),
-      });
+      if (!run)
+        channel ??= createChannel({
+          store,
+          client,
+          ...options,
+          notify: ({ content, meta }) =>
+            write({
+              jsonrpc: "2.0",
+              method: "notifications/claude/channel",
+              params: { content, meta },
+            }),
+        });
       return reply(id, {
         protocolVersion: VERSIONS.includes(params?.protocolVersion)
           ? params.protocolVersion
@@ -72,11 +81,14 @@ export function createServer({ store, version, write, channel: options = {} }) {
         capabilities: {
           tools: { listChanged: false },
           // Claude Code: events pushed into the session (desktop/mcp-channel.mjs).
-          ...(pushes(client) ? { experimental: { "claude/channel": {} } } : {}),
+          ...(channel && pushes(client)
+            ? { experimental: { "claude/channel": {} } }
+            : {}),
         },
         serverInfo: { name: "marklore", title: "Marklore", version },
         instructions:
-          INSTRUCTIONS + (pushes(client) ? " " + CHANNEL_INSTRUCTIONS : ""),
+          INSTRUCTIONS +
+          (channel && pushes(client) ? " " + CHANNEL_INSTRUCTIONS : ""),
       });
     }
     if (method === "notifications/initialized") {

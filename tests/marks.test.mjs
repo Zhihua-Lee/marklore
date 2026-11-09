@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createAiStore } from "../desktop/ai-store.mjs";
 import { createServer } from "../desktop/mcp-server.mjs";
 import { createAiBridge } from "../desktop/ai-bridge.mjs";
@@ -23,7 +24,7 @@ test("an anchor finds its passage again after edits elsewhere, and the right one
   assert.equal(locateAnchor(text, { quote: "" }), null);
 });
 
-async function setup() {
+async function setup({ claude = true } = {}) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "folio-marks-"));
   const notes = path.join(root, "Notes");
   await fs.mkdir(notes);
@@ -85,8 +86,21 @@ async function setup() {
     openFile: async (p) => ({ path: p }),
     pathOf: (id) => id,
     notify: () => {},
-    executable: "x",
-    script: "y",
+    executable: process.execPath,
+    script: fileURLToPath(new URL("../desktop/mcp.mjs", import.meta.url)),
+    // Claude Code played by a script (tests/fake-claude.mjs).
+    runOptions: {
+      findClaude: async () =>
+        claude
+          ? {
+              command: process.execPath,
+              args: [
+                fileURLToPath(new URL("./fake-claude.mjs", import.meta.url)),
+              ],
+              env: { ELECTRON_RUN_AS_NODE: "1" },
+            }
+          : null,
+    },
   });
   const mark = async (file, quote, words) => {
     const text = await fs.readFile(file, "utf8");
@@ -111,108 +125,284 @@ async function setup() {
   };
 }
 
-test("marks wait until sent; the session they go to hears at once, reads, answers, and the owner finishes", async (t) => {
-  const { plan, ideas, project, bridge, session, mark, done } = await setup();
+const byText = (state, text) => state.marks.find((m) => m.text === text);
+
+test("marks are read when asked; a proposal answering them shows, and accepting it takes them away", async (t) => {
+  const { plan, ideas, bridge, session, mark, done } = await setup();
   t.after(done);
   const claude = await session();
-  // The app lists the running session, with where it runs.
-  let state = await bridge.handlers.marks();
-  assert.equal(state.sessions.length, 1);
-  assert.equal(state.sessions[0].client, "claude-code");
-  assert.equal(state.sessions[0].cwd, project);
-  assert.equal(state.sessions[0].push, true);
-  // Marks on two notes: kept, not sent.
+  assert.deepEqual((await claude.call("get_marks")).marks, []);
   await mark(plan, "on Friday", "Can this be earlier?");
-  state = await mark(
-    ideas,
-    "A reading list.",
-    "Add the two books from Monday.",
-  );
-  assert.equal(state.marks.length, 2);
-  assert.ok(state.marks.every((m) => m.batch === null));
-  assert.deepEqual(await claude.call("get_marks"), []);
-  await claude.check();
-  assert.deepEqual(claude.events(), []);
-  // A mark not sent can still change, or go.
-  state = await mark(plan, "Ask Ana.", "Who?");
-  const extra = state.marks.find((m) => m.text === "Who?");
-  state = await bridge.handlers.changeMark("edit", {
-    id: extra.id,
-    text: "Who is Ana?",
-  });
-  assert.ok(state.marks.some((m) => m.text === "Who is Ana?"));
-  state = await bridge.handlers.changeMark("remove", { id: extra.id });
-  assert.equal(state.marks.length, 2);
-  // Sent together, to that session.
-  state = await bridge.handlers.sendMarks({
-    client: "claude-code",
-    cwd: project,
-    session: state.sessions[0].id,
-  });
-  assert.equal(state.batches.length, 1);
-  const batch = state.batches[0];
-  assert.equal(batch.status, "sent");
-  assert.ok(state.marks.every((m) => m.batch === batch.id));
-  await assert.rejects(
-    bridge.handlers.changeMark("edit", { id: state.marks[0].id, text: "x" }),
-    /已发送/,
-  );
-  await assert.rejects(bridge.handlers.sendMarks(batch.target), /没有要发送/);
-  // The session hears, once.
-  await claude.check();
-  await claude.check();
-  assert.equal(claude.events().length, 1);
-  assert.equal(claude.events()[0].meta.event, "marks");
-  assert.equal(claude.events()[0].meta.batch_id, batch.id);
-  assert.match(claude.events()[0].content, /2 marks on 2 notes/);
-  assert.doesNotMatch(claude.events()[0].content, /Friday/);
-  // It reads them, placed in the notes; the app sees it read.
-  const [read] = await claude.call("get_marks", { batch_id: batch.id });
+  await mark(plan, "Ask Ana.", "Who?");
+  let state = await mark(ideas, "A reading list.", "Add two books.");
   assert.deepEqual(
-    read.marks.map((m) => [m.n, m.note, m.quote, m.line, m.text]),
-    [
-      [1, "Notes/Plan.md", "on Friday", 3, "Can this be earlier?"],
-      [
-        2,
-        "Notes/Ideas.md",
-        "A reading list.",
-        3,
-        "Add the two books from Monday.",
-      ],
-    ],
+    state.marks.map((m) => m.state),
+    ["open", "open", "open"],
   );
-  state = await bridge.handlers.marks();
-  assert.equal(state.batches[0].status, "read");
-  assert.equal(state.batches[0].readBy, "claude-code");
-  // One answer for the batch.
-  const answered = await claude.call("reply_marks", {
-    batch_id: batch.id,
-    text: "1: proposed Thursday. 2: which books?",
+  const earlier = byText(state, "Can this be earlier?"),
+    who = byText(state, "Who?"),
+    books = byText(state, "Add two books.");
+  // The AI reads them all, placed in their notes.
+  const { marks } = await claude.call("get_marks");
+  assert.deepEqual(
+    marks.find((m) => m.mark_id === earlier.id),
+    {
+      mark_id: earlier.id,
+      note: "Notes/Plan.md",
+      quote: "on Friday",
+      line: 3,
+      text: "Can this be earlier?",
+      status: "open",
+    },
+  );
+  assert.equal(
+    (await claude.call("get_marks", { note: "Notes/Ideas.md" })).marks.length,
+    1,
+  );
+  // A proposal names the marks it answers: only marks on its note.
+  const stray = await claude.call("propose_edit", {
+    note: "Notes/Plan.md",
+    summary: "Thursday",
+    edits: [{ old_text: "on Friday", new_text: "on Thursday" }],
+    marks: [earlier.id, books.id],
   });
-  assert.equal(answered.status, "replied");
+  assert.match(stray.error, /is not a mark on Notes\/Plan\.md/);
+  const made = await claude.call("propose_edit", {
+    note: "Notes/Plan.md",
+    summary: "Thursday",
+    edits: [{ old_text: "on Friday", new_text: "on Thursday" }],
+    marks: [earlier.id],
+  });
   state = await bridge.handlers.marks();
+  assert.equal(byText(state, "Can this be earlier?").state, "proposed");
+  const again = await claude.call("get_marks", { note: "Notes/Plan.md" });
   assert.equal(
-    state.batches[0].replies[0].text,
-    "1: proposed Thursday. 2: which books?",
+    again.marks.find((m) => m.mark_id === earlier.id).proposal_id,
+    made.proposal_id,
   );
-  assert.equal(state.batches[0].replies[0].by, "claude-code");
-  // Finished: the marks leave the notes, the batch the lists.
-  state = await bridge.handlers.finishBatch(batch.id);
-  assert.deepEqual(state.marks, []);
-  assert.deepEqual(state.batches, []);
-  assert.deepEqual(await claude.call("get_marks"), []);
-  assert.equal(
-    (await claude.call("get_marks", { batch_id: batch.id })).at(0).status,
-    "finished",
+  // A mark not acted on gets a reply; asked anew, the reply goes.
+  assert.deepEqual(
+    await claude.call("reply_mark", {
+      mark_id: who.id,
+      text: "Ana Lee, from finance?",
+    }),
+    { mark_id: who.id, status: "replied" },
   );
-  assert.match(
-    (await claude.call("reply_marks", { batch_id: batch.id, text: "x" })).error,
-    /finished/,
+  state = await bridge.handlers.marks();
+  assert.equal(byText(state, "Who?").state, "replied");
+  assert.equal(byText(state, "Who?").answer.text, "Ana Lee, from finance?");
+  // Asked further: the exchange so far stays with it, for the AI too.
+  state = await bridge.handlers.changeMark("edit", {
+    id: who.id,
+    text: "Who is Ana? Her full name.",
+  });
+  const asked = byText(state, "Who is Ana? Her full name.");
+  assert.equal(asked.state, "open");
+  assert.equal(asked.answer, undefined);
+  assert.deepEqual(asked.earlier, [
+    { by: "owner", text: "Who?" },
+    { by: "claude-code", text: "Ana Lee, from finance?" },
+  ]);
+  const read = (await claude.call("get_marks")).marks.find(
+    (m) => m.mark_id === who.id,
   );
-  assert.match(
-    (await claude.call("get_marks", { batch_id: "zzzzzz-000000" })).error,
-    /no batch/,
+  assert.deepEqual(read.earlier, [
+    { from: "owner", text: "Who?" },
+    { from: "you", text: "Ana Lee, from finance?" },
+  ]);
+  // Accepted: the mark it answered is done.
+  await bridge.handlers.decideProposal(made.proposal_id, {
+    results: ["accepted"],
+    saved: true,
+  });
+  state = await bridge.handlers.marks();
+  assert.equal(byText(state, "Can this be earlier?"), undefined);
+  assert.equal(state.marks.length, 2);
+  // Rejected: the mark it answered is the owner's again.
+  const second = await claude.call("propose_edit", {
+    note: "Notes/Ideas.md",
+    summary: "Two books",
+    edits: [{ old_text: "A reading list.", new_text: "A reading list: X, Y." }],
+    marks: [books.id],
+  });
+  await bridge.handlers.decideProposal(second.proposal_id, {
+    results: ["rejected"],
+    saved: true,
+  });
+  state = await bridge.handlers.marks();
+  assert.equal(byText(state, "Add two books.").state, "open");
+});
+
+test("get_context tells the AI the note open in Marklore and the text selected in it", async (t) => {
+  const { root, plan, bridge, session, mark, done } = await setup();
+  t.after(done);
+  const claude = await session();
+  assert.deepEqual(await claude.call("get_context"), {
+    open_note: null,
+    note: "No note is open in Marklore.",
+  });
+  await mark(plan, "Ask Ana.", "Who?");
+  const text = await fs.readFile(plan, "utf8");
+  await bridge.handlers.setContext({
+    fileId: plan,
+    selection: { text: "on Friday", from: text.indexOf("on Friday") },
+  });
+  const context = await claude.call("get_context");
+  assert.equal(context.open_note, "Notes/Plan.md");
+  assert.deepEqual(context.selection, { text: "on Friday", line: 3 });
+  assert.deepEqual(
+    context.marks.map((m) => m.text),
+    ["Who?"],
   );
+  // Nothing selected.
+  await bridge.handlers.setContext({ fileId: plan, selection: null });
+  assert.equal((await claude.call("get_context")).selection, null);
+  // A note outside the libraries open to AI: neither its name nor its text.
+  const other = path.join(root, "Private.md");
+  await fs.writeFile(other, "# Private\n\nSecret.\n");
+  await bridge.handlers.setContext({
+    fileId: other,
+    selection: { text: "Secret.", from: 11 },
+  });
+  assert.deepEqual(await claude.call("get_context"), {
+    open_note: null,
+    note: "The note open in Marklore is not in a library open to AI.",
+  });
+  const written = await fs.readFile(
+    path.join(root, "data", "ai", "context.json"),
+    "utf8",
+  );
+  assert.doesNotMatch(written, /Secret|Private/);
+});
+
+test("marks on a note closed to AI show the AI only the owner's words", async (t) => {
+  const { plan, store, session, mark, done } = await setup();
+  t.after(done);
+  const claude = await session();
+  const state = await mark(plan, "on Friday", "Earlier?");
+  await store.writeAccess({ libraries: [], excluded: [] });
+  assert.deepEqual((await claude.call("get_marks")).marks, [
+    {
+      mark_id: state.marks[0].id,
+      unavailable: "This note is not in a library open to AI.",
+      text: "Earlier?",
+      status: "open",
+    },
+  ]);
+});
+
+// The run's end, as the page sees it.
+async function ended(bridge) {
+  for (let i = 0; i < 600; i++) {
+    const state = await bridge.handlers.marks();
+    if (state.run && state.run.status !== "running") return state;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  throw Error("The run did not end.");
+}
+
+test("a background run takes the open marks, proposes on each note and answers the rest", async (t) => {
+  const { root, plan, ideas, store, bridge, session, mark, done } =
+    await setup();
+  t.after(done);
+  const claude = await session();
+  await mark(plan, "on Friday", "Earlier?");
+  await mark(plan, "Ask Ana.", "Full name.");
+  await mark(ideas, "A reading list.", "Add two books.");
+  const argsFile = path.join(root, "args.json");
+  process.env.FAKE_CLAUDE_ARGS = argsFile;
+  t.after(() => delete process.env.FAKE_CLAUDE_ARGS);
+  let state = await bridge.handlers.startRun();
+  assert.equal(state.run.status, "running");
+  assert.equal(state.run.count, 3);
+  // While it works, its marks are not anyone else's.
+  if (state.marks.every((m) => m.state === "background")) {
+    assert.deepEqual((await claude.call("get_marks")).marks, []);
+    await assert.rejects(
+      bridge.handlers.changeMark("edit", { id: state.marks[0].id, text: "x" }),
+      /后台 AI 正在处理这条标记/,
+    );
+  }
+  await assert.rejects(bridge.handlers.startRun(), /后台 AI 正在处理标记/);
+  state = await ended(bridge);
+  assert.equal(state.run.status, "done");
+  assert.equal(state.run.proposals, 2);
+  assert.equal(state.run.result, "Proposed changes to 2 notes.");
+  assert.deepEqual(
+    state.marks.map((m) => m.state),
+    ["proposed", "proposed", "proposed"],
+  );
+  const proposals = await bridge.handlers.proposals();
+  assert.equal(proposals.length, 2);
+  assert.ok(proposals.every((p) => p.background === true));
+  // Claude Code was started with Marklore's server only, no tools of its
+  // own, none of the owner's settings, and nothing to ask.
+  const args = JSON.parse(await fs.readFile(argsFile, "utf8"));
+  for (const flag of [
+    "-p",
+    "--restricted",
+    "--strict-mcp-config",
+    "--no-session-persistence",
+  ])
+    assert.ok(args.includes(flag), flag);
+  assert.equal(args[args.indexOf("--tools") + 1], "");
+  assert.equal(args[args.indexOf("--allowedTools") + 1], "mcp__marklore");
+  assert.equal(args[args.indexOf("--permission-mode") + 1], "dontAsk");
+  // Its folder is gone with it; its note can be put away.
+  assert.deepEqual(await fs.readdir(store.runs), [
+    (await store.listRuns())[0].id + ".json",
+  ]);
+  state = await bridge.handlers.dismissRun(state.run.id);
+  assert.equal(state.run, null);
+});
+
+test("a background run that fails or is stopped gives the marks back", async (t) => {
+  const { plan, store, bridge, mark, done } = await setup();
+  t.after(done);
+  await mark(plan, "on Friday", "Earlier?");
+  process.env.FAKE_CLAUDE = "fail";
+  t.after(() => delete process.env.FAKE_CLAUDE);
+  await bridge.handlers.startRun();
+  let state = await ended(bridge);
+  assert.equal(state.run.status, "failed");
+  assert.match(state.run.error, /没有登录或登录已过期/);
+  assert.equal(state.marks[0].state, "open");
+  process.env.FAKE_CLAUDE = "hang";
+  state = await bridge.handlers.startRun();
+  assert.equal(state.marks[0].state, "background");
+  await bridge.handlers.stopRun(state.run.id);
+  state = await ended(bridge);
+  assert.equal(state.run.status, "stopped");
+  assert.equal(state.marks[0].state, "open");
+  // Left running when Marklore closed: over at the next start.
+  const run = await store.createRun({
+    client: "claude-code",
+    marks: [{ id: state.marks[0].id, file: plan }],
+  });
+  await store.changeMarks(plan, (doc) => {
+    doc.marks[0].run = run.id;
+  });
+  bridge.start();
+  t.after(() => bridge.close());
+  state = await ended(bridge);
+  assert.equal(state.run.status, "failed");
+  assert.equal(state.marks[0].state, "open");
+});
+
+test("without Claude Code, or with nothing open, a run does not start", async (t) => {
+  const { plan, store, bridge, mark, done } = await setup({ claude: false });
+  t.after(done);
+  await assert.rejects(bridge.handlers.startRun(), /没有找到 Claude Code/);
+  const withClaude = await setup();
+  t.after(withClaude.done);
+  await assert.rejects(
+    withClaude.bridge.handlers.startRun(),
+    /没有要交给 AI 的标记/,
+  );
+  await withClaude.mark(withClaude.plan, "on Friday", "Earlier?");
+  await withClaude.store.writeAccess({ libraries: [], excluded: [] });
+  await assert.rejects(withClaude.bridge.handlers.startRun(), /没有开放给 AI/);
+  (void plan, store, mark);
 });
 
 test("a finished review tells the session that proposed it, with the owner's reasons", async (t) => {
@@ -258,78 +448,7 @@ test("a finished review tells the session that proposed it, with the owner's rea
   assert.equal(claude.events().length, 1);
 });
 
-test("only Claude Code is pushed to; marks sent to a session that ended go to the next one in its folder", async (t) => {
-  const { plan, project, bridge, session, mark, done } = await setup();
-  t.after(done);
-  const codex = await session("codex-mcp-client");
-  const init = codex.messages.find((m) => m.id === 0).result;
-  assert.equal(init.capabilities.experimental, undefined);
-  const claude = await session();
-  assert.deepEqual(
-    claude.messages.find((m) => m.id === 0).result.capabilities.experimental,
-    { "claude/channel": {} },
-  );
-  let state = await bridge.handlers.marks();
-  assert.deepEqual(state.sessions.map((s) => [s.client, s.push]).sort(), [
-    ["claude-code", true],
-    ["codex-mcp-client", false],
-  ]);
-  // Sent to Codex: nothing pushed anywhere; Codex reads them when asked.
-  await mark(plan, "on Friday", "Earlier?");
-  await bridge.handlers.sendMarks({
-    client: "codex-mcp-client",
-    cwd: project,
-    session: state.sessions.find((s) => s.client === "codex-mcp-client").id,
-  });
-  await codex.check();
-  await claude.check();
-  assert.deepEqual([...codex.events(), ...claude.events()], []);
-  assert.equal((await codex.call("get_marks")).length, 1);
-  // Sent to a Claude Code session that has ended: the next one started in
-  // that folder hears it when it starts.
-  await mark(plan, "Ask Ana.", "Who?");
-  const gone = claude.server.channel().id;
-  await claude.server.stop();
-  state = await bridge.handlers.sendMarks({
-    client: "claude-code",
-    cwd: project,
-    session: gone,
-  });
-  assert.ok(!state.sessions.some((s) => s.id === gone));
-  const elsewhere = await session(
-    "claude-code",
-    path.join(project, "..", "other"),
-  );
-  const later = await session();
-  await elsewhere.check();
-  await later.check();
-  assert.deepEqual(elsewhere.events(), []);
-  assert.equal(later.events().length, 1);
-  assert.equal(later.events()[0].meta.event, "marks");
-});
-
-test("marks on a note closed to AI show the AI only the owner's words", async (t) => {
-  const { plan, project, store, bridge, session, mark, done } = await setup();
-  t.after(done);
-  const claude = await session();
-  await mark(plan, "on Friday", "Earlier?");
-  await bridge.handlers.sendMarks({
-    client: "claude-code",
-    cwd: project,
-    session: null,
-  });
-  await store.writeAccess({ libraries: [], excluded: [] });
-  const [batch] = await claude.call("get_marks");
-  assert.deepEqual(batch.marks, [
-    {
-      n: 1,
-      unavailable: "This note is not in a library open to AI.",
-      text: "Earlier?",
-    },
-  ]);
-});
-
-test("open comments of earlier versions become marks not sent, once", async (t) => {
+test("open comments of earlier versions become marks, once", async (t) => {
   const { plan, store, bridge, done } = await setup();
   t.after(done);
   const comments = path.join(store.folder, "comments");
@@ -363,8 +482,8 @@ test("open comments of earlier versions become marks not sent, once", async (t) 
   assert.equal(await store.carryComments(), 0);
   const { marks } = await bridge.handlers.marks();
   assert.deepEqual(
-    marks.map((m) => [m.id, m.text, m.batch]),
-    [["aaaaaaa-111111", "Earlier?\n\nYes", null]],
+    marks.map((m) => [m.id, m.text, m.state]),
+    [["aaaaaaa-111111", "Earlier?\n\nYes", "open"]],
   );
 });
 
@@ -374,7 +493,7 @@ test("concurrent writers keep every mark", async (t) => {
   await Promise.all(
     Array.from({ length: 12 }, (_, i) =>
       store.changeMarks(plan, (doc) => {
-        doc.marks.push({ id: `m${i}`, quote: "x", text: "y", batch: null });
+        doc.marks.push({ id: `m${i}`, quote: "x", text: "y" });
       }),
     ),
   );

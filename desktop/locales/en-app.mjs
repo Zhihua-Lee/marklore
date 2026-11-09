@@ -367,6 +367,8 @@ export default {
   编辑源码: "Edit source",
   属性名: "Property name",
   属性值: "Property value",
+  页面标题: "Title",
+  点击修改标题: "Click to change the title",
   用逗号分隔: "Separate with commas",
   点击修改代码语言: "Click to change the code language",
   代码语言: "Code language",
@@ -474,13 +476,27 @@ export default {
   "AI 助手通过 MCP 读取勾选的笔记库并提出修改；修改要你在 Marklore 中预览并接受才会写入":
     "AI assistants read the ticked libraries through MCP and propose changes; nothing is written until you preview and accept it in Marklore",
   "连接 AI 助手": "Connect an AI assistant",
-  "把 Marklore 添加为 MCP 服务器；移动程序位置后需重新添加":
-    "Add Marklore as an MCP server; add it again after moving the program",
+  "连接后，它新开的会话就能读取勾选的笔记库、提出修改、收到你的标记":
+    "Once connected, its new sessions can read the ticked libraries, propose changes and get your marks",
   尚未添加笔记库: "No library folders yet",
-  "已复制 Claude Code 命令，在终端中运行即可":
-    "Claude Code command copied; run it in a terminal",
-  "已复制，粘贴到 Codex 的 config.toml":
-    "Copied; paste it into Codex's config.toml",
+  "其他 AI 助手": "Other AI assistants",
+  "复制 MCP 服务器的配置（JSON），按那个 AI 助手的说明添加":
+    "Copy the MCP server's setup (JSON) and add it as that assistant describes",
+  复制配置: "Copy setup",
+  "已连接 · {count} 个会话正在使用": "Connected · {count} sessions using it",
+  "已连接 · 新开的会话就能使用": "Connected · new sessions can use it",
+  "连接的 Marklore 已不在原处：{path}":
+    "Connected to a Marklore that is no longer there: {path}",
+  "连接的是另一个 Marklore：{path}": "Connected to another Marklore: {path}",
+  "读不了它的设置文件：{file}": "Its settings file can't be read: {file}",
+  未连接: "Not connected",
+  "未连接 · 这台电脑上没有找到它": "Not connected · not found on this computer",
+  连接: "Connect",
+  改为连接这个: "Connect this one",
+  断开: "Disconnect",
+  "已连接 {name}：在它新开的会话里就能使用 Marklore":
+    "{name} connected: its new sessions can use Marklore",
+  "已断开 {name}": "{name} disconnected",
   "已复制 MCP 配置（JSON）": "MCP configuration (JSON) copied",
   "服务器：{command} {script}": "Server: {command} {script}",
   "AI 提议": "AI proposals",
@@ -513,53 +529,49 @@ export default {
   "标记给 AI… Ctrl+Alt+M": "Mark for AI… Ctrl+Alt+M",
   "标记给 AI…": "Mark for AI…",
   标记: "Marks",
-  "标记（{count} 条未发送）": "Marks ({count} not sent)",
-  "标记（{count} 条未发送；AI 已回复）":
-    "Marks ({count} not sent; the AI replied)",
+  "标记（{count} 条待处理）": "Marks ({count} waiting)",
+  "标记（{count} 条待处理；AI 有回复）":
+    "Marks ({count} waiting; the AI replied)",
   删除: "Delete",
   "想让 AI 做什么…（Ctrl+Enter 保存）":
     "What should the AI do here?… (Ctrl+Enter saves)",
   保存标记: "Save mark",
-  "已存为标记，{count} 条待发送": "Mark saved; {count} waiting to be sent",
+  "已存为标记，{count} 条待处理": "Mark saved; {count} waiting",
   "请先保存笔记，再标记": "Save the note first, then mark it",
   "审阅 AI 提议时不能标记": "Marks can't be added while reviewing a proposal",
   先选中要标记的文字: "Select the text to mark first",
   "标记的文字太长，请选短一些":
     "The selection is too long for a mark; select less",
-  未发送: "Not sent",
-  "AI 已回复，回复在标记列表中":
-    "The AI replied; the reply is in the marks list",
-  "AI 已读": "Read by the AI",
-  "已发送，等 AI 读取": "Sent; waiting for the AI to read it",
-  "已发送。{target} 下次启动时会收到":
-    "Sent. {target} gets it the next time it starts",
-  "已发送给 {target}": "Sent to {target}",
-  "已发送。{client} 收不到推送：在 {client} 里让它读取 Marklore 的标记":
-    "Sent. {client} isn't notified: ask it in {client} to read Marklore's marks",
-  "未发送（{count}）": "Not sent ({count})",
-  "选中文字，右键“标记给 AI…”。标好几处后一起发送。":
-    "Select text and right-click “Mark for AI…”. Mark several places, then send them together.",
+  "后台 AI 正在处理": "A background AI is working on it",
+  "AI 提了修改，等你审阅": "The AI proposed a change for you to review",
+  "AI 回复了": "The AI replied",
+  "等 AI 处理": "Waiting for the AI",
+  "AI：": "AI: ",
+  "你：": "You: ",
+  "追问…": "Ask further…",
+  "接着对 AI 说…（Ctrl+Enter 确定）": "Go on… (Ctrl+Enter sends)",
+  "交给 AI": "Give to the AI",
+  "接着问；之前的问答会一起交给 AI":
+    "Ask further; what was said so far goes to the AI with it",
+  "看完了，去掉这条标记": "Done with it: remove the mark",
+  "看一下 Marklore 的标记": "Check the Marklore marks",
+  复制这句话: "Copy this sentence",
+  "在你的 AI 对话里说：": "Tell your AI in its chat:",
+  "已复制，粘贴到 AI 的对话里": "Copied: paste it into the AI's chat",
+  "选中文字，右键“标记给 AI…”，写下想让 AI 做什么。可以在多篇笔记里标多处。":
+    "Select text, right-click “Mark for AI…” and say what the AI should do. Mark as many places as you like, across notes.",
   删除这条标记: "Delete this mark",
-  发送给: "Send to",
-  "（未运行）": " (not running)",
-  "选择…": "Choose…",
-  更改发送对象: "Change where marks go",
-  "发送 {count} 条": "Send {count}",
-  已发送: "Sent",
-  "{count} 条": "{count} marks",
-  "AI 已回复": "Replied",
-  "等 AI 读取": "Waiting for the AI",
-  "AI 还没有回复这批标记。仍然完成，去掉这些标记？":
-    "The AI hasn't replied to these marks. Finish anyway and remove them?",
-  "这批处理完了：去掉正文里的这些标记":
-    "These are dealt with: remove the marks from the notes",
-  "发送给哪个 AI 会话？": "Which AI session gets the marks?",
-  "以后都发给它，直到你更改。":
-    "Marks go there from now on, until you change it.",
-  "没有正在运行的 AI 会话：先在终端里启动 Claude Code 或 Codex。":
-    "No AI session is running: start Claude Code or Codex in a terminal first.",
-  收不到推送: "not notified",
-  返回: "Back",
+  "交给后台 AI（{count} 条）": "Hand to a background AI ({count})",
+  "Claude Code 在后台处理这些标记，结果作为提议等你审阅；会用到你的 Claude 用量":
+    "Claude Code works on these marks in the background; what it changes comes as proposals for you to review. It uses your Claude usage.",
+  "后台 AI 正在处理 {count} 条标记…":
+    "A background AI is working on {count} marks…",
+  停止: "Stop",
+  "后台 AI 处理完了：提了 {count} 条修改":
+    "The background AI is done: {count} proposals",
+  "后台 AI 已停止": "The background AI was stopped",
+  "后台 AI 没有完成：{reason}": "The background AI didn't finish: {reason}",
+  "{client}（后台）": "{client} (background)",
   // A rejection, and what to tell the AI with it.
   "理由：{reason}": "Reason: {reason}",
   拒绝这处的选项: "More ways to reject this change",
@@ -569,13 +581,6 @@ export default {
   "全部拒绝并说明…": "Reject all and say why…",
   "告诉 AI 为什么（Enter 确定，Esc 取消）":
     "Tell the AI why (Enter keeps it, Esc cancels)",
-  // Settings → AI assistant: Claude Code listening.
-  "让 Claude Code 自动收到": "Let Claude Code hear at once",
-  "审阅结果和发送的标记直接进入正在运行的 Claude Code 会话。这是 Claude Code 的研究预览功能：用这条命令启动，每次启动时确认一次提示。其他 AI 需要你提醒它查看。":
-    "Finished reviews and sent marks go straight into the running Claude Code session. This uses a research preview of Claude Code: start it with this command and confirm the prompt each time. Other assistants need to be asked to look.",
-  复制启动命令: "Copy start command",
-  "已复制，在项目文件夹的终端里用它启动 Claude Code":
-    "Copied: start Claude Code with it in a terminal in your project folder",
   // A folder listed by its index file.
   "展开或折叠 {name} 的子页": "Expand or collapse the sub-pages of {name}",
   "{name} 有未保存的修改，请先保存，再在文件树中拖动排序":
@@ -608,19 +613,16 @@ export default {
   切换提议: "Switch proposal",
   审阅: "Review",
   "已决定 {done} / {count}": "Decided {done} / {count}",
-  完成审阅: "Finish review",
   "笔记有未保存的修改：接受的修改写入草稿，按 Ctrl+S 一起保存":
     "The note has unsaved changes: accepted changes go into the draft; Ctrl+S saves them together",
-  "写入接受的修改，并把每处的决定告诉 AI":
-    "Write the accepted changes and tell the AI each decision",
+  写入全部修改并结束审阅: "Write all the changes and end the review",
+  拒绝全部修改并结束审阅: "Reject all the changes and end the review",
   退出审阅: "Exit review",
   "回到笔记；已做的决定会保留": "Back to the note; your decisions are kept",
   呈现: "Show as",
   范围: "Extent",
   逐处: "Change by change",
   全部: "All",
-  "还有 {count} 处没有决定，按拒绝处理并完成审阅？":
-    "{count} changes are undecided. Reject them and finish the review?",
   "已接受 {accepted} 处并保存，拒绝 {rejected} 处":
     "Accepted {accepted} and saved, rejected {rejected}",
   "已接受 {accepted} 处，写入草稿，按 Ctrl+S 保存":

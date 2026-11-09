@@ -205,8 +205,19 @@ export default {
     "the note is gone, or it is not in a library open to AI",
   // Comment threads.
   这条标记已不存在: "This mark no longer exists",
-  "这条标记已发送，不能再改": "This mark has been sent and can't be changed",
-  没有要发送的标记: "There are no marks to send",
+  "后台 AI 正在处理这条标记": "A background AI is working on this mark",
+  "后台 AI 正在处理标记": "A background AI is already working on marks",
+  "没有找到 Claude Code：先安装它，并登录一次":
+    "Claude Code wasn't found: install it and sign in once",
+  "这些标记所在的笔记没有开放给 AI（设置 → AI 助手）":
+    "The notes with these marks aren't open to AI (Settings → AI assistant)",
+  "没有要交给 AI 的标记": "There are no marks to hand to the AI",
+  "后台 AI 没能启动：{reason}": "The background AI couldn't start: {reason}",
+  "超过 15 分钟，已停止": "Stopped after 15 minutes",
+  "退出代码 {code}": "exit code {code}",
+  "Claude Code 没有登录或登录已过期：在终端里运行一次 claude 并登录，再试":
+    "Claude Code isn't signed in, or its sign-in ran out: run claude once in a terminal, sign in, and try again",
+  "Marklore 关闭时中断": "Interrupted when Marklore closed",
   // A folder's index file (the tree's order).
   目录文件过大: "The index file is too large",
   这个文件夹没有目录文件: "This folder has no index file",

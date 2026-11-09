@@ -64,10 +64,15 @@ for (const name of [
   "decideProposal",
   "createProposedNote",
   "aiSetup",
+  "aiConnections",
+  "aiConnect",
+  "aiDisconnect",
   "marks",
   "changeMark",
-  "sendMarks",
-  "finishBatch",
+  "setContext",
+  "startRun",
+  "stopRun",
+  "dismissRun",
   "openMarked",
 ])
   api[name] = invoke(name);

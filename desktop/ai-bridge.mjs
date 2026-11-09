@@ -3,14 +3,19 @@
 // assistant, tells the page when proposals or marks change, and carries out
 // the owner's decisions. An accepted edit is applied by the page to the open
 // note (so it can be undone, and saves as any edit does); an accepted new
-// note is written here. The owner's marks are written here for the page and
-// sent, in batches, to an assistant session the server keeps listed.
+// note is written here. The owner's marks are written here; an AI reads them
+// through the server when asked, or a background run (ai-runs.mjs) takes
+// them. A mark goes once a proposal answering it is accepted. What the owner
+// is looking at (the note, the selection) is written for the server too.
 import fs from "node:fs/promises";
 import { watch, mkdirSync } from "node:fs";
 import path from "node:path";
 import { normalizeExcluded } from "./excluded.mjs";
 import { isLapsed, newId } from "./ai-store.mjs";
 import { locate } from "./mcp-tools.mjs";
+import { createConnections } from "./ai-connect.mjs";
+import { createRuns } from "./ai-runs.mjs";
+import { findClaude } from "./claude-cli.mjs";
 import { t } from "./i18n.mjs";
 
 const key = (p) =>
@@ -51,8 +56,45 @@ export function createAiBridge({
   notify,
   executable,
   script,
+  connections = null,
+  runOptions = {},
 }) {
   let accessText = null;
+  const setup = {
+    command: executable,
+    args: [script],
+    env: { ELECTRON_RUN_AS_NODE: "1" },
+  };
+  connections ??= createConnections({ setup });
+  const runs = createRuns({
+    store,
+    setup,
+    dataFolder: path.dirname(store.folder),
+    findClaude: () => findClaude(),
+    notify: () => notify("marks"),
+    ...runOptions,
+  });
+  const assistant = (kind) => {
+    if (!connections.kinds.includes(kind)) throw Error(t("无效操作"));
+    return kind;
+  };
+  // An assistant's connection, and how many of its sessions run now.
+  async function connection(kind) {
+    const status = await connections.status(kind);
+    const live = await store.liveSessions(Date.now(), running);
+    const client = connections.clientOf(kind);
+    return {
+      ...status,
+      sessions: live.filter((s) => client.test(s.client)).length,
+    };
+  }
+  async function changeConnection(kind, connect) {
+    const before = await connections.status(assistant(kind));
+    if (before.state === "unreadable")
+      throw Error(t("读不了它的设置文件：{file}", { file: before.file }));
+    await (connect ? connections.connect(kind) : connections.disconnect(kind));
+    return connection(kind);
+  }
   const watchers = [],
     timers = {};
   // roots: the library folders; settings.aiLibraries: those ticked for AI.
@@ -81,19 +123,22 @@ export function createAiBridge({
       .carryComments()
       .then((count) => count && notify("marks"))
       .catch(() => {});
-    for (const [kind, folder] of [
-      ["proposals", store.proposals],
-      ["marks", store.marks],
-      ["marks", store.batches],
-      ["marks", store.sessions],
+    runs.recover().catch(() => {});
+    // A mark's state follows the proposals that answer it.
+    for (const [kinds, folder] of [
+      [["proposals", "marks"], store.proposals],
+      [["marks"], store.marks],
+      [["marks"], store.runs],
     ])
       try {
         mkdirSync(folder, { recursive: true });
         const watcher = watch(folder, (_type, name) => {
           // Lock folders and temporary files come and go with each write.
           if (name && !/^[\w-]+\.json$/.test(String(name))) return;
-          clearTimeout(timers[kind]);
-          timers[kind] = setTimeout(() => notify(kind), 150);
+          for (const kind of kinds) {
+            clearTimeout(timers[kind]);
+            timers[kind] = setTimeout(() => notify(kind), 150);
+          }
         });
         watcher.on("error", () => watcher.close());
         watchers.push(watcher);
@@ -102,54 +147,59 @@ export function createAiBridge({
       }
   }
 
-  // Marks: every note's, the batches not finished, and the sessions they
-  // can be sent to.
+  // Marks: every note's, each with its state (open; replied: the AI
+  // answered it; proposed: a proposal answering it waits for review;
+  // background: a background run works on it), and the latest run.
   async function marksState() {
     const notes = await store.allMarks();
-    const batches = (await store.listBatches()).filter((b) => !b.done);
-    const sessions = await store.liveSessions(Date.now(), running);
+    const pending = new Set((await waiting()).map((p) => p.id));
+    const all = await store.listRuns();
+    const running = new Set(
+      all.filter((r) => r.status === "running").map((r) => r.id),
+    );
+    const latest = all.find((r) => !r.dismissed) || null;
+    const made = latest
+      ? (await store.list()).filter((p) => p.run === latest.id).length
+      : 0;
     return {
       marks: notes.flatMap((n) =>
         n.marks.map((m) => ({
-          ...m,
+          id: m.id,
+          quote: m.quote,
+          prefix: m.prefix,
+          suffix: m.suffix,
+          text: m.text,
+          created: m.created,
           file: n.file,
           name: path.basename(n.file),
+          state:
+            m.run && running.has(m.run)
+              ? "background"
+              : m.proposal && pending.has(m.proposal)
+                ? "proposed"
+                : m.answer
+                  ? "replied"
+                  : "open",
+          ...(m.answer ? { answer: m.answer } : {}),
+          ...(m.earlier?.length ? { earlier: m.earlier } : {}),
         })),
       ),
-      batches: batches.map((b) => ({
-        id: b.id,
-        created: b.created,
-        target: b.target,
-        status: b.status,
-        readBy: b.readBy || null,
-        marks: b.marks.map((m) => ({
-          id: m.id,
-          file: m.file,
-          name: path.basename(m.file),
-          quote: m.quote,
-          text: m.text,
-        })),
-        replies: b.replies,
-      })),
-      sessions: sessions.map((s) => ({
-        id: s.id,
-        client: s.client,
-        cwd: s.cwd,
-        folder: s.folder,
-        push: s.push === true,
-        active: s.active,
-      })),
+      run: latest && {
+        id: latest.id,
+        status: latest.status,
+        started: latest.started,
+        finished: latest.finished || null,
+        count: latest.marks.length,
+        proposals: made,
+        ...(latest.error ? { error: latest.error } : {}),
+        ...(latest.result ? { result: latest.result } : {}),
+      },
     };
   }
-  // A mark not sent yet, wherever it is: its note's file.
-  async function draftFile(id) {
-    for (const note of await store.allMarks()) {
-      const mark = note.marks.find((m) => m.id === id);
-      if (mark) {
-        if (mark.batch) throw Error(t("这条标记已发送，不能再改"));
-        return note.file;
-      }
-    }
+  // A mark, wherever it is: its note's file.
+  async function markFile(id) {
+    for (const note of await store.allMarks())
+      if (note.marks.some((m) => m.id === id)) return note.file;
     throw Error(t("这条标记已不存在"));
   }
   async function changeMark(action, args = {}) {
@@ -164,67 +214,76 @@ export function createAiBridge({
           suffix: string(args.suffix ?? "", 100),
           text: words(args.text, 5000) ?? "",
           created: new Date().toISOString(),
-          batch: null,
         });
       });
     } else if (action === "edit" || action === "remove") {
-      const file = await draftFile(args.id);
+      const file = await markFile(args.id);
+      const running = new Set(
+        (await store.listRuns())
+          .filter((r) => r.status === "running")
+          .map((r) => r.id),
+      );
       await store.changeMarks(file, (doc) => {
         const at = doc.marks.findIndex((m) => m.id === args.id);
         if (at < 0) throw Error(t("这条标记已不存在"));
-        if (action === "remove") doc.marks.splice(at, 1);
-        else doc.marks[at].text = words(args.text, 5000) ?? "";
+        const mark = doc.marks[at];
+        if (action === "remove") return void doc.marks.splice(at, 1);
+        if (mark.run && running.has(mark.run))
+          throw Error(t("后台 AI 正在处理这条标记"));
+        // Answered, then asked further: the exchange so far stays with
+        // the mark for the AI to read (the last ten turns).
+        if (mark.answer)
+          mark.earlier = [
+            ...(mark.earlier || []),
+            { by: "owner", text: mark.text },
+            { by: mark.answer.by, text: mark.answer.text },
+          ].slice(-10);
+        mark.text = words(args.text, 5000) ?? "";
+        delete mark.answer;
       });
     } else throw Error(t("无效操作"));
     return marksState();
   }
-  // Every mark not sent yet goes, as one batch, to an assistant session:
-  // target { client, cwd, session } (the session may be gone by the time;
-  // the next one of that assistant in that folder takes it).
-  async function sendMarks(target) {
-    const chosen = {
-      client: string(target?.client, 100),
-      cwd: string(target?.cwd, 2000),
-      session: target?.session == null ? null : string(target.session, 100),
-    };
-    // In the order they were made: the AI numbers them so.
-    const drafts = (await store.allMarks())
-      .flatMap((n) =>
-        n.marks.filter((m) => !m.batch).map((m) => ({ ...m, file: n.file })),
-      )
-      .sort((a, b) => String(a.created).localeCompare(String(b.created)));
-    if (!drafts.length) throw Error(t("没有要发送的标记"));
-    const batch = await store.createBatch({
-      target: chosen,
-      marks: drafts.map(({ id, file, quote, prefix, suffix, text }) => ({
-        id,
-        file,
-        quote,
-        prefix,
-        suffix,
-        text,
-      })),
-    });
-    const ids = new Set(drafts.map((m) => m.id));
-    for (const file of new Set(drafts.map((m) => m.file)))
-      await store.changeMarks(file, (doc) => {
-        for (const m of doc.marks) if (ids.has(m.id)) m.batch = batch.id;
-      });
-    return marksState();
+  // A proposal accepted: the marks it answered are done.
+  async function settleMarks(id) {
+    const p = await store.get(id);
+    if (p?.status !== "accepted" || !p.marks?.length || !p.file) return;
+    await store
+      .changeMarks(p.file, (doc) => {
+        doc.marks = doc.marks.filter((m) => m.proposal !== id);
+      })
+      .catch(() => {});
   }
-  // The owner is done with a batch: its marks leave the notes.
-  async function finishBatch(id) {
-    const batch = await store.changeBatch(string(id, 100), (b) => {
-      b.done = new Date().toISOString();
-      return b;
-    });
-    for (const file of new Set(batch.marks.map((m) => m.file)))
-      await store
-        .changeMarks(file, (doc) => {
-          doc.marks = doc.marks.filter((m) => m.batch !== batch.id);
-        })
-        .catch(() => {});
-    return marksState();
+  // What the owner is looking at, for the AI (get_context): the note, if it
+  // is open to AI, and the text selected in it.
+  let contextText = null;
+  async function setContext({ fileId, selection } = {}) {
+    let file = null;
+    try {
+      file = fileId ? pathOf(fileId) : null;
+    } catch {
+      /* A note that is gone. */
+    }
+    const open =
+      file &&
+      (await locate(store, file).then(
+        () => true,
+        () => false,
+      ));
+    const chosen =
+      open && typeof selection?.text === "string" && selection.text.trim()
+        ? {
+            text: selection.text.slice(0, 20000),
+            from: Number.isInteger(selection.from) ? selection.from : null,
+          }
+        : null;
+    const value = open
+      ? { file, selection: chosen }
+      : { file: null, closed: !!file };
+    const text = JSON.stringify(value);
+    if (text === contextText) return;
+    contextText = text;
+    await store.writeContext({ ...value, at: new Date().toISOString() });
   }
 
   const waiting = async () =>
@@ -235,6 +294,7 @@ export function createAiBridge({
     kind: p.kind,
     summary: p.summary,
     client: p.client,
+    ...(p.run ? { background: true } : {}),
     created: p.created,
     note: p.note,
     file: p.file,
@@ -370,22 +430,30 @@ export function createAiBridge({
   return {
     sync,
     start,
-    close: () => watchers.forEach((w) => w.close()),
+    close: () => {
+      watchers.forEach((w) => w.close());
+      runs.close();
+    },
     handlers: {
       marks: marksState,
       changeMark,
-      sendMarks,
-      finishBatch,
-      // The note a mark is on, opened as any note.
-      async openMarked(id) {
-        for (const note of await store.allMarks())
-          if (note.marks.some((m) => m.id === id)) return openFile(note.file);
-        for (const batch of await store.listBatches()) {
-          const mark = batch.marks.find((m) => m.id === id);
-          if (mark) return openFile(mark.file);
-        }
-        throw Error(t("这条标记已不存在"));
+      setContext,
+      // The owner's open marks to a background AI; stopped, or its note
+      // put away.
+      async startRun() {
+        await runs.start();
+        return marksState();
       },
+      async stopRun(id) {
+        await runs.stop(string(id, 100));
+        return marksState();
+      },
+      async dismissRun(id) {
+        await runs.dismiss(string(id, 100));
+        return marksState();
+      },
+      // The note a mark is on, opened as any note.
+      openMarked: async (id) => openFile(await markFile(id)),
       proposals: async () => (await waiting()).map(shown),
       // An edit's note opens as any note; a new note has no file yet.
       async openProposal(id) {
@@ -396,7 +464,11 @@ export function createAiBridge({
           document: p.kind === "edit" ? await openFile(found.file) : null,
         };
       },
-      decideProposal: decide,
+      async decideProposal(id, decision) {
+        const out = await decide(id, decision);
+        await settleMarks(id);
+        return out;
+      },
       async createProposedNote(id) {
         const p = await store.get(id);
         if (p?.kind !== "note") throw Error(t("无效操作"));
@@ -408,11 +480,10 @@ export function createAiBridge({
         await decide(id, { status: "accepted", saved: true });
         return openFile(found.file);
       },
-      aiSetup: () => ({
-        command: executable,
-        args: [script],
-        env: { ELECTRON_RUN_AS_NODE: "1" },
-      }),
+      aiSetup: () => setup,
+      aiConnections: () => Promise.all(connections.kinds.map(connection)),
+      aiConnect: (kind) => changeConnection(kind, true),
+      aiDisconnect: (kind) => changeConnection(kind, false),
     },
   };
 }

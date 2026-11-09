@@ -3,7 +3,9 @@
 // turns it into a field (Enter or leaving it keeps the change, Esc drops
 // it), a yes/no value flips, a row's × removes it, and a property is added
 // at the bottom. Values the card cannot read (nested YAML, blocks of text)
-// open the front matter as source, as "编辑源码" does.
+// open the front matter as source, as "编辑源码" does. The title above the
+// card is changed the same way, a click turning it into a field.
+import { Plugin } from "prosemirror-state";
 import {
   propertiesCard,
   readProperties,
@@ -11,12 +13,18 @@ import {
   setProperty,
   addProperty,
   removeProperty,
+  titleField,
 } from "../properties.js";
 import { open } from "./math.js";
 import { t } from "../../desktop/i18n.mjs";
 
 // Unfolded stays unfolded while the editor draws the card again.
 let unfolded = false;
+// The card of each editor, told when the note's first heading changes.
+const cards = new WeakMap();
+export const titleWatch = new Plugin({
+  view: () => ({ update: (view) => cards.get(view)?.recheck() }),
+});
 const SPLIT = /^(---[^\n]*\n)([\s\S]*?)\n?((?:---|\.\.\.)[ \t]*)$/;
 
 export class PropertiesView {
@@ -28,6 +36,7 @@ export class PropertiesView {
     this.dom.className = "raw-block rich-properties";
     this.dom.dataset.kind = "frontmatter";
     this.dom.contentEditable = "false";
+    cards.set(view, this);
     this.draw();
     this.dom.addEventListener(
       "toggle",
@@ -43,6 +52,12 @@ export class PropertiesView {
       if (value && (e.key === "Enter" || e.key === " ")) {
         e.preventDefault();
         this.editValue(value.closest(".fm-row"));
+      } else if (
+        e.target.classList?.contains("fm-title") &&
+        (e.key === "Enter" || e.key === " ")
+      ) {
+        e.preventDefault();
+        this.editTitle();
       }
     });
   }
@@ -52,11 +67,27 @@ export class PropertiesView {
       ? { lead: m[1], yaml: m[2], tail: m[3] }
       : { lead: "---\n", yaml: "", tail: "---" };
   }
+  // The first heading of the note, when it is a level-one heading right
+  // below the properties.
+  bodyHeading() {
+    const pos = this.getPos();
+    if (typeof pos !== "number") return null;
+    const next = this.view.state.doc.nodeAt(pos + this.node.nodeSize);
+    return next?.type.name === "heading" && next.attrs.level === 1
+      ? next.textContent.trim()
+      : null;
+  }
   draw() {
+    this.heading = this.bodyHeading();
     this.dom.innerHTML = propertiesCard(this.parts().yaml, {
       editable: true,
       open: unfolded,
+      heading: this.heading,
     });
+  }
+  recheck() {
+    if (this.dom.querySelector("input")) return;
+    if (this.bodyHeading() !== this.heading) this.draw();
   }
   write(yaml) {
     const pos = this.getPos();
@@ -81,6 +112,11 @@ export class PropertiesView {
     const row = e.target.closest?.(".fm-row");
     if (action === "source") return this.source();
     if (action === "add") return this.addForm();
+    if (
+      e.target.closest?.(".fm-title") &&
+      !this.dom.querySelector(".fm-title input")
+    )
+      return this.editTitle();
     if (action === "delete" && row)
       return this.write(removeProperty(this.parts().yaml, row.dataset.key));
     if (row && e.target.closest(".fm-value") && !row.querySelector("input")) {
@@ -121,6 +157,39 @@ export class PropertiesView {
     };
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
+        e.preventDefault();
+        finish(true, true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false, true);
+      }
+    });
+    input.addEventListener("blur", () => finish(true, false));
+    input.focus();
+    input.select();
+  }
+  editTitle() {
+    const f = titleField(readProperties(this.parts().yaml));
+    const head = this.dom.querySelector(".fm-title");
+    if (!f || !head) return;
+    const input = document.createElement("input");
+    input.className = "fm-input fm-title-input";
+    input.value = f.text;
+    input.spellcheck = false;
+    input.setAttribute("aria-label", t("页面标题"));
+    head.replaceChildren(input);
+    let done = false;
+    const finish = (keep, refocus) => {
+      if (done) return;
+      done = true;
+      const text = input.value.trim();
+      if (keep && text !== f.text)
+        this.write(setProperty(this.parts().yaml, f.key, text));
+      else this.draw();
+      if (refocus) this.view.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.isComposing) {
         e.preventDefault();
         finish(true, true);
       } else if (e.key === "Escape") {
@@ -173,6 +242,9 @@ export class PropertiesView {
       if (!row.contains(e.relatedTarget)) finish(true, false);
     });
     key.focus();
+  }
+  destroy() {
+    if (cards.get(this.view) === this) cards.delete(this.view);
   }
   update(node) {
     if (node.type !== this.node.type || node.attrs.kind !== "frontmatter")

@@ -2,9 +2,11 @@
 // Marklore's MCP server with the setup the app shows in Settings, reads a
 // note of a library opened to AI and proposes an edit and a new note; the app
 // shows them, and accepting writes them to disk, the assistant hearing it at
-// once (Claude Code's channel events). The reader marks a passage and sends
-// it to that session, which reads and answers it. Closing the library to AI
-// shuts the server out at once.
+// once (Claude Code's channel events). The reader marks a passage; asked,
+// the assistant reads it with the note open, proposes what it asks, and the
+// mark goes once that is accepted. A mark handed to a background AI (Claude
+// Code played by tests/fake-claude.mjs) comes back as a proposal from it.
+// Closing the library to AI shuts the server out at once.
 import { _electron as electron } from "@playwright/test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -22,7 +24,10 @@ const temp = await fs.realpath(
   await fs.mkdtemp(path.join(os.tmpdir(), "marklore-ai-")),
 );
 const library = path.join(temp, "kb"),
-  profile = path.join(temp, "profile");
+  profile = path.join(temp, "profile"),
+  // The assistants' own settings, here and not the owner's.
+  claudeDir = path.join(temp, "claude"),
+  codexDir = path.join(temp, "codex");
 await fs.mkdir(library);
 await fs.mkdir(profile);
 const plan = path.join(library, "Plan.md");
@@ -97,6 +102,11 @@ try {
     env: {
       ...process.env,
       FOLIO_DATA_DIR: profile,
+      CLAUDE_CONFIG_DIR: claudeDir,
+      CODEX_HOME: codexDir,
+      FOLIO_CLAUDE: fileURLToPath(
+        new URL("./fake-claude.mjs", import.meta.url),
+      ),
       ELECTRON_RUN_AS_NODE: undefined,
     },
     timeout: 30000,
@@ -115,9 +125,24 @@ try {
   }
   assert.deepEqual(access.libraries, [{ path: library }]);
 
-  const setup = await page.evaluate(() => window.folio.aiSetup());
-  assert.equal(setup.env.ELECTRON_RUN_AS_NODE, "1");
-  ai = connect(setup);
+  // Connected with one button: the app writes Claude Code's settings, and
+  // the assistant starts the server as written there.
+  const before = await page.evaluate(() => window.folio.aiConnections());
+  assert.deepEqual(
+    before.map((c) => [c.kind, c.state]),
+    [
+      ["claude", "none"],
+      ["codex", "none"],
+    ],
+  );
+  const connected = await page.evaluate(() => window.folio.aiConnect("claude"));
+  assert.equal(connected.state, "ok");
+  const written = JSON.parse(
+    await fs.readFile(path.join(claudeDir, ".claude.json"), "utf8"),
+  ).mcpServers.marklore;
+  assert.equal(written.type, "stdio");
+  assert.equal(written.env.ELECTRON_RUN_AS_NODE, "1");
+  ai = connect(written);
   const init = await ai.request("initialize", {
     protocolVersion: "2025-06-18",
     capabilities: {},
@@ -128,6 +153,13 @@ try {
     "claude/channel": {},
   });
   ai.notify("notifications/initialized");
+  // The running session is counted beside the connection.
+  for (let i = 0; i < 50; i++) {
+    const [claude] = await page.evaluate(() => window.folio.aiConnections());
+    if (claude.sessions === 1) break;
+    assert.ok(i < 49, "the session is not counted");
+    await new Promise((r) => setTimeout(r, 100));
+  }
   const note = await ai.call("read_note", { note: "kb/Plan.md" });
   assert.equal(note.text, "# Plan\n\nSend it on Friday.\n");
   const proposal = await ai.call("propose_edit", {
@@ -151,10 +183,8 @@ try {
     .getByText(/Send it on Friday\s*Thursday\./)
     .waitFor();
   assert.equal(await fs.readFile(plan, "utf8"), note.text);
-  // Nothing is written until the review is finished.
+  // Deciding the only change ends the review and writes it.
   await bar.getByRole("button", { name: "接受这处", exact: true }).click();
-  assert.equal(await fs.readFile(plan, "utf8"), note.text);
-  await bar.getByRole("button", { name: "完成审阅", exact: true }).click();
   await bar.waitFor({ state: "hidden" });
   assert.equal(
     await fs.readFile(plan, "utf8"),
@@ -179,7 +209,6 @@ try {
   await button.click();
   await page.getByRole("menuitem", { name: /Meeting\.md/ }).click();
   await bar.getByRole("button", { name: "全部接受", exact: true }).click();
-  await bar.getByRole("button", { name: "完成审阅", exact: true }).click();
   await bar.waitFor({ state: "hidden" });
   assert.equal(
     await fs.readFile(path.join(library, "Meeting.md"), "utf8"),
@@ -190,8 +219,7 @@ try {
     "accepted",
   );
 
-  // Marks: the reader marks a passage, sends it to this session (chosen
-  // the first time), the session hears and reads it, and answers.
+  // Marks: the reader marks a passage, and asks the session about it.
   await page.locator("#tree").getByText("Plan.md", { exact: true }).click();
   await page.locator("#content").getByText("Send it on Thursday.").waitFor();
   await page.evaluate(() => {
@@ -221,25 +249,36 @@ try {
     null,
     { timeout: 5000 },
   );
-  const marksButton = page.locator("#marks-button");
-  await marksButton.click();
-  const panel = page.locator(".marks-panel");
-  await panel.getByRole("button", { name: "发送 1 条" }).click();
-  await panel.getByRole("button", { name: /^Claude Code · / }).click();
-  const sent = await ai.event("marks");
-  const [batch] = await ai.call("get_marks", { batch_id: sent.meta.batch_id });
+  // The AI reads the note open and its marks, and answers with a
+  // proposal; dotted while it waits, gone once it is accepted.
+  // (The app tells what is open a moment after it changes.)
+  let context = null;
+  for (let i = 0; i < 50; i++) {
+    context = await ai.call("get_context");
+    if (context.open_note) break;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  assert.equal(context.open_note, "kb/Plan.md", JSON.stringify(context));
   assert.deepEqual(
-    batch.marks.map((m) => [m.note, m.quote, m.line, m.text]),
-    [["kb/Plan.md", "Thursday", 3, "Morning or afternoon?"]],
+    context.marks.map((m) => [m.quote, m.line, m.text, m.status]),
+    [["Thursday", 3, "Morning or afternoon?", "open"]],
   );
-  await panel.locator(".marks-status", { hasText: "AI 已读" }).waitFor();
-  await ai.call("reply_marks", {
-    batch_id: batch.batch_id,
-    text: "Noted: morning.",
+  const [asked] = (await ai.call("get_marks")).marks;
+  await ai.call("propose_edit", {
+    note: "kb/Plan.md",
+    summary: "In the morning",
+    edits: [{ old_text: "on Thursday.", new_text: "on Thursday morning." }],
+    marks: [asked.mark_id],
   });
-  await panel.locator(".marks-reply", { hasText: "Noted: morning." }).waitFor();
-  // Finished: the mark leaves the note.
-  await panel.getByRole("button", { name: "完成", exact: true }).click();
+  await page.waitForFunction(
+    () => CSS.highlights.get("folio-mark-sent")?.size === 1,
+    null,
+    { timeout: 5000 },
+  );
+  await button.click();
+  await page.getByRole("menuitem", { name: /In the morning/ }).click();
+  await bar.getByRole("button", { name: "全部接受", exact: true }).click();
+  await bar.waitFor({ state: "hidden" });
   await page.waitForFunction(
     () =>
       !CSS.highlights.get("folio-mark")?.size &&
@@ -247,8 +286,51 @@ try {
     null,
     { timeout: 5000 },
   );
-  assert.deepEqual(await ai.call("get_marks"), []);
+  assert.deepEqual((await ai.call("get_marks")).marks, []);
+  assert.equal(
+    await fs.readFile(plan, "utf8"),
+    "# Plan\n\nSend it on Thursday morning.\n",
+  );
+
+  // Handed to a background AI: it proposes, and the proposal says so.
+  await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.querySelector("#content"),
+      NodeFilter.SHOW_TEXT,
+    );
+    for (let node; (node = walker.nextNode());) {
+      const at = node.data.indexOf("Send it");
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + "Send it".length);
+      getSelection().removeAllRanges();
+      getSelection().addRange(range);
+      return;
+    }
+  });
+  await page.keyboard.press("Control+Alt+m");
+  await card.getByRole("textbox").fill("Say who sends it.");
+  await card.getByRole("textbox").press("Control+Enter");
+  const marksButton = page.locator("#marks-button");
+  await marksButton.click();
+  const panel = page.locator(".marks-panel");
+  await panel.getByRole("button", { name: "交给后台 AI（1 条）" }).click();
+  await panel
+    .locator(".marks-run-line", { hasText: "后台 AI 处理完了：提了 1 条修改" })
+    .waitFor({ timeout: 60000 });
   await page.keyboard.press("Escape");
+  await button.click();
+  await page
+    .getByRole("menuitem", { name: /Claude Code（后台）：As marked/ })
+    .click();
+  await bar.getByRole("button", { name: "全部接受", exact: true }).click();
+  await bar.waitFor({ state: "hidden" });
+  assert.equal(
+    await fs.readFile(plan, "utf8"),
+    "# Plan\n\nSend it! on Thursday morning.\n",
+  );
+  assert.deepEqual((await ai.call("get_marks")).marks, []);
 
   // Closed to AI in Settings: the server can no longer read it.
   await page.locator("#weight").click();
@@ -265,7 +347,7 @@ try {
   }
   assert.match(closed, /not opened any library/);
   console.log(
-    "Native AI passed: the server started with the app's setup reads an opened library; an edit and a new note proposed over MCP show in the app, and accepting writes them and tells the session; a mark sent from the app reaches the session, which reads and answers it; closing the library to AI shuts the server out.",
+    "Native AI passed: connected with one button, the server started as Claude Code's settings say reads an opened library; an edit and a new note proposed over MCP show in the app, and accepting writes them and tells the session; a marked passage is read with the open note and answered with a proposal, and a mark handed to a background AI comes back as one; closing the library to AI shuts the server out.",
   );
 } finally {
   ai?.close();

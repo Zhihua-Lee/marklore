@@ -71,7 +71,7 @@ import { imageBox } from "./images.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 import { CodeView, TableView } from "./blocks.js";
-import { PropertiesView } from "./properties.js";
+import { PropertiesView, titleWatch } from "./properties.js";
 
 const S = schema.nodes;
 const M = schema.marks;
@@ -661,6 +661,7 @@ export function createRichEditor({
     codeRing,
     tickFont,
     closer,
+    titleWatch,
     history(),
     ...linkPlugins({ follow: (href) => follow(href) }),
     keymap({

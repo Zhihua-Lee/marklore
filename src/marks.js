@@ -1,27 +1,27 @@
 import { t } from "../desktop/i18n.mjs";
 import { anchorOf, locateAnchor } from "../desktop/comment-anchors.mjs";
 import { atPoint, selectionSource } from "./positions.js";
-import { markText, clientName } from "./proposals.js";
+import { markText } from "./proposals.js";
 import { icon } from "./icons.js";
 import "./marks.css";
 
 // Marks for the AI: the reader marks passages of their notes with what they
 // want of the AI about each (select text, "Mark for AI…", or Ctrl+Alt+M),
-// across notes, and sends the marks together, as one batch, to an assistant
-// session (Claude Code, Codex…) the MCP server lists as running. The AI
-// answers with proposals and one reply for the batch, read in the marks
-// list (the toolbar's mark button). Marks are kept in Marklore's data
-// folder, never in the note; a marked passage is underlined, solid until
-// sent, dotted after. The first send asks where to send; that choice stays
-// until changed.
+// as many as they like across notes. Nothing is sent: an assistant connected
+// to Marklore reads them when told (get_marks; the list offers the sentence
+// to say), or a background run takes them (desktop/ai-runs.mjs). The AI
+// answers with proposals, reviewed as any, and a mark goes once a proposal
+// answering it is accepted; a mark it does not act on gets its reply.
+// Marks live in Marklore's data folder, never in the note. Underlined in the
+// text: solid while the AI has not taken it, dotted while a run works on it
+// or a proposal answering it waits.
+//
+// The note being read and the text selected in it are told to the main
+// process as they change, so the AI can be asked about "this" (get_context).
 
 const MAX_QUOTE = 1000;
-const time = new Intl.DateTimeFormat(undefined, {
-  month: "numeric",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+// What to tell an assistant to look at the marks.
+const ASK = () => t("看一下 Marklore 的标记");
 const samePath = (a, b) =>
   !!a &&
   !!b &&
@@ -31,13 +31,6 @@ const oneLine = (s, max = 80) => {
   const line = s.replace(/\s+/g, " ").trim();
   return line.length > max ? line.slice(0, max) + "…" : line;
 };
-const folderOf = (cwd) =>
-  cwd
-    .split(/[\\/]+/)
-    .filter(Boolean)
-    .at(-1) || cwd;
-export const targetName = (target) =>
-  `${clientName(target.client)} · ${target.folder || folderOf(target.cwd)}`;
 
 export function createMarks({
   api,
@@ -49,9 +42,6 @@ export function createMarks({
   jump,
   report,
   run,
-  getSettings,
-  changeSettings,
-  confirm = (question) => window.confirm(question),
   // The editor of Edit mode when it shows the note ({ ranges(from, to,
   // out), selected(), scroller }), else null: marks are placed in it.
   surface = () => null,
@@ -62,20 +52,19 @@ export function createMarks({
     surface()?.ranges(from, to, out) ?? markText(content, from, to, out);
   const viewport = () =>
     (surface()?.scroller ?? reader).getBoundingClientRect();
-  let state = { marks: [], batches: [], sessions: [] },
+  let state = { marks: [], run: null },
     // Mark id -> { from, to } in the text shown.
     placed = new Map(),
     card = null,
     panel = null,
-    // The panel lists the places to send to instead of the marks.
-    choosing = false,
     // A mark to show once its note, just opened, is rendered.
     pending = null;
 
-  const drafts = () => state.marks.filter((m) => !m.batch);
+  const open = () => state.marks.filter((m) => m.state === "open");
   const onNote = (doc) =>
     doc?.path ? state.marks.filter((m) => samePath(m.file, doc.path)) : [];
-  const batchOf = (mark) => state.batches.find((b) => b.id === mark.batch);
+  const taken = (mark) =>
+    mark.state === "background" || mark.state === "proposed";
 
   async function load() {
     take(await api.marks());
@@ -87,16 +76,16 @@ export function createMarks({
   }
 
   function paintButton() {
-    const count = drafts().length;
-    const answered = state.batches.some((b) => b.status === "replied");
-    button.hidden =
-      !getActive()?.fileId && !state.marks.length && !state.batches.length;
+    const count = open().length;
+    const answered = state.marks.some((m) => m.state === "replied");
+    button.hidden = !getActive()?.fileId && !state.marks.length && !state.run;
     button.dataset.count = String(count);
     button.classList.toggle("settled", !count);
     button.classList.toggle("answered", answered);
+    button.classList.toggle("working", state.run?.status === "running");
     const label = answered
-      ? t("标记（{count} 条未发送；AI 已回复）", { count })
-      : t("标记（{count} 条未发送）", { count });
+      ? t("标记（{count} 条待处理；AI 有回复）", { count })
+      : t("标记（{count} 条待处理）", { count });
     button.title = label;
     button.setAttribute("aria-label", label);
   }
@@ -104,6 +93,7 @@ export function createMarks({
   // After each render: place the note's marks in the text shown.
   function rendered() {
     paintButton();
+    tell();
     CSS.highlights?.delete("folio-mark");
     CSS.highlights?.delete("folio-mark-sent");
     placed = new Map();
@@ -111,19 +101,19 @@ export function createMarks({
     // A proposal under review shows other text: its marks wait.
     if (!doc || doc.preview) return;
     const text = surface() ? doc.text : (doc.previewText ?? doc.text),
-      unsent = [],
-      sent = [];
+      solid = [],
+      dotted = [];
     for (const mark of onNote(doc)) {
       const at = locateAnchor(text, mark);
       if (!at) continue;
       placed.set(mark.id, at);
-      range(at.from, at.to, mark.batch ? sent : unsent);
+      range(at.from, at.to, taken(mark) ? dotted : solid);
     }
     if (CSS.highlights) {
-      if (unsent.length)
-        CSS.highlights.set("folio-mark", new Highlight(...unsent));
-      if (sent.length)
-        CSS.highlights.set("folio-mark-sent", new Highlight(...sent));
+      if (solid.length)
+        CSS.highlights.set("folio-mark", new Highlight(...solid));
+      if (dotted.length)
+        CSS.highlights.set("folio-mark-sent", new Highlight(...dotted));
     }
     if (pending && placed.has(pending)) {
       const id = pending;
@@ -132,6 +122,43 @@ export function createMarks({
     }
     if (card) place();
   }
+
+  // The note and the selection, for the AI to ask about (get_context).
+  let telling = null;
+  function tell() {
+    if (!api.setContext) return;
+    clearTimeout(telling);
+    telling = setTimeout(() => {
+      const doc = getActive();
+      let selection = null;
+      if (doc?.fileId && !doc.preview) {
+        const chosen = surface()
+          ? surface().selected()
+          : doc.previewText === doc.text
+            ? selectionSource(content)
+            : null;
+        if (chosen && chosen.to > chosen.from)
+          selection = {
+            text: doc.text.slice(chosen.from, chosen.to),
+            from: chosen.from,
+          };
+      }
+      api
+        .setContext({ fileId: doc?.fileId ?? null, selection })
+        .catch(() => {});
+    }, 400);
+  }
+  document.addEventListener("selectionchange", tell);
+
+  // What a mark's state says.
+  const statusOf = (mark) =>
+    mark.state === "background"
+      ? t("后台 AI 正在处理")
+      : mark.state === "proposed"
+        ? t("AI 提了修改，等你审阅")
+        : mark.state === "replied"
+          ? t("AI 回复了")
+          : t("等 AI 处理");
 
   // The card: one mark, or a new one on a selection.
   function close() {
@@ -171,14 +198,29 @@ export function createMarks({
     into.append(b);
     return b;
   };
-  const closer = (into, fn) => {
+  const closer = (into, fn, label = t("关闭")) => {
     const b = button$(into, "", fn, "icon mark-close");
     b.innerHTML = icon("close");
-    b.setAttribute("aria-label", t("关闭"));
+    b.setAttribute("aria-label", label);
+    b.title = label;
     return b;
   };
-  // A card holding a passage and what the reader wants of the AI about it:
-  // editable until sent.
+  // One turn of what was said about a mark: the reader's or the AI's.
+  const turn = (by, text) => {
+    const box = document.createElement("div");
+    box.className = by === "owner" ? "mark-turn mark-mine" : "mark-turn";
+    const who = document.createElement("strong");
+    who.textContent = by === "owner" ? t("你：") : t("AI：");
+    const body = document.createElement("span");
+    body.textContent = text;
+    box.append(who, body);
+    return box;
+  };
+  // A card holding a passage and what the reader wants of the AI about it.
+  // Not answered yet: the words can be changed (saved) or the mark deleted.
+  // Answered: what was said, read only; the reader asks further (the
+  // exchange stays for the AI) or is done with it. A background run's mark
+  // is only shown.
   function build({ mark, quote }) {
     close();
     const element = document.createElement("div");
@@ -189,47 +231,27 @@ export function createMarks({
     head.className = "mark-quote";
     head.textContent = quote;
     element.append(head);
+    for (const e of mark?.earlier || []) element.append(turn(e.by, e.text));
     const actions = document.createElement("div");
     actions.className = "mark-actions";
     let field = null;
-    if (mark?.batch) {
-      const words = document.createElement("p");
-      words.className = "mark-text";
-      words.textContent = mark.text;
-      const status = document.createElement("p");
-      status.className = "mark-status";
-      status.textContent = statusOf(batchOf(mark));
-      element.append(words, status);
-    } else {
-      field = document.createElement("textarea");
-      field.rows = 3;
-      field.value = mark?.text || "";
-      const hint = t("想让 AI 做什么…（Ctrl+Enter 保存）");
-      field.placeholder = hint;
-      field.setAttribute("aria-label", hint);
-      element.append(field);
+    // A field for the reader's words, with its button (Ctrl+Enter too).
+    const words$ = ({ value = "", hint, label, save: done }) => {
+      const area = document.createElement("textarea");
+      area.rows = 3;
+      area.value = value;
+      area.placeholder = hint;
+      area.setAttribute("aria-label", hint);
+      element.insertBefore(area, element.contains(actions) ? actions : null);
       const save = button$(
         actions,
-        mark ? t("保存") : t("保存标记"),
+        label,
         async () => {
-          const text = field.value.trim();
-          if (!text) return field.focus();
+          const text = area.value.trim();
+          if (!text) return area.focus();
           save.disabled = true;
           try {
-            if (mark) take(await api.changeMark("edit", { id: mark.id, text }));
-            else {
-              const doc = getActive();
-              take(
-                await api.changeMark("add", {
-                  fileId: doc.fileId,
-                  ...card.anchor,
-                  text,
-                }),
-              );
-              report(
-                t("已存为标记，{count} 条待发送", { count: drafts().length }),
-              );
-            }
+            await done(text);
             close();
           } finally {
             save.disabled = false;
@@ -237,17 +259,76 @@ export function createMarks({
         },
         "primary",
       );
-      if (mark)
-        button$(actions, t("删除"), async () => {
-          take(await api.changeMark("remove", { id: mark.id }));
-          close();
-        });
-      field.addEventListener("keydown", (event) => {
+      actions.prepend(save);
+      area.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
           event.preventDefault();
           save.click();
         }
       });
+      return area;
+    };
+    const remove = async () => {
+      take(await api.changeMark("remove", { id: mark.id }));
+      close();
+    };
+    if (!mark)
+      field = words$({
+        hint: t("想让 AI 做什么…（Ctrl+Enter 保存）"),
+        label: t("保存标记"),
+        save: async (text) => {
+          const doc = getActive();
+          take(
+            await api.changeMark("add", {
+              fileId: doc.fileId,
+              ...card.anchor,
+              text,
+            }),
+          );
+          report(t("已存为标记，{count} 条待处理", { count: open().length }));
+        },
+      });
+    else if (mark.state === "replied") {
+      element.append(turn("owner", mark.text), turn("ai", mark.answer.text));
+      const further = button$(
+        actions,
+        t("追问…"),
+        () => {
+          further.remove();
+          finished.remove();
+          words$({
+            hint: t("接着对 AI 说…（Ctrl+Enter 确定）"),
+            label: t("交给 AI"),
+            save: async (text) =>
+              take(await api.changeMark("edit", { id: mark.id, text })),
+          }).focus();
+        },
+        "primary",
+      );
+      further.title = t("接着问；之前的问答会一起交给 AI");
+      const finished = button$(actions, t("完成"), remove);
+      finished.title = t("看完了，去掉这条标记");
+    } else {
+      if (mark.state === "background") {
+        const words = document.createElement("p");
+        words.className = "mark-text";
+        words.textContent = mark.text;
+        element.append(words);
+      } else
+        field = words$({
+          value: mark.text,
+          hint: t("想让 AI 做什么…（Ctrl+Enter 保存）"),
+          label: t("保存"),
+          save: async (text) => {
+            if (text !== mark.text)
+              take(await api.changeMark("edit", { id: mark.id, text }));
+          },
+        });
+      const status = document.createElement("p");
+      status.className = "mark-status";
+      status.textContent = statusOf(mark);
+      element.append(status);
+      button$(actions, t("删除"), remove).title = t("删除这条标记");
     }
     closer(actions, close);
     element.append(actions);
@@ -310,67 +391,48 @@ export function createMarks({
     setTimeout(() => requestAnimationFrame(() => showMark(mark)), 160);
   }
 
-  const statusOf = (batch) =>
-    !batch
-      ? t("未发送")
-      : batch.status === "replied"
-        ? t("AI 已回复，回复在标记列表中")
-        : batch.status === "read"
-          ? t("AI 已读")
-          : t("已发送，等 AI 读取");
-
-  // The place marks go: the one chosen before, as a running session if
-  // one is (the most recently active).
-  const chosenTarget = () => getSettings().aiTarget || null;
-  const liveFor = (target) =>
-    target &&
-    state.sessions.find(
-      (s) => s.client === target.client && samePath(s.cwd, target.cwd),
-    );
-
-  async function send() {
-    const target = chosenTarget();
-    if (!target) {
-      choosing = true;
-      return paintPanel();
+  // The background run, if one runs or has news.
+  function paintRun(into) {
+    const r = state.run;
+    if (!r) return;
+    const box = document.createElement("div");
+    box.className = "marks-run";
+    box.dataset.status = r.status;
+    const line = document.createElement("p");
+    line.className = "marks-run-line";
+    if (r.status === "running") {
+      line.textContent = t("后台 AI 正在处理 {count} 条标记…", {
+        count: r.count,
+      });
+      box.append(line);
+      const actions = document.createElement("div");
+      actions.className = "mark-actions";
+      button$(actions, t("停止"), async () => take(await api.stopRun(r.id)));
+      box.append(actions);
+    } else {
+      line.textContent =
+        r.status === "done"
+          ? t("后台 AI 处理完了：提了 {count} 条修改", { count: r.proposals })
+          : r.status === "stopped"
+            ? t("后台 AI 已停止")
+            : t("后台 AI 没有完成：{reason}", { reason: r.error || "" });
+      const head = document.createElement("div");
+      head.className = "marks-run-head";
+      head.append(line);
+      closer(head, async () => take(await api.dismissRun(r.id)), t("收起"));
+      box.append(head);
+      if (r.status === "done" && r.result) {
+        const said = document.createElement("p");
+        said.className = "marks-run-result";
+        said.textContent = r.result;
+        box.append(said);
+      }
     }
-    const live = liveFor(target);
-    const name = targetName(target);
-    take(
-      await api.sendMarks({
-        client: target.client,
-        cwd: target.cwd,
-        session: live?.id ?? null,
-      }),
-    );
-    report(
-      !live
-        ? t("已发送。{target} 下次启动时会收到", { target: name })
-        : live.push
-          ? t("已发送给 {target}", { target: name })
-          : t(
-              "已发送。{client} 收不到推送：在 {client} 里让它读取 Marklore 的标记",
-              {
-                client: clientName(target.client),
-              },
-            ),
-    );
-  }
-  function choose(session, thenSend) {
-    changeSettings({
-      aiTarget: {
-        client: session.client,
-        cwd: session.cwd,
-        folder: session.folder,
-      },
-    });
-    choosing = false;
-    if (thenSend) return send();
-    paintPanel();
+    into.append(box);
   }
 
-  // The list: marks not sent yet, by note, and where they go; then the
-  // batches sent and not finished, with the AI's replies.
+  // The list: the marks by note, with their state; how to have the AI take
+  // them; the background run.
   function paintPanel() {
     if (!panel) return;
     panel.replaceChildren();
@@ -381,22 +443,17 @@ export function createMarks({
     head.append(title);
     closer(head, closePanel);
     panel.append(head);
-    if (choosing) return paintChoice();
-    const unsent = drafts();
-    const section = (label) => {
-      const h = document.createElement("h3");
-      h.textContent = label;
-      panel.append(h);
-    };
-    section(t("未发送（{count}）", { count: unsent.length }));
-    if (!unsent.length) {
+    paintRun(panel);
+    if (!state.marks.length) {
       const empty = document.createElement("p");
       empty.className = "marks-empty";
-      empty.textContent = t("选中文字，右键“标记给 AI…”。标好几处后一起发送。");
+      empty.textContent = t(
+        "选中文字，右键“标记给 AI…”，写下想让 AI 做什么。可以在多篇笔记里标多处。",
+      );
       panel.append(empty);
     }
     const byNote = new Map();
-    for (const mark of unsent) {
+    for (const mark of state.marks) {
       const k = mark.file.toLowerCase();
       if (!byNote.has(k)) byNote.set(k, []);
       byNote.get(k).push(mark);
@@ -410,14 +467,24 @@ export function createMarks({
       list.className = "marks-list";
       for (const mark of marks) {
         const item = document.createElement("li");
-        const open = button$(item, "", () => reveal(mark), "mark-item");
+        item.dataset.state = mark.state;
+        const go = button$(item, "", () => reveal(mark), "mark-item");
         const quote = document.createElement("span");
         quote.className = "mark-item-quote";
         quote.textContent = oneLine(mark.quote, 60);
         const words = document.createElement("span");
         words.className = "mark-item-text";
         words.textContent = mark.text;
-        open.append(quote, words);
+        go.append(quote, words);
+        if (mark.state !== "open") {
+          const status = document.createElement("span");
+          status.className = "mark-item-status";
+          status.textContent =
+            mark.state === "replied"
+              ? `${t("AI：")}${oneLine(mark.answer?.text || "", 120)}`
+              : statusOf(mark);
+          go.append(status);
+        }
         const remove = button$(
           item,
           "",
@@ -431,135 +498,40 @@ export function createMarks({
       }
       panel.append(list);
     }
-    if (unsent.length) {
+    const waiting = open().length;
+    if (waiting) {
+      // Two ways for the AI to take them: told in its chat, or a run.
+      const how = document.createElement("div");
+      how.className = "marks-how";
+      const say = document.createElement("p");
+      say.className = "marks-hint";
+      say.textContent = t("在你的 AI 对话里说：");
+      const ask = document.createElement("button");
+      ask.type = "button";
+      ask.className = "marks-ask";
+      ask.textContent = ASK();
+      ask.title = t("复制这句话");
+      ask.onclick = run(async () => {
+        await api.copyText(ASK());
+        report(t("已复制，粘贴到 AI 的对话里"));
+      });
+      say.append(ask);
+      how.append(say);
       const row = document.createElement("div");
       row.className = "marks-send";
-      const target = chosenTarget();
-      const to = document.createElement("span");
-      to.className = "marks-to";
-      to.textContent = t("发送给");
-      row.append(to);
-      const where = button$(
+      const background = button$(
         row,
-        target
-          ? targetName(target) + (liveFor(target) ? "" : t("（未运行）"))
-          : t("选择…"),
-        () => {
-          choosing = true;
-          paintPanel();
-        },
-        "marks-target",
-      );
-      where.title = t("更改发送对象");
-      button$(
-        row,
-        t("发送 {count} 条", { count: unsent.length }),
-        send,
+        t("交给后台 AI（{count} 条）", { count: waiting }),
+        async () => take(await api.startRun()),
         "primary",
       );
-      panel.append(row);
-    }
-    if (state.batches.length) section(t("已发送"));
-    for (const batch of state.batches) {
-      const box = document.createElement("div");
-      box.className = "marks-batch";
-      box.dataset.status = batch.status;
-      const line = document.createElement("div");
-      line.className = "marks-batch-head";
-      const when = document.createElement("span");
-      when.textContent = `${time.format(new Date(batch.created))} · ${targetName(batch.target)} · ${t("{count} 条", { count: batch.marks.length })}`;
-      const status = document.createElement("span");
-      status.className = "marks-status";
-      status.textContent =
-        batch.status === "replied"
-          ? t("AI 已回复")
-          : batch.status === "read"
-            ? t("AI 已读")
-            : t("等 AI 读取");
-      line.append(when, status);
-      box.append(line);
-      const list = document.createElement("ol");
-      list.className = "marks-batch-list";
-      for (const mark of batch.marks) {
-        const item = document.createElement("li");
-        const open = button$(
-          item,
-          "",
-          () => reveal({ ...mark, batch: batch.id }),
-          "mark-item",
-        );
-        const words = document.createElement("span");
-        words.className = "mark-item-text";
-        words.textContent = `${mark.name}：${mark.text}`;
-        open.append(words);
-        list.append(item);
-      }
-      box.append(list);
-      for (const reply of batch.replies) {
-        const answer = document.createElement("div");
-        answer.className = "marks-reply";
-        const who = document.createElement("strong");
-        who.textContent = clientName(reply.by);
-        const body = document.createElement("p");
-        body.textContent = reply.text;
-        answer.append(who, body);
-        box.append(answer);
-      }
-      const actions = document.createElement("div");
-      actions.className = "mark-actions";
-      button$(actions, t("完成"), async () => {
-        if (
-          batch.status !== "replied" &&
-          !confirm(t("AI 还没有回复这批标记。仍然完成，去掉这些标记？"))
-        )
-          return;
-        take(await api.finishBatch(batch.id));
-      }).title = t("这批处理完了：去掉正文里的这些标记");
-      box.append(actions);
-      panel.append(box);
-    }
-  }
-  function paintChoice() {
-    const sendAfter = !chosenTarget();
-    const h = document.createElement("h3");
-    h.textContent = t("发送给哪个 AI 会话？");
-    panel.append(h);
-    const note = document.createElement("p");
-    note.className = "marks-empty";
-    note.textContent = state.sessions.length
-      ? t("以后都发给它，直到你更改。")
-      : t("没有正在运行的 AI 会话：先在终端里启动 Claude Code 或 Codex。");
-    panel.append(note);
-    const list = document.createElement("ul");
-    list.className = "marks-list marks-sessions";
-    for (const session of state.sessions) {
-      const item = document.createElement("li");
-      const pick = button$(
-        item,
-        "",
-        () => choose(session, sendAfter),
-        "mark-item",
+      background.disabled = state.run?.status === "running";
+      background.title = t(
+        "Claude Code 在后台处理这些标记，结果作为提议等你审阅；会用到你的 Claude 用量",
       );
-      const name = document.createElement("span");
-      name.className = "mark-item-text";
-      name.textContent = targetName(session);
-      const where = document.createElement("span");
-      where.className = "mark-item-quote";
-      where.textContent = session.push
-        ? session.cwd
-        : `${session.cwd} · ${t("收不到推送")}`;
-      pick.append(name, where);
-      pick.title = session.cwd;
-      list.append(item);
+      how.append(row);
+      panel.append(how);
     }
-    panel.append(list);
-    const actions = document.createElement("div");
-    actions.className = "mark-actions";
-    button$(actions, t("返回"), () => {
-      choosing = false;
-      paintPanel();
-    });
-    panel.append(actions);
   }
   function openPanel() {
     close();
@@ -583,7 +555,6 @@ export function createMarks({
   function closePanel() {
     panel?.remove();
     panel = null;
-    choosing = false;
   }
   button.onclick = () => (panel ? closePanel() : openPanel());
 

@@ -1414,3 +1414,15 @@ dialog::backdrop {
 .prose span[style^="color"] mark {
   color: inherit !important;
 }
+/* A `title` property is the page's title, above the properties' line. */
+.prose .fm-title {
+  --heading-scale: 1.85;
+  margin: 0 0 0.3em;
+  font-size: calc(1em * var(--heading-scale));
+  line-height: 1.3;
+  font-weight: var(--heading-weight);
+  overflow-wrap: anywhere;
+}
+.prose .fm-title + details.front-matter {
+  margin-top: 0;
+}

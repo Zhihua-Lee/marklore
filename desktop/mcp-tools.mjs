@@ -17,7 +17,7 @@ const MAX_READ = 4 * 1024 * 1024,
   MAX_WALK = 5000,
   MAX_SEARCH = 3000;
 
-export const INSTRUCTIONS = `Marklore is the owner's Markdown notebook. You can read the notes in the libraries (folders) the owner opened to AI in Marklore, and propose changes: edits to a note (propose_edit) or a new note (propose_note). Nothing changes until the owner previews the proposal in Marklore and accepts it, so do not claim a change is made until get_proposal says it was accepted. Name a note as "<library>/<path inside it>", as list_notes and search_notes return it. Edits replace exact text: read_note first and copy old_text from it exactly, with enough around it to occur once. Put related edits to one note in one proposal; list_proposals shows what is still waiting (look before proposing again), and withdraw_proposal takes back one of yours. When the owner rejects an edit, get_proposal may give their reason. The owner also marks passages in Marklore with what they want about each, and sends the marks to you in batches: get_marks reads them; make the changes asked for with propose_edit (one proposal per note), and answer the batch once with reply_marks (questions, or what you did and did not do).`;
+export const INSTRUCTIONS = `Marklore is the owner's Markdown notebook. You can read the notes in the libraries (folders) the owner opened to AI in Marklore, and propose changes: edits to a note (propose_edit) or a new note (propose_note). Nothing changes until the owner previews the proposal in Marklore and accepts it, so do not claim a change is made until get_proposal says it was accepted. Name a note as "<library>/<path inside it>", as list_notes and search_notes return it. Edits replace exact text: read_note first and copy old_text from it exactly, with enough around it to occur once. Put related edits to one note in one proposal; list_proposals shows what is still waiting (look before proposing again), and withdraw_proposal takes back one of yours. When the owner rejects an edit, get_proposal may give their reason. The owner also marks passages in Marklore with what they want about each. When they mention their marks, call get_marks; when they say "this", "here" or "the selected text", or refer to the note they are reading, call get_context (the note open in Marklore, the text selected there, and its marks). Make the changes a mark asks for with propose_edit, one proposal per note, passing the ids of the marks it answers; a mark you do not act on, or a question about it, gets a short reply_mark.`;
 
 const fail = (message) => {
   throw Error(message);
@@ -193,54 +193,88 @@ async function walk(list, excluded, limit) {
   return notes;
 }
 
-const MAX_REPLY = 5000,
-  MAX_REPLIES = 20;
-// A batch of marks as the AI sees it: each mark placed in its note's current
-// text; a note no longer open to AI shows only the owner's words.
-async function batchShown(store, batch) {
+const MAX_REPLY = 2000,
+  MAX_SELECTION = 4000;
+const cap = (s, max) => (s.length > max ? s.slice(0, max) + "…" : s);
+// A note's text by its real path, read once per call.
+function noteTexts() {
   const texts = new Map();
-  const marks = [];
-  for (const [i, m] of batch.marks.entries()) {
-    let found = null;
-    try {
-      found = await locate(store, m.file);
-    } catch {
-      /* Not open to AI any more, or gone. */
-    }
-    if (!found) {
-      marks.push({
-        n: i + 1,
-        unavailable: "This note is not in a library open to AI.",
-        text: m.text,
-      });
-      continue;
-    }
-    if (!texts.has(found.file))
+  return async (file) => {
+    if (!texts.has(file))
       texts.set(
-        found.file,
-        await readNote(found.file).then(
+        file,
+        await readNote(file).then(
           (c) => c.text,
           () => null,
         ),
       );
-    const content = texts.get(found.file);
-    const at = content == null ? null : locateAnchor(content, m);
-    marks.push({
-      n: i + 1,
-      note: found.note,
-      quote: m.quote.length > 500 ? m.quote.slice(0, 500) + "…" : m.quote,
-      ...(at ? { line: lineAt(content, at.from) } : { anchor: "lost" }),
-      text: m.text,
-    });
-  }
-  return {
-    batch_id: batch.id,
-    sent_at: batch.created,
-    status: batch.done ? "finished" : batch.status,
-    marks,
-    replies: batch.replies.map((r) => ({ from: r.by, text: r.text, at: r.at })),
+    return texts.get(file);
   };
 }
+// Where a note named by the app is, if it is open to AI.
+const found$ = (store, file) => locate(store, file).catch(() => null);
+// A mark as the AI sees it: placed in its note's current text, with its
+// state; on a note not open to AI, only the owner's words.
+async function markShown(store, mark, found, textOf, pending) {
+  const state =
+    mark.proposal && pending.has(mark.proposal)
+      ? "proposed"
+      : mark.answer
+        ? "replied"
+        : "open";
+  const extra = {
+    // What was said about it before: the owner's words and your replies.
+    ...(mark.earlier?.length
+      ? {
+          earlier: mark.earlier.map((e) => ({
+            from: e.by === "owner" ? "owner" : "you",
+            text: e.text,
+          })),
+        }
+      : {}),
+    status: state,
+    ...(state === "proposed" ? { proposal_id: mark.proposal } : {}),
+    ...(mark.answer ? { reply: mark.answer.text } : {}),
+  };
+  if (!found)
+    return {
+      mark_id: mark.id,
+      unavailable: "This note is not in a library open to AI.",
+      text: mark.text,
+      ...extra,
+    };
+  const content = await textOf(found.file);
+  const at = content == null ? null : locateAnchor(content, mark);
+  return {
+    mark_id: mark.id,
+    note: found.note,
+    quote: cap(mark.quote, 500),
+    ...(at ? { line: lineAt(content, at.from) } : { anchor: "lost" }),
+    text: mark.text,
+    ...extra,
+  };
+}
+// The marks the AI may work on: a background run (ai-runs.mjs) only its
+// own; anyone else all but those a run still works on.
+async function workable(store, run) {
+  const runs = new Map((await store.listRuns()).map((r) => [r.id, r]));
+  const out = [];
+  for (const doc of await store.allMarks())
+    for (const mark of doc.marks)
+      if (
+        run
+          ? mark.run === run
+          : !(mark.run && runs.get(mark.run)?.status === "running")
+      )
+        out.push({ file: doc.file, mark });
+  return out;
+}
+const pendingIds = async (store) =>
+  new Set(
+    (await store.list())
+      .filter((p) => p.status === "pending" && !isLapsed(p))
+      .map((p) => p.id),
+  );
 
 const shown = (p, client) => ({
   proposal_id: p.id,
@@ -283,7 +317,7 @@ const propose = {
   openWorldHint: false,
 };
 
-export function createTools({ store }) {
+export function createTools({ store, run = null }) {
   return [
     {
       name: "list_libraries",
@@ -432,12 +466,25 @@ export function createTools({ store }) {
               required: ["old_text", "new_text"],
             },
           },
+          marks: {
+            type: "array",
+            items: { type: "string" },
+            description:
+              "The ids of the owner's marks on this note that the proposal answers (get_marks); they show as answered in Marklore.",
+          },
         },
         required: ["note", "summary", "edits"],
       },
       annotations: propose,
-      async run({ note, summary, edits }, { client, session }) {
+      async run({ note, summary, edits, marks }, { client, session }) {
         text(summary, "summary", { max: 300 });
+        if (
+          marks !== undefined &&
+          (!Array.isArray(marks) ||
+            marks.length > 100 ||
+            marks.some((id) => typeof id !== "string" || id.length > 100))
+        )
+          fail("marks must be a list of mark ids from get_marks.");
         if (!Array.isArray(edits) || !edits.length || edits.length > MAX_EDITS)
           fail(`edits must hold 1 to ${MAX_EDITS} edits.`);
         edits = edits.map((edit, i) => ({
@@ -459,10 +506,21 @@ export function createTools({ store }) {
             `Edit ${edit + 1}: ${reasons[reason](count)}. Nothing was proposed.`,
           );
         }
+        // The marks answered must be on this note.
+        if (marks?.length) {
+          const here = (await store.marksOf(found.file)).marks.map((m) => m.id);
+          const stray = marks.filter((id) => !here.includes(id));
+          if (stray.length)
+            fail(
+              `${stray.join(", ")} ${stray.length === 1 ? "is not a mark" : "are not marks"} on ${found.note}. Nothing was proposed.`,
+            );
+        }
         const proposal = await store.create({
           kind: "edit",
           client,
           session,
+          ...(run ? { run } : {}),
+          ...(marks?.length ? { marks: [...new Set(marks)] } : {}),
           summary: summary.trim(),
           note: found.note,
           file: found.file,
@@ -472,6 +530,11 @@ export function createTools({ store }) {
             new_text: e.new_text.replace(/\r\n?/g, "\n"),
           })),
         });
+        if (marks?.length)
+          await store.changeMarks(found.file, (doc) => {
+            for (const m of doc.marks)
+              if (marks.includes(m.id)) m.proposal = proposal.id;
+          });
         return {
           ...shown(proposal, client),
           next: "Nothing has changed yet. The owner previews and accepts or rejects it in Marklore; check with get_proposal.",
@@ -591,76 +654,104 @@ export function createTools({ store }) {
       name: "get_marks",
       title: "Read the owner's marks",
       description:
-        "Marks the owner made on passages of notes in Marklore and sent to you, in batches: each mark is a passage (quote, with its line) and what the owner wants about it. With batch_id, that batch; without, every batch not finished yet, newest first. Make the changes asked for with propose_edit, one proposal per note; answer a batch once with reply_marks.",
+        "The owner's marks in Marklore: each a passage of a note (quote, with its line) and what the owner wants about it, with its status (open; proposed: a proposal of yours answers it and waits for the owner; replied: you answered it). With note, only that note's. Make the changes asked for with propose_edit, one proposal per note, passing the mark ids; answer a mark you do not act on with reply_mark.",
       inputSchema: {
         type: "object",
-        properties: { batch_id: { type: "string" } },
+        properties: { note: { type: "string" } },
       },
       annotations: read,
-      async run({ batch_id }, { client }) {
-        let batches;
-        if (batch_id !== undefined) {
-          const one = await store
-            .getBatch(text(batch_id, "batch_id", { max: 100 }))
-            .catch(() => null);
-          if (!one) fail(`There is no batch ${batch_id}.`);
-          batches = [one];
-        } else batches = (await store.listBatches()).filter((b) => !b.done);
-        const out = [];
-        for (const batch of batches) {
-          // Read: the owner sees that the marks reached an assistant.
-          if (batch.status === "sent" && !batch.done)
-            await store
-              .changeBatch(batch.id, (b) => {
-                if (b.status !== "sent") return;
-                b.status = "read";
-                b.readBy = client;
-                b.read = new Date().toISOString();
-              })
-              .catch(() => {});
-          out.push(await batchShown(store, batch));
+      async run({ note }) {
+        const only = note === undefined ? null : await locate(store, note);
+        const textOf = noteTexts(),
+          pending = await pendingIds(store),
+          marks = [];
+        for (const { file, mark } of await workable(store, run)) {
+          const found = await found$(store, file);
+          if (only && found?.file !== only.file) continue;
+          marks.push(await markShown(store, mark, found, textOf, pending));
         }
-        return out;
+        return {
+          marks,
+          ...(marks.length
+            ? {}
+            : { note: "The owner has no marks for you now." }),
+        };
       },
     },
     {
-      name: "reply_marks",
-      title: "Answer a batch of marks",
+      name: "get_context",
+      title: "What the owner is looking at",
       description:
-        "Answer the owner's batch of marks (batch_id from get_marks) in one message: answers to their questions, and what you proposed or did not do, by mark number where it helps. The owner reads it in Marklore beside the batch. Changes themselves go in proposals (propose_edit).",
+        'The note open in Marklore now, the text the owner selected in it (if any), and the marks on that note. Call it when the owner says "this", "here", "the selected text", or refers to what they are reading.',
+      inputSchema: { type: "object", properties: {} },
+      annotations: read,
+      async run() {
+        const context = await store.readContext();
+        if (!context?.file && !context?.closed)
+          return { open_note: null, note: "No note is open in Marklore." };
+        const found = context.file && (await found$(store, context.file));
+        if (!found)
+          return {
+            open_note: null,
+            note: "The note open in Marklore is not in a library open to AI.",
+          };
+        const textOf = noteTexts(),
+          content = await textOf(found.file),
+          pending = await pendingIds(store);
+        let selection = null;
+        const chosen = context.selection?.text;
+        if (typeof chosen === "string" && chosen.trim() && content != null) {
+          const from = Number.isInteger(context.selection.from)
+            ? context.selection.from
+            : -1;
+          const at =
+            content.slice(from, from + chosen.length) === chosen
+              ? from
+              : content.indexOf(chosen);
+          selection = {
+            text: cap(chosen, MAX_SELECTION),
+            ...(at >= 0 ? { line: lineAt(content, at) } : {}),
+          };
+        }
+        const marks = [];
+        for (const { file, mark } of await workable(store, run)) {
+          const there = await found$(store, file);
+          if (there?.file === found.file)
+            marks.push(await markShown(store, mark, there, textOf, pending));
+        }
+        return { open_note: found.note, selection, marks };
+      },
+    },
+    {
+      name: "reply_mark",
+      title: "Answer a mark",
+      description:
+        "Answer one of the owner's marks (mark_id from get_marks) in a few sentences: a question back, or why you did not change anything. The owner reads it beside the mark in Marklore. Changes themselves go in proposals (propose_edit with the mark ids).",
       inputSchema: {
         type: "object",
         properties: {
-          batch_id: { type: "string" },
+          mark_id: { type: "string" },
           text: { type: "string" },
         },
-        required: ["batch_id", "text"],
+        required: ["mark_id", "text"],
       },
       annotations: propose,
-      async run({ batch_id, text: body }, { client }) {
-        text(batch_id, "batch_id", { max: 100 });
+      async run({ mark_id, text: body }, { client }) {
+        text(mark_id, "mark_id", { max: 100 });
         text(body, "text", { max: MAX_REPLY });
-        const next = await store
-          .changeBatch(batch_id, (b) => {
-            if (b.done) fail("The owner has finished this batch already.");
-            if (b.replies.length >= MAX_REPLIES)
-              fail(
-                "This batch has enough replies; the owner can send more marks.",
-              );
-            b.replies.push({
-              by: client,
-              text: body.trim(),
-              at: new Date().toISOString(),
-            });
-            b.status = "replied";
-            return b;
-          })
-          .catch((error) => {
-            if (/^There is no batch/.test(error.message))
-              fail(`There is no batch ${batch_id}.`);
-            throw error;
-          });
-        return batchShown(store, next);
+        const target = (await workable(store, run)).find(
+          (x) => x.mark.id === mark_id,
+        );
+        if (!target) fail(`There is no mark ${mark_id} for you.`);
+        const at = new Date().toISOString();
+        const done = await store.changeMarks(target.file, (doc) => {
+          const mark = doc.marks.find((m) => m.id === mark_id);
+          if (!mark) return false;
+          mark.answer = { by: client, text: body.trim(), at };
+          return true;
+        });
+        if (!done) fail(`There is no mark ${mark_id} for you.`);
+        return { mark_id, status: "replied" };
       },
     },
   ];

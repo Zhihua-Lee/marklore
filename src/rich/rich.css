@@ -401,3 +401,17 @@
   font-family: var(--font-code);
   font-size: 0.88em;
 }
+#rich .rich-properties .fm-title[role="button"] {
+  cursor: text;
+  border-radius: 4px;
+}
+#rich .rich-properties .fm-title:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+#rich .rich-properties .fm-title-input {
+  font: inherit;
+  line-height: inherit;
+  padding: 0 4px;
+  margin-left: -5px;
+}

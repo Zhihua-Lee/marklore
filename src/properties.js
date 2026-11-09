@@ -1,6 +1,8 @@
 // A note's properties (the YAML front matter at its top), read and drawn as
-// a card: folded, one quiet line under the title's place (the date, the
-// notebook and section); unfolded, one row per property. The editor
+// a card: folded, one quiet line under the title (the date, the notebook and
+// section); unfolded, one row per property. A `title` property is the
+// page's title, shown above the card rather than as one of its rows, and
+// shown once when the note's first line is the same level-one heading. The editor
 // (rich/properties.js) draws the same card and changes single values; a
 // value it cannot read here (nested YAML, a block of text) is edited as
 // source. Only simple YAML is read: `key: value` lines, `[a, b]` lists and
@@ -206,13 +208,43 @@ function rowHtml(f, editable) {
   );
 }
 
+// The `title` property, when it holds a single line of text.
+export const titleField = (fields) =>
+  fields.find(
+    (f) =>
+      f.key.toLowerCase() === "title" &&
+      !["list", "bool", "complex"].includes(f.kind) &&
+      f.text.trim(),
+  );
+// The text of a body's first line when that is a level-one heading.
+export function firstHeading(body) {
+  const m = /^(?:[ \t]*\r?\n)*#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*(?:\r?\n|$)/.exec(
+    body,
+  );
+  return m ? m[1].trim() : null;
+}
+
 // The card. In the reading view a <details> (its `attrs` carry the source
 // map); in the editor (`editable`) the same, with buttons to change it.
+// `heading`: the body's first level-one heading, if it starts with one.
 export function propertiesCard(
   yaml,
-  { attrs = "", editable = false, open = false } = {},
+  { attrs = "", editable = false, open = false, heading = null } = {},
 ) {
-  const fields = readProperties(yaml);
+  const all = readProperties(yaml);
+  const title = titleField(all);
+  const fields = title ? all.filter((f) => f !== title) : all;
+  const page =
+    title && title.text.trim() !== heading
+      ? editable
+        ? `<div class="fm-title" data-key="${escape(title.key)}" tabindex="0" role="button" title="${escape(t("点击修改标题"))}">${escape(title.text)}</div>`
+        : `<div class="fm-title" role="heading" aria-level="1">${escape(title.text)}</div>`
+      : "";
+  // Nothing but the title: the reading view shows the title alone.
+  if (!fields.length && !editable)
+    return page
+      ? page.replace("<div ", () => `<div${attrs} `) + "\n"
+      : `<div class="fm-none"${attrs} hidden></div>\n`;
   const get = (...keys) =>
     fields.find((f) => keys.includes(f.key.toLowerCase()) && f.text);
   const when = get("created", "date", "modified", "updated");
@@ -240,7 +272,7 @@ export function propertiesCard(
     rows +=
       `<div class="fm-actions"><button type="button" data-action="add">${icon("plus")}<span>${escape(t("添加属性"))}</span></button>` +
       `<button type="button" data-action="source">${escape(t("编辑源码"))}</button></div>`;
-  return `<details class="front-matter"${attrs}${open ? " open" : ""}><summary>${line.join("")}</summary><div class="fm-rows">${rows}</div></details>\n`;
+  return `${page}<details class="front-matter"${attrs}${open ? " open" : ""}><summary>${line.join("")}</summary><div class="fm-rows">${rows}</div></details>\n`;
 }
 
 // ---- Changing the YAML, line by line (the rest is kept as written) ----

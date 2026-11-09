@@ -54,11 +54,11 @@ Add Marklore as an MCP server (`Settings → AI assistant` copies the setup for 
 
 - **In the note, as it would read:** removed words struck through in red, new ones underlined in green, and marks on the right edge for each change.
 - **Rendered or source, the whole note or only the changes:** two independent switches, so the source diff can show every line or only the changed ones.
-- **Accept or reject each change**, or all at once, and change your mind until you finish the review. Only then are the accepted changes written, in one step, and the agent can read the decision on each of its changes. A rejection can say why, for the agent to read.
+- **Accept or reject each change**, or all at once, and change your mind until the last one is decided. Only then are the accepted changes written, in one step, and the agent can read the decision on each of its changes. A rejection can say why, for the agent to read.
 
-![An assistant proposes three edits over MCP. They show in the note in review colors; one is accepted, one is checked in the source diff and rejected, the last is accepted, and finishing the review writes the accepted ones](docs/images/en/proposal.gif)
+![An assistant proposes three edits over MCP. They show in the note in review colors; one is accepted, one is checked in the source diff and rejected, the last is accepted, which writes the accepted ones](docs/images/en/proposal.gif)
 
-The other way round, mark passages for the agent while you read: select text, say what you want there, and mark as many places as you like across notes. Then send them together to a running Claude Code or Codex session. The agent answers with proposals and one reply for the whole batch, which you read in Marklore. Started with the command in `Settings → AI assistant`, Claude Code hears at once when you send marks or finish a review (a research preview of Claude Code); other agents read them when you ask. Proposals and marks stay in your user profile, not in the notes.
+The other way round, mark passages for the agent while you read: select text, say what you want there, and mark as many places as you like across notes. Then tell your agent to look at them, or hand them to a background Claude Code run that works on them while you do something else. Either way the changes come back as proposals, and a mark goes once its proposal is accepted. The agent also knows which note you have open and what you selected, so “shorten the selected paragraph” works. `Settings → AI assistant` connects Claude Code or Codex with one button. Proposals and marks stay in your user profile, not in the notes.
 
 ### Conventions for the agent
 

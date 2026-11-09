@@ -21,12 +21,13 @@ import "./proposals.css";
 // underlined in green); rendered and changed passages is each passage before
 // and after, side by side; source is the Markdown, whole or in hunks.
 //
-// Decisions are staged: each change is accepted or rejected (or all at
-// once), can be taken back, and nothing is written until "Finish review",
-// which applies the accepted changes as one undoable change, saves unless
-// the note has unsaved changes of the reader's own (those are not saved
-// behind their back: the changes stay in the draft for Ctrl+S), and tells
-// the assistant every decision at once.
+// Decisions are staged: each change is accepted or rejected, and can be
+// taken back until the last one is decided; that one, or accepting or
+// rejecting all at once, ends the review: the accepted changes are applied
+// as one undoable change, saved unless the note has unsaved changes of the
+// reader's own (those are not saved behind their back: the changes stay in
+// the draft for Ctrl+S), and the assistant hears every decision at once.
+// Leaving a review half done keeps its decisions for the next visit.
 
 // Assistants by the names they give in MCP's clientInfo.
 const clients = {
@@ -38,6 +39,11 @@ const clients = {
   "cursor-vscode": "Cursor",
 };
 export const clientName = (name) => clients[name] || name || "AI";
+// Who made a proposal: an assistant, or one run in the background on marks.
+const authorOf = (p) =>
+  p.background
+    ? t("{client}（后台）", { client: clientName(p.client) })
+    : clientName(p.client);
 
 const sameFile = (a, b) =>
   !!a &&
@@ -117,7 +123,6 @@ export function createProposals({
   report,
   run,
   showContext,
-  confirm = (question) => window.confirm(question),
 }) {
   if (!api?.proposals) return null;
   let list = [],
@@ -162,7 +167,7 @@ export function createProposals({
     if (fresh.length === 1)
       report(
         t("{client} 提议修改《{name}》", {
-          client: clientName(fresh[0].client),
+          client: authorOf(fresh[0]),
           name: fresh[0].name,
         }),
       );
@@ -288,7 +293,7 @@ export function createProposals({
     const mark = element("span", "proposal-mark");
     mark.innerHTML = icon("spark");
     const who = document.createElement("strong");
-    who.textContent = clientName(p.client);
+    who.textContent = authorOf(p);
     text.append(
       mark,
       who,
@@ -343,12 +348,6 @@ export function createProposals({
       t("已决定 {done} / {count}", { done: decidedCount, count: items.length }),
       "proposal-progress",
     );
-    const own = p.kind === "edit" && dirty(doc);
-    action(ends, t("完成审阅"), () => finish(doc, p), {
-      primary: true,
-    }).title = own
-      ? t("笔记有未保存的修改：接受的修改写入草稿，按 Ctrl+S 一起保存")
-      : t("写入接受的修改，并把每处的决定告诉 AI");
     action(ends, t("退出审阅"), () => leave(doc)).title =
       t("回到笔记；已做的决定会保留");
 
@@ -420,28 +419,18 @@ export function createProposals({
     ]);
     tools.append(one);
     const all = element("span", "proposal-all", t("全部"));
-    const every = (status) => items.every((ix) => decisions.get(ix) === status);
-    action(all, t("全部接受"), () => decideAll(doc, p, "accepted"), {
-      pressed: every("accepted"),
-    }).classList.add("proposal-accept");
-    const note = notes.get(p.id);
-    const rejectAll = action(
-      all,
-      t("全部拒绝"),
-      () => decideAll(doc, p, "rejected"),
-      { pressed: every("rejected") },
-    );
-    rejectAll.classList.add("proposal-reject");
-    if (every("rejected") && note)
-      rejectAll.title = t("理由：{reason}", { reason: note });
+    const own = p.kind === "edit" && dirty(doc);
+    action(all, t("全部接受"), () => decideAll(doc, p, "accepted")).title = own
+      ? t("笔记有未保存的修改：接受的修改写入草稿，按 Ctrl+S 一起保存")
+      : t("写入全部修改并结束审阅");
+    action(all, t("全部拒绝"), () => decideAll(doc, p, "rejected")).title =
+      t("拒绝全部修改并结束审阅");
     options(all, t("全部拒绝的选项"), false, (at) => [
-      [t("全部拒绝"), () => decideAll(doc, p, "rejected", { keep: true })],
+      [t("全部拒绝"), () => decideAll(doc, p, "rejected")],
       [
         t("全部拒绝并说明…"),
         () =>
-          ask(at, note, (text) =>
-            decideAll(doc, p, "rejected", { note: text }),
-          ),
+          ask(at, "", (text) => decideAll(doc, p, "rejected", { note: text })),
       ],
     ]);
     tools.append(all);
@@ -598,6 +587,7 @@ export function createProposals({
       else reasons.delete(ix);
       const again = decisions.get(ix) === status;
       decisions.set(ix, status);
+      if (items.every((j) => decisions.has(j))) return finish(doc, p);
       if (again) {
         marks();
         return paint();
@@ -614,23 +604,18 @@ export function createProposals({
     focus(doc);
     paint();
   }
-  // All changes one way; pressed again, all taken back. From the menu, a
-  // rejection stays one, with `note` for the whole proposal.
-  function decideAll(doc, p, status, { note, keep = false } = {}) {
+  // All changes one way, which ends the review; a rejection may carry
+  // `note` for the whole proposal (the reasons given change by change
+  // stay with their changes).
+  function decideAll(doc, p, status, { note } = {}) {
     const shown = doc.preview;
     if (!shown) return;
-    const items = itemsOf(shown),
-      decisions = decisionsOf(p);
-    const told = note !== undefined || keep;
-    const undo = !told && items.every((ix) => decisions.get(ix) === status);
-    for (const ix of items)
-      if (undo) decisions.delete(ix);
-      else decisions.set(ix, status);
-    if (status === "rejected" && !undo && note) notes.set(p.id, note);
+    const decisions = decisionsOf(p);
+    for (const ix of itemsOf(shown)) decisions.set(ix, status);
+    if (status === "rejected" && note) notes.set(p.id, note);
     else notes.delete(p.id);
     if (status === "accepted") reasonsOf(p).clear();
-    marks();
-    paint();
+    return finish(doc, p);
   }
 
   async function decide(p, decision) {
@@ -659,22 +644,13 @@ export function createProposals({
     return { saved, own };
   }
 
-  // The review finished: changes not decided count as rejected (after
-  // asking), the accepted ones are applied at once, and the assistant hears
-  // every decision in one answer.
+  // Every change decided: the accepted ones are applied at once, and the
+  // assistant hears every decision in one answer.
   async function finish(doc, p) {
     const shown = doc.preview;
     if (!shown) return;
     const items = itemsOf(shown),
       decisions = decisionsOf(p);
-    const open = items.filter((ix) => !decisions.has(ix)).length;
-    if (
-      open &&
-      !confirm(
-        t("还有 {count} 处没有决定，按拒绝处理并完成审阅？", { count: open }),
-      )
-    )
-      return;
     if (p.kind === "note") {
       if (decisions.get(0) !== "accepted")
         return decide(p, {
@@ -1046,7 +1022,7 @@ export function createProposals({
             await refresh();
           }),
         false,
-        `${clientName(p.client)}：${p.summary}`,
+        `${authorOf(p)}：${p.summary}`,
       ]),
       { wide: true },
     );

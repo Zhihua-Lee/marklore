@@ -24,6 +24,24 @@ async function boot(page, { proposals = [], roots = [], settings = {} } = {}) {
         saved: [],
         copied: [],
         created: [],
+        connections: {
+          claude: {
+            kind: "claude",
+            state: "other",
+            installed: true,
+            sessions: 0,
+            command: "D:\\Old\\Marklore.exe",
+            missing: true,
+            file: "C:\\Users\\me\\.claude.json",
+          },
+          codex: {
+            kind: "codex",
+            state: "none",
+            installed: true,
+            sessions: 0,
+            file: "C:\\Users\\me\\.codex\\config.toml",
+          },
+        },
       };
       const remove = (id) =>
         (window.mock.proposals = window.mock.proposals.filter(
@@ -70,6 +88,26 @@ async function boot(page, { proposals = [], roots = [], settings = {} } = {}) {
           env: { ELECTRON_RUN_AS_NODE: "1" },
         }),
         copyText: async (text) => window.mock.copied.push(text),
+        aiConnections: async () =>
+          ["claude", "codex"].map((kind) => window.mock.connections[kind]),
+        aiConnect: async (kind) => {
+          window.mock.connections[kind] = {
+            kind,
+            state: "ok",
+            installed: true,
+            sessions: 0,
+            file: "C:\\Users\\me\\.claude.json",
+          };
+        },
+        aiDisconnect: async (kind) => {
+          window.mock.connections[kind] = {
+            kind,
+            state: "none",
+            installed: true,
+            sessions: 0,
+            file: "C:\\Users\\me\\.codex\\config.toml",
+          };
+        },
       });
     },
     { proposals, roots, settings },
@@ -143,14 +181,13 @@ test("a proposal is reviewed in the note, then accepted and saved at the end", a
   await expect(bar.locator(".proposal-one .proposal-count")).toHaveText(
     "第 1 / 1 处",
   );
-  await control(bar, "接受这处").click();
-  await pressed(bar, "接受这处");
-  await pressed(bar, "全部接受");
-  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 1 / 1");
-  // Nothing is written before the review is finished.
+  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 0 / 1");
+  // Nothing is written while the review is open.
   expect(await page.evaluate(() => window.mock.saved)).toEqual([]);
   expect(await page.evaluate(() => window.mock.decided)).toEqual([]);
-  await control(bar, "完成审阅").click();
+  // Deciding the last change ends the review: no button to finish it.
+  await expect(control(bar, "完成审阅")).toHaveCount(0);
+  await control(bar, "接受这处").click();
   await expect(bar).toBeHidden();
   expect(await page.evaluate(() => window.mock.saved)).toEqual([
     {
@@ -176,18 +213,18 @@ test("into a note with unsaved changes, a proposal joins the draft and undoes wi
   await control(bar, "退出审阅").click();
   await expect(page.locator("#content .proposal-added")).toHaveCount(0);
   await expect(control(bar, "审阅")).toBeVisible();
-  await expect(control(bar, "完成审阅")).toHaveCount(0);
+  await expect(control(bar, "全部接受")).toHaveCount(0);
   await page.getByRole("button", { name: "编辑", exact: true }).click();
   await page.locator(".cm-content").click();
   await page.keyboard.press("Control+Home");
   await page.keyboard.type("Mine. ");
   await control(bar, "审阅").click();
-  await control(bar, "全部接受").click();
-  await expect(control(bar, "完成审阅")).toHaveAttribute(
+  await expect(control(bar, "全部接受")).toHaveAttribute(
     "title",
     /未保存的修改/,
   );
-  await control(bar, "完成审阅").click();
+  // Accepting all writes at once and ends the review.
+  await control(bar, "全部接受").click();
   await expect(bar).toBeHidden();
   const text = () =>
     page.evaluate(() =>
@@ -356,12 +393,12 @@ test("several changes: two independent choices of view, review colors, and stage
   expect(await page.evaluate(() => window.mock.saved)).toEqual([]);
   expect(await page.evaluate(() => window.mock.decided)).toEqual([]);
   expect(await places()).toEqual(start);
-  // Finished with the first undecided: it counts as rejected, after asking.
-  page.once("dialog", (dialog) => {
-    expect(dialog.message()).toBe("还有 1 处没有决定，按拒绝处理并完成审阅？");
-    dialog.accept();
-  });
-  await control(bar, "完成审阅").click();
+  // Out and back in: the decisions were kept.
+  await control(bar, "退出审阅").click();
+  await control(bar, "审阅").click();
+  await expect(bar.locator(".proposal-progress")).toHaveText("已决定 2 / 3");
+  // The last undecided change decided: the review ends and is written.
+  await control(bar, "拒绝这处").click();
   await expect(bar).toBeHidden();
   expect((await page.evaluate(() => window.mock.saved)).at(-1).text).toBe(
     "# Plan\n\nWrite the first draft.\n\nSend it on Friday.\n",
@@ -417,7 +454,6 @@ test("a rejection can say why: per change, or for the whole proposal", async ({
   );
   await control(bar, "下一处修改").click();
   await control(bar, "接受这处").click();
-  await control(bar, "完成审阅").click();
   await expect(bar).toBeHidden();
   expect(await page.evaluate(() => window.mock.decided)).toEqual([
     {
@@ -452,8 +488,6 @@ test("a whole new note rejected with a note for the AI", async ({ page }) => {
   await page.getByRole("menuitem", { name: "全部拒绝并说明…" }).click();
   await page.locator(".proposal-reason input").fill("Use the existing note");
   await page.locator(".proposal-reason input").press("Enter");
-  await pressed(bar, "全部拒绝");
-  await control(bar, "完成审阅").click();
   await expect(bar).toBeHidden();
   expect(await page.evaluate(() => window.mock.decided)).toEqual([
     { id: "p6", status: "rejected", note: "Use the existing note" },
@@ -476,11 +510,11 @@ test("a rejected proposal changes nothing; a stale one can only be dismissed", a
   await expect(bar.locator(".proposal-switch .proposal-count")).toHaveText(
     "1 / 2",
   );
+  // Rejecting all ends that review; the next one no longer fits the note.
   await control(bar, "全部拒绝").click();
-  await control(bar, "完成审阅").click();
   await expect(bar).toContainText("的提议与笔记当前内容对不上");
   await expect(bar).toContainText("第 1 处修改的原文已改变");
-  await expect(control(bar, "完成审阅")).toHaveCount(0);
+  await expect(control(bar, "全部拒绝")).toHaveCount(0);
   await control(bar, "关闭提议").click();
   await expect(bar).toBeHidden();
   const decided = await page.evaluate(() => window.mock.decided);
@@ -493,7 +527,7 @@ test("a rejected proposal changes nothing; a stale one can only be dismissed", a
   await expect(page.locator("#content")).toContainText("Send it on Friday.");
 });
 
-test("a proposed new note is reviewed in its own tab and created on finishing", async ({
+test("a proposed new note is reviewed in its own tab and created on accepting", async ({
   page,
 }) => {
   await boot(page, {
@@ -520,7 +554,6 @@ test("a proposed new note is reviewed in its own tab and created on finishing", 
   await control(bar, "源码").click();
   await expect(page.locator("#content .src-add")).toHaveCount(3);
   await control(bar, "全部接受").click();
-  await control(bar, "完成审阅").click();
   await expect(bar).toBeHidden();
   expect(await page.evaluate(() => window.mock.created)).toEqual(["p3"]);
   await expect(page.getByRole("tab")).toHaveCount(1);
@@ -528,7 +561,7 @@ test("a proposed new note is reviewed in its own tab and created on finishing", 
   await expect(page.locator("#content li")).toHaveText("Agenda");
 });
 
-test("Settings opens libraries to AI and copies the server's setup", async ({
+test("Settings opens libraries to AI and connects assistants with one button", async ({
   page,
 }) => {
   await boot(page, {
@@ -551,13 +584,27 @@ test("Settings opens libraries to AI and copies the server's setup", async ({
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.settings.aiLibraries))
     .toEqual(["C:\\synthetic\\Notes", "C:\\synthetic\\Private"]);
-  await page.locator("#ai-copy-claude").click();
-  await page.locator("#ai-copy-codex").click();
-  const [claude, codex] = await page.evaluate(() => window.mock.copied);
-  expect(claude).toBe(
-    'claude mcp add --env ELECTRON_RUN_AS_NODE=1 --transport stdio --scope user marklore -- "C:\\Apps\\Marklore\\Marklore.exe" "C:\\Apps\\Marklore\\resources\\app.asar\\desktop\\mcp.mjs"',
+  // Each assistant: its state, and one button.
+  const row = (kind) => page.locator(`#ai-connections li[data-kind="${kind}"]`);
+  await expect(row("claude")).toContainText("Claude Code");
+  await expect(row("claude")).toContainText(
+    "连接的 Marklore 已不在原处：D:\\Old\\Marklore.exe",
   );
-  expect(codex).toContain("[mcp_servers.marklore]");
-  expect(codex).toContain("command = 'C:\\Apps\\Marklore\\Marklore.exe'");
+  await expect(row("codex")).toContainText("未连接");
+  await row("codex").getByRole("button", { name: "连接" }).click();
+  await expect(row("codex")).toContainText("已连接 · 新开的会话就能使用");
+  await expect(page.locator("#toast")).toHaveText(
+    "已连接 Codex：在它新开的会话里就能使用 Marklore",
+  );
+  await row("claude").getByRole("button", { name: "改为连接这个" }).click();
+  await expect(row("claude")).toContainText("已连接");
+  await row("claude").getByRole("button", { name: "断开" }).click();
+  await expect(row("claude")).toContainText("未连接");
+  // Any other assistant: the setup as JSON.
+  await page.locator("#ai-copy-json").click();
+  const [json] = await page.evaluate(() => window.mock.copied);
+  expect(JSON.parse(json).mcpServers.marklore.command).toBe(
+    "C:\\Apps\\Marklore\\Marklore.exe",
+  );
   await expect(page.locator("#ai-setup")).toContainText("mcp.mjs");
 });

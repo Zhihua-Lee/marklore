@@ -1890,8 +1890,6 @@ marks = createMarks({
   jump: (from) => jump(from),
   report: toast,
   run,
-  getSettings: () => settings,
-  changeSettings: (patch) => changeSettings(patch),
   surface: () =>
     richActive()
       ? {

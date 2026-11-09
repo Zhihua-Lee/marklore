@@ -7,13 +7,17 @@
 //   never rewrite each other's files. The server creates them; the app
 //   decides them; the AI that made one may withdraw it.
 // - marks/<key>.json: the owner's marks on one note: a passage and what they
-//   want of the AI about it. Only the app writes these.
-// - batches/<id>.json: marks the owner sent together to an AI session, with
-//   the AI's replies. The app creates and finishes them; the server notes
-//   that they were read or answered. Both write, so a change takes a lock.
+//   want of the AI about it. The app adds, edits and removes them; the
+//   server notes on a mark the proposal that answers it or the AI's reply.
+//   Both write, so a change takes a lock.
+// - context.json: what the owner is looking at in Marklore (the note, the
+//   selected text), written by the app as it changes, read by the server
+//   when the AI asks.
+// - runs/<id>.json: a background AI run the app started on the owner's
+//   marks (desktop/ai-runs.mjs): its marks, state and outcome.
 // - sessions/<id>.json: one per running server (one per assistant session):
-//   which assistant, in which folder, when last active. The app lists them
-//   as the places marks can be sent to.
+//   which assistant, in which folder, when last active. Settings counts
+//   them beside each assistant.
 // (comments/, from earlier versions, is read once: open comments by the
 // owner become marks.)
 // No Electron here: the MCP server runs in Node mode.
@@ -95,9 +99,10 @@ export function createAiStore(folder) {
   const proposals = path.join(folder, "proposals"),
     comments = path.join(folder, "comments"),
     marks = path.join(folder, "marks"),
-    batches = path.join(folder, "batches"),
+    runs = path.join(folder, "runs"),
     sessions = path.join(folder, "sessions"),
-    accessFile = path.join(folder, "access.json");
+    accessFile = path.join(folder, "access.json"),
+    contextFile = path.join(folder, "context.json");
   // A note's marks file, by its path (any case, either slash).
   const marksFile = (file) =>
     path.join(
@@ -115,7 +120,7 @@ export function createAiStore(folder) {
     return id + ".json";
   };
   const fileOf = (id) => path.join(proposals, named("proposal")(id));
-  const batchFile = (id) => path.join(batches, named("batch")(id));
+  const runFile = (id) => path.join(runs, named("run")(id));
   const sessionFile = (id) => path.join(sessions, named("session")(id));
   // The JSON files of a folder whose names match, read; unreadable ones are
   // left out.
@@ -139,7 +144,7 @@ export function createAiStore(folder) {
     folder,
     proposals,
     marks,
-    batches,
+    runs,
     sessions,
     // The marks on one note: { file, marks }.
     marksOf: readMarks,
@@ -161,37 +166,41 @@ export function createAiStore(folder) {
         return result;
       });
     },
-    async createBatch(batch, now = new Date()) {
+    // What the owner is looking at: { file, selection: { text, from, to } }.
+    writeContext: (value) => writeJson(contextFile, value),
+    readContext: () => readJson(contextFile),
+    async createRun(run, now = new Date()) {
       const value = {
-        ...batch,
+        ...run,
         id: newId(now.getTime()),
-        created: now.toISOString(),
-        status: "sent",
-        replies: [],
+        started: now.toISOString(),
+        status: "running",
       };
-      await writeJson(batchFile(value.id), value);
+      await writeJson(runFile(value.id), value);
       return value;
     },
-    getBatch: (id) => readJson(batchFile(id)),
-    // Every batch kept, newest first; finished ones past a month go.
-    async listBatches(now = Date.now()) {
+    getRun: (id) => readJson(runFile(id)),
+    // Every run kept, newest first; finished ones past a month go.
+    async listRuns(now = Date.now()) {
       const out = [];
-      for (const { name, value } of await readAll(batches, byId)) {
-        if (value.done && now - Date.parse(value.done) > KEEP_DAYS * DAY) {
-          await fs.rm(path.join(batches, name), { force: true });
+      for (const { name, value } of await readAll(runs, byId)) {
+        if (
+          value.finished &&
+          now - Date.parse(value.finished) > KEEP_DAYS * DAY
+        ) {
+          await fs.rm(path.join(runs, name), { force: true });
           continue;
         }
         out.push(value);
       }
-      return out.sort((a, b) => b.created.localeCompare(a.created));
+      return out.sort((a, b) => b.started.localeCompare(a.started));
     },
-    // Changes a batch under the lock: `change` edits it in place and returns
-    // the result to give back.
-    async changeBatch(id, change) {
-      const file = batchFile(id);
+    // Changes a run: `change` edits it in place.
+    async changeRun(id, change) {
+      const file = runFile(id);
       return withLock(file, async () => {
         const value = await readJson(file);
-        if (!value) throw Error(`There is no batch ${id}.`);
+        if (!value) throw Error(`There is no run ${id}.`);
         const result = await change(value);
         await writeJson(file, value);
         return result;
@@ -250,7 +259,6 @@ export function createAiStore(folder) {
                 .join("\n\n")
                 .slice(0, 5000),
               created: t.created,
-              batch: null,
             });
             count++;
           }

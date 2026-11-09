@@ -76,7 +76,6 @@ const L = english
           source: "Source",
           rendered: "Rendered",
           changes: "Changes only",
-          finish: "Finish review",
         },
       },
       // Edit mode: typed into the note as it reads.
@@ -160,7 +159,6 @@ const L = english
           source: "源码",
           rendered: "渲染",
           changes: "仅改动",
-          finish: "完成审阅",
         },
       },
       edit: {
@@ -510,7 +508,7 @@ await scene(
 // The assistant proposes instead of writing (MCP): the edits show in the note
 // in review colors. The first is accepted; the second is looked at as source,
 // changes only, and rejected; the last is accepted in the rendered changes,
-// and finishing the review writes the accepted ones.
+// which ends the review and writes the accepted ones.
 await scene(
   "proposal",
   "light",
@@ -550,10 +548,10 @@ await scene(
       await press(page, moveTo, control(P.labels.changes), 1800);
       await press(page, moveTo, control(P.labels.reject), 1400);
       await press(page, moveTo, control(P.labels.rendered), 1800);
-      await press(page, moveTo, control(P.labels.accept), 1400);
-      await press(page, moveTo, control(P.labels.finish), 1800);
+      // The last decision ends the review and writes the accepted ones.
+      await press(page, moveTo, control(P.labels.accept), 0);
       await bar.waitFor({ state: "hidden" });
-      await page.waitForTimeout(800);
+      await page.waitForTimeout(2200);
     } finally {
       ai.close();
     }

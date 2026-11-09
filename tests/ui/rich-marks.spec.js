@@ -15,7 +15,7 @@ const mark = {
   suffix: ".\n",
   text: "Which?",
   created: "2026-11-07T09:00:00.000Z",
-  batch: null,
+  state: "open",
 };
 
 async function boot(page) {
@@ -24,7 +24,7 @@ async function boot(page) {
     ({ text, mark }) => {
       window.mock = {
         handlers: {},
-        state: { marks: [mark], batches: [], sessions: [] },
+        state: { marks: [mark], run: null },
         changes: [],
       };
       const state = () => structuredClone(window.mock.state);
@@ -52,7 +52,7 @@ async function boot(page) {
               id: "m-new",
               file: "C:/synthetic/Notes/Plan.md",
               name: "Plan.md",
-              batch: null,
+              state: "open",
             });
           return state();
         },

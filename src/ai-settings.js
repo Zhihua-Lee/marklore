@@ -1,51 +1,44 @@
 import { t } from "../desktop/i18n.mjs";
 
 // Settings → AI assistant: which library folders an AI may read through
-// Marklore's MCP server, the lines that add the server to an assistant, and
-// the command that starts Claude Code listening to it (events pushed into
-// the session: desktop/mcp-channel.mjs). Desktop only (the browser preview
-// has no server).
+// Marklore's MCP server, and the assistants it is added to. Claude Code and
+// Codex are connected with one button (the app writes their settings:
+// desktop/ai-connect.mjs), and each says whether it is connected to this
+// copy of Marklore and how many of its sessions use it now; any other
+// assistant takes the server's setup as JSON. Desktop only (the browser
+// preview has no server).
 export const aiSettingsMarkup = `
 <fieldset id="settings-ai" hidden><legend>${t("AI 助手")}</legend>
   <div class="setting setting-list"><span class="setting-text"><span id="ai-libraries-label">${t("AI 可以读取的笔记库")}</span><small>${t("AI 助手通过 MCP 读取勾选的笔记库并提出修改；修改要你在 Marklore 中预览并接受才会写入")}</small></span></div>
   <ul id="ai-libraries" class="ai-libraries" aria-labelledby="ai-libraries-label"></ul>
-  <div class="setting"><span class="setting-text"><span>${t("连接 AI 助手")}</span><small>${t("把 Marklore 添加为 MCP 服务器；移动程序位置后需重新添加")}</small></span><span class="setting-actions"><button id="ai-copy-claude" type="button">Claude Code</button><button id="ai-copy-codex" type="button">Codex</button><button id="ai-copy-json" type="button">JSON</button></span></div>
-  <div class="setting"><span class="setting-text"><span>${t("让 Claude Code 自动收到")}</span><small>${t("审阅结果和发送的标记直接进入正在运行的 Claude Code 会话。这是 Claude Code 的研究预览功能：用这条命令启动，每次启动时确认一次提示。其他 AI 需要你提醒它查看。")}</small></span><span class="setting-actions"><button id="ai-copy-listen" type="button">${t("复制启动命令")}</button></span></div>
+  <div class="setting setting-list"><span class="setting-text"><span id="ai-connect-label">${t("连接 AI 助手")}</span><small>${t("连接后，它新开的会话就能读取勾选的笔记库、提出修改、收到你的标记")}</small></span></div>
+  <ul id="ai-connections" class="ai-libraries ai-connections" aria-labelledby="ai-connect-label"></ul>
+  <div class="setting"><span class="setting-text"><span>${t("其他 AI 助手")}</span><small>${t("复制 MCP 服务器的配置（JSON），按那个 AI 助手的说明添加")}</small></span><span class="setting-actions"><button id="ai-copy-json" type="button">${t("复制配置")}</button></span></div>
   <p id="ai-setup" class="setting-footnote"></p>
 </fieldset>`;
 
-const quote = (s) => `"${s}"`;
-// Starts Claude Code listening to Marklore's server (a channel in its
-// research preview; a server of one's own needs the development flag).
-export const LISTEN_COMMAND =
-  "claude --dangerously-load-development-channels server:marklore";
-// The three forms assistants take a stdio server in.
-export function setupText(kind, { command, args, env }) {
-  const envPairs = Object.entries(env);
-  if (kind === "claude")
-    return [
-      // --env takes several KEY=value pairs: another option must follow it,
-      // or the name is read as one more pair (Claude Code docs).
-      "claude mcp add",
-      ...envPairs.map(([k, v]) => `--env ${k}=${v}`),
-      "--transport stdio --scope user marklore --",
-      quote(command),
-      ...args.map(quote),
-    ].join(" ");
-  if (kind === "codex")
-    // TOML literal strings: backslashes in Windows paths stay as they are.
-    return [
-      "[mcp_servers.marklore]",
-      `command = '${command}'`,
-      `args = [${args.map((a) => `'${a}'`).join(", ")}]`,
-      `env = { ${envPairs.map(([k, v]) => `${k} = "${v}"`).join(", ")} }`,
-      "",
-    ].join("\n");
-  return JSON.stringify(
-    { mcpServers: { marklore: { command, args, env } } },
-    null,
-    2,
-  );
+const NAMES = { claude: "Claude Code", codex: "Codex" };
+
+// The server as an MCP client's JSON settings take it.
+export const setupJson = ({ command, args, env }) =>
+  JSON.stringify({ mcpServers: { marklore: { command, args, env } } }, null, 2);
+
+// What a connection's row says.
+function statusText(c) {
+  switch (c.state) {
+    case "ok":
+      return c.sessions
+        ? t("已连接 · {count} 个会话正在使用", { count: c.sessions })
+        : t("已连接 · 新开的会话就能使用");
+    case "other":
+      return c.missing
+        ? t("连接的 Marklore 已不在原处：{path}", { path: c.command })
+        : t("连接的是另一个 Marklore：{path}", { path: c.command });
+    case "unreadable":
+      return t("读不了它的设置文件：{file}", { file: c.file });
+    default:
+      return c.installed ? t("未连接") : t("未连接 · 这台电脑上没有找到它");
+  }
 }
 
 export function wireAiSettings({ api, getRoots, getSettings, change, report }) {
@@ -89,37 +82,82 @@ export function wireAiSettings({ api, getRoots, getSettings, change, report }) {
             }),
           ]),
     );
+    paintConnections();
   }
+
+  // One row per assistant: its name and state, and what can be done.
+  function connectionRow(c) {
+    const item = document.createElement("li"),
+      text = document.createElement("span"),
+      name = document.createElement("span"),
+      state = document.createElement("small"),
+      actions = document.createElement("span");
+    item.className = "setting";
+    item.dataset.kind = c.kind;
+    item.dataset.state = c.state;
+    text.className = "setting-text";
+    actions.className = "setting-actions";
+    name.textContent = NAMES[c.kind];
+    state.textContent = statusText(c);
+    state.title = c.state === "other" ? c.command : c.file;
+    text.append(name, state);
+    const button = (label, connect) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = label;
+      b.onclick = () => change$(c.kind, connect);
+      actions.append(b);
+    };
+    if (c.state === "none") button(t("连接"), true);
+    if (c.state === "other") button(t("改为连接这个"), true);
+    if (c.state === "ok" || c.state === "other") button(t("断开"), false);
+    item.append(text, actions);
+    return item;
+  }
+  let painting = 0;
+  async function paintConnections() {
+    const epoch = ++painting;
+    const list = await api.aiConnections().catch(() => []);
+    if (epoch !== painting) return;
+    $("#ai-connections").replaceChildren(...list.map(connectionRow));
+  }
+  async function change$(kind, connect) {
+    try {
+      await (connect ? api.aiConnect(kind) : api.aiDisconnect(kind));
+      report(
+        connect
+          ? t("已连接 {name}：在它新开的会话里就能使用 Marklore", {
+              name: NAMES[kind],
+            })
+          : t("已断开 {name}", { name: NAMES[kind] }),
+      );
+    } catch (error) {
+      report(error.message);
+    }
+    paintConnections();
+  }
+
   $("#ai-libraries").onchange = () =>
     change({
       aiLibraries: [...document.querySelectorAll("#ai-libraries input")]
         .filter((box) => box.checked)
         .map((box) => box.dataset.path),
     });
-  async function copy(kind) {
-    setup ??= await api.aiSetup();
-    await api.copyText(setupText(kind, setup));
-    report(
-      {
-        claude: t("已复制 Claude Code 命令，在终端中运行即可"),
-        codex: t("已复制，粘贴到 Codex 的 config.toml"),
-        json: t("已复制 MCP 配置（JSON）"),
-      }[kind],
-    );
-  }
-  // Library folders change while Settings is closed: list them on opening.
+  // Library folders and connections change while Settings is closed: look
+  // again on opening.
   new MutationObserver(() => $("#appearance").open && paint()).observe(
     $("#appearance"),
     { attributes: true, attributeFilter: ["open"] },
   );
-  for (const kind of ["claude", "codex", "json"])
-    $(`#ai-copy-${kind}`).onclick = () =>
-      copy(kind).catch((error) => report(error.message));
-  $("#ai-copy-listen").onclick = () =>
-    api
-      .copyText(LISTEN_COMMAND)
-      .then(() => report(t("已复制，在项目文件夹的终端里用它启动 Claude Code")))
-      .catch((error) => report(error.message));
+  $("#ai-copy-json").onclick = async () => {
+    try {
+      setup ??= await api.aiSetup();
+      await api.copyText(setupJson(setup));
+      report(t("已复制 MCP 配置（JSON）"));
+    } catch (error) {
+      report(error.message);
+    }
+  };
   api.aiSetup().then(
     (value) => {
       setup = value;

@@ -1,8 +1,7 @@
 // The server's side of telling its assistant session what the owner did,
 // without being asked: each running server is one session (sessions/ in the
 // AI store), and when the owner finishes reviewing a proposal this session
-// made, or sends marks to it, the server pushes a short event into the
-// session. Claude Code takes such events from MCP servers it was started to
+// made, the server pushes a short event into the session. Claude Code takes such events from MCP servers it was started to
 // listen to (its "channels", a research preview: started with
 // `--dangerously-load-development-channels server:marklore`); other
 // assistants never receive them and read the same state through the tools
@@ -11,12 +10,13 @@
 import { watch, mkdirSync } from "node:fs";
 import path from "node:path";
 import { isLapsed, newId, SESSION_STALE } from "./ai-store.mjs";
+export { SESSION_STALE };
 
 // Assistants that take pushed events (Claude Code's channels).
 export const pushes = (client) => /^claude-code\b/i.test(client);
 
 // Told to Claude Code with the server's instructions.
-export const CHANNEL_INSTRUCTIONS = `When Claude Code listens to this server, Marklore also tells you, as <channel source="marklore" event="..."> messages, when the owner finished reviewing one of your proposals (event="proposal": which edits were taken, and the owner's reasons) and when the owner sent you marks (event="marks": read them with get_marks). Act on them as on a message from the owner.`;
+export const CHANNEL_INSTRUCTIONS = `When Claude Code listens to this server, Marklore also tells you, as <channel source="marklore" event="proposal"> messages, when the owner finished reviewing one of your proposals: which edits were taken, and the owner's reasons. Act on them as on a message from the owner.`;
 
 const HEARTBEAT = 60e3;
 const same = (a, b) =>
@@ -63,15 +63,6 @@ export function proposalEvent(p) {
   };
 }
 
-// What sent marks tell the session they were sent to.
-export function marksEvent(batch) {
-  const notes = new Set(batch.marks.map((m) => m.file)).size;
-  return {
-    content: `The owner sent you ${batch.marks.length} mark${batch.marks.length === 1 ? "" : "s"} on ${notes} note${notes === 1 ? "" : "s"} from Marklore: passages and what they want about each. Read them with get_marks (batch_id ${batch.id}). Make changes with propose_edit, one proposal per note; answer the batch with one reply_marks.`,
-    meta: { event: "marks", batch_id: batch.id },
-  };
-}
-
 export function createChannel({
   store,
   client,
@@ -103,16 +94,6 @@ export function createChannel({
   });
   const beat = () => store.writeSession(id, describe()).catch(() => {});
 
-  // A batch this session should push: sent to it, or to its assistant in
-  // its folder while the session it was sent to is gone.
-  async function ours(batch, live) {
-    const target = batch.target;
-    if (!target || batch.pushedBy || batch.status !== "sent") return false;
-    if (target.session === id) return true;
-    if (target.client !== client || !same(target.cwd, cwd)) return false;
-    return !live.some((s) => s.id === target.session);
-  }
-
   // Looks for what to tell; one look at a time, again if asked meanwhile.
   async function check() {
     if (!canPush) return;
@@ -134,19 +115,6 @@ export function createChannel({
             told.add(p.id);
             notify(proposalEvent(p));
           }
-        const live = await store.liveSessions(now(), alive);
-        for (const batch of await store.listBatches())
-          if (await ours(batch, live)) {
-            const claimed = await store
-              .changeBatch(batch.id, (b) => {
-                if (b.pushedBy || b.status !== "sent") return false;
-                b.pushedBy = id;
-                b.pushed = new Date(now()).toISOString();
-                return true;
-              })
-              .catch(() => false);
-            if (claimed) notify(marksEvent(batch));
-          }
       } while (again);
     })().finally(() => (checking = null));
     return checking;
@@ -163,7 +131,7 @@ export function createChannel({
       timer.unref?.();
       if (!canPush) return;
       let pending = null;
-      for (const folder of [store.proposals, store.batches])
+      for (const folder of [store.proposals])
         try {
           mkdirSync(folder, { recursive: true });
           const watcher = watch(folder, (_type, name) => {
@@ -180,8 +148,7 @@ export function createChannel({
         }
       await check().catch(() => {});
     },
-    // A tool call: the session is active (the app sends marks to the most
-    // recently active), and a missed change is caught up.
+    // A tool call: the session is active, and a missed change is caught up.
     touch() {
       active = new Date(now()).toISOString();
       beat();
@@ -195,5 +162,3 @@ export function createChannel({
     },
   };
 }
-
-export { SESSION_STALE };

@@ -8,7 +8,7 @@ import DOMPurify from "dompurify";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
 import { t } from "../desktop/i18n.mjs";
-import { propertiesCard } from "./properties.js";
+import { propertiesCard, firstHeading } from "./properties.js";
 import { createSlugger } from "../desktop/slug.mjs";
 
 export function lineOffsets(source) {
@@ -789,6 +789,7 @@ function frontMatter(md) {
       const lines = m[0].replace(/\r?\n$/, "").split("\n").length;
       const token = state.push("front_matter", "details", 0);
       token.content = m[1];
+      token.meta = { heading: firstHeading(state.src.slice(m[0].length)) };
       token.map = [0, lines];
       token.block = true;
       state.line = lines;
@@ -796,7 +797,10 @@ function frontMatter(md) {
     },
   );
   md.renderer.rules.front_matter = (tokens, i, _o, _env, self) =>
-    propertiesCard(tokens[i].content, { attrs: self.renderAttrs(tokens[i]) });
+    propertiesCard(tokens[i].content, {
+      attrs: self.renderAttrs(tokens[i]),
+      heading: tokens[i].meta?.heading ?? null,
+    });
 }
 const parser = createParser().use(frontMatter);
 const outlineParser = createParser()

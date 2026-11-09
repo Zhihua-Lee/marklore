@@ -2,27 +2,16 @@ import { test, expect } from "@playwright/test";
 import { installFolio } from "./fixtures.js";
 
 // Marks for the AI (src/marks.js) against a mocked main process that keeps
-// the marks, batches and sessions in window.mock.state, as
+// the marks and the background run in window.mock.state, as
 // desktop/ai-bridge.mjs does.
 const text = "# Plan\n\nSend it on Friday.\n\nAsk Ana about the budget.\n";
 const PLAN = "C:/synthetic/Notes/Plan.md",
   IDEAS = "C:/synthetic/Notes/Ideas.md";
-const claude = {
-  id: "s1",
-  client: "claude-code",
-  cwd: "C:/work/project",
-  folder: "project",
-  push: true,
-  active: "2026-11-07T10:00:00.000Z",
-};
 
-async function boot(
-  page,
-  { marks = [], batches = [], sessions = [claude], settings = {} } = {},
-) {
+async function boot(page, { marks = [], run = null } = {}) {
   await installFolio(page);
   await page.addInitScript(
-    ({ text, marks, batches, sessions, settings, PLAN, IDEAS }) => {
+    ({ text, marks, run, PLAN, IDEAS }) => {
       const files = {
         "file-plan": {
           id: "file-plan",
@@ -40,11 +29,7 @@ async function boot(
         },
       };
       const byPath = (p) => Object.values(files).find((f) => f.path === p);
-      window.mock = {
-        handlers: {},
-        state: { marks, batches, sessions },
-        calls: [],
-      };
+      window.mock = { handlers: {}, state: { marks, run }, calls: [] };
       const state = () => structuredClone(window.mock.state);
       let n = 0;
       window.folio = folioTest.mock({
@@ -52,7 +37,7 @@ async function boot(
           incoming: [files["file-plan"]],
           restored: [],
           roots: [],
-          settings,
+          settings: {},
         }),
         marks: async () => state(),
         changeMark: async (action, args) => {
@@ -69,7 +54,7 @@ async function boot(
               suffix: args.suffix,
               text: args.text,
               created: "2026-11-07T10:0" + n + ":00.000Z",
-              batch: null,
+              state: "open",
             });
           }
           const mark = list.find((m) => m.id === args.id);
@@ -77,34 +62,35 @@ async function boot(
           if (action === "remove") list.splice(list.indexOf(mark), 1);
           return state();
         },
-        sendMarks: async (target) => {
-          window.mock.calls.push(["sendMarks", target]);
+        setContext: async (value) =>
+          window.mock.calls.push(["setContext", value]),
+        copyText: async (text) => window.mock.calls.push(["copyText", text]),
+        startRun: async () => {
+          window.mock.calls.push(["startRun"]);
           const s = window.mock.state;
-          const drafts = s.marks.filter((m) => !m.batch);
-          const id = "b" + (s.batches.length + 1);
-          s.batches.unshift({
-            id,
-            created: "2026-11-07T11:00:00.000Z",
-            target,
-            status: "sent",
-            readBy: null,
-            marks: drafts.map(({ id, file, name, quote, text }) => ({
-              id,
-              file,
-              name,
-              quote,
-              text,
-            })),
-            replies: [],
-          });
-          for (const m of drafts) m.batch = id;
+          const taken = s.marks.filter((m) => m.state === "open");
+          for (const m of taken) m.state = "background";
+          s.run = {
+            id: "r1",
+            status: "running",
+            started: "2026-11-08T10:00:00.000Z",
+            finished: null,
+            count: taken.length,
+            proposals: 0,
+          };
           return state();
         },
-        finishBatch: async (id) => {
-          window.mock.calls.push(["finishBatch", id]);
+        stopRun: async (id) => {
+          window.mock.calls.push(["stopRun", id]);
           const s = window.mock.state;
-          s.batches = s.batches.filter((b) => b.id !== id);
-          s.marks = s.marks.filter((m) => m.batch !== id);
+          for (const m of s.marks)
+            if (m.state === "background") m.state = "open";
+          s.run = { ...s.run, status: "stopped" };
+          return state();
+        },
+        dismissRun: async (id) => {
+          window.mock.calls.push(["dismissRun", id]);
+          window.mock.state.run = null;
           return state();
         },
         openMarked: async (id) => {
@@ -114,7 +100,7 @@ async function boot(
         },
       });
     },
-    { text, marks, batches, sessions, settings, PLAN, IDEAS },
+    { text, marks, run, PLAN, IDEAS },
   );
   await page.goto("/");
   await expect(page.locator("#content h1")).toContainText("Plan");
@@ -154,19 +140,20 @@ async function select(page, phrase) {
   }, phrase);
 }
 
-const draft = (id, quote, words, file = PLAN, name = "Plan.md") => ({
+const mark = (id, quote, words, extra = {}) => ({
   id,
-  file,
-  name,
+  file: PLAN,
+  name: "Plan.md",
   quote,
   prefix: "",
   suffix: "",
   text: words,
   created: "2026-11-07T09:00:00.000Z",
-  batch: null,
+  state: "open",
+  ...extra,
 });
 
-test("marks wait until sent, then go together where the reader chose the first time", async ({
+test("marks are kept; the list says how the AI takes them, or hands them to a background AI", async ({
   page,
 }) => {
   await boot(page);
@@ -183,7 +170,7 @@ test("marks wait until sent, then go together where the reader chose the first t
   await card.getByRole("textbox").fill("Can this be earlier?");
   await card.getByRole("button", { name: "保存标记" }).click();
   await expect(card).toHaveCount(0);
-  await expect(page.locator("#toast")).toHaveText("已存为标记，1 条待发送");
+  await expect(page.locator("#toast")).toHaveText("已存为标记，1 条待处理");
   expect((await calls(page, "changeMark"))[0]).toEqual([
     "add",
     {
@@ -195,131 +182,166 @@ test("marks wait until sent, then go together where the reader chose the first t
     },
   ]);
   await expect.poll(() => highlighted(page)).toEqual(["on Friday"]);
-  // The keyboard way; nothing is sent yet.
+  // The keyboard way.
   await select(page, "the budget");
   await page.keyboard.press("Control+Alt+m");
   await expect(card.getByRole("textbox")).toBeFocused();
   await card.getByRole("textbox").fill("Which budget?");
   await card.getByRole("textbox").press("Control+Enter");
   await expect(button).toHaveAttribute("data-count", "2");
-  expect(await calls(page, "sendMarks")).toEqual([]);
-  // The list: the marks by note, and the first send asks where.
+  // The list: the marks by note, nothing to send, what to tell the AI.
   await button.click();
   const panel = page.locator(".marks-panel");
-  await expect(
-    panel.getByRole("heading", { name: "未发送（2）" }),
-  ).toBeVisible();
   await expect(panel.locator(".marks-note")).toHaveText(["Plan.md"]);
   await expect(panel.locator(".marks-list .mark-item-text")).toHaveText([
     "Can this be earlier?",
     "Which budget?",
   ]);
-  await expect(panel.locator(".marks-target")).toHaveText("选择…");
-  await panel.getByRole("button", { name: "发送 2 条" }).click();
-  await expect(
-    panel.getByRole("heading", { name: "发送给哪个 AI 会话？" }),
-  ).toBeVisible();
-  await panel.getByRole("button", { name: /Claude Code · project/ }).click();
-  expect(await calls(page, "sendMarks")).toEqual([
-    [{ client: "claude-code", cwd: "C:/work/project", session: "s1" }],
-  ]);
-  await expect(page.locator("#toast")).toHaveText(
-    "已发送给 Claude Code · project",
+  await expect(panel.getByRole("button", { name: /发送/ })).toHaveCount(0);
+  await expect(panel.locator(".marks-hint")).toContainText(
+    "在你的 AI 对话里说：",
   );
-  // Sent: dotted, out of the count, listed with the batch.
+  await panel.getByRole("button", { name: "看一下 Marklore 的标记" }).click();
+  expect(await calls(page, "copyText")).toEqual([["看一下 Marklore 的标记"]]);
+  await expect(page.locator("#toast")).toHaveText("已复制，粘贴到 AI 的对话里");
+  // Or a background AI takes them: worked on, dotted, out of the count.
+  await panel.getByRole("button", { name: "交给后台 AI（2 条）" }).click();
+  expect(await calls(page, "startRun")).toEqual([[]]);
+  await expect(panel.locator(".marks-run")).toHaveText(
+    /后台 AI 正在处理 2 条标记…/,
+  );
+  await expect(panel.locator(".mark-item-status")).toHaveText([
+    "后台 AI 正在处理",
+    "后台 AI 正在处理",
+  ]);
   await expect.poll(() => highlighted(page)).toEqual([]);
   await expect
     .poll(() => highlighted(page, "folio-mark-sent"))
     .toEqual(["on Friday", "the budget"]);
-  await expect(button).toHaveClass(/settled/);
-  await expect(panel.locator(".marks-batch .marks-status")).toHaveText(
-    "等 AI 读取",
-  );
-  // The next send goes to the same place without asking.
-  await page.keyboard.press("Escape");
-  await select(page, "Ask Ana");
-  await page.keyboard.press("Control+Alt+m");
-  await card.getByRole("textbox").fill("Who is Ana?");
-  await card.getByRole("textbox").press("Control+Enter");
-  await button.click();
-  await expect(panel.locator(".marks-target")).toHaveText(
-    "Claude Code · project",
-  );
-  await panel.getByRole("button", { name: "发送 1 条" }).click();
-  expect((await calls(page, "sendMarks")).length).toBe(2);
-  await expect(panel.locator(".marks-batch")).toHaveCount(2);
+  await expect(button).toHaveClass(/working/);
+  await expect(panel.locator(".marks-how")).toHaveCount(0);
+  // Stopped: the marks are the reader's again.
+  await panel.getByRole("button", { name: "停止" }).click();
+  expect(await calls(page, "stopRun")).toEqual([["r1"]]);
+  await expect(panel.locator(".marks-run")).toHaveText(/后台 AI 已停止/);
+  await expect(button).toHaveAttribute("data-count", "2");
+  await panel.getByRole("button", { name: "收起" }).click();
+  expect(await calls(page, "dismissRun")).toEqual([["r1"]]);
+  await expect(panel.locator(".marks-run")).toHaveCount(0);
 });
 
-test("the AI's answer is read in the list; finishing a batch takes its marks away", async ({
+test("what the AI made of the marks shows in the list and on each mark", async ({
   page,
 }) => {
-  const sent = { ...draft("m1", "on Friday", "Earlier?"), batch: "b1" };
   await boot(page, {
-    marks: [sent],
-    batches: [
-      {
-        id: "b1",
-        created: "2026-11-07T11:00:00.000Z",
-        target: {
-          client: "claude-code",
-          cwd: "C:/work/project",
-          session: "s1",
-        },
-        status: "replied",
-        readBy: "claude-code",
-        marks: [
-          {
-            id: "m1",
-            file: PLAN,
-            name: "Plan.md",
-            quote: "on Friday",
-            text: "Earlier?",
-          },
-        ],
-        replies: [
-          {
-            by: "claude-code",
-            text: "Proposed Thursday.",
-            at: "2026-11-07T11:05:00.000Z",
-          },
-        ],
-      },
+    marks: [
+      mark("m1", "on Friday", "Earlier?", { state: "proposed" }),
+      mark("m2", "the budget", "Which?", {
+        state: "replied",
+        answer: { by: "claude-code", text: "This year's or next?" },
+      }),
     ],
+    run: {
+      id: "r1",
+      status: "done",
+      started: "2026-11-08T10:00:00.000Z",
+      finished: "2026-11-08T10:02:00.000Z",
+      count: 2,
+      proposals: 1,
+      result: "Moved the date; asked about the budget.",
+    },
   });
-  const button = page.locator("#marks-button");
-  await expect(button).toHaveClass(/answered/);
+  // Waiting on review: dotted; answered: solid, a dot on the button.
   await expect
     .poll(() => highlighted(page, "folio-mark-sent"))
     .toEqual(["on Friday"]);
-  // Its card says where the answer is; a sent mark is not edited.
-  await page
-    .locator("#content")
-    .getByText("Send it on Friday.")
-    .click({ position: { x: 80, y: 8 } });
-  const card = page.locator(".mark-card");
-  await expect(card.locator(".mark-status")).toHaveText(
-    "AI 已回复，回复在标记列表中",
-  );
-  await expect(card.getByRole("textbox")).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  await expect.poll(() => highlighted(page)).toEqual(["the budget"]);
+  const button = page.locator("#marks-button");
+  await expect(button).toHaveClass(/answered/);
   await button.click();
   const panel = page.locator(".marks-panel");
-  await expect(panel.locator(".marks-status")).toHaveText("AI 已回复");
-  await expect(panel.locator(".marks-reply")).toContainText("Claude Code");
-  await expect(panel.locator(".marks-reply")).toContainText(
-    "Proposed Thursday.",
+  await expect(panel.locator(".marks-run-line")).toHaveText(
+    "后台 AI 处理完了：提了 1 条修改",
   );
-  await panel.getByRole("button", { name: "完成" }).click();
-  expect(await calls(page, "finishBatch")).toEqual([["b1"]]);
-  await expect(panel.locator(".marks-batch")).toHaveCount(0);
-  await expect.poll(() => highlighted(page, "folio-mark-sent")).toEqual([]);
-  await expect(button).not.toHaveClass(/answered/);
+  await expect(panel.locator(".marks-run-result")).toHaveText(
+    "Moved the date; asked about the budget.",
+  );
+  await expect(panel.locator(".mark-item-status")).toHaveText([
+    "AI 提了修改，等你审阅",
+    "AI：This year's or next?",
+  ]);
+  // Nothing open: nothing to hand over.
+  await expect(panel.locator(".marks-how")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  // The answered mark's card: what was said, read only; ask further, or
+  // be done with it.
+  const passage = () =>
+    page
+      .locator("#content")
+      .getByText("Ask Ana about the budget")
+      .click({ position: { x: 160, y: 8 } });
+  await passage();
+  const card = page.locator(".mark-card");
+  await expect(card.locator(".mark-turn")).toHaveText([
+    "你：Which?",
+    "AI：This year's or next?",
+  ]);
+  await expect(card.getByRole("textbox")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "保存" })).toHaveCount(0);
+  await card.getByRole("button", { name: "追问…" }).click();
+  const further = card.getByRole("textbox");
+  await expect(further).toBeFocused();
+  await expect(further).toHaveValue("");
+  await further.fill("Next year's.");
+  await further.press("Control+Enter");
+  await expect(card).toHaveCount(0);
+  expect((await calls(page, "changeMark")).at(-1)).toEqual([
+    "edit",
+    { id: "m2", text: "Next year's." },
+  ]);
+  // Done with an answer: the mark goes.
+  await page.evaluate(() => {
+    const m = window.mock.state.marks.find((x) => x.id === "m2");
+    m.state = "replied";
+    m.answer = { by: "claude-code", text: "Noted." };
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(page.locator("#marks-button")).toHaveClass(/answered/);
+  await passage();
+  await card.getByRole("button", { name: "完成", exact: true }).click();
+  expect((await calls(page, "changeMark")).at(-1)).toEqual([
+    "remove",
+    { id: "m2" },
+  ]);
 });
 
-test("a mark not sent opens from its passage to be changed or deleted", async ({
+test("a background AI that did not finish says why", async ({ page }) => {
+  await boot(page, {
+    marks: [mark("m1", "on Friday", "Earlier?")],
+    run: {
+      id: "r1",
+      status: "failed",
+      started: "2026-11-08T10:00:00.000Z",
+      finished: "2026-11-08T10:00:05.000Z",
+      count: 1,
+      proposals: 0,
+      error: "Not signed in.",
+    },
+  });
+  await page.locator("#marks-button").click();
+  const panel = page.locator(".marks-panel");
+  await expect(panel.locator(".marks-run-line")).toHaveText(
+    "后台 AI 没有完成：Not signed in.",
+  );
+  await expect(
+    panel.getByRole("button", { name: "交给后台 AI（1 条）" }),
+  ).toBeEnabled();
+});
+
+test("a mark opens from its passage to be changed or deleted", async ({
   page,
 }) => {
-  await boot(page, { marks: [draft("m1", "the budget", "Which?")] });
+  await boot(page, { marks: [mark("m1", "the budget", "Which?")] });
   await expect.poll(() => highlighted(page)).toEqual(["the budget"]);
   await page
     .locator("#content")
@@ -346,7 +368,12 @@ test("a mark in the list on another note opens that note at the passage", async 
   page,
 }) => {
   await boot(page, {
-    marks: [draft("m1", "A reading list.", "Add two books", IDEAS, "Ideas.md")],
+    marks: [
+      mark("m1", "A reading list.", "Add two books", {
+        file: IDEAS,
+        name: "Ideas.md",
+      }),
+    ],
   });
   await page.locator("#marks-button").click();
   await page.locator(".marks-panel .mark-item").click();
@@ -358,24 +385,22 @@ test("a mark in the list on another note opens that note at the passage", async 
   );
 });
 
-test("with no AI session running, the first send says how to start one", async ({
+test("the note and the selected text are told for the AI to ask about", async ({
   page,
 }) => {
-  await boot(page, {
-    sessions: [],
-    marks: [draft("m1", "on Friday", "Earlier?")],
-  });
-  await page.locator("#marks-button").click();
-  const panel = page.locator(".marks-panel");
-  await panel.getByRole("button", { name: "发送 1 条" }).click();
-  await expect(panel).toContainText(
-    "没有正在运行的 AI 会话：先在终端里启动 Claude Code 或 Codex。",
-  );
-  await panel.getByRole("button", { name: "返回" }).click();
-  await expect(
-    panel.getByRole("heading", { name: "未发送（1）" }),
-  ).toBeVisible();
-  expect(await calls(page, "sendMarks")).toEqual([]);
+  await boot(page);
+  await expect
+    .poll(async () => (await calls(page, "setContext")).at(-1))
+    .toEqual([{ fileId: "file-plan", selection: null }]);
+  await select(page, "on Friday");
+  await expect
+    .poll(async () => (await calls(page, "setContext")).at(-1))
+    .toEqual([
+      {
+        fileId: "file-plan",
+        selection: { text: "on Friday", from: text.indexOf("on Friday") },
+      },
+    ]);
 });
 
 test("a new note cannot be marked until it is saved", async ({ page }) => {

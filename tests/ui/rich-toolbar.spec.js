@@ -297,3 +297,29 @@ test("the small toolbar's palette opens with a right click and stays open", asyn
     /^Mark <mark style="background-color: #[\da-f]{6}(; color: #[\da-f]{6})?">these words<\/mark> here\.\n$/i,
   );
 });
+
+// A formula in a paragraph changed around it is drawn again; it must not
+// show its TeX for a frame first.
+test("formatting beside a formula never shows its TeX", async ({ page }) => {
+  await boot(page, "# T\n\nSome words here and $a^2 + b^2$ after them.\n");
+  const editor = page.locator("#rich .ProseMirror");
+  await expect(editor.locator(".katex")).toHaveCount(1);
+  await editor.evaluate((el) => {
+    window.sawTeX = false;
+    new MutationObserver(() => {
+      if (el.querySelector(".math-pending")) window.sawTeX = true;
+    }).observe(el, { childList: true, subtree: true });
+    const text = el.querySelector("p").firstChild;
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, text.length);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+  await page.keyboard.press("Control+b");
+  await expect(editor.locator("p strong")).toContainText("Some words");
+  await page.keyboard.press("Control+z");
+  await expect(editor.locator("p strong")).toHaveCount(0);
+  await expect(editor.locator(".katex")).toHaveCount(1);
+  expect(await page.evaluate(() => window.sawTeX)).toBe(false);
+});

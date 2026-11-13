@@ -17,8 +17,10 @@ const S = schema.nodes;
 const OPEN_MATH = "$$";
 const OPEN_RAW = "\u0000raw:";
 
-// Formulas are typeset when they come near the screen (a long note holds
-// thousands); until then they show their TeX. Never while an input method
+// When a whole note is put into the editor, formulas are typeset when they
+// come near the screen (a long note holds thousands); until then they show
+// their TeX. A formula drawn again by an edit (its paragraph was changed
+// around it) is typeset at once: its TeX never shows. Never while an input method
 // composes (see composing.js): changing the page around a composition can
 // end it halfway through the pinyin; they wait for it to end.
 const pending = new WeakMap();
@@ -38,6 +40,16 @@ function flushLater() {
     pending.delete(dom);
     waiting.delete(dom);
     if (typeset && dom.isConnected) typeset();
+  }
+}
+// While run() puts a whole note in.
+let whole = false;
+export function wholeNote(run) {
+  whole = true;
+  try {
+    return run();
+  } finally {
+    whole = false;
   }
 }
 let watcher = null;
@@ -123,7 +135,7 @@ export class DrawnView {
       dom.className = display ? "math-block rich-drawn" : "formula rich-drawn";
       const typeset = () =>
         dom.replaceChildren(formulaFragmentFor(node.attrs.tex, display));
-      if (!watcher) return typeset();
+      if (!watcher || (!whole && !composing())) return typeset();
       const wait = document.createElement("span");
       wait.className = "math-pending";
       wait.textContent = node.attrs.tex;

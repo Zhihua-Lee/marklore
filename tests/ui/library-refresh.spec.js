@@ -52,6 +52,39 @@ test("the library follows notes added on disk and keeps open folders", async ({
     tree.locator('details.folder[data-path="C:/kb/Topic"]'),
   ).toHaveAttribute("open", "");
 
+  // A refresh with nothing new (a note was saved) leaves the tree alone.
+  await tree.evaluate((el) => {
+    window.swaps = 0;
+    new MutationObserver((list) => (window.swaps += list.length)).observe(el, {
+      childList: true,
+      subtree: true,
+    });
+  });
+  await page.evaluate(() => window.mock.handlers.library());
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => window.swaps)).toBe(0);
+  // And a change puts the new tree in place in one step, folders filled.
+  await page.evaluate(() => {
+    window.mock.entries.root.push({
+      name: "Later.md",
+      path: "C:/kb/Later.md",
+      directory: false,
+    });
+    window.sawEmpty = false;
+    new MutationObserver(() => {
+      const open = document.querySelector(
+        '#tree details.folder[data-path="C:/kb/Topic"]',
+      );
+      if (!open?.querySelector(".file")) window.sawEmpty = true;
+    }).observe(document.querySelector("#tree"), {
+      childList: true,
+      subtree: true,
+    });
+    window.mock.handlers.library();
+  });
+  await expect(tree.getByRole("button", { name: "Later.md" })).toBeVisible();
+  expect(await page.evaluate(() => window.sawEmpty)).toBe(false);
+
   // With a filter in use, the search runs again; the filter is not cleared.
   await page.locator("#file-filter").fill("Agent");
   await page.evaluate(() => window.mock.handlers.library());

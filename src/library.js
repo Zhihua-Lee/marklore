@@ -397,14 +397,35 @@ export function createLibrary({
       run(async () => {
         if (!details.open) return;
         await load();
+        // Open again after a rebuild: the reader's place stays.
+        if (restored.delete(details)) return;
         const selected = details.querySelector('[aria-current="page"]');
         if (details.isConnected && selected)
           selected.scrollIntoView({ block: "nearest" });
       }),
     );
-    if (open?.has(entry.path)) details.open = true;
+    // A folder that was open comes back open and filled, so that the
+    // rebuilt tree takes the old one's place in one step.
+    if (open?.has(entry.path)) {
+      details.open = true;
+      restored.add(details);
+      await load().catch(() => {});
+    }
     return details;
   }
+  // What a tree shows: names, order, open folders. The entries of a closed
+  // folder and the current note's mark do not count.
+  const shown = (el) =>
+    [...el.children]
+      .map((c) =>
+        c.matches("input")
+          ? ""
+          : c.matches("details:not([open])")
+            ? `[${c.className}|${c.dataset.path}|${c.firstChild?.textContent}]`
+            : `<${c.tagName}|${c.className}|${c.title}|${c.dataset.path || ""}|${c.dataset.note || ""}|${c.dataset.listed || ""}|${c.children.length ? shown(c) : c.textContent}>`,
+      )
+      .join("");
+  const restored = new WeakSet();
   async function renderTree(open = null) {
     const tree = $("#tree");
     const fragment = document.createDocumentFragment(),
@@ -428,7 +449,11 @@ export function createLibrary({
       fragment.append(el);
       el.open = true;
     }
-    if (epoch === treeEpoch) tree.replaceChildren(fragment);
+    if (epoch !== treeEpoch) return;
+    // A refresh that found nothing new (a note was saved) leaves the tree
+    // as it is: no flash, and the focus and a name being typed stay.
+    if (open && shown(fragment) === shown(tree)) return;
+    tree.replaceChildren(fragment);
   }
   const element = (tag, className, text) => {
     const el = document.createElement(tag);
@@ -670,8 +695,7 @@ export function createLibrary({
     const top = tree.scrollTop;
     await renderTree(open);
     tree.scrollTop = top;
-    // Reopened folders load their entries a moment later.
-    setTimeout(() => (tree.scrollTop = top), 150);
+    markCurrentFile();
   }
   // ── The tree's own file operations (right-click, F2, Delete) ──
   // A name typed in place: in a new row at the top of a folder, or over the

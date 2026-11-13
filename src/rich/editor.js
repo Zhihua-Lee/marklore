@@ -62,6 +62,7 @@ import {
   grab,
   openSelected,
   watchFormulas,
+  wholeNote,
   openMathBlock,
 } from "./math.js";
 import { linkPlugins, editLink } from "./links.js";
@@ -863,7 +864,8 @@ export function createRichEditor({
       doc.rich = next;
     }
     current = doc;
-    if (view.state !== doc.rich.state) view.updateState(doc.rich.state);
+    if (view.state !== doc.rich.state)
+      wholeNote(() => view.updateState(doc.rich.state));
     if (again) {
       const pos = Math.min(at, view.state.doc.content.size);
       view.dispatch(
@@ -883,7 +885,7 @@ export function createRichEditor({
     // Draw formulas and diagrams again (theme, math loaded).
     redraw() {
       if (!current?.rich) return;
-      view.setProps({ nodeViews: { ...nodeViews } });
+      wholeNote(() => view.setProps({ nodeViews: { ...nodeViews } }));
     },
     focus() {
       view.focus();

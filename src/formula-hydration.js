@@ -41,6 +41,7 @@ export function createFormulaHydrator(
     ownerWindow = null,
     idle = null,
     frame = null,
+    hidden = null,
     lastScroll = 0,
     lastTop = 0,
     direction = 1;
@@ -106,8 +107,11 @@ export function createFormulaHydrator(
   // The reading position is measured (hit tests) only when a formula about to
   // be drawn lies above the reading line: drawn below it, formulas move
   // nothing that is being read.
+  // At the top of the note the top is the reading position, kept as it is
+  // without measuring anything.
+  const atTop = () => !scroller || scroller.scrollTop < 2;
   function anchorFor(list) {
-    if (!scroller) return null;
+    if (atTop()) return null;
     const line = scroller.getBoundingClientRect().top + 48;
     for (const marker of list) {
       const rect = marker.getBoundingClientRect();
@@ -178,6 +182,8 @@ export function createFormulaHydrator(
       : ownerWindow.setTimeout(() => backfill(null), 50);
   }
   function cancelBackfill() {
+    clearTimeout(hidden);
+    hidden = null;
     if (idle === null) return;
     if (ownerWindow?.cancelIdleCallback) ownerWindow.cancelIdleCallback(idle);
     else ownerWindow?.clearTimeout(idle);
@@ -185,7 +191,17 @@ export function createFormulaHydrator(
   }
   function backfill(deadline) {
     idle = null;
-    if (!host?.isConnected || !host.getClientRects().length) return;
+    if (!host?.isConnected) return;
+    // Hidden (Edit or Source mode): go on once the note is shown again, or
+    // it would keep undrawn formulas, and no block of it is skipped.
+    if (!host.getClientRects().length) {
+      clearTimeout(hidden);
+      hidden = setTimeout(() => {
+        hidden = null;
+        scheduleBackfill();
+      }, 500);
+      return;
+    }
     const busy =
       ready.size ||
       timer !== null ||
@@ -195,9 +211,9 @@ export function createFormulaHydrator(
     if (busy) return scheduleBackfill();
     const all = markers(host).filter((marker) => !failed.has(marker));
     if (!all.length) return;
-    const split = scroller
-      ? firstBelow(all, scroller.getBoundingClientRect().top)
-      : 0;
+    const split = atTop()
+      ? 0
+      : firstBelow(all, scroller.getBoundingClientRect().top);
     const below = all.slice(split, split + 32),
       above = all.slice(Math.max(0, split - 32), split).reverse();
     const list =

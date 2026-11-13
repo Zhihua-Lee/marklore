@@ -54,7 +54,6 @@
     "markdown-it": "15.0.3",
     "markdown-it-footnote": "4.0.0",
     "markdown-it-task-lists": "2.1.1",
-    "mermaid": "12.2.0",
     "ondine": "0.0.3",
     "prosemirror-commands": "1.7.2",
     "prosemirror-gapcursor": "1.4.1",

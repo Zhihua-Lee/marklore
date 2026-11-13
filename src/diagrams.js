@@ -1,40 +1,28 @@
 import { t } from "../desktop/i18n.mjs";
 import DOMPurify from "dompurify";
 import { settled } from "./composing.js";
-let library,
-  initializedTheme,
-  compiled,
+let compiled,
   counter = 0,
   queue = Promise.resolve();
 const pending = new WeakMap();
 
 // Diagrams are drawn by Ondine (Mermaid's syntax compiled to SVG by a Rust
-// module) first: tens of times faster and far lighter than mermaid.js. Its
+// module): tens of times faster and far lighter than mermaid.js. Its
 // colors come from CSS variables (diagrams.css), so a theme change needs no
-// new drawing. What it cannot draw goes to mermaid.js, loaded only then.
-async function drawWithOndine(source) {
-  if (compiled === false) return null;
-  try {
-    if (!compiled) {
-      const [{ create }, { wasm }] = await Promise.all([
-        import("ondine/compiler/wasm"),
-        import("ondine/compiler/wasm/all"),
-      ]);
-      compiled = create({ modules: { all: wasm } });
-    }
-  } catch {
-    compiled = false;
-    return null;
+// new drawing. What it cannot read shows its error under the source.
+async function draw(source) {
+  if (!compiled) {
+    const [{ create }, { wasm }] = await Promise.all([
+      import("ondine/compiler/wasm"),
+      import("ondine/compiler/wasm/all"),
+    ]);
+    compiled = create({ modules: { all: wasm } });
   }
-  try {
-    return compiled.render(source, {
-      autoDirection: false,
-      idPrefix: `folio-diagram-${++counter}-`,
-      limit: 50000,
-    }).svg;
-  } catch {
-    return null;
-  }
+  return compiled.render(source, {
+    autoDirection: false,
+    idPrefix: `folio-diagram-${++counter}-`,
+    limit: 50000,
+  }).svg;
 }
 export function renderDiagrams(host, theme, onLayout) {
   for (const code of host.querySelectorAll("pre > code.language-mermaid")) {
@@ -65,9 +53,8 @@ export function renderDiagrams(host, theme, onLayout) {
           return;
         }
         try {
-          let svg = await drawWithOndine(source);
+          const svg = await draw(source);
           if (stale()) return;
-          if (!svg) svg = await drawWithMermaid(source, theme);
           // Not while an input method composes (see composing.js).
           await settled();
           if (stale()) return;
@@ -106,22 +93,4 @@ export function renderDiagrams(host, theme, onLayout) {
         if (pending.get(pre) === request) pending.delete(pre);
       });
   }
-}
-
-async function drawWithMermaid(source, theme) {
-  library ??= (await import("mermaid")).default;
-  if (initializedTheme !== theme) {
-    library.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: theme === "dark" ? "dark" : "neutral",
-      suppressErrorRendering: true,
-      maxTextSize: 50000,
-      flowchart: { htmlLabels: false },
-      htmlLabels: false,
-    });
-    initializedTheme = theme;
-  }
-  const { svg } = await library.render("folio-diagram-" + ++counter, source);
-  return svg;
 }

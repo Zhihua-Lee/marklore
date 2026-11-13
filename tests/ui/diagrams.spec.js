@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-// Diagrams are drawn by Ondine; mermaid.js is loaded only for what Ondine
-// cannot draw. Ondine's colors come from the theme's CSS variables.
+// Diagrams are drawn by Ondine; mermaid.js is not part of the app. Ondine's
+// colors come from the theme's CSS variables.
 async function draw(page, source, theme = "light") {
   await page.evaluate(
     async ([source, theme]) => {
@@ -50,11 +50,14 @@ test("a diagram is drawn by Ondine without loading mermaid.js", async ({
   expect(await ink()).not.toBe(light);
 });
 
-test("what Ondine cannot read goes to mermaid.js, and its error shows", async ({
+test("what Ondine cannot read shows its error under the source", async ({
   page,
 }) => {
   await draw(page, "flowchart LR\n  A -->");
-  await expect(page.locator(".diagram-error")).toBeVisible({ timeout: 20000 });
-  expect(await mermaidLoaded(page)).toBe(true);
+  const error = page.locator(".diagram-error");
+  await expect(error).toBeVisible({ timeout: 20000 });
+  // The error says where in the source.
+  await expect(error).toContainText(/Parse error on line \d/);
+  expect(await mermaidLoaded(page)).toBe(false);
   await expect(page.locator("pre code.language-mermaid")).toBeVisible();
 });

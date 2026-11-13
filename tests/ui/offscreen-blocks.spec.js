@@ -163,11 +163,49 @@ test("outline jumps and find land on skipped parts of a long note", async ({
   expect(visible).toBe(true);
 });
 
+test("a reading position right of a line's end is held by its last character", async ({
+  page,
+}) => {
+  // Where the reading line crosses a short line right of its text, the caret
+  // there is after the run's last character. That offset belongs to no run,
+  // and restoring it measured the whole block: every formula drawn above
+  // moved the text by the line's distance from the block's top.
+  await page.goto("/");
+  const moved = await page.evaluate(async () => {
+    const { visibleAnchor, restoreAnchor } = await import("/src/positions.js");
+    const host = document.createElement("div");
+    host.style.cssText =
+      "position:fixed;left:0;top:0;width:600px;height:300px;overflow:auto;font:16px/40px sans-serif";
+    host.innerHTML =
+      '<div style="height:1000px"></div>' +
+      '<p data-from="0" data-to="20" style="margin:0;padding-top:30px">' +
+      '<span data-text-from="0" data-text-to="5">short</span><br>' +
+      '<span data-text-from="6" data-text-to="11">lines</span></p>' +
+      '<div style="height:1000px"></div>';
+    document.body.append(host);
+    const run = host.querySelector("span");
+    // The first line's box spans 20 to 60 px below the top; the reading
+    // line (32 px) crosses it right of "short".
+    host.scrollTop = run.getBoundingClientRect().top - 20;
+    const before = run.getBoundingClientRect().top;
+    const anchor = visibleAnchor(host);
+    host.firstChild.style.height = "1050px";
+    restoreAnchor(host, anchor);
+    const after = run.getBoundingClientRect().top;
+    host.remove();
+    return after - before;
+  });
+  expect(Math.abs(moved)).toBeLessThanOrEqual(1);
+});
+
 test("scrolling over formulas not drawn yet keeps the reading line still", async ({
   page,
 }) => {
   // Right after opening most formulas are still TeX placeholders; they are
-  // drawn as they come near the screen (and in idle time).
+  // drawn as they come near the screen (and in idle time). A slower machine
+  // (CI under load): formulas are drawn later, fonts arrive later.
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   await boot(page, longNote);
   // Text at the reading line, its distance from the reader's top, after a
   // scroll step and again once the formulas around it have been drawn.
@@ -175,9 +213,11 @@ test("scrolling over formulas not drawn yet keeps the reading line still", async
     page.evaluate(() => {
       const reader = document.querySelector("#reader"),
         box = reader.getBoundingClientRect();
-      const leaf = document
-        .elementFromPoint(box.left + box.width / 2, box.top + 60)
-        ?.closest("p, li, h2, td, blockquote");
+      let leaf = null;
+      for (const y of [60, 90, 120, 160, 200])
+        leaf ??= document
+          .elementFromPoint(box.left + box.width / 2, box.top + y)
+          ?.closest("p, li, h2, td, blockquote");
       window.__leaf = leaf;
       return leaf ? leaf.getBoundingClientRect().top - box.top : null;
     });
@@ -187,17 +227,45 @@ test("scrolling over formulas not drawn yet keeps the reading line still", async
         window.__leaf.getBoundingClientRect().top -
         document.querySelector("#reader").getBoundingClientRect().top,
     );
+  // What was painted after the step: formulas a jump lands on are drawn
+  // before the frame that shows them.
+  const painted = () =>
+    page.evaluate(
+      () =>
+        new Promise((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(resolve)),
+        ),
+    );
+  // Quiet: no formula left undrawn on screen or within 600 px of it.
+  const near = () =>
+    page.evaluate(() => {
+      const box = document.querySelector("#reader").getBoundingClientRect();
+      return [...document.querySelectorAll("#content [data-folio-math]")]
+        .map((marker) => marker.getBoundingClientRect())
+        .filter(
+          (rect) =>
+            (rect.width || rect.height) &&
+            rect.bottom > box.top - 600 &&
+            rect.top < box.bottom + 600,
+        ).length;
+    });
+  let checked = 0;
   for (const step of [900, 900, 900, -1400, -700, 1600]) {
     await page.evaluate(
       (step) => (document.querySelector("#reader").scrollTop += step),
       step,
     );
+    await painted();
     const at = await probe();
     if (at === null) continue;
-    await page.waitForTimeout(250);
-    // The position is kept at the reader's top edge; a formula drawn in the
-    // lines between that edge and this text may still move it by a few
-    // pixels (3 seen with current Edge). A jump would be tens of pixels.
-    expect(Math.abs((await again()) - at)).toBeLessThanOrEqual(4);
+    checked++;
+    await expect.poll(near, { timeout: 10000 }).toBe(0);
+    await page.waitForTimeout(100);
+    // Rounding at most. A reading position restored to the wrong place
+    // moved it by a line (20 px on CI), and a formula drawn after it was
+    // shown by its growth (2 px a line with a subscript, 10 or more for a
+    // display formula).
+    expect(Math.abs((await again()) - at)).toBeLessThanOrEqual(2);
   }
+  expect(checked).toBeGreaterThan(1);
 });

@@ -22,8 +22,9 @@ function underShield(measure) {
     shield?.classList.add("raised");
   }
 }
-export function atPoint(host, x, y) {
-  return underShield(() => pointSource(host, x, y));
+// `held`: for a reading position (see pointSource).
+export function atPoint(host, x, y, held = false) {
+  return underShield(() => pointSource(host, x, y, held));
 }
 // The DOM caret position at a point of the page, or null.
 export function caretAt(x, y) {
@@ -36,27 +37,29 @@ export function caretAt(x, y) {
       : null;
   });
 }
-function pointSource(host, x, y) {
+function pointSource(host, x, y, held) {
   const caret = document.caretPositionFromPoint?.(x, y);
   const range = !caret && document.caretRangeFromPoint?.(x, y);
   const node = caret?.offsetNode || range?.startContainer,
     offset = caret?.offset ?? range?.startOffset;
   const leaf = node?.parentElement?.closest("[data-text-from]");
   if (leaf && host.contains(leaf)) {
-    // Where that character's box starts now (findPosition measures the same
-    // box when the anchor is restored).
+    const start = Number(leaf.dataset.textFrom),
+      end = Number(leaf.dataset.textTo),
+      at = start + textOffset(leaf, node, offset);
+    // For a reading position, a caret after the run's last character (a
+    // point right of a line's end) is held by that character: the offset
+    // after it belongs to no run, and restoring it measured the enclosing
+    // block instead, a line or more away.
+    const from = held ? Math.max(start, Math.min(end - 1, at)) : at;
+    // Where that character's box starts now, measured by findPosition as it
+    // is when the anchor is restored: a caret at the end of one text node
+    // and at the start of the next are the same offset, but their boxes can
+    // lie on different lines or beside a formula that is still growing.
     let top;
-    if (node.nodeType === 3) {
-      const range = document.createRange();
-      range.setStart(node, Math.min(offset, node.length));
-      range.setEnd(node, Math.min(node.length, offset + 1));
-      top = range.getBoundingClientRect().top;
-    }
-    return {
-      from: Number(leaf.dataset.textFrom) + textOffset(leaf, node, offset),
-      exact: true,
-      top,
-    };
+    if (held)
+      top = findPosition(host, from)?.range?.getBoundingClientRect().top;
+    return { from, exact: true, top };
   }
   const target = document.elementFromPoint(x, y)?.closest("[data-from]");
   if (target && host.contains(target))
@@ -132,7 +135,7 @@ function readingAnchor(host) {
     rect.left + rect.width * 0.3,
     rect.left + rect.width * 0.5,
   ]) {
-    const hit = atPoint(host, x, y);
+    const hit = atPoint(host, x, y, true);
     // The character keeps its place: its box's top, not the probe's height
     // (up to a line below it), goes back to where it is now.
     if (hit?.exact) {
@@ -179,15 +182,24 @@ export function findPosition(host, from) {
   if (leaf) {
     const walker = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
     let remaining = from - Number(leaf.dataset.textFrom),
-      node;
+      node,
+      last = null;
+    // The character at that offset: the start of the next text node rather
+    // than the (empty) end of the one before it.
     while ((node = walker.nextNode())) {
-      if (remaining <= node.length) {
+      if (remaining < node.length) {
         const r = document.createRange();
         r.setStart(node, remaining);
-        r.setEnd(node, Math.min(node.length, remaining + 1));
+        r.setEnd(node, remaining + 1);
         return { element: leaf, range: r };
       }
       remaining -= node.length;
+      last = node;
+    }
+    if (last && remaining === 0) {
+      const r = document.createRange();
+      r.setStart(last, last.length);
+      return { element: leaf, range: r };
     }
   }
   let best = null;

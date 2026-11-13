@@ -1,8 +1,12 @@
 // Keep recent previews alive, reconciling source skeletons rather than expanded
 // KaTeX/diagram DOM. Matching siblings by content also survives insertions/deletions.
+// The budget is the memory the kept notes hold, as the renderer estimates it
+// (markdown.js): a few plain or formula-light notes fit; a long note full of
+// formulas (100 MB or more once drawn) is kept only while it is shown, and
+// drawn again, from cached formulas, when its tab comes back.
 export function createPreviewCache({
   maxDocuments = 4,
-  maxHtmlBytes = 4 * 1024 * 1024,
+  maxHtmlBytes = 64 * 1024 * 1024,
 } = {}) {
   const entries = new Map(),
     signatures = new WeakMap();

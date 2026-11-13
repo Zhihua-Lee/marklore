@@ -147,6 +147,29 @@ test("a formula drawn again is not typeset again, and batches draw what single f
   });
 });
 
+test("a note's retained-memory estimate counts its drawn formulas", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    const { renderMarkdown } = await import("/src/markdown.js");
+    const estimate = (text) =>
+      renderMarkdown(text, "x", { deferMath: true }).bytes / 1048576;
+    const prose = "A plain paragraph of prose, nothing else in it.\n\n";
+    return {
+      // ~50,000 characters of prose: a few MB.
+      plain: estimate(prose.repeat(1000)),
+      // 1,000 formulas: about 100 MB once drawn (measured ~100 KB each).
+      formulas: estimate(
+        Array.from({ length: 1000 }, (_, i) => `$x_{${i}}$ text`).join("\n\n"),
+      ),
+    };
+  });
+  expect(result.plain).toBeLessThan(8);
+  // Above the preview cache's 64 MB: such a note is not kept in the background.
+  expect(result.formulas).toBeGreaterThan(80);
+});
+
 test("preview retention respects document and HTML budgets and releases closed tabs", async ({
   page,
 }) => {

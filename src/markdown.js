@@ -1288,15 +1288,13 @@ export function renderMarkdown(
           },
         )
       : null,
-    // Account conservatively for future expanded math, not just placeholder HTML.
+    // What the note keeps in memory once drawn, kept in the preview cache
+    // (render-cache.js). Measured in the renderer (Blink's heap, strings, V8)
+    // on a long note (118,000 characters, 1,300 formulas): about 12 bytes per
+    // character of its HTML, and about 100 KB per drawn formula (KaTeX's
+    // ~60 positioned elements, their styles and MathML), 140 MB in all.
     bytes:
-      html.length * 2 +
-      (deferMath
-        ? env.mathFragments.reduce(
-            (n, f) => n + Math.max(8192, f.source.length * 256),
-            0,
-          )
-        : 0),
+      html.length * 12 + (deferMath ? env.mathFragments.length * 96 * 1024 : 0),
     formulaCount: env.mathFragments.length,
   };
 }

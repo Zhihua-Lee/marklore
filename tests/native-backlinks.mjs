@@ -91,8 +91,46 @@ try {
     .getByRole("tab", { name: "Use.md", exact: true })
     .waitFor({ timeout: 10000 });
   await page.locator("#content h1", { hasText: "Use" }).waitFor();
+
+  // Full-text search answers from the same index.
+  const found = await page.evaluate(() => window.folio.searchText("bound"));
+  assert.equal(found.total, 3);
+  assert.deepEqual(found.results.map((r) => r.name).sort(), [
+    "Apply.md",
+    "Lemma.md",
+    "Use.md",
+  ]);
+  assert.ok(found.results.every((r) => r.hits.length > 0));
+
+  // The index in use: the native one whenever its binary is in the package
+  // (or the checkout), and Settings says which.
+  const binary = path.join(
+    ...(exe
+      ? [path.dirname(exe), "resources", "app.asar.unpacked"]
+      : [project]),
+    "native",
+    "index",
+    `marklore-index.${process.platform}-${process.arch}.node`,
+  );
+  const expected =
+    process.env.MARKLORE_INDEX !== "js" &&
+    (await fs.access(binary).then(
+      () => true,
+      () => false,
+    ))
+      ? "native"
+      : "js";
+  const status = await page.evaluate(() => window.folio.desktopStatus());
+  assert.equal(status.index, expected);
+  await page.locator("#weight").click();
+  await page.locator('.settings-nav [data-section="desktop-settings"]').click();
+  await page
+    .locator("#desktop-index", {
+      hasText: expected === "native" ? "原生索引" : "JavaScript 索引",
+    })
+    .waitFor({ timeout: 10000 });
   console.log(
-    "Native backlinks passed: counts from the library index, a note written by another program adds to them, the card opens the source, broken links marked.",
+    `Native backlinks passed: counts from the library index (${status.index}), a note written by another program adds to them, the card opens the source, broken links marked, search answers, Settings names the index.`,
   );
 } finally {
   if (instance) {

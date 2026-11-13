@@ -90,6 +90,9 @@ pnpm dev
 
 - 构建：在 `native/index` 中运行 `cargo build --release`，把生成的动态库复制为上述文件名；`cargo test --no-default-features` 测试不含 Node 绑定的部分。
 - [.github/workflows/native-index.yml](../.github/workflows/native-index.yml) 为 win32-x64、darwin-x64、darwin-arm64 构建并上传二进制，并运行 `tests/native-index.test.mjs`（没有二进制时该测试跳过）。
+- 不装 Rust 时取用 CI 构建：`node tools/fetch-native-index.mjs [--ref <提交或分支>] [--target <platform-arch>]` 用 GitHub CLI 下载最近一次成功的 `Native index` 运行的产物到 `native/index/`。它取提交是 ref 本身、或是 ref 的祖先且此后工作流 `paths` 所列文件没有变化的运行，所以没改动索引的提交也能找到；本机平台的二进制会加载检查（`kind` 为 native、API 版本一致），并打印 sha256。`gh`、`git` 不在 PATH 上时用环境变量 `GH`、`GIT` 指定。
+- 打包：`package.json` 的 `build.files` 只收入当前平台与架构的 `native/index/marklore-index.${platform}-${arch}.node`，`asarUnpack` 把它放到 `resources/app.asar.unpacked/native/index/`。没有二进制时照常打包，程序使用 JavaScript 实现。CI 的 `mac` 任务在打包前为 arm64 和 x64 各构建一个，每个 dmg 带自己架构的那个。
+- 设置 → 后台与系统的底部注明当前使用的是原生索引还是 JavaScript 索引（`desktopStatus().index`）；`tests/native-backlinks.mjs` 检查包内有二进制时程序确实用它，反向链接和全文搜索照常返回。
 - `node tools/bench-index.mjs <临时文件夹>` 生成合成笔记库（`tools/synthetic-library.mjs`）并计时。
 
 具体版本执行了哪些测试，以 [VERIFICATION.md](../VERIFICATION.md) 为准。历史通过记录不代表后续提交已自动验证，也不代表所有个人笔记已通过人工验收。
@@ -128,11 +131,11 @@ CI 的 `mac` 任务在 `macos-latest` 上运行 `pnpm exec electron-builder --ma
 
 `desktop/updater.mjs` 读取 `https://api.github.com/repos/Zhihua-Lee/marklore/releases/latest`，按固定的资产名下载：`Marklore-Setup-vX.Y.Z-x64.exe`（安装版）或 `Marklore-vX.Y.Z-win-x64.zip`（压缩包版，内含一个 `Marklore-vX.Y.Z-win-x64` 文件夹），并用 `SHA256SUMS-vX.Y.Z.txt` 校验。发布时这些名字不能变。
 
-新版本与正在运行的程序使用同一个 Electron 时，两种版本都只下载应用文件 `Marklore-vX.Y.Z-app-electron-<Electron 版本>.zip`（约 3.5 MB，内含同名文件夹，只有 `resources/app.asar`、README、LICENSE 和第三方声明），而不是约 100 MB 的完整包。文件名里的 Electron 版本决定能否使用：版本不同、发布中没有这个文件或程序目录不可写时，照旧下载完整包。发布时用 `node tools/app-update.mjs <win-unpacked> <输出目录> [版本]` 生成，Electron 版本取自包内的 `version` 文件，并把它加入 `SHA256SUMS-vX.Y.Z.txt`。下载在单独的会话中进行，默认会话仍拦截所有网络请求。
+新版本与正在运行的程序使用同一个 Electron 时，两种版本都只下载应用文件 `Marklore-vX.Y.Z-app-electron-<Electron 版本>.zip`（约 3.5 MB，内含同名文件夹，只有 `resources/app.asar`、README、LICENSE 和第三方声明；包内有原生索引时还有 `resources/app.asar.unpacked/native/index/marklore-index.win32-x64.node`，见 `nativeAppFiles`），而不是约 100 MB 的完整包。文件名里的 Electron 版本决定能否使用：版本不同、发布中没有这个文件或程序目录不可写时，照旧下载完整包。发布时用 `node tools/app-update.mjs <win-unpacked> <输出目录> [版本]` 生成，Electron 版本取自包内的 `version` 文件，并把它加入 `SHA256SUMS-vX.Y.Z.txt`。下载在单独的会话中进行，默认会话仍拦截所有网络请求。
 
 SHA256SUMS 与下载走同一条连接，能冒充 GitHub 的人可以一并替换，所以更新的安全取决于 TLS。Chrome 用 CRLSet 推送屏蔽出事的证书机构，Electron 收不到这些推送；更新会话因此自己拒绝经过这些机构的证书链（`distrusted`，用 `setCertificateVerifyProc`，其余照 Chromium 的验证结果）。目前是 eMudhra（2026-10，中间证书私钥可被猜出）。以后再有证书机构出事，把它加进 `distrusted` 并发布新版本。
 
-校验通过后写入一个 PowerShell 辅助脚本并退出：脚本等旧进程结束，安装版运行 `Setup /S /currentuser --updated /D=<原目录>`，压缩包版用 `robocopy /E` 覆盖程序目录（不删除文件，便携 `data` 保留）；应用文件同样用 `robocopy` 覆盖，安装版随后把“应用和功能”中的版本改为新版本。然后重新启动 Marklore。下次启动时读取 `pending.json` 报告结果并删除下载；下载里有 `app.asar`，Electron 的 `fs` 会把它当作归档读，所以删除用 `original-fs`。`FOLIO_UPDATE_FEED` 可把查询指向本地测试服务；`tests/native-update.mjs` 用它端到端测试：压缩包版先用完整包、再用应用文件更新，安装版（`tools/installer-check.ps1 -Newer`）先用新安装包、再用应用文件更新。
+校验通过后写入一个 PowerShell 辅助脚本并退出：脚本等旧进程结束，安装版运行 `Setup /S /currentuser --updated /D=<原目录>`，压缩包版用 `robocopy /E` 覆盖程序目录（不删除文件，便携 `data` 保留）；应用文件同样用 `robocopy` 覆盖，安装版随后把“应用和功能”中的版本改为新版本。然后重新启动 Marklore。加载中的原生索引二进制在 Windows 上被锁定，但只有主进程加载它（MCP 服务器不加载），辅助脚本等这个程序的进程结束后才复制，与 `app.asar` 相同，所以无需改名。更新包不带二进制时，原有的二进制保留；API 版本不符的二进制不会被加载，程序改用 JavaScript 实现。下次启动时读取 `pending.json` 报告结果并删除下载；下载里有 `app.asar`，Electron 的 `fs` 会把它当作归档读，所以删除用 `original-fs`。`FOLIO_UPDATE_FEED` 可把查询指向本地测试服务；`tests/native-update.mjs` 用它端到端测试：压缩包版先用完整包、再用应用文件更新，安装版（`tools/installer-check.ps1 -Newer`）先用新安装包、再用应用文件更新。包内有原生索引时，压缩包版先去掉它（如同之前的版本），检查完整包带来它、应用文件在它被加载过的程序退出后替换它，更新后的程序仍使用原生索引。
 
 ### 发布与清理本地产物
 

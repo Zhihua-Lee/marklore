@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { createLinkIndex } from "./link-index.mjs";
 import { parseQuery } from "./note-search.mjs";
 
-const API = 1;
+// The binding's apiVersion() this loader expects.
+export const API = 1;
 const require = createRequire(import.meta.url);
 const appDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 

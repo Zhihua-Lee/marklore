@@ -68,6 +68,21 @@ jobs:
       - run: pnpm test
         continue-on-error: true
       - run: pnpm build
+      # The native library index for each dmg's architecture, built from this
+      # commit (the "Native index" workflow runs only when the index changes,
+      # and its artifacts expire). Each dmg takes the binary for its own arch.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Native index
+        working-directory: native/index
+        run: |
+          for pair in aarch64-apple-darwin:darwin-arm64 x86_64-apple-darwin:darwin-x64; do
+            cargo build --release --target "${pair%%:*}"
+            cp "target/${pair%%:*}/release/libmarklore_index.dylib" "marklore-index.${pair##*:}.node"
+          done
+          cd ../..
+          node -e 'import("./desktop/native-index.mjs").then((m) => { const i = m.indexInfo(); console.log(i); if (i.kind !== "native") process.exit(1); })'
       - run: pnpm exec electron-builder --mac --publish never
       - uses: actions/upload-artifact@v4
         with:

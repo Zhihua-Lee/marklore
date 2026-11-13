@@ -177,6 +177,8 @@ export default {
   "系统集成仅在 Windows 打包版可用。":
     "System integration is only available in the packaged Windows app.",
   "当前程序：{path}": "Current app: {path}",
+  "链接与搜索：原生索引": "Links and search: native index",
+  "链接与搜索：JavaScript 索引": "Links and search: JavaScript index",
   "便携模式仅在打包版可用。":
     "Portable mode is only available in the packaged app.",
   "正在重启 Marklore…": "Restarting Marklore…",

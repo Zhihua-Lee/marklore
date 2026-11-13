@@ -12,6 +12,9 @@
 //   FOLIO_UPDATE_SETUP, version FOLIO_UPDATE_VERSION, installed over itself;
 //   then "v9.9.9" as app files, which must also update the version
 //   "Apps & features" shows.
+// When the package has the native library index, the zip copy starts without
+// it (as a release from before it): the whole package brings it, and the app
+// files replace it after the copy that had it loaded has quit.
 import { _electron as electron } from "@playwright/test";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
@@ -20,7 +23,7 @@ import os from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { assetNames, appFiles } from "../desktop/updater.mjs";
+import { assetNames, appFiles, nativeAppFiles } from "../desktop/updater.mjs";
 
 if (!process.env.FOLIO_TEST_EXE || process.platform !== "win32") {
   console.log("Native update skipped: needs a packaged Windows build.");
@@ -52,6 +55,13 @@ const program = installed ? source : path.join(temp, "app"),
   note = path.join(temp, "Update.md"),
   executable = path.join(program, path.basename(process.env.FOLIO_TEST_EXE));
 await fs.writeFile(note, "# Update\n\nStill here.\n");
+// The native library index, when the package has it. The zip copy starts
+// without it, as a release from before it did; the whole package brings it,
+// and the app files then replace it while the running copy has it loaded.
+const nativeFiles = [];
+for (const file of nativeAppFiles)
+  if (await exists(path.join(source, file))) nativeFiles.push(file);
+const stamp = new Date("2020-01-02T03:04:05Z");
 const tar = (cwd, ...args) =>
   execFileSync(path.join(process.env.SystemRoot, "System32", "tar.exe"), args, {
     cwd,
@@ -72,11 +82,14 @@ async function release(kind, version) {
       await fs.cp(source, folder, { recursive: true });
       await fs.rm(path.join(folder, "debug.log"), { force: true });
     } else
-      for (const file of appFiles) {
+      for (const file of [...appFiles, ...nativeFiles]) {
         await fs.mkdir(path.dirname(path.join(folder, file)), {
           recursive: true,
         });
         await fs.copyFile(path.join(source, file), path.join(folder, file));
+        // Its own time, to tell the copy the helper puts in place.
+        if (nativeFiles.includes(file))
+          await fs.utimes(path.join(folder, file), stamp, stamp);
       }
     await fs.writeFile(path.join(folder, `UPDATED-${version}.txt`), version);
     asset = kind === "zip" ? names.zip : names.app;
@@ -165,6 +178,8 @@ async function update(kind, version) {
   });
   const page = await app.firstWindow();
   await page.getByRole("tab", { name: "Update.md" }).waitFor();
+  const { index } = await page.evaluate(() => window.folio.desktopStatus());
+  step(`running with the ${index} index`);
   await page.locator("#weight").click();
   await page.locator('.settings-nav [data-section="desktop-settings"]').click();
   const action = page.locator("#update-action"),
@@ -228,6 +243,31 @@ async function update(kind, version) {
   step(
     `ok: v${version} (${kind}) in place, program restarted at the same path`,
   );
+  return index;
+}
+
+// Starts the updated copy once more: the index it uses.
+async function inspect() {
+  const app = await electron.launch({
+    executablePath: executable,
+    args: [note],
+    env: {
+      ...process.env,
+      FOLIO_PROFILE_DIR: profile,
+      FOLIO_DATA_DIR: "",
+      FOLIO_UPDATE_FEED: feed,
+      ELECTRON_RUN_AS_NODE: undefined,
+    },
+    timeout: 30000,
+  });
+  try {
+    const page = await app.firstWindow();
+    await page.getByRole("tab", { name: "Update.md" }).waitFor();
+    return (await page.evaluate(() => window.folio.desktopStatus())).index;
+  } finally {
+    await app.close().catch(() => {});
+    stop();
+  }
 }
 
 let failed = false;
@@ -239,10 +279,27 @@ try {
     // Portable: its data must survive the update.
     await fs.mkdir(path.join(program, "data"));
     await fs.writeFile(path.join(program, "data", "keep.txt"), "mine");
+    for (const file of nativeFiles)
+      await fs.rm(path.join(program, file), { force: true });
   }
-  if (installed) await update("setup", process.env.FOLIO_UPDATE_VERSION);
-  else await update("zip", "9.9.8");
-  await update("app", "9.9.9");
+  const first = installed
+    ? await update("setup", process.env.FOLIO_UPDATE_VERSION)
+    : await update("zip", "9.9.8");
+  if (!installed) assert.equal(first, "js");
+  const second = await update("app", "9.9.9");
+  if (nativeFiles.length) {
+    // The whole package brought the binary; the running copy loaded it, and
+    // the app files replaced it after the copy quit.
+    assert.equal(second, "native");
+    for (const file of nativeFiles)
+      assert.equal(
+        (await fs.stat(path.join(program, file))).mtime.getTime(),
+        stamp.getTime(),
+        file + " was not replaced",
+      );
+    assert.equal(await inspect(), "native");
+    step("ok: the native index came with the update and was replaced in use");
+  } else step("no native index in this package: the JavaScript index is used");
 } catch (error) {
   failed = true;
   console.error(error);

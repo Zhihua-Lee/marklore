@@ -102,6 +102,8 @@ export function skipOffscreenBlocks(host, scroller) {
     idle = null,
     paused = 0,
     lastScroll = 0,
+    retry = 500,
+    cursor = 0,
     width = -1,
     signature = "";
   // Class changes that move nothing: the hover and focus marks of sections
@@ -159,21 +161,31 @@ export function skipOffscreenBlocks(host, scroller) {
     // blocks per pass, so a slow machine still gets through the note.
     const found = [];
     let more = false,
+      waiting = false,
       looked = 0;
-    for (const el of candidates) {
+    // Each pass goes on from where the last one stopped, so parts that keep
+    // waiting (and a large body around them) do not hold up the rest.
+    const count = candidates.length;
+    if (cursor >= count) cursor = 0;
+    for (let i = 0; i < count; i++) {
+      const at = (cursor + i) % count,
+        el = candidates[at];
       if (el.classList.contains(SKIP) || verdicts.get(el) === false) continue;
       if (
         found.length >= BATCH ||
         (looked++ >= 24 && performance.now() - start > budget)
       ) {
         more = true;
+        cursor = at;
         break;
       }
-      if (el.getElementsByTagName("*").length < MIN_ELEMENTS) {
+      // At least so many elements (without counting them all).
+      if (!el.getElementsByTagName("*")[MIN_ELEMENTS - 1]) {
         verdicts.set(el, false);
         continue;
       }
       if (finished(el)) found.push(el);
+      else waiting = true;
     }
     // Then styles and heights (one style and layout update for the batch),
     // then the writes.
@@ -207,6 +219,12 @@ export function skipOffscreenBlocks(host, scroller) {
     // Our own writes are not changes to the blocks.
     observer.takeRecords();
     if (more) schedule();
+    // Parts still waiting for something that changes nothing in the page
+    // (a table's widths found fitting as they are): look again, less often.
+    else if (waiting) {
+      retry = blocks.length ? 500 : Math.min(8000, retry * 2);
+      schedule(retry);
+    } else retry = 500;
   }
   // Changes inside a skipped block un-skip it (its placeholder height would be
   // stale); new or redrawn blocks are looked at in the next idle pass.

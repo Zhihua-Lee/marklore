@@ -220,6 +220,7 @@ export function watchTableLayout(host, scroller) {
   let timer,
     idle = null,
     lastScroll = 0,
+    next = 0,
     measuredWidth = -1;
   // Tables beyond the viewport are sized in idle time, so jumps glide through
   // finished layout. Yields to jumps and active scrolling; keeps the reading line.
@@ -236,20 +237,27 @@ export function watchTableLayout(host, scroller) {
     // measurement hit-tests the page, and most passes find nothing to do.
     let anchor = null;
     const keep = () => (anchor ??= visibleAnchor(scroller)),
-      start = performance.now(),
-      budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8));
+      budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8)),
+      tables = host.querySelectorAll(
+        ".table-scroll > table:not(.table-measure)",
+      ),
+      start = performance.now();
     let changed = false,
       done = true;
-    for (const table of host.querySelectorAll(
-      ".table-scroll > table:not(.table-measure)",
-    )) {
-      if (performance.now() - start >= budget) {
+    // Each slice goes on where the last one stopped and sizes at least one
+    // table: on a slow machine the first measurement can take the whole
+    // budget, and restarting from the top never reached the later tables.
+    if (next >= tables.length) next = 0;
+    for (let i = next, first = true; i < tables.length; i++, first = false) {
+      if (!first && performance.now() - start >= budget) {
         done = false;
+        next = i;
         break;
       }
-      if (skipped(table)) continue;
-      changed = optimizeTable(table, keep) || changed;
+      if (skipped(tables[i])) continue;
+      changed = optimizeTable(tables[i], keep) || changed;
     }
+    if (done) next = 0;
     if (changed && anchor) restoreAnchor(scroller, anchor);
     if (!done) scheduleBackfill();
   };

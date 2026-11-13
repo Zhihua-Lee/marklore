@@ -84,6 +84,7 @@ import "./library-index.css";
 import { createFindBar } from "./find-bar.js";
 import { wireSourceCopy } from "./copy-source.js";
 import { createSmoothScroll } from "./smooth-scroll.js";
+import { skipOffscreenBlocks } from "./offscreen-blocks.js";
 import { releaseWhenQuiet } from "./memory-release.js";
 import { measureAllLines } from "./editor-heights.js";
 import folioLogo from "./folio.svg?raw";
@@ -246,6 +247,8 @@ createTabPreview({
   active: () => active,
   dirty,
 });
+// First: a new width un-skips blocks before tables are measured for it.
+skipOffscreenBlocks($("#content"), $("#reader"));
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
 watchSections($("#content"));
 const smoothScroll = createSmoothScroll($("#reader"));

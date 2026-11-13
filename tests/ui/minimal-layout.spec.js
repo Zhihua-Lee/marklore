@@ -456,7 +456,17 @@ Retained when the other chapter is folded.
       css = (s) => getComputedStyle(q(s));
     return {
       rule: q("#content hr").getBoundingClientRect().width,
-      parent: q("#content hr").parentElement.getBoundingClientRect().width,
+      // Its parent's content box: a section body skipped from drawing
+      // (offscreen-blocks.js) reaches into the gutter with its padding.
+      parent: (() => {
+        const parent = q("#content hr").parentElement,
+          box = getComputedStyle(parent);
+        return (
+          parent.getBoundingClientRect().width -
+          parseFloat(box.paddingLeft) -
+          parseFloat(box.paddingRight)
+        );
+      })(),
       ruleHeight: css("#content hr").height,
       line: css("#content h2").borderBottomWidth,
       mathMargin: css("#content .katex-display").marginTop,

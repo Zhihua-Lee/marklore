@@ -64,7 +64,18 @@ export function createFormulaHydrator(
       timer = setTimeout(work, 100);
       return;
     }
-    const anchor = scroller ? visibleAnchor(scroller) : null;
+    // The reading position is measured (hit tests, a walk of the note) only
+    // when a formula above the reading line can grow: scrolling down, the
+    // formulas drawn come from below and move nothing on screen.
+    const line = scroller ? scroller.getBoundingClientRect().top + 48 : 0;
+    let above = false;
+    if (scroller)
+      for (const marker of ready)
+        if (marker.getBoundingClientRect().top < line) {
+          above = true;
+          break;
+        }
+    const anchor = above ? visibleAnchor(scroller) : null;
     const start = performance.now();
     let count = 0;
     while (ready.size && count < 32) {

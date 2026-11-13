@@ -217,26 +217,10 @@ export function parseNote(text, file) {
   return { links, anchors };
 }
 
-// onProgress: called about once a second while a library is being read.
-export function createLinkIndex({
-  read = fs.readFile,
-  stat = fs.stat,
-  readdir = fs.readdir,
-  onProgress = null,
-} = {}) {
-  const notes = new Map(); // pathKey -> { path, mtime, links, anchors }
-  let folders = [],
-    ready = Promise.resolve(),
-    scanGeneration = 0,
-    indexing = false,
-    followed = null,
-    followedWith = null,
-    isExcluded = () => false;
-  const inLibrary = (file) =>
-    folders.some((folder) => {
-      const rel = path.relative(folder, file);
-      return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
-    });
+// The notes read, with their text, links and anchors, in JavaScript. The
+// native index (desktop/native-index.mjs) is a store with the same methods.
+export function createNoteStore({ read = fs.readFile, stat = fs.stat } = {}) {
+  const notes = new Map(); // pathKey -> { path, mtime, text, lower, links, anchors }
   // fresh: the watcher reported a write. Two quick writes can leave the same
   // modification time on Windows, so only a walk trusts it to skip a read.
   async function load(file, fresh = false) {
@@ -246,7 +230,7 @@ export function createLinkIndex({
       if (!info.isFile() || info.size > MAX_BYTES) return notes.delete(key);
       if (!fresh && notes.get(key)?.mtime === info.mtimeMs) return;
       // Without a byte order mark: a heading on the first line is one.
-      const text = (await read(file, "utf8")).replace(/^\uFEFF/, "");
+      const text = (await read(file, "utf8")).replace(/^﻿/, "");
       // The text stays for full-text search (at most 5000 notes of 2 MB), with a lower-cased copy.
       notes.set(key, {
         path: file,
@@ -259,11 +243,86 @@ export function createLinkIndex({
       notes.delete(key);
     }
   }
+  return {
+    async load(files, fresh = false) {
+      for (const file of files) await load(file, fresh);
+    },
+    // Drop these notes; true when one was indexed.
+    remove(files) {
+      let dropped = false;
+      for (const file of files) if (notes.delete(pathKey(file))) dropped = true;
+      return dropped;
+    },
+    // Keep only these notes.
+    retain(files) {
+      const keep = new Set(files.map(pathKey));
+      for (const key of notes.keys()) if (!keep.has(key)) notes.delete(key);
+    },
+    paths: () => [...notes.values()].map((note) => note.path),
+    has: (file) => notes.has(pathKey(file)),
+    get size() {
+      return notes.size;
+    },
+    backlinks(file) {
+      const key = pathKey(file),
+        result = [];
+      for (const note of notes.values()) {
+        if (pathKey(note.path) === key) continue;
+        for (const link of note.links)
+          if (pathKey(link.target) === key)
+            result.push({ ...link, source: note.path });
+      }
+      return result;
+    },
+    anchors: (file) => notes.get(pathKey(file))?.anchors ?? null,
+    notes: () =>
+      [...notes.values()].map((note) => ({
+        path: note.path,
+        anchors: note.anchors,
+      })),
+    parse: parseNote,
+    search(query, options) {
+      const list = [...notes.values()].map((note) => ({
+        path: note.path,
+        name: path.basename(note.path),
+        text: note.text,
+        lower: note.lower,
+      }));
+      return searchNotes(list, query, options);
+    },
+  };
+}
+
+// Notes found in one folder are read together, at most this many at a time.
+const BATCH = 200;
+
+// onProgress: called about once a second while a library is being read.
+// store: where the notes are kept (createNoteStore unless given).
+export function createLinkIndex({
+  read = fs.readFile,
+  stat = fs.stat,
+  readdir = fs.readdir,
+  onProgress = null,
+  store = createNoteStore({ read, stat }),
+} = {}) {
+  let folders = [],
+    ready = Promise.resolve(),
+    scanGeneration = 0,
+    indexing = false,
+    followed = null,
+    followedWith = null,
+    isExcluded = () => false;
+  const inLibrary = (file) =>
+    folders.some((folder) => {
+      const rel = path.relative(folder, file);
+      return rel && !rel.startsWith("..") && !path.isAbsolute(rel);
+    });
   // Breadth first, so the notes near the top of a large library (a whole
-  // home folder on a network drive) are indexed first; each note is loaded
-  // as it is found and is searchable at once. Software folders are skipped:
-  // Python and conda environments, packages and caches hold no notes.
-  async function scan(roots, generation, onNote) {
+  // home folder on a network drive) are indexed first; the notes of each
+  // folder are loaded as it is read and are searchable at once. Software
+  // folders are skipped: Python and conda environments, packages and caches
+  // hold no notes.
+  async function scan(roots, generation, onNotes) {
     const queue = roots.map((folder) => ({ folder, root: true }));
     let notesFound = 0,
       visited = 0;
@@ -278,6 +337,7 @@ export function createLinkIndex({
         continue;
       }
       if (!root && isEnvironment(entries.map((e) => e.name))) continue;
+      let batch = [];
       for (const entry of entries) {
         if (skippedName(entry.name)) continue;
         const full = path.join(folder, entry.name);
@@ -285,9 +345,14 @@ export function createLinkIndex({
         if (entry.isDirectory()) queue.push({ folder: full, root: false });
         else if (NOTE.test(entry.name) && notesFound < MAX_FILES) {
           notesFound++;
-          await onNote(full);
+          batch.push(full);
+          if (batch.length >= BATCH) {
+            await onNotes(batch);
+            batch = [];
+          }
         }
       }
+      if (batch.length) await onNotes(batch);
     }
     return true;
   }
@@ -304,18 +369,16 @@ export function createLinkIndex({
       folders = next;
       isExcluded = excludedBy(without);
       // Notes in a newly excluded folder go at once, before the rescan.
-      let dropped = false;
-      for (const [k, note] of notes)
-        if (isExcluded(note.path)) dropped = notes.delete(k);
-      if (dropped) onProgress?.();
+      if (store.remove(store.paths().filter((file) => isExcluded(file))))
+        onProgress?.();
       const generation = ++scanGeneration;
       indexing = true;
       ready = (async () => {
-        const keep = new Set();
+        const keep = [];
         let last = Date.now();
-        const complete = await scan(folders, generation, async (file) => {
-          keep.add(pathKey(file));
-          await load(file);
+        const complete = await scan(folders, generation, async (files) => {
+          keep.push(...files);
+          await store.load(files, false);
           // While a large library is read, tell listeners now and then.
           if (Date.now() - last > 1000) {
             last = Date.now();
@@ -323,7 +386,7 @@ export function createLinkIndex({
           }
         });
         if (!complete) return;
-        for (const key of notes.keys()) if (!keep.has(key)) notes.delete(key);
+        store.retain(keep);
         indexing = false;
       })();
       return ready;
@@ -338,28 +401,22 @@ export function createLinkIndex({
     async changed(file) {
       if (!NOTE.test(file) || !inLibrary(file) || isExcluded(file))
         return false;
-      await load(file, true);
+      await store.load([file], true);
       return true;
     },
     // Links from other notes into this one, with where they come from.
     // Answered from the notes read so far while a large library is read.
     async backlinks(file) {
-      const key = pathKey(file),
-        result = [];
-      for (const note of notes.values()) {
-        if (pathKey(note.path) === key) continue;
-        for (const link of note.links)
-          if (pathKey(link.target) === key)
-            result.push({ ...link, source: note.path });
-      }
-      return result;
+      return store.backlinks(file);
     },
     // This note's anchors (headings and explicit ids), from the index or disk.
     async anchors(file) {
-      const note = notes.get(pathKey(file));
-      if (note) return note.anchors;
-      return parseNote((await read(file, "utf8")).replace(/^\uFEFF/, ""), file)
-        .anchors;
+      const anchors = store.anchors(file);
+      if (anchors) return anchors;
+      return store.parse(
+        (await read(file, "utf8")).replace(/^\uFEFF/, ""),
+        file,
+      ).anchors;
     },
     // Does a link from this note lead somewhere? "ok", "missing-file" or
     // "missing-anchor". Footnote and line anchors (#L12) are not checked.
@@ -388,32 +445,23 @@ export function createLinkIndex({
     },
     // Every note in the library with its anchors, for the link picker.
     async notes() {
-      return [...notes.values()].map((note) => ({
-        path: note.path,
-        anchors: note.anchors,
-      }));
+      return store.notes();
     },
     // Notes whose name or text holds every word of the query (note-search.mjs).
     // indexing: the library is still being read; more results may come.
     async search(query, options) {
-      const list = [...notes.values()].map((note) => ({
-        path: note.path,
-        name: path.basename(note.path),
-        text: note.text,
-        lower: note.lower,
-      }));
       return {
-        ...searchNotes(list, query, options),
+        ...store.search(query, options),
         indexing,
-        indexed: notes.size,
+        indexed: store.size,
       };
     },
     // Is this file one of the indexed library notes?
     has(file) {
-      return notes.has(pathKey(file));
+      return store.has(file);
     },
     get size() {
-      return notes.size;
+      return store.size;
     },
   };
 }

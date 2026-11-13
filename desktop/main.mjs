@@ -22,7 +22,7 @@ import { createIntegration } from "./integration.mjs";
 import { createUpdater, distrusted } from "./updater.mjs";
 import { profileFolder } from "./profile-folder.mjs";
 import { createLibraryWatch } from "./library-watch.mjs";
-import { createLinkIndex } from "./link-index.mjs";
+import { createIndex } from "./native-index.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
 import {
@@ -311,7 +311,7 @@ const allowedImage = {
 // other programs, such as an AI agent writing into the library.
 // Which notes link to which, for backlinks and broken links; it follows the
 // same folders and changes as the tree.
-const linkIndex = createLinkIndex({
+const linkIndex = createIndex({
   // A large library (a home folder on a network drive) is read for a while:
   // backlinks and search results refresh as it goes.
   onProgress: () => send("links", null),

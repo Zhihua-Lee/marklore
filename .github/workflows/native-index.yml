@@ -1,0 +1,82 @@
+name: Native index
+
+# Builds the Rust library index (native/index) for each desktop target,
+# checks it gives the JavaScript index's results, and keeps the binaries as
+# artifacts. The app falls back to the JavaScript index without them.
+on:
+  push:
+    branches: [main]
+    paths: ["native/index/**", "desktop/link-index.mjs", "desktop/note-search.mjs", "desktop/snippet.mjs", "desktop/slug.mjs", "desktop/native-index.mjs", "tests/native-index.test.mjs", ".github/workflows/native-index.yml"]
+  pull_request:
+    paths: ["native/index/**", "desktop/link-index.mjs", "desktop/note-search.mjs", "desktop/snippet.mjs", "desktop/slug.mjs", "desktop/native-index.mjs", "tests/native-index.test.mjs", ".github/workflows/native-index.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-index-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: win32-x64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            node-arch: x64
+          - name: darwin-arm64
+            os: macos-latest
+            target: aarch64-apple-darwin
+            node-arch: arm64
+          # Built on Apple silicon; tested with an x64 Node under Rosetta.
+          - name: darwin-x64
+            os: macos-latest
+            target: x86_64-apple-darwin
+            node-arch: x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          architecture: ${{ matrix.node-arch }}
+          check-latest: true
+      - name: Rust tests
+        working-directory: native/index
+        run: cargo test --release --no-default-features
+      - name: Build
+        working-directory: native/index
+        run: |
+          cargo build --release --target ${{ matrix.target }}
+          dir=target/${{ matrix.target }}/release
+          case "${{ matrix.target }}" in
+            *windows*) lib=$dir/marklore_index.dll ;;
+            *darwin*) lib=$dir/libmarklore_index.dylib ;;
+          esac
+          cp "$lib" marklore-index.${{ matrix.name }}.node
+      - name: The binary loads
+        run: node -e 'import("./desktop/native-index.mjs").then((m) => { const i = m.indexInfo(); console.log(i); if (i.kind !== "native") process.exit(1); })'
+      - name: Same results as the JavaScript index
+        env:
+          MARKLORE_COMPARE_NOTES: "2000"
+        run: node --test tests/native-index.test.mjs tests/link-index.test.mjs tests/note-search.test.mjs
+      - name: Timings (JavaScript, then native)
+        run: |
+          MARKLORE_INDEX=js node tools/bench-index.mjs "$RUNNER_TEMP/marklore-bench" 5000
+          node tools/bench-index.mjs "$RUNNER_TEMP/marklore-bench" 5000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: marklore-index-${{ matrix.name }}
+          path: native/index/marklore-index.${{ matrix.name }}.node
+          retention-days: 30

@@ -68,3 +68,15 @@ test("cache byte limits account for replacement and skip oversized results", () 
   assert.equal(cache.get("b"), undefined);
   assert.equal(cache.get("c"), "123");
 });
+test("cache values that are not strings state their own cost", () => {
+  const cache = createBoundedCache({ maxBytes: 100 });
+  cache.set("a", { html: "x" }, 60);
+  cache.set("b", { html: "y" }, 30);
+  assert.equal(cache.bytes, 90);
+  // Growing an entry states its cost again; the oldest goes when over budget.
+  cache.set("b", { html: "y", safe: "y" }, 50);
+  assert.equal(cache.get("a"), undefined);
+  assert.deepEqual(cache.get("b"), { html: "y", safe: "y" });
+  assert.equal(cache.size, 1);
+  assert.equal(cache.bytes, 50);
+});

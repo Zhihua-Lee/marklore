@@ -12,6 +12,13 @@ function markers(node) {
     ...(node.querySelectorAll?.(selector) || []),
   ];
 }
+// Formulas are drawn a few at a time: each group is sanitized in one pass
+// (`warm`), and the time budget is checked between groups.
+const GROUP = 8;
+// What has come on screen is drawn before that frame is painted, up to this
+// much time; the rest follows in the next tasks.
+const SCREEN_MS = 24;
+const shown = (rect) => rect.width > 0 || rect.height > 0;
 
 // Only authenticated parser markers reach this helper. The renderer supplies a
 // sanitized fragment; neither authored HTML nor TeX is assigned to innerHTML here.
@@ -24,6 +31,7 @@ export function createFormulaHydrator(
     backfill: fillIdle = true,
     ready: rendererReady = () => true,
     load = null,
+    warm = null,
   } = {},
 ) {
   let host = null,
@@ -32,11 +40,25 @@ export function createFormulaHydrator(
     timer = null,
     ownerWindow = null,
     idle = null,
-    queue = null,
-    lastScroll = 0;
+    frame = null,
+    lastScroll = 0,
+    lastTop = 0,
+    direction = 1;
   const ready = new Set();
+  // Markers that cannot be drawn (no formula behind them) are not retried.
+  const failed = new WeakSet();
   const onScroll = () => {
-    if (!isCorrection(scroller)) lastScroll = performance.now();
+    if (isCorrection(scroller)) return;
+    lastScroll = performance.now();
+    const top = scroller.scrollTop,
+      jump = Math.abs(top - lastTop) > scroller.clientHeight / 2;
+    if (top !== lastTop) direction = top > lastTop ? 1 : -1;
+    lastTop = top;
+    // Scrolling step by step, formulas ahead were drawn as they came within
+    // 600 px; a jump (the scroll bar dragged, Page Down, a scripted move)
+    // can land on undrawn ones, drawn then before they are shown.
+    if (jump && frame === null && ownerWindow)
+      frame = ownerWindow.requestAnimationFrame(onScreen);
   };
 
   function expand(marker) {
@@ -44,16 +66,91 @@ export function createFormulaHydrator(
     // retries once it arrives, so the TeX source placeholder is temporary.
     if (!rendererReady()) return false;
     const formula = formulas.get(marker.getAttribute("data-folio-math"));
-    if (formula === undefined) return false;
+    if (formula === undefined) {
+      failed.add(marker);
+      return false;
+    }
     marker.replaceWith(render(formula));
     return true;
   }
+  // A node about to be put in the page (render-cache.js): all its formulas.
   function hydrate(node) {
-    if (!progressive) for (const marker of markers(node)) expand(marker);
+    if (!progressive) draw(markers(node), Infinity, false);
+  }
+  // Draws `list` in order, a group at a time, until `limit` ms have passed
+  // (at least one group). Returns how many were drawn.
+  function draw(list, limit, inHost = true) {
+    const start = performance.now();
+    let count = 0;
+    for (let at = 0; at < list.length; at += GROUP) {
+      const group = [];
+      for (const marker of list.slice(at, at + GROUP)) {
+        ready.delete(marker);
+        observer?.unobserve(marker);
+        if (!failed.has(marker) && (!inHost || host?.contains(marker)))
+          group.push(marker);
+      }
+      if (warm && group.length > 1 && rendererReady())
+        warm(
+          group
+            .map((marker) =>
+              formulas.get(marker.getAttribute("data-folio-math")),
+            )
+            .filter(Boolean),
+        );
+      for (const marker of group) if (expand(marker)) count++;
+      if (performance.now() - start >= limit) break;
+    }
+    return count;
+  }
+  // The reading position is measured (hit tests) only when a formula about to
+  // be drawn lies above the reading line: drawn below it, formulas move
+  // nothing that is being read.
+  function anchorFor(list) {
+    if (!scroller) return null;
+    const line = scroller.getBoundingClientRect().top + 48;
+    for (const marker of list) {
+      const rect = marker.getBoundingClientRect();
+      if (shown(rect) && rect.top < line) return visibleAnchor(scroller);
+    }
+    return null;
   }
   function changed(anchor) {
     if (anchor) restoreAnchor(scroller, anchor);
     host?.dispatchEvent(new Event("folio:math-rendered"));
+  }
+  // Index of the first marker whose box reaches below `y` (markers follow
+  // the page from top to bottom; hidden ones, in folded sections, may break
+  // the order a little, which only changes what is drawn first and whether
+  // the reading position is measured).
+  function firstBelow(list, y) {
+    let low = 0,
+      high = list.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      const rect = list[mid].getBoundingClientRect();
+      if (shown(rect) && rect.bottom < y) low = mid + 1;
+      else high = mid;
+    }
+    return low;
+  }
+  // What is on screen now, top to bottom.
+  function onScreen() {
+    frame = null;
+    if (!host?.isConnected || !scroller || !rendererReady()) return;
+    if (navigationMoving(scroller)) return;
+    const view = scroller.getBoundingClientRect(),
+      all = markers(host);
+    const list = [];
+    for (let i = firstBelow(all, view.top); i < all.length; i++) {
+      const rect = all[i].getBoundingClientRect();
+      if (!shown(rect)) continue;
+      if (rect.top > view.bottom) break;
+      if (!failed.has(all[i])) list.push(all[i]);
+    }
+    if (!list.length) return;
+    const anchor = anchorFor(list);
+    if (draw(list, SCREEN_MS)) changed(anchor);
   }
   function work() {
     timer = null;
@@ -64,34 +161,16 @@ export function createFormulaHydrator(
       timer = setTimeout(work, 100);
       return;
     }
-    // The reading position is measured (hit tests, a walk of the note) only
-    // when a formula above the reading line can grow: scrolling down, the
-    // formulas drawn come from below and move nothing on screen.
-    const line = scroller ? scroller.getBoundingClientRect().top + 48 : 0;
-    let above = false;
-    if (scroller)
-      for (const marker of ready)
-        if (marker.getBoundingClientRect().top < line) {
-          above = true;
-          break;
-        }
-    const anchor = above ? visibleAnchor(scroller) : null;
-    const start = performance.now();
-    let count = 0;
-    while (ready.size && count < 32) {
-      const marker = ready.values().next().value;
-      ready.delete(marker);
-      observer?.unobserve(marker);
-      if (host.contains(marker) && expand(marker)) count++;
-      if (performance.now() - start >= budgetMs) break;
-    }
-    if (count) changed(anchor);
+    const list = [...ready].slice(0, 32);
+    const anchor = anchorFor(list);
+    if (draw(list, budgetMs)) changed(anchor);
     if (ready.size) timer = setTimeout(work, 0);
   }
   // After the viewport, render the rest of the note in idle time so outline and
   // link jumps glide through finished content instead of placeholders. Slices
-  // yield to viewport work, jumps and active scrolling, and keep the reading
-  // position when formulas above it grow.
+  // yield to viewport work, jumps and active scrolling. They go on from the
+  // reading position in the direction of the last scroll (formulas drawn below
+  // it need no reading position kept), then the other way, nearest first.
   function scheduleBackfill() {
     if (!fillIdle || idle !== null || !ownerWindow) return;
     idle = ownerWindow.requestIdleCallback
@@ -110,25 +189,27 @@ export function createFormulaHydrator(
     const busy =
       ready.size ||
       timer !== null ||
+      frame !== null ||
       (scroller && navigationMoving(scroller)) ||
       performance.now() - lastScroll < 250;
     if (busy) return scheduleBackfill();
-    queue ??= markers(host);
-    const anchor = scroller ? visibleAnchor(scroller) : null;
-    const start = performance.now(),
-      budget = Math.min(
-        budgetMs,
-        deadline ? deadline.timeRemaining() : budgetMs,
-      );
-    let count = 0;
-    while (queue.length && performance.now() - start < Math.max(2, budget)) {
-      const marker = queue.shift();
-      if (!marker.isConnected) continue;
-      observer?.unobserve(marker);
-      if (expand(marker)) count++;
-    }
-    if (count) changed(anchor);
-    if (queue.length) scheduleBackfill();
+    const all = markers(host).filter((marker) => !failed.has(marker));
+    if (!all.length) return;
+    const split = scroller
+      ? firstBelow(all, scroller.getBoundingClientRect().top)
+      : 0;
+    const below = all.slice(split, split + 32),
+      above = all.slice(Math.max(0, split - 32), split).reverse();
+    const list =
+      (direction < 0 && above.length) || !below.length ? above : below;
+    const anchor = anchorFor(list);
+    const budget = Math.min(
+      budgetMs,
+      deadline ? deadline.timeRemaining() : budgetMs,
+    );
+    if (draw(list, Math.max(2, budget))) changed(anchor);
+    if (all.some((marker) => marker.isConnected && !failed.has(marker)))
+      scheduleBackfill();
   }
   function flush() {
     if (!host) return;
@@ -137,9 +218,7 @@ export function createFormulaHydrator(
     observer?.disconnect();
     ready.clear();
     const anchor = scroller ? visibleAnchor(scroller) : null;
-    let count = 0;
-    for (const marker of markers(host)) if (expand(marker)) count++;
-    if (count) changed(anchor);
+    if (draw(markers(host), Infinity)) changed(anchor);
   }
   // A jump's destination renders before it scrolls (positions.js), so formulas
   // never pop in on arrival. Only markers inside the requested range expand.
@@ -158,15 +237,13 @@ export function createFormulaHydrator(
       .sort(
         (a, b) => Math.abs(a.rect.top - target) - Math.abs(b.rect.top - target),
       );
-    const start = performance.now();
-    let count = 0;
-    for (const { marker } of inRange) {
-      if (performance.now() - start >= limit) break;
-      ready.delete(marker);
-      observer?.unobserve(marker);
-      if (expand(marker)) count++;
-    }
-    if (count) changed(null);
+    if (
+      draw(
+        inRange.map(({ marker }) => marker),
+        limit,
+      )
+    )
+      changed(null);
   }
   function deactivate() {
     clearTimeout(timer);
@@ -175,7 +252,8 @@ export function createFormulaHydrator(
     observer = null;
     ready.clear();
     cancelBackfill();
-    queue = null;
+    if (frame !== null) ownerWindow?.cancelAnimationFrame(frame);
+    frame = null;
     scroller?.removeEventListener("scroll", onScroll);
     host?.removeEventListener("folio:prepare-content", prepare);
     ownerWindow?.removeEventListener("beforeprint", flush);
@@ -224,7 +302,10 @@ export function createFormulaHydrator(
     );
     for (const marker of pending) observer.observe(marker);
     container.addEventListener("folio:prepare-content", prepare);
-    scroller?.addEventListener("scroll", onScroll, { passive: true });
+    if (scroller) {
+      lastTop = scroller.scrollTop;
+      scroller.addEventListener("scroll", onScroll, { passive: true });
+    }
     ownerWindow.addEventListener("beforeprint", flush);
     scheduleBackfill();
   }

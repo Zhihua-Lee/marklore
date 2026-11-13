@@ -5,6 +5,7 @@ import { highlightCode } from "./highlighting.js";
 import { createFormulaHydrator } from "./formula-hydration.js";
 import { decorateSortableTables } from "./table-sort.js";
 import DOMPurify from "dompurify";
+import { createBoundedCache } from "./bounded-cache.js";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
 import { t } from "../desktop/i18n.mjs";
@@ -31,17 +32,129 @@ const escape = (value) =>
 let katex = null,
   katexLoad = null;
 export function loadMath() {
-  return (katexLoad ??= import("katex").then((module) => {
+  return (katexLoad ??= import("katex").then(async (module) => {
+    await mathFonts();
     katex = module.default;
   }));
+}
+// KaTeX's common fonts, loaded before the first formula is drawn: a font
+// arriving later changes the size of every formula drawn with it, and with
+// them the place of the text after them (the reading position included).
+const MATH_FONTS = [
+  "1em KaTeX_Main",
+  "italic 1em KaTeX_Main",
+  "bold 1em KaTeX_Main",
+  "italic 1em KaTeX_Math",
+  "1em KaTeX_AMS",
+  "1em KaTeX_Size1",
+  "1em KaTeX_Size2",
+  "1em KaTeX_Size3",
+  "1em KaTeX_Size4",
+];
+function mathFonts() {
+  const fonts = typeof document !== "undefined" && document.fonts;
+  if (!fonts?.load) return null;
+  return Promise.race([
+    Promise.all(MATH_FONTS.map((font) => fonts.load(font).catch(() => null))),
+    // Never held up for long by a font that does not come.
+    new Promise((resolve) => setTimeout(resolve, 1500)),
+  ]);
 }
 export const mathReady = () => katex !== null;
 // Cheap pre-check for callers that must render synchronously after loading.
 export const mayContainMath = (text) => /\$|\\[([]/.test(text);
-const mathCache = new Map();
-let mathCacheBytes = 0;
-const mathDOMCache = new Map();
-let mathDOMBytes = 0;
+// One entry per formula (display mode and TeX; the KaTeX options are fixed):
+// KaTeX's HTML, and once the formula has been put in a page, that HTML
+// sanitized. A formula met again (the same one further on, the note drawn
+// again, a tab coming back, the editor) is neither typeset nor sanitized
+// again. Held in memory only; a long note's ~800 distinct formulas take about
+// 4 MB.
+const formulaCache = createBoundedCache({
+  maxEntries: 8192,
+  maxBytes: 32 * 1024 * 1024,
+});
+const formulaKey = (source, display) => (display ? "D" : "I") + source;
+function remember(key, entry) {
+  // A formula longer than this is rare and cheap to keep out.
+  if (key.length < 20000)
+    formulaCache.set(
+      key,
+      entry,
+      (key.length + entry.html.length + (entry.safe?.length ?? 0)) * 2,
+    );
+}
+function formulaEntry(source, display) {
+  if (!katex) return null;
+  const key = formulaKey(source, display);
+  let entry = formulaCache.get(key);
+  if (!entry) {
+    entry = { key, html: typeset(source, display), safe: null };
+    remember(key, entry);
+  }
+  return entry;
+}
+// KaTeX's output is sanitized like authored HTML (math runs without trust).
+// Its own sanitizer instance keeps the configuration set once instead of
+// parsing it for every formula.
+let purifier = null;
+function mathPurifier() {
+  if (!purifier) {
+    purifier = DOMPurify(window);
+    purifier.setConfig({
+      RETURN_DOM_FRAGMENT: true,
+      ADD_TAGS: ["annotation", "semantics"],
+      ADD_ATTR: ["encoding"],
+      ADD_URI_SAFE_ATTR: ["d"],
+    });
+  }
+  return purifier;
+}
+function sanitized(html) {
+  const box = document.createElement("div");
+  box.append(mathPurifier().sanitize(html));
+  return box.innerHTML;
+}
+// Sanitizes, in one pass, the formulas of a batch about to be drawn that
+// have not been yet (one pass costs about half of one per formula).
+export function prepareFormulas(list) {
+  const todo = new Set();
+  for (const { source, display } of list) {
+    const entry = formulaEntry(source, display);
+    if (entry && entry.safe === null) todo.add(entry);
+  }
+  if (todo.size < 2) return;
+  const entries = [...todo];
+  const boxes = [
+    ...mathPurifier().sanitize(
+      entries.map((entry) => "<span>" + entry.html + "</span>").join(""),
+    ).childNodes,
+  ];
+  // Anything unexpected: each is sanitized on its own when drawn.
+  if (
+    boxes.length !== entries.length ||
+    boxes.some((box) => box.nodeName !== "SPAN")
+  )
+    return;
+  entries.forEach((entry, i) => {
+    entry.safe = boxes[i].innerHTML;
+    remember(entry.key, entry);
+  });
+}
+function formulaFragment(source, display) {
+  const entry = formulaEntry(source, display);
+  let safe;
+  if (!entry) safe = sanitized(pendingMath(source));
+  else {
+    if (entry.safe === null) {
+      entry.safe = sanitized(entry.html);
+      remember(entry.key, entry);
+    }
+    safe = entry.safe;
+  }
+  const template = document.createElement("template");
+  template.innerHTML = safe;
+  return template.content;
+}
 function formulaMarkup(source, display, env) {
   if (!env?.mathFragments) return math(source, display);
   const html = env.deferMath ? null : math(source, display);
@@ -55,30 +168,10 @@ function formulaMarkup(source, display, env) {
   });
   return `<span data-folio-formula="${key}"></span>`;
 }
-function formulaFragment(html) {
-  let fragment = mathDOMCache.get(html);
-  if (fragment) mathDOMCache.delete(html);
-  else {
-    fragment = DOMPurify.sanitize(html, {
-      RETURN_DOM_FRAGMENT: true,
-      ADD_TAGS: ["annotation", "semantics"],
-      ADD_ATTR: ["encoding"],
-      ADD_URI_SAFE_ATTR: ["d"],
-    });
-    mathDOMBytes += html.length * 2;
-  }
-  mathDOMCache.set(html, fragment);
-  while (mathDOMBytes > 12 * 1024 * 1024 || mathDOMCache.size > 1024) {
-    const oldest = mathDOMCache.keys().next().value;
-    mathDOMBytes -= oldest.length * 2;
-    mathDOMCache.delete(oldest);
-  }
-  return fragment.cloneNode(true);
-}
 // A formula as a sanitized DOM fragment, for the editor (src/rich/math.js);
 // TeX source in a pending span until KaTeX has loaded.
 export function formulaFragmentFor(source, display) {
-  return formulaFragment(math(source, display));
+  return formulaFragment(source, display);
 }
 function escapedDisplayMath(source) {
   let result = "";
@@ -130,18 +223,16 @@ function escapedDisplayMath(source) {
   }
   return result;
 }
+const pendingMath = (source) =>
+  `<span class="math-pending">${escape(source)}</span>`;
 function math(source, display) {
   if (!katex) {
     loadMath();
-    return `<span class="math-pending">${escape(source)}</span>`;
+    return pendingMath(source);
   }
-  const key = display + source;
-  if (mathCache.has(key)) {
-    const cached = mathCache.get(key);
-    mathCache.delete(key);
-    mathCache.set(key, cached);
-    return cached;
-  }
+  return formulaEntry(source, display).html;
+}
+function typeset(source, display) {
   const normalized = source.replace(
     /\\(begin|end)\{(?:align\*?|equation\*?|gather\*?)\}/g,
     "\\$1{aligned}",
@@ -159,15 +250,6 @@ function math(source, display) {
     });
   } catch (e) {
     html = `<span class="math-error" title="${escape(e.message)}">${escape(source)}</span>`;
-  }
-  if (source.length < 20000) {
-    mathCache.set(key, html);
-    mathCacheBytes += (key.length + html.length) * 2;
-    while (mathCacheBytes > 12 * 1024 * 1024 || mathCache.size > 2048) {
-      const oldest = mathCache.keys().next().value;
-      mathCacheBytes -= (oldest.length + mathCache.get(oldest).length) * 2;
-      mathCache.delete(oldest);
-    }
   }
   return html;
 }
@@ -988,7 +1070,7 @@ export function renderMarkdown(
       deferred.set(formula.sourceKey, formula);
       marker.setAttribute("data-folio-math", formula.sourceKey);
       marker.textContent = formula.source;
-    } else marker.replaceWith(formulaFragment(formula.html));
+    } else marker.replaceWith(formulaFragment(formula.source, formula.display));
   }
   decorateTextColors(template.content);
   for (const table of template.content.querySelectorAll("table")) {
@@ -1195,8 +1277,9 @@ export function renderMarkdown(
     hydrate: deferMath
       ? createFormulaHydrator(
           deferred,
-          (formula) => formulaFragment(math(formula.source, formula.display)),
+          (formula) => formulaFragment(formula.source, formula.display),
           {
+            warm: prepareFormulas,
             progressive:
               progressive ??
               (source.length > 80000 || env.mathFragments.length > 200),

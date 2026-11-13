@@ -83,6 +83,70 @@ test("editing the final block does not detach the other 1,199 preview blocks", a
   });
 });
 
+test("a formula drawn again is not typeset again, and batches draw what single formulas do", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    const markdown = await import("/src/markdown.js");
+    await markdown.loadMath();
+    // The KaTeX module markdown.js loaded (the same instance by its URL).
+    const url = performance
+      .getEntriesByType("resource")
+      .map((entry) => entry.name)
+      .find((name) => /\/katex\.js(\?|$)/.test(name));
+    const katex = (await import(url)).default;
+    const original = katex.renderToString;
+    let calls = 0;
+    katex.renderToString = (...args) => (calls++, original(...args));
+    const html = (fragment) => {
+      const box = document.createElement("div");
+      box.append(fragment);
+      return box.innerHTML;
+    };
+    try {
+      const tex = "\\frac{a_{cache}}{b^2}";
+      const first = html(markdown.formulaFragmentFor(tex, false));
+      const again = html(markdown.formulaFragmentFor(tex, false));
+      const typeset = calls;
+      // Sanitized in one pass, then drawn: the same markup as one at a time.
+      const list = [
+        { source: "x_{batch}^2", display: false },
+        { source: "\\sum_{k=0}^{n} k_{batch}", display: true },
+        { source: "\\frac{1}{", display: false },
+      ];
+      markdown.prepareFormulas(list);
+      const batched = list.map((f) =>
+        html(markdown.formulaFragmentFor(f.source, f.display)),
+      );
+      return {
+        same: first === again,
+        typeset,
+        katex: first.includes('class="katex"'),
+        batched: batched.slice(0, 2).every((h) => h.includes('class="katex')),
+        display: batched[1].includes("katex-display"),
+        // Invalid TeX stays as its source, marked, with KaTeX's message.
+        error:
+          /^<span class="math-error" title="[^"]+">\\frac\{1\}\{<\/span>$/.test(
+            batched[2],
+          ),
+        calls,
+      };
+    } finally {
+      katex.renderToString = original;
+    }
+  });
+  expect(result).toEqual({
+    same: true,
+    typeset: 1,
+    katex: true,
+    batched: true,
+    display: true,
+    error: true,
+    calls: 4,
+  });
+});
+
 test("preview retention respects document and HTML budgets and releases closed tabs", async ({
   page,
 }) => {

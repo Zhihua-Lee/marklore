@@ -678,6 +678,17 @@ main[data-empty="true"] > #panes {
 .prose li > p {
   margin-block: 0.4em;
 }
+/* A top-level list's own margins are larger, so these edge margins only
+   collapsed into them: zero, nothing moves, and the list keeps its height
+   when it is drawn contained (offscreen-blocks.js). */
+:is(.prose, .section-body) > :is(ul, ol) > li:first-child,
+:is(.prose, .section-body) > :is(ul, ol) > li:first-child > p:first-child {
+  margin-top: 0;
+}
+:is(.prose, .section-body) > :is(ul, ol) > li:last-child,
+:is(.prose, .section-body) > :is(ul, ol) > li:last-child > p:last-child {
+  margin-bottom: 0;
+}
 .prose .task-list-item {
   list-style: none;
 }

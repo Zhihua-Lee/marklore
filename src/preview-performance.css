@@ -21,8 +21,26 @@
   );
   border-radius: 4px;
 }
-/* No content-visibility here: its estimated off-screen heights made outline and
-   link jumps land short, and measured no clear gain on 250k-character notes. */
+/* Finished blocks away from the screen are not painted or hit-tested
+   (offscreen-blocks.js). The placeholder height is the block's measured height,
+   so jumps and reading positions see the same layout. The clip margin keeps
+   marks drawn just outside a block (review bars) visible. */
+.reading-skip {
+  content-visibility: auto;
+  overflow-clip-margin: 32px;
+}
+/* Sub-sections' fold buttons and rails sit left of the body's content: the
+   box reaches over them (hit tests are clipped at the box, unlike painting),
+   while the content stays where it was. */
+.section-body.reading-skip {
+  margin-left: -32px;
+  padding-left: 32px;
+  /* The gutter itself is not a target: the section's own rail lies under it. */
+  pointer-events: none;
+}
+.section-body.reading-skip > * {
+  pointer-events: auto;
+}
 /* See app.js: raised only while the reader scrolls. A zero-height sticky row
    keeps it over the visible part without taking space in the note. */
 .scroll-shield {

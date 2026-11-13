@@ -7,7 +7,17 @@ import {
   isCorrection,
 } from "./positions.js";
 
-const cache = new WeakMap();
+const cache = new WeakMap(),
+  settled = new WeakSet();
+// Whether a table has been looked at (and given reading widths, if any) at
+// all; offscreen-blocks.js skips drawing only settled tables.
+export function tableSettled(table) {
+  return settled.has(table);
+}
+// Tables in blocks skipped from drawing (offscreen-blocks.js) were settled
+// before the skip, and anything that changes their widths un-skips them first.
+// Measuring them would force their layout for nothing.
+const skipped = (table) => Boolean(table.closest(".reading-skip"));
 function clearWidths(table) {
   table.querySelector(":scope > colgroup[data-reading-widths]")?.remove();
   table.classList.remove("reading-columns");
@@ -31,6 +41,9 @@ function applyWidths(table, widths) {
 // `beforeChange` runs once, just before the table is first modified.
 export function optimizeTable(table, beforeChange) {
   if (!table.isConnected || !table.getClientRects().length) return false;
+  // Looked at again once its formulas are drawn.
+  if (table.querySelector("[data-folio-math]")) return false;
+  settled.add(table);
   const wrapper = table.closest(".table-scroll"),
     parent = wrapper?.parentElement;
   if (
@@ -207,6 +220,7 @@ export function watchTableLayout(host, scroller) {
   let timer,
     idle = null,
     lastScroll = 0,
+    next = 0,
     measuredWidth = -1;
   // Tables beyond the viewport are sized in idle time, so jumps glide through
   // finished layout. Yields to jumps and active scrolling; keeps the reading line.
@@ -223,19 +237,27 @@ export function watchTableLayout(host, scroller) {
     // measurement hit-tests the page, and most passes find nothing to do.
     let anchor = null;
     const keep = () => (anchor ??= visibleAnchor(scroller)),
-      start = performance.now(),
-      budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8));
+      budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8)),
+      tables = host.querySelectorAll(
+        ".table-scroll > table:not(.table-measure)",
+      ),
+      start = performance.now();
     let changed = false,
       done = true;
-    for (const table of host.querySelectorAll(
-      ".table-scroll > table:not(.table-measure)",
-    )) {
-      if (performance.now() - start >= budget) {
+    // Each slice goes on where the last one stopped and sizes at least one
+    // table: on a slow machine the first measurement can take the whole
+    // budget, and restarting from the top never reached the later tables.
+    if (next >= tables.length) next = 0;
+    for (let i = next, first = true; i < tables.length; i++, first = false) {
+      if (!first && performance.now() - start >= budget) {
         done = false;
+        next = i;
         break;
       }
-      changed = optimizeTable(table, keep) || changed;
+      if (skipped(tables[i])) continue;
+      changed = optimizeTable(tables[i], keep) || changed;
     }
+    if (done) next = 0;
     if (changed && anchor) restoreAnchor(scroller, anchor);
     if (!done) scheduleBackfill();
   };
@@ -257,7 +279,7 @@ export function watchTableLayout(host, scroller) {
       }
       const pending = [
         ...host.querySelectorAll(".table-scroll > table:not(.table-measure)"),
-      ];
+      ].filter((table) => !skipped(table));
       let cursor = 0;
       const viewport = scroller.getBoundingClientRect();
       function work() {
@@ -301,6 +323,7 @@ export function watchTableLayout(host, scroller) {
     const tables = [
       ...host.querySelectorAll(".table-scroll > table:not(.table-measure)"),
     ]
+      .filter((table) => !skipped(table))
       .map((table) => {
         const rect = table.getBoundingClientRect();
         return {
@@ -344,6 +367,7 @@ export function watchTableLayout(host, scroller) {
       for (const table of host.querySelectorAll(
         ".table-scroll > table:not(.table-measure)",
       )) {
+        if (skipped(table)) continue;
         const rect = table.getBoundingClientRect();
         if (rect.bottom >= top && rect.top <= bottom) optimizeTable(table);
       }

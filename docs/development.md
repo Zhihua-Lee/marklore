@@ -84,6 +84,14 @@ pnpm dev
 
 [.github/workflows/ci.yml](../.github/workflows/ci.yml) 在 `windows-latest` 上对每次推送到 `main` 和每个 PR 运行格式检查、单元测试、第三方声明一致性检查、构建和浏览器测试。原生套件较慢，只在手动触发（`workflow_dispatch` 勾选 native）时运行。另有 `mac` 任务生成未签名的 macOS dmg，见下文“macOS 构建”。
 
+### 原生笔记库索引（Rust）
+
+主进程的链接索引与全文搜索有 Rust 实现（`native/index`，napi-rs）：并行读入并解析笔记，结果与 JavaScript 实现（`desktop/link-index.mjs`、`desktop/note-search.mjs`）逐项相同。`desktop/native-index.mjs` 按平台查找 `native/index/marklore-index.<platform>-<arch>.node`（打包后在 `app.asar.unpacked` 中），找不到或加载失败时使用 JavaScript 实现；设置 `MARKLORE_INDEX=js` 可强制使用 JavaScript 实现。
+
+- 构建：在 `native/index` 中运行 `cargo build --release`，把生成的动态库复制为上述文件名；`cargo test --no-default-features` 测试不含 Node 绑定的部分。
+- [.github/workflows/native-index.yml](../.github/workflows/native-index.yml) 为 win32-x64、darwin-x64、darwin-arm64 构建并上传二进制，并运行 `tests/native-index.test.mjs`（没有二进制时该测试跳过）。
+- `node tools/bench-index.mjs <临时文件夹>` 生成合成笔记库（`tools/synthetic-library.mjs`）并计时。
+
 具体版本执行了哪些测试，以 [VERIFICATION.md](../VERIFICATION.md) 为准。历史通过记录不代表后续提交已自动验证，也不代表所有个人笔记已通过人工验收。
 
 ## Windows 打包

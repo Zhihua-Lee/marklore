@@ -8,3 +8,5 @@ playwright-report/
 output/playwright/
 *.log
 blob-report/
+native/index/target/
+native/index/*.node

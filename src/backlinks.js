@@ -84,6 +84,7 @@ export function createBacklinks({
   getActive,
   getHeadings,
   getSettings,
+  shown = () => true,
   navigate,
   run,
 }) {
@@ -245,6 +246,9 @@ export function createBacklinks({
       el.remove();
     const mode = getSettings().outlineAnchors;
     if (mode !== "referenced" && mode !== "all") return;
+    // Counts and anchors are read from the note as rendered: not while
+    // what is rendered is not the note shown.
+    if (!shown()) return;
     const buttons = [...outline.querySelectorAll(":scope > button")];
     const headings = getHeadings();
     const counts = new Map(

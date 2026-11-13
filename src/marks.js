@@ -115,10 +115,14 @@ export function createMarks({
       if (dotted.length)
         CSS.highlights.set("folio-mark-sent", new Highlight(...dotted));
     }
-    if (pending && placed.has(pending)) {
-      const id = pending;
-      pending = null;
-      reveal(state.marks.find((m) => m.id === id));
+    if (pending) {
+      // Its note is shown now: its card, also where the passage is no
+      // longer found in the text.
+      const mark = state.marks.find((m) => m.id === pending);
+      if (!mark || samePath(mark.file, doc.path)) {
+        pending = null;
+        if (mark) reveal(mark);
+      }
     }
     if (card) place();
   }

@@ -3,7 +3,7 @@ import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
 import { restoreAnchor, visibleAnchor, unfold } from "./positions.js";
-import { setSectionCollapsed } from "./sections.js";
+import { setSectionCollapsed, watchSections } from "./sections.js";
 import { wireCodeBlocks } from "./code-blocks.js";
 import { icon } from "./icons.js";
 import { watchTableLayout } from "./table-layout.js";
@@ -56,6 +56,7 @@ export function createLinkPreview({
     article = card.querySelector("article");
   wireCodeBlocks(article, report);
   watchTableLayout(article, scroller);
+  watchSections(article);
   function applyZoom() {
     const zoom = Math.max(50, Math.min(200, Number(getZoom()) || 100));
     card.style.setProperty("--note-size", (16 * zoom) / 100 + "px");

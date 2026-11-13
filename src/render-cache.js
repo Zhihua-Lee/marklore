@@ -188,6 +188,8 @@ export function createPreviewCache({
       "code-wrap",
       "has-backlinks",
       "link-broken",
+      "section-hover",
+      "section-focus",
     ],
     added = (node) =>
       node.nodeType === 1 && node.classList.contains("backlink-badge");

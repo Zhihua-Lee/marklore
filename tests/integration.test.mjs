@@ -286,3 +286,38 @@ test("turning other formats on keeps other preferences and follows this copy's r
     await fs.rm(temp, { recursive: true, force: true });
   }
 });
+
+test("a registered path with letters of the console's code page is read", async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), "folio-integration-"));
+  try {
+    const where = "D:\\笔记\\Marklore\\Marklore.exe";
+    // That path as reg.exe writes it in code page 936.
+    const line = Buffer.concat([
+      Buffer.from('    (Default)    REG_SZ    "D:\\', "latin1"),
+      Buffer.from([0xb1, 0xca, 0xbc, 0xc7]),
+      Buffer.from('\\Marklore\\Marklore.exe" "%1"\r\n', "latin1"),
+    ]);
+    const app = {
+      isPackaged: true,
+      getLoginItemSettings: () => ({
+        openAtLogin: false,
+        executableWillLaunchAtLogin: false,
+      }),
+      setLoginItemSettings: () => {},
+    };
+    const { integration } = fixture(temp, {
+      app,
+      executable: where,
+      run: async (_exe, args) => {
+        if (args[0] === "query" && args.includes("OEMCP"))
+          return { stdout: "    OEMCP    REG_SZ    936\r\n" };
+        if (args[0] === "query" && args[1].endsWith("command"))
+          return { stdout: line };
+        throw Object.assign(Error("not found"), { code: 1 });
+      },
+    });
+    assert.equal((await integration.status()).registeredHere, true);
+  } finally {
+    await fs.rm(temp, { recursive: true, force: true });
+  }
+});

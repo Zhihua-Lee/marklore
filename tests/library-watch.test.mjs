@@ -86,3 +86,27 @@ test("a note written into a library folder is noticed", async () => {
     await fs.rm(folder, { recursive: true, force: true });
   }
 });
+
+test("a renamed folder tells the index to look again, a renamed note does not", async () => {
+  let listener;
+  const folders = [];
+  const library = createLibraryWatch({
+    notify: () => {},
+    foldersChanged: () => folders.push(1),
+    delay: 10,
+    watch: (_folder, _options, fn) => {
+      listener = fn;
+      return Object.assign(new EventEmitter(), { close() {} });
+    },
+  });
+  library.follow(["A"]);
+  listener("rename", "note.md");
+  listener("change", "Topic");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(folders.length, 0);
+  listener("rename", "Topic");
+  listener("rename", "Topic 2");
+  await new Promise((resolve) => setTimeout(resolve, 40));
+  assert.equal(folders.length, 1);
+  library.close();
+});

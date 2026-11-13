@@ -112,6 +112,12 @@ export function createDocumentSync({
         return;
       }
       loadFromDisk(doc, result);
+      // No unsaved changes are left (they were undone): an earlier conflict
+      // is over, and its older copy of the file must not be offered.
+      if (doc.conflict) {
+        doc.conflict = null;
+        if (doc === getActive()) showConflict();
+      }
       if (doc === getActive()) updateStatus();
       changed();
       if (manual) report(t("已从磁盘刷新"));

@@ -253,6 +253,10 @@ const closeOf = (raw) => (raw.endsWith("$$") || raw.endsWith("\\)") ? 2 : 1);
 
 // Once the caret has left an open formula or block, it is drawn again (or
 // stays text where its delimiters were removed).
+// What the note defines (footnotes, link references), for reading a piece
+// of it again; set by the editor.
+let envOf = () => ({});
+export const readingWith = (fn) => (envOf = fn);
 export const closer = new Plugin({
   appendTransaction(trs, _old, state) {
     if (!trs.some((tr) => tr.docChanged || tr.selectionSet)) return null;
@@ -307,7 +311,9 @@ const isOpen = (node) =>
   node.attrs.params === OPEN_MATH || node.attrs.params.startsWith(OPEN_RAW);
 // Text that reads as exactly one formula or one raw inline piece.
 function inlineFrom(text) {
-  const blocks = parseBlocks(text);
+  // With the note's own definitions: a footnote reference reads as one
+  // only where its footnote is known.
+  const blocks = parseBlocks(text, envOf());
   if (blocks.length !== 1 || blocks[0].type !== S.paragraph) return null;
   const para = blocks[0];
   if (para.childCount !== 1) return null;

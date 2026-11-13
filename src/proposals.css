@@ -18,18 +18,16 @@
 }
 /* The library and outline buttons float over the top corners when their
    panels are closed: the bar keeps clear of them. */
-body:has(#sidebar[hidden]) #proposal-bar {
+.workspace[data-left-dock="closed"] #proposal-bar {
   --bar-left: 44px;
 }
-body:has(#sidebar[hidden]):has(#panel-controls-left > button + button)
-  #proposal-bar {
+.workspace[data-left-dock="closed"][data-left-buttons="2"] #proposal-bar {
   --bar-left: 76px;
 }
-body:has(#right-sidebar[hidden]) #proposal-bar {
+.workspace[data-right-dock="closed"] #proposal-bar {
   --bar-right: 50px;
 }
-body:has(#right-sidebar[hidden]):has(#panel-controls-right > button + button)
-  #proposal-bar {
+.workspace[data-right-dock="closed"][data-right-buttons="2"] #proposal-bar {
   --bar-right: 82px;
 }
 #proposal-bar :is(.proposal-head, .proposal-tools) {

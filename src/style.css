@@ -1110,25 +1110,16 @@ main[data-empty="true"] > #panes {
 .section-rail:hover {
   background: transparent;
 }
-:is(
-    .note-section:hover:not(:has(.note-section:hover)),
-    .note-section:has(
-      > .section-rail:focus-visible,
-      > :is(h1, h2, h3, h4, h5, h6) > .fold:focus-visible
-    )
-  )
+/* The section under the pointer (the innermost one) and the one whose fold
+   control has the keyboard focus: classes kept by sections.js. Written with
+   ":has()" on the section, every node put into a long note (a formula
+   drawn, a review's mark) restyled the whole note. */
+:is(.note-section.section-hover, .note-section.section-focus)
   > :is(h1, h2, h3, h4, h5, h6)
   > .fold {
   --section-marker: var(--accent);
 }
-:is(
-    .note-section:hover:not(:has(.note-section:hover)),
-    .note-section:has(
-      > .section-rail:focus-visible,
-      > :is(h1, h2, h3, h4, h5, h6) > .fold:focus-visible
-    )
-  )
-  > .section-rail {
+:is(.note-section.section-hover, .note-section.section-focus) > .section-rail {
   --section-guide: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .note-section.collapsed {

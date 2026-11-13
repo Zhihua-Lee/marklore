@@ -47,15 +47,34 @@ function tomlBlock(lines) {
   const head =
     /^\s*\[\s*mcp_servers\s*\.\s*(?:"marklore"|'marklore'|marklore)\s*(?:\.|\])/;
   const start = lines.findIndex((l) => head.test(l));
-  if (start < 0) return null;
+  if (start < 0) {
+    // Written on one line instead: "marklore = { ... }" in [mcp_servers],
+    // or "mcp_servers.marklore = { ... }" before any table.
+    const name = `(?:"marklore"|'marklore'|marklore)`,
+      inline = new RegExp(`^\\s*${name}\\s*=\\s*\\{.*\\}\\s*(?:#.*)?$`),
+      dotted = new RegExp(
+        `^\\s*mcp_servers\\s*\\.\\s*${name}\\s*=\\s*\\{.*\\}\\s*(?:#.*)?$`,
+      );
+    let table = "";
+    for (let i = 0; i < lines.length; i++) {
+      const opened = /^\s*\[\s*([^\]]*?)\s*\]/.exec(lines[i]);
+      if (opened) table = opened[1];
+      else if (
+        (table === "" && dotted.test(lines[i])) ||
+        (table === "mcp_servers" && inline.test(lines[i]))
+      )
+        return [i, i + 1];
+    }
+    return null;
+  }
   let end = start + 1;
   while (
     end < lines.length &&
     !(/^\s*\[/.test(lines[end]) && !head.test(lines[end]))
   )
     end++;
-  // Blank lines before the next table stay with it.
-  while (end > start + 1 && !lines[end - 1].trim()) end--;
+  // Blank lines and comments before the next table stay with it.
+  while (end > start + 1 && /^\s*(#.*)?$/.test(lines[end - 1])) end--;
   return [start, end];
 }
 function tomlString(value) {
@@ -74,10 +93,20 @@ function tomlEntry(text) {
   const block = tomlBlock(lines);
   if (!block) return null;
   const body = lines.slice(...block);
+  // On one line ("{ command = ..., args = [...] }"), each key is looked
+  // for within the braces.
+  const within =
+    body.length === 1 && !/^\s*\[/.test(body[0])
+      ? body[0].slice(body[0].indexOf("{") + 1)
+      : null;
   const value = (key) =>
-    body
-      .map((l) => new RegExp(`^\\s*${key}\\s*=\\s*(.*)$`).exec(l))
-      .find(Boolean)?.[1];
+    within !== null
+      ? new RegExp(
+          `(?:^|[,\\s])${key}\\s*=\\s*(\\[[^\\]]*\\]|"(?:[^"\\\\]|\\\\.)*"|'[^']*')`,
+        ).exec(within)?.[1]
+      : body
+          .map((l) => new RegExp(`^\\s*${key}\\s*=\\s*(.*)$`).exec(l))
+          .find(Boolean)?.[1];
   const args = value("args");
   return {
     command: value("command") ? tomlString(value("command")) : null,
@@ -91,10 +120,26 @@ function tomlEntry(text) {
 // JSON strings are TOML basic strings.
 const toml = (s) => JSON.stringify(s);
 function tomlWith(text, setup) {
+  // With the file's own line ends.
+  const eol = /\r\n/.test(text || "") ? "\r\n" : "\n";
+  return tomlLines(text, setup).replace(/\n/g, eol);
+}
+function tomlLines(text, setup) {
   const lines = text ? text.split(/\r?\n/) : [];
   const block = tomlBlock(lines);
-  if (block) lines.splice(block[0], block[1] - block[0]);
+  if (block) {
+    lines.splice(block[0], block[1] - block[0]);
+    // One blank line where the table stood, not the two around it.
+    if (
+      block[0] > 0 &&
+      !lines[block[0] - 1].trim() &&
+      lines[block[0]]?.trim() === ""
+    )
+      lines.splice(block[0], 1);
+  }
   while (lines.length && !lines.at(-1).trim()) lines.pop();
+  // Nor a blank line left at the top where the entry was the first thing.
+  if (block?.[0] === 0) while (lines.length && !lines[0].trim()) lines.shift();
   if (!setup) return lines.length ? lines.join("\n") + "\n" : "";
   const env = Object.entries(setup.env)
     .map(([k, v]) => `${k} = ${toml(v)}`)

@@ -222,3 +222,33 @@ test("a large library: software folders skipped, searchable while read", async (
   );
   assert.ok(progress >= 0);
 });
+
+test("a renamed folder, a byte order mark and encoded names", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "folio-links-"));
+  try {
+    await fs.mkdir(path.join(dir, "sub"));
+    await fs.writeFile(path.join(dir, "sub", "two.md"), "# Two\n");
+    await fs.writeFile(path.join(dir, "one.md"), "[two](sub/two.md)\n");
+    await fs.writeFile(path.join(dir, "bom.md"), "﻿# Title\n\n# Title\n");
+    await fs.writeFile(path.join(dir, "Q&A.md"), "# Q\n");
+    await fs.writeFile(
+      path.join(dir, "from.md"),
+      "[q](Q%26A.md) [t](bom.md#title-1)\n",
+    );
+    const index = createLinkIndex();
+    await index.follow([dir]);
+    const from = path.join(dir, "from.md");
+    // A heading on the first line after a byte order mark is a heading.
+    assert.equal(await index.status(from, "bom.md#title-1"), "ok");
+    // "%26" is "&", as opening the link reads it.
+    assert.equal(await index.status(from, "Q%26A.md"), "ok");
+    assert.equal((await index.backlinks(path.join(dir, "Q&A.md"))).length, 1);
+    // A folder renamed: one event for the folder, none for its notes.
+    await fs.rename(path.join(dir, "sub"), path.join(dir, "renamed"));
+    await index.rescan();
+    assert.equal(index.has(path.join(dir, "sub", "two.md")), false);
+    assert.equal(index.has(path.join(dir, "renamed", "two.md")), true);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

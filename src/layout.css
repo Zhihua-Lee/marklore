@@ -547,13 +547,13 @@ select:focus-visible {
 #right-sidebar > .side-panel:nth-child(1 of :not([hidden])) .sidebar-top {
   padding-right: 36px;
 }
-body:has(#panel-controls-left > button + button)
+.workspace[data-left-buttons="2"]
   #sidebar
   > .side-panel:nth-child(1 of :not([hidden]))
   .sidebar-top {
   padding-left: 62px;
 }
-body:has(#panel-controls-right > button + button)
+.workspace[data-right-buttons="2"]
   #right-sidebar
   > .side-panel:nth-child(1 of :not([hidden]))
   .sidebar-top {

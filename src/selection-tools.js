@@ -64,15 +64,46 @@ function outerSpan(el, text) {
   const inner = innerSpan(el);
   if (!inner) return null;
   const tag = el.tagName.toLowerCase();
-  const open = text.lastIndexOf("<" + tag, inner[0]);
-  const opening =
-    open < 0
-      ? null
-      : text.slice(open).match(new RegExp(`^<${tag}\\b[^>]*>`, "i"));
-  const close = text.indexOf("</" + tag, inner[1]);
-  const end = close < 0 ? -1 : text.indexOf(">", close);
-  if (!opening || open + opening[0].length > inner[0] || end < 0) return null;
-  return [open, end + 1];
+  // Its own tags: those of the same name nested in it (around its first
+  // or last text, or closed between) are counted past, and "<s" is not
+  // the start of "<sub".
+  const tags = new RegExp(`<(/?)${tag}(?=[\\s/>])[^>]*>`, "gi");
+  const nested = (leaf) => {
+    let n = 0;
+    for (let up = leaf?.parentElement; up && up !== el; up = up.parentElement)
+      if (up.tagName === el.tagName) n++;
+    return n;
+  };
+  const leaves = [...el.querySelectorAll("[data-text-from]")].filter(
+    (leaf) => !inFormula(leaf),
+  );
+  const first = leaves.find(
+      (leaf) => Number(leaf.dataset.textFrom) === inner[0],
+    ),
+    last = leaves.findLast((leaf) => Number(leaf.dataset.textTo) === inner[1]);
+  let open = -1,
+    depth = 0,
+    pass = nested(first);
+  for (const m of [...text.slice(0, inner[0]).matchAll(tags)].reverse()) {
+    if (m[1]) depth++;
+    else if (depth) depth--;
+    else if (pass) pass--;
+    else {
+      open = m.index;
+      break;
+    }
+  }
+  if (open < 0) return null;
+  depth = 0;
+  pass = nested(last);
+  tags.lastIndex = inner[1];
+  for (let m; (m = tags.exec(text));) {
+    if (!m[1]) depth++;
+    else if (depth) depth--;
+    else if (pass) pass--;
+    else return [open, m.index + m[0].length];
+  }
+  return null;
 }
 
 // The source position of a DOM point between pieces of mapped text.

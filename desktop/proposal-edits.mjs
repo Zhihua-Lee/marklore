@@ -104,6 +104,9 @@ function shared(a, b) {
     (letter(a[head]) || letter(b[head]))
   )
     head--;
+  // Not between the two halves of one character (an emoji).
+  const high = (c) => c >= "\ud800" && c <= "\udbff";
+  if (head > 0 && high(a[head - 1])) head--;
   let tail = 0;
   while (
     tail < a.length - head &&
@@ -117,6 +120,7 @@ function shared(a, b) {
     (letter(a[a.length - 1 - tail]) || letter(b[b.length - 1 - tail]))
   )
     tail--;
+  if (tail > 0 && high(a[a.length - tail - 1])) tail--;
   return { head, tail };
 }
 // Above this many words a change is shown whole rather than word by word.

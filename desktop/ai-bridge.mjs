@@ -99,7 +99,12 @@ export function createAiBridge({
     timers = {};
   // roots: the library folders; settings.aiLibraries: those ticked for AI.
   // A ticked folder removed from the library is no longer open.
-  async function sync(roots, settings = {}) {
+  // One write at a time, in order; what was written is remembered only
+  // once it is: a write that failed is made again.
+  let syncing = Promise.resolve();
+  const sync = (roots, settings = {}) =>
+    (syncing = syncing.catch(() => {}).then(() => syncNow(roots, settings)));
+  async function syncNow(roots, settings) {
     const chosen = new Set(normalizeExcluded(settings.aiLibraries).map(key));
     const value = {
       libraries: roots
@@ -112,11 +117,13 @@ export function createAiBridge({
     // Nothing opened and nothing written before: leave the profile as it is.
     if (accessText === null && !value.libraries.length) {
       const old = await store.access();
-      accessText = text;
-      if (!old.libraries.length) return;
+      if (!old.libraries.length) {
+        accessText = text;
+        return;
+      }
     }
-    accessText = text;
     await store.writeAccess(value);
+    accessText = text;
   }
   function start() {
     store
@@ -256,8 +263,12 @@ export function createAiBridge({
   }
   // What the owner is looking at, for the AI (get_context): the note, if it
   // is open to AI, and the text selected in it.
-  let contextText = null;
-  async function setContext({ fileId, selection } = {}) {
+  let contextText = null,
+    telling = Promise.resolve();
+  // In the order asked: the last note and selection are the ones left.
+  const setContext = (value) =>
+    (telling = telling.catch(() => {}).then(() => contextNow(value)));
+  async function contextNow({ fileId, selection } = {}) {
     let file = null;
     try {
       file = fileId ? pathOf(fileId) : null;
@@ -282,8 +293,8 @@ export function createAiBridge({
       : { file: null, closed: !!file };
     const text = JSON.stringify(value);
     if (text === contextText) return;
-    contextText = text;
     await store.writeContext({ ...value, at: new Date().toISOString() });
+    contextText = text;
   }
 
   const waiting = async () =>

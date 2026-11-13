@@ -77,6 +77,9 @@ export function createRuns({
         .catch(() => {});
   }
   async function end(id, fields) {
+    // Only a run there is: the id names the folder that goes.
+    if (!(await store.getRun(id).catch(() => null)))
+      throw Error(`There is no run ${id}.`);
     // Its folder goes first: once the run reads as over, nothing is left.
     await fs
       .rm(path.join(store.runs, id), { recursive: true, force: true })
@@ -166,11 +169,11 @@ export function createRuns({
       throw Error(t("后台 AI 没能启动：{reason}", { reason: error.message }));
     }
     children.set(run.id, child);
-    await store.changeRun(run.id, (r) => {
-      r.pid = child.pid ?? null;
-    });
+    // Listening from the start: a child that fails or ends at once is heard.
     let out = "",
       err = "";
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
     child.stdout?.on("data", (d) => (out = (out + d).slice(-200000)));
     child.stderr?.on("data", (d) => (err = (err + d).slice(-20000)));
     const timer = setTimeout(() => {
@@ -217,6 +220,13 @@ export function createRuns({
     };
     child.on("error", (error) => finished(null, error));
     child.on("close", (code) => finished(code));
+    await store
+      .changeRun(run.id, (r) => {
+        if (r.status !== "running") return null;
+        r.pid = child.pid ?? null;
+        return r;
+      })
+      .catch(() => {});
     notify();
     return run.id;
   }
@@ -226,10 +236,13 @@ export function createRuns({
     // The owner stops it: its marks are theirs again.
     async stop(id) {
       const child = children.get(id);
-      if (child) {
+      if (child && child.exitCode === null && !child.killed) {
         child.stopped = true;
         child.kill();
-      } else await end(id, { status: "stopped" });
+      } else {
+        children.delete(id);
+        await end(id, { status: "stopped" });
+      }
     },
     // A finished run's note is put away.
     async dismiss(id) {

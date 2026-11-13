@@ -359,6 +359,23 @@ const tokenizer = {
     const kept = tail >= 0 ? tokens.slice(0, tail) : tokens;
     // A display formula's own source, to write it back as it was.
     const lines = src.split("\n");
+    kept.forEach((tok, at) => {
+      // A task item with no text yet ("- [ ] ", as Enter after a task
+      // starts one): the task plugin wants text after the box.
+      const only = tok.children?.length === 1 ? tok.children[0] : null;
+      if (
+        only?.type === "text" &&
+        /^\[[ xX]\]$/.test(only.content) &&
+        kept[at - 1]?.type === "paragraph_open" &&
+        kept[at - 2]?.type === "list_item_open"
+      ) {
+        const space = new only.constructor("text", "", 0);
+        space.content = " ";
+        only.type = "task_box";
+        only.meta = { checked: only.content !== "[ ]" };
+        tok.children.push(space);
+      }
+    });
     for (const tok of kept) {
       if (tok.type === "folio_math_block")
         tok.meta = { raw: displayRaw(tok, lines) };
@@ -630,7 +647,7 @@ const serializer = new MarkdownSerializer(
       const escape = escaping && !state.inAutolink;
       if (!inCell) return state.text(node.text, escape);
       const text = escape ? state.esc(node.text) : node.text;
-      state.text(text.replace(/(?<!\\)\|/g, "\\|"), false);
+      state.text(escapePipes(text), false);
     },
     soft_break(state) {
       state.write("\n");
@@ -676,7 +693,13 @@ const serializer = new MarkdownSerializer(
         state.closeBlock(node);
         return;
       }
-      const fence = node.attrs.markup || "```";
+      // A fence longer than any run of its character starting a line of
+      // the code, which would otherwise close it.
+      let fence = node.attrs.markup || "```";
+      const runs = new RegExp("^ {0,3}(\\" + fence[0] + "{3,})", "gm");
+      for (const m of node.textContent.matchAll(runs))
+        if (m[1].length >= fence.length)
+          fence = fence[0].repeat(m[1].length + 1);
       state.write(fence + (node.attrs.params || "") + "\n");
       state.text(node.textContent, false);
       state.ensureNewLine();
@@ -713,6 +736,16 @@ const serializer = new MarkdownSerializer(
     },
     raw_inline(state, node) {
       state.write(node.attrs.source);
+    },
+    image(state, node) {
+      state.write(
+        "![" +
+          state.esc(node.attrs.alt || "") +
+          "](" +
+          address(node.attrs.src) +
+          titleOf(node.attrs.title) +
+          ")",
+      );
     },
     table(state, node) {
       const rows = [];
@@ -798,11 +831,15 @@ const serializer = new MarkdownSerializer(
           state.inAutolink = undefined;
           return "";
         }
-        return defaultMarkdownSerializer.marks.link.close(
-          state,
-          mark,
-          parent,
-          index,
+        if (state.inAutolink)
+          return defaultMarkdownSerializer.marks.link.close(
+            state,
+            mark,
+            parent,
+            index,
+          );
+        return (
+          "](" + address(mark.attrs.href) + titleOf(mark.attrs.title) + ")"
         );
       },
       mixable: true,
@@ -821,8 +858,22 @@ const serializer = new MarkdownSerializer(
       escape: false,
     },
   },
-  { escapeExtraCharacters: /\$/g },
+  // Also what would read as HTML or as an entity.
+  { escapeExtraCharacters: /[$<]|&(?=#?\w+;)/g },
 );
+// A link's or image's address as Markdown takes it: between angle brackets
+// when it holds a space (it would otherwise end at the space).
+const address = (url) =>
+  url === "" || /[\s<>]/.test(url)
+    ? "<" + url.replace(/\n/g, " ").replace(/[<>\\]/g, "\\$&") + ">"
+    : url.replace(/[()]/g, "\\$&");
+const titleOf = (title) =>
+  title ? ' "' + title.replace(/"/g, '\\"') + '"' : "";
+// A pipe would end a table cell: escaped unless it already is.
+const escapePipes = (text) =>
+  text.replace(/(\\*)\|/g, (m, slashes) =>
+    slashes.length % 2 ? m : slashes + "\\|",
+  );
 // Inline code keeps its own backticks when they still fit around the text;
 // text starting or ending with a backtick gets a space inside them.
 function codeFence(mark, node, side) {
@@ -855,7 +906,18 @@ function cellText(cell) {
   const outer = inCell;
   inCell = true;
   try {
-    return serializeNodes([S.paragraph.create(null, cell.content)]).replace(
+    // Inline code is written as it is, so its pipes are escaped here.
+    const nodes = [];
+    cell.content.forEach((node) =>
+      nodes.push(
+        node.isText &&
+          node.text.includes("|") &&
+          node.marks.some((mark) => mark.type === schema.marks.code)
+          ? node.withText(escapePipes(node.text))
+          : node,
+      ),
+    );
+    return serializeNodes([S.paragraph.create(null, nodes)]).replace(
       /\n/g,
       " ",
     );
@@ -903,11 +965,16 @@ export function mapBlocks(loaded, mapping) {
 // read as formatting it is not.
 function merge(origin, node, env) {
   origin.plain ??= unescaped(origin.node);
-  const plain = splice(origin.text, origin.plain, unescaped(node));
-  if (plain !== null && readsAs(plain, node, env)) return plain;
+  for (const plain of splices(origin.text, origin.plain, unescaped(node)))
+    if (readsAs(plain, node, env)) return plain;
   const after = writeBlock(node, env);
-  const merged = splice(origin.text, writeBlock(origin.node, env), after);
-  return merged !== null && readsAs(merged, node, env) ? merged : after;
+  for (const merged of splices(
+    origin.text,
+    writeBlock(origin.node, env),
+    after,
+  ))
+    if (readsAs(merged, node, env)) return merged;
+  return after;
 }
 function readsAs(text, node, env) {
   try {
@@ -918,10 +985,14 @@ function readsAs(text, node, env) {
   }
 }
 // The source with the change from `before` to `after` (two writings of the
-// block) carried over where they line up; null where they do not.
-function splice(source, before, after) {
-  if (before === after) return source;
-  if (before === source) return after;
+// block) carried over where they line up: the ways it can be done (none
+// where they do not line up). Text put in where the source has more than
+// the writing (a wide list marker, an escape, an entity) goes on either
+// side of that: both are given, for the caller to take the one that reads
+// as the block.
+function splices(source, before, after) {
+  if (before === after) return [source];
+  if (before === source) return [after];
   let p = 0;
   const max = Math.min(before.length, after.length);
   while (p < max && before[p] === after[p]) p++;
@@ -931,15 +1002,30 @@ function splice(source, before, after) {
     before[before.length - 1 - s] === after[after.length - 1 - s]
   )
     s++;
+  const put = after.slice(p, after.length - s);
+  // Only text put at the very end or the very start: there the source needs
+  // no lining up (its last words may be written another way, as a link by
+  // reference is).
+  const edge =
+    before.length - s !== p
+      ? []
+      : p === before.length
+        ? [source + put]
+        : p === 0
+          ? [put + source]
+          : [];
   const runs = alignment(before, source);
-  if (!runs) return null;
+  if (!runs) return edge;
   const from = mapOffset(runs, p, true);
   const to = mapOffset(runs, before.length - s, false);
-  if (from === null || to === null || from > to) return null;
-  return (
-    source.slice(0, from) + after.slice(p, after.length - s) + source.slice(to)
-  );
+  if (from === null || to === null) return edge;
+  const at = (a, b) => source.slice(0, a) + put + source.slice(b);
+  if (from <= to) return [at(from, to)];
+  // Only text put in, at a gap: after it, or before it.
+  return before.length - s === p ? [at(from, from), at(to, to)] : [];
 }
+const splice = (source, before, after) =>
+  splices(source, before, after)[0] ?? null;
 // Runs of equal text between a and b ([aFrom, aTo, bFrom]), by Myers' diff;
 // null when they differ too much to line up.
 function alignment(a, b, limit = 1500) {
@@ -1009,8 +1095,19 @@ export function write(doc, loaded) {
   // The note ends as it did (a new note with one line break); a block that
   // was last and no longer is gets a blank line after it.
   const endGap = () => (loaded.blocks.length ? loaded.blocks.at(-1).gap : "\n");
-  const gapAfter = (b, last) =>
-    last ? endGap() : b === loaded.blocks.at(-1) || !b.gap ? "\n\n" : b.gap;
+  // What follows a block: its own gap when it held a blank line; one
+  // without (a list right under its paragraph) only while both blocks are
+  // the ones that stood there and still of their kinds, since other blocks
+  // so close would read as one.
+  const gapAfter = (b, last, tight) =>
+    last
+      ? endGap()
+      : b === loaded.blocks.at(-1) || !b.gap
+        ? "\n\n"
+        : /\n[ \t]*\n/.test(b.gap) || tight
+          ? b.gap
+          : "\n\n";
+  const written = [];
   doc.forEach((node, pos, i) => {
     // An untouched block is the same node (or an equal one after undo).
     let hit = -1;
@@ -1021,21 +1118,38 @@ export function write(doc, loaded) {
         break;
       }
     }
-    const last = i === doc.childCount - 1;
-    starts.push(out.length);
     if (hit >= 0) {
       const b = loaded.blocks[hit];
       next = hit + 1;
-      out += b.text + gapAfter(b, last);
+      written.push({ text: b.text, block: b, at: hit, same: true });
       kept.push(true);
       return;
     }
     const origin = loaded.blocks.find((b) => b.pos === pos && b.text !== null);
-    out += origin
-      ? merge(origin, node, loaded.env)
-      : writeBlock(node, loaded.env);
-    out += origin ? gapAfter(origin, last) : last ? endGap() : "\n\n";
+    written.push({
+      text: origin
+        ? merge(origin, node, loaded.env)
+        : writeBlock(node, loaded.env),
+      block: origin || null,
+      at: origin ? loaded.blocks.indexOf(origin) : -1,
+      same: !!origin && origin.node.type === node.type,
+    });
     kept.push(false);
+  });
+  written.forEach((w, i) => {
+    const last = i === written.length - 1;
+    const after = written[i + 1];
+    starts.push(out.length);
+    out += w.text;
+    out += w.block
+      ? gapAfter(
+          w.block,
+          last,
+          w.same && !!after && after.same && after.at === w.at + 1,
+        )
+      : last
+        ? endGap()
+        : "\n\n";
   });
   return { text: out, starts, kept };
 }
@@ -1092,8 +1206,7 @@ function sameShape(a, b) {
 // With bias -1 an offset where kept text meets markup stays with the text
 // before it (the end of a range), else with the text after it.
 export function mapText(a, b, offset, bias = 1) {
-  const runs = alignment(a, b);
-  if (!runs) return Math.min(offset, b.length);
+  const runs = alignment(a, b) || roughly(a, b);
   if (bias < 0)
     for (const [aFrom, aTo, bFrom] of runs)
       if (aFrom < offset && offset <= aTo) return bFrom + offset - aFrom;
@@ -1101,6 +1214,47 @@ export function mapText(a, b, offset, bias = 1) {
   for (const [aFrom, aTo, bFrom] of runs)
     if (aFrom <= offset) best = bFrom + Math.min(offset - aFrom, aTo - aFrom);
   return best;
+}
+
+// Runs of equal text between two long texts that differ too much for
+// alignment() (a long table and its Markdown): walked side by side, taking
+// up again at the nearest place where three characters agree.
+function roughly(a, b, reach = 80) {
+  const runs = [];
+  let i = 0,
+    j = 0;
+  const agree = (x, y) =>
+    a[x] === b[y] &&
+    (x + 1 >= a.length || y + 1 >= b.length || a[x + 1] === b[y + 1]) &&
+    (x + 2 >= a.length || y + 2 >= b.length || a[x + 2] === b[y + 2]);
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      const from = i,
+        at = j;
+      while (i < a.length && j < b.length && a[i] === b[j]) {
+        i++;
+        j++;
+      }
+      runs.push([from, i, at]);
+      continue;
+    }
+    let found = false;
+    for (let d = 1; d <= reach && !found; d++)
+      for (let x = 0; x <= d; x++) {
+        const y = d - x;
+        if (i + x < a.length && j + y < b.length && agree(i + x, j + y)) {
+          i += x;
+          j += y;
+          found = true;
+          break;
+        }
+      }
+    if (!found) {
+      i++;
+      j++;
+    }
+  }
+  return runs;
 }
 
 // Insert text at pos as typing would (with the marks there) and keep the

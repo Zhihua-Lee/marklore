@@ -182,22 +182,40 @@ export function createUpdater({
       reader = response.body.getReader();
     let received = 0,
       shown = 0;
+    // A write that fails (a full disk) ends the download with its error.
+    let failed = null,
+      wake = null;
+    out.on("error", (error) => {
+      failed ??= error;
+      wake?.();
+    });
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         hash.update(value);
         received += value.length;
+        if (failed) throw failed;
         if (!out.write(value))
-          await new Promise((resolve) => out.once("drain", resolve));
+          await new Promise((resolve) => {
+            wake = resolve;
+            out.once("drain", resolve);
+          });
+        if (failed) throw failed;
         if (share && total && received - shown > total / 100) {
           shown = received;
           set({ progress: Math.min(99, Math.round((received / total) * 100)) });
         }
       }
     } finally {
-      await new Promise((resolve) => out.end(resolve));
+      await Promise.resolve(reader.cancel?.()).catch(() => {});
+      await new Promise((resolve) => {
+        if (failed || out.destroyed) return resolve();
+        wake = resolve;
+        out.end(resolve);
+      });
     }
+    if (failed) throw failed;
     return hash.digest("hex");
   }
   // A folder copy overwrites itself: its folder must take new files.

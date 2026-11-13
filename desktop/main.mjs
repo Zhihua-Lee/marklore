@@ -325,6 +325,11 @@ const libraryWatch = createLibraryWatch({
       clearTimeout(linksTimer);
       linksTimer = setTimeout(() => send("links", null), 300);
     }),
+  foldersChanged: () =>
+    linkIndex.rescan().then(
+      () => send("links", null),
+      () => {},
+    ),
 });
 // excluded: folders left out of search and backlinks (in the settings).
 // The file-name search of folders outside the library skips them too.
@@ -370,6 +375,30 @@ function watchFile(id) {
     watchers.set(folder, entry);
   } catch {
     /* Focus refresh still works on filesystems without watch support. */
+  }
+}
+// Windows does not rename or remove a folder while a folder below it is
+// watched: the watchers at or under it are let go for that (run), and the
+// open notes are watched again where they are afterwards.
+async function withoutWatchersUnder(folder, run) {
+  const under = (p) =>
+    p.toLowerCase() === folder.toLowerCase() ||
+    p.toLowerCase().startsWith(folder.toLowerCase() + path.sep);
+  const names = [];
+  for (const [watched, entry] of watchers)
+    if (under(watched)) {
+      names.push(...[...entry.names.keys()].map((n) => path.join(watched, n)));
+      entry.watcher.close();
+      watchers.delete(watched);
+    }
+  try {
+    return await run();
+  } finally {
+    // Where the rename did not happen (or for what is left), as before; the
+    // caller watches the notes that moved.
+    const was = new Set(names.map((n) => n.toLowerCase()));
+    for (const [id, file] of files.files)
+      if (was.has(file.path.toLowerCase())) watchFile(id);
   }
 }
 // Release watchers for notes no open tab references. A just-opened file may not
@@ -478,8 +507,19 @@ app.on("open-file", (event, file) => {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on("activate", showWindow);
-  app.on("second-instance", (_event, argv) => {
-    acceptArgs(argv);
+  app.on("second-instance", (_event, argv, workingDirectory) => {
+    // A file named relative to where that copy was started.
+    acceptArgs(
+      argv.map((arg, i) =>
+        i &&
+        workingDirectory &&
+        !arg.startsWith("-") &&
+        !path.isAbsolute(arg) &&
+        !/^[a-z][a-z0-9+.-]*:/i.test(arg)
+          ? path.resolve(workingDirectory, arg)
+          : arg,
+      ),
+    );
     if (
       !argv.includes("--background") ||
       argv.some((arg) => files.openable(arg))
@@ -1056,13 +1096,15 @@ else {
                 ).size,
             )
             .catch(() => 0);
-        const result = await files.renameEntry(id, name, newName);
+        const result = await withoutWatchersUnder(source, () =>
+          files.renameEntry(id, name, newName),
+        );
         for (const file of result.files) watchFile(file.id);
         return { ...result, links };
       });
       api("trashEntry", async (id, name) => {
         const target = await files.childPath(id, name);
-        await shell.trashItem(target);
+        await withoutWatchersUnder(target, () => shell.trashItem(target));
         return { path: target };
       });
       api("revealEntry", async (id, name = null) =>
@@ -1114,7 +1156,8 @@ else {
           href:
             encodeURI(
               path.relative(base, link.source).split(path.sep).join("/"),
-            ) + `#L${link.line}C${link.column}`,
+            ).replace(/[#?]/g, (c) => (c === "#" ? "%23" : "%3F")) +
+            `#L${link.line}C${link.column}`,
           fragment: link.fragment,
           section: link.section,
           snippet: link.snippet,

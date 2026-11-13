@@ -93,7 +93,12 @@ export async function locate(store, input, { exists = true } = {}) {
   let library, file;
   if (path.isAbsolute(value)) {
     file = path.resolve(value);
-    library = list.find((lib) => within(lib.path, file));
+    // Of the libraries holding it (one may lie in a hidden folder of
+    // another), the one that has it as a note; else the innermost.
+    const holding = list
+      .filter((lib) => within(lib.path, file))
+      .sort((a, b) => b.path.length - a.path.length);
+    library = holding.find((lib) => allowed(lib, file, excluded)) || holding[0];
   } else {
     const parts = value.split(/[\\/]+/).filter(Boolean);
     library = list.find(
@@ -159,10 +164,11 @@ async function readNote(file) {
 }
 
 // Every note of the libraries (or one), breadth first, as the library walks.
-async function walk(list, excluded, limit) {
+// from: only this folder of the (one) library.
+async function walk(list, excluded, limit, from = null) {
   const notes = [];
   for (const library of list) {
-    const queue = [library.path];
+    const queue = [from || library.path];
     let folders = 0;
     while (queue.length && folders++ < MAX_WALK && notes.length < limit) {
       const folder = queue.shift();
@@ -370,13 +376,20 @@ export function createTools({ store, run = null }) {
           roots = [library];
           inside = path.join(library.path, ...parts.slice(1));
         }
-        const notes = (await walk(roots, excluded, MAX_WALK))
-          .filter((n) => !inside || within(inside, n.file))
+        // One more than is told of: whether the walk stopped short.
+        const found = await walk(roots, excluded, MAX_WALK + 1, inside);
+        const notes = found
+          .slice(0, MAX_WALK)
           .map((n) => n.note)
           .sort((a, b) => a.localeCompare(b));
         return {
           notes: notes.slice(0, limit),
           ...(notes.length > limit ? { more: notes.length - limit } : {}),
+          ...(found.length > MAX_WALK
+            ? {
+                incomplete: `Only the first ${MAX_WALK} notes were looked at; name a folder to see the others.`,
+              }
+            : {}),
         };
       },
     },

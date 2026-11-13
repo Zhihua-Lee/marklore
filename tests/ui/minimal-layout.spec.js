@@ -414,10 +414,25 @@ Retained when the other chapter is folded.
     (await parent.boundingBox()).x,
   );
   const rail = parent.locator(":scope > .section-rail");
+  const guide = (section) =>
+    section
+      .locator(":scope > .section-rail")
+      .evaluate((el) => getComputedStyle(el, "::before").backgroundColor);
+  const quiet = [await guide(parent), await guide(child)];
   const before = await parent.boundingBox();
   expect((await rail.boundingBox()).height).toBeCloseTo(before.height, 0);
   await rail.hover();
   expect((await parent.boundingBox()).height).toBeCloseTo(before.height, 0);
+  // The section under the pointer is marked, and only the innermost one.
+  await expect(parent).toHaveClass(/section-hover/);
+  await expect(child).not.toHaveClass(/section-hover/);
+  await expect.poll(() => guide(parent)).not.toBe(quiet[0]);
+  await child.locator("p").first().hover();
+  await expect(child).toHaveClass(/section-hover/);
+  await expect(parent).not.toHaveClass(/section-hover/);
+  await expect.poll(() => guide(child)).not.toBe(quiet[1]);
+  await expect.poll(() => guide(parent)).toBe(quiet[0]);
+  await rail.hover();
   await rail.click({ position: { x: 5, y: 60 } });
   await expect(parent).toHaveClass(/collapsed/);
   await expect(parent.locator(":scope > h2 > .section-summary")).toBeVisible();

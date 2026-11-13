@@ -140,6 +140,46 @@ const control = (bar, name) => bar.getByRole("button", { name, exact: true });
 const pressed = (bar, name) =>
   expect(control(bar, name)).toHaveAttribute("aria-pressed", "true");
 
+test("the bar keeps clear of the panel buttons over its corners", async ({
+  page,
+}) => {
+  const pads = () =>
+    page.evaluate(() => {
+      const q = (s) => document.querySelector(s),
+        style = getComputedStyle(q("#proposal-bar"));
+      return {
+        left: parseFloat(style.paddingLeft),
+        right: parseFloat(style.paddingRight),
+        closed: [q("#sidebar").hidden, q("#right-sidebar").hidden],
+        buttons: [
+          q("#panel-controls-left").children.length,
+          q("#panel-controls-right").children.length,
+        ],
+      };
+    });
+  // Both panels on the left, closed: two buttons over the left corner.
+  await boot(page, {
+    proposals: [edit],
+    settings: {
+      sidebar: false,
+      outline: false,
+      librarySide: "left",
+      outlineSide: "left",
+    },
+  });
+  await openFromToolbar(page, /Earlier deadline/);
+  await expect(page.locator("#proposal-bar")).toBeVisible();
+  expect(await pads()).toEqual({
+    left: 76,
+    right: 50,
+    closed: [true, true],
+    buttons: [2, 0],
+  });
+  // The library opened: nothing floats over the left corner.
+  await page.locator("#sidebar-toggle").click();
+  await expect.poll(async () => (await pads()).left).toBe(14);
+});
+
 test("a proposal is reviewed in the note, then accepted and saved at the end", async ({
   page,
 }) => {

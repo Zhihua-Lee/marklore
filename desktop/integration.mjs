@@ -76,6 +76,26 @@ export function otherCommands() {
 }
 
 // Register an opt-in candidate, never write UserChoice or extension defaults.
+// Console code pages by the names TextDecoder knows them by.
+const consoleLabels = {
+  936: "gbk",
+  54936: "gb18030",
+  950: "big5",
+  932: "shift_jis",
+  949: "euc-kr",
+  866: "ibm866",
+  874: "windows-874",
+  1250: "windows-1250",
+  1251: "windows-1251",
+  1252: "windows-1252",
+  1253: "windows-1253",
+  1254: "windows-1254",
+  1255: "windows-1255",
+  1256: "windows-1256",
+  1257: "windows-1257",
+  1258: "windows-1258",
+  65001: "utf-8",
+};
 export function registrationCommands(executable, { other = false } = {}) {
   if (!path.win32.isAbsolute(executable) || /["\r\n]/.test(executable))
     throw Error(t("无效程序路径"));
@@ -184,14 +204,53 @@ export function createIntegration({
   async function forget(commands) {
     for (const command of commands) await invoke(command).catch(() => {});
   }
+  // reg.exe writes in the console's code page, not UTF-8: a path with
+  // other than ASCII letters is read with that code page (asked for once).
+  let codePage = null;
+  async function consoleText(bytes) {
+    if (typeof bytes === "string") return bytes;
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    } catch {
+      // Not UTF-8: the code page's own letters.
+    }
+    codePage ??= run(
+      reg,
+      [
+        "query",
+        "HKLM\\SYSTEM\\CurrentControlSet\\Control\\Nls\\CodePage",
+        "/v",
+        "OEMCP",
+      ],
+      { windowsHide: true, timeout: 10000 },
+    ).then(
+      (result) => String(result.stdout).match(/REG_SZ\s+(\d+)/)?.[1] || "",
+      () => "",
+    );
+    const label = consoleLabels[await codePage];
+    try {
+      return new TextDecoder(label || "latin1").decode(bytes);
+    } catch {
+      return Buffer.from(bytes).toString("latin1");
+    }
+  }
   async function query(key, name) {
     try {
-      const result = await invoke([
-        "query",
-        key,
-        ...(name === null ? ["/ve"] : ["/v", name]),
-      ]);
-      return result.stdout.match(/REG_SZ\s+([^\r\n]*)/)?.[1]?.trim() || null;
+      const result = await run(
+        reg,
+        ["query", key, ...(name === null ? ["/ve"] : ["/v", name])],
+        {
+          windowsHide: true,
+          timeout: 10000,
+          maxBuffer: 1024 * 1024,
+          encoding: "buffer",
+        },
+      );
+      return (
+        (await consoleText(result.stdout))
+          .match(/REG_SZ\s+([^\r\n]*)/)?.[1]
+          ?.trim() || null
+      );
     } catch (error) {
       if (error.code === 1) return null;
       throw error;

@@ -348,7 +348,15 @@ export class FileStore {
   // An entry of an authorized folder, by its name there.
   async childPath(id, name) {
     const folder = this.directories.get(id);
-    if (!folder || typeof name !== "string" || path.basename(name) !== name)
+    // A name of an entry: not the folder itself ("" or "."), nor one above.
+    if (
+      !folder ||
+      typeof name !== "string" ||
+      !name ||
+      name === "." ||
+      name === ".." ||
+      path.basename(name) !== name
+    )
       throw Error(t("未授权的文件"));
     await unchangedPath(folder);
     const child = path.join(folder, name);

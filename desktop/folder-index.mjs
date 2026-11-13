@@ -125,7 +125,7 @@ function lastLine(parsed, i) {
 // A link to a child, written as links in such indexes are: spaces and the
 // characters that would end the link percent-encoded, other text as is.
 export const hrefFor = (name, folder = false) =>
-  name.replace(/[%\s()<>[\]]/g, (c) =>
+  name.replace(/[%\s()<>[\]#?]/g, (c) =>
     [...new TextEncoder().encode(c)]
       .map((b) => "%" + b.toString(16).toUpperCase().padStart(2, "0"))
       .join(""),

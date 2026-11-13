@@ -49,7 +49,7 @@ import {
   anchorOffset,
 } from "./positions.js";
 import { icon } from "./icons.js";
-import { setSectionCollapsed } from "./sections.js";
+import { setSectionCollapsed, watchSections } from "./sections.js";
 import {
   appearanceMarkup,
   applyAppearance,
@@ -247,6 +247,7 @@ createTabPreview({
   dirty,
 });
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
+watchSections($("#content"));
 const smoothScroll = createSmoothScroll($("#reader"));
 releaseWhenQuiet(api?.releaseMemory);
 wireSourceCopy({
@@ -651,6 +652,9 @@ function capture() {
     (active.mode === "edit" && active.pane === "editor" && sourcePaneShown())
       ? editorAnchor()
       : paneAnchor();
+  // The editor of Edit mode shows no folds, and the reading view then
+  // still holds the note read before: this note's folds stay as they were.
+  if (richActive()) return;
   active.folds = [
     ...$("#content").querySelectorAll(".note-section.collapsed"),
   ].map((el) => el.dataset.foldKey);
@@ -1175,6 +1179,20 @@ async function navigateLink(href, source = active) {
     updateHistoryButtons();
     return;
   }
+  if (richActive()) {
+    // The reading view is not this note's in Edit mode: the heading, or an
+    // anchor written in the note, is found in its text.
+    const heading = parseHeadings(active.text).find((h) => h.id === anchor);
+    const written = heading
+      ? null
+      : new RegExp(
+          `<[a-z][^>]*\\sid=(["']?)${anchor.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\1[\\s>]`,
+          "i",
+        ).exec(active.text);
+    if (heading || written) jump(heading ? heading.from : written.index);
+    else toast(t("没有找到锚点：{anchor}", { anchor }));
+    return;
+  }
   const el = $("#content").querySelector("#" + CSS.escape(anchor));
   if (el) {
     unfold(el);
@@ -1213,6 +1231,8 @@ backlinks = createBacklinks({
   getActive: () => active,
   getHeadings: () => active?.headings || [],
   getSettings: () => settings,
+  // In Edit mode the reading view holds another note, or an older text.
+  shown: () => !richActive(),
   navigate: (href) => navigateLink(href),
   run,
 });
@@ -1652,7 +1672,7 @@ function zoom(delta) {
     Math.min(200, delta === 0 ? 100 : settings.zoom + delta),
   );
   applySettings();
-  if (active) requestAnimationFrame(() => restore(active));
+  if (active) requestAnimationFrame(() => active && restore(active));
   scheduleSession();
 }
 function applySettings() {

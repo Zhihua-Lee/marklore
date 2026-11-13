@@ -40,7 +40,10 @@ export function selectionBubble({ comment = null } = {}) {
         const sel = view.state.selection;
         return sel instanceof TextSelection && !sel.empty && view.hasFocus();
       };
+      // Its palette of colours is open (the focus is in it): the bar stays.
+      const choosing = () => !!bar.querySelector('[aria-expanded="true"]');
       function place() {
+        if (choosing()) return;
         if (pressed || view.composing || !selected()) return hide();
         const { from, to } = view.state.selection;
         const start = view.coordsAtPos(from, 1);
@@ -103,8 +106,11 @@ export function selectionBubble({ comment = null } = {}) {
               : null,
         );
       // The editor losing focus to anything but this bar hides it.
+      // ... or to the palette opened from it.
       const blur = (event) => {
-        if (!bar.contains(event.relatedTarget)) hide();
+        const to = event.relatedTarget;
+        if (bar.contains(to) || to?.closest?.(".text-color-picker")) return;
+        hide();
       };
       view.dom.addEventListener("blur", blur);
       return {

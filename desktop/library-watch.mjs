@@ -22,15 +22,18 @@ export function treeChange(name) {
 }
 
 // notify(): the tree changed. noteChanged(path): a note was written, created,
-// renamed or deleted (the link index follows its content).
+// renamed or deleted (the link index follows its content). foldersChanged():
+// something that may be a folder was renamed, moved or deleted (one event
+// for the folder, none for the notes in it): the index looks again.
 export function createLibraryWatch({
   notify,
   noteChanged = () => {},
+  foldersChanged = () => {},
   delay = 400,
   watch = fsWatch,
 }) {
   const watchers = new Map();
-  let timer;
+  let timer, foldersTimer;
   return {
     // Watch exactly these folders; folders no longer in the library are released.
     follow(folders) {
@@ -53,6 +56,13 @@ export function createLibraryWatch({
             if ((type !== "rename" && !order) || !treeChange(name)) return;
             clearTimeout(timer);
             timer = setTimeout(notify, delay);
+            if (
+              type === "rename" &&
+              !(name && (markdownPath(String(name)) || otherPath(String(name))))
+            ) {
+              clearTimeout(foldersTimer);
+              foldersTimer = setTimeout(foldersChanged, delay);
+            }
           });
           watcher.on("error", () => {
             watcher.close();
@@ -66,6 +76,7 @@ export function createLibraryWatch({
     },
     close() {
       clearTimeout(timer);
+      clearTimeout(foldersTimer);
       for (const watcher of watchers.values()) watcher.close();
       watchers.clear();
     },

@@ -174,8 +174,9 @@ export function parseNote(text, file) {
       const hash = href.indexOf("#");
       let target = hash < 0 ? href : href.slice(0, hash);
       let fragment = hash < 0 ? "" : href.slice(hash + 1);
+      // As opening a link reads it: "%26" is "&", "%23" is "#".
       try {
-        target = decodeURI(target);
+        target = decodeURIComponent(target);
         fragment = decodeURIComponent(fragment);
       } catch {
         continue;
@@ -229,6 +230,7 @@ export function createLinkIndex({
     scanGeneration = 0,
     indexing = false,
     followed = null,
+    followedWith = null,
     isExcluded = () => false;
   const inLibrary = (file) =>
     folders.some((folder) => {
@@ -243,7 +245,8 @@ export function createLinkIndex({
       const info = await stat(file);
       if (!info.isFile() || info.size > MAX_BYTES) return notes.delete(key);
       if (!fresh && notes.get(key)?.mtime === info.mtimeMs) return;
-      const text = await read(file, "utf8");
+      // Without a byte order mark: a heading on the first line is one.
+      const text = (await read(file, "utf8")).replace(/^\uFEFF/, "");
       // The text stays for full-text search (at most 5000 notes of 2 MB), with a lower-cased copy.
       notes.set(key, {
         path: file,
@@ -292,6 +295,7 @@ export function createLinkIndex({
     // Index exactly these library folders.
     // excluded: folders the reader left out of search and backlinks.
     follow(list, excluded = []) {
+      followedWith = [list, excluded];
       const next = [...new Set(list.map((folder) => path.resolve(folder)))];
       const without = normalizeExcluded(excluded);
       const signature = next.join("\n") + "\0" + without.join("\n");
@@ -324,6 +328,12 @@ export function createLinkIndex({
       })();
       return ready;
     },
+    // The same folders read again: a folder was renamed, moved or deleted.
+    rescan() {
+      if (!followedWith) return ready;
+      followed = null;
+      return this.follow(...followedWith);
+    },
     // A file in the library was written, created, renamed or deleted.
     async changed(file) {
       if (!NOTE.test(file) || !inLibrary(file) || isExcluded(file))
@@ -348,7 +358,8 @@ export function createLinkIndex({
     async anchors(file) {
       const note = notes.get(pathKey(file));
       if (note) return note.anchors;
-      return parseNote(await read(file, "utf8"), file).anchors;
+      return parseNote((await read(file, "utf8")).replace(/^\uFEFF/, ""), file)
+        .anchors;
     },
     // Does a link from this note lead somewhere? "ok", "missing-file" or
     // "missing-anchor". Footnote and line anchors (#L12) are not checked.
@@ -358,7 +369,7 @@ export function createLinkIndex({
       let target = hash < 0 ? href : href.slice(0, hash),
         fragment = hash < 0 ? "" : href.slice(hash + 1);
       try {
-        target = decodeURI(target);
+        target = decodeURIComponent(target);
         fragment = decodeURIComponent(fragment);
       } catch {
         return "ok";

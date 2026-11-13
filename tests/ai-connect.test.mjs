@@ -142,3 +142,29 @@ test("Codex: a new config.toml holds only the table", async () => {
   assert.match(text, /^\[mcp_servers\.marklore\]\ncommand = /);
   assert.equal((await connections.status("codex")).state, "ok");
 });
+
+test("Codex: an entry written on one line is seen and replaced", async () => {
+  for (const [before, rest] of [
+    [
+      'model = "x"\n\n[mcp_servers]\nother = { command = "o" }\nmarklore = { command = "D:\\\\Old\\\\Marklore.exe", args = ["a.mjs"] }\n',
+      /^model = "x"\n\n\[mcp_servers\]\nother = \{ command = "o" \}\n\n\[mcp_servers\.marklore\]\n/,
+    ],
+    [
+      "mcp_servers.marklore = { args = ['a.mjs'], command = 'D:\\Old\\Marklore.exe' }\n\n[profile]\nx = 1\n",
+      /^\[profile\]\nx = 1\n\n\[mcp_servers\.marklore\]\n/,
+    ],
+  ]) {
+    const { home, connections } = await place();
+    const dir = path.join(home, ".codex");
+    await fs.mkdir(dir);
+    const file = path.join(dir, "config.toml");
+    await fs.writeFile(file, before);
+    const status = await connections.status("codex");
+    assert.equal(status.state, "other");
+    assert.equal(status.command, "D:\\Old\\Marklore.exe");
+    assert.equal((await connections.connect("codex")).state, "ok");
+    const text = await fs.readFile(file, "utf8");
+    assert.match(text, rest);
+    assert.equal(text.match(/marklore/g).length, 1);
+  }
+});

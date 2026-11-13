@@ -275,3 +275,25 @@ test("a highlight inside colored text shows the text's color", async ({
     await color("#content span[style]"),
   );
 });
+
+test("the small toolbar's palette opens with a right click and stays open", async ({
+  page,
+}) => {
+  await boot(page, "Mark these words here.\n");
+  await selectText(page, "these words");
+  const bubble = page.locator(".rich-bubble");
+  await expect(bubble).toBeVisible();
+  await bubble.getByRole("button", { name: "高亮" }).click({ button: "right" });
+  const palette = page.locator(".text-color-picker");
+  await expect(palette).toBeVisible();
+  // Still there a moment later: the editor losing the focus to it does not
+  // close it.
+  await page.waitForTimeout(150);
+  await expect(palette).toBeVisible();
+  await expect(bubble).toBeVisible();
+  await palette.locator("[data-color]").nth(2).click();
+  await expect(palette).toHaveCount(0);
+  expect(await saved(page)).toMatch(
+    /^Mark <mark style="background-color: #[\da-f]{6}(; color: #[\da-f]{6})?">these words<\/mark> here\.\n$/i,
+  );
+});

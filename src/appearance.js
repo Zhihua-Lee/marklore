@@ -130,6 +130,19 @@ export function applyAppearance(settings) {
     dock.hidden = hidden;
     dock.dataset.stacked = String(visible.length > 1);
   }
+  // For the styles that keep clear of the panel buttons: which docks are
+  // closed, and how many buttons each corner holds.
+  const workspace = $(".workspace");
+  for (const side of ["left", "right"]) {
+    workspace.dataset[side + "Dock"] = $(
+      side === "right" ? "#right-sidebar" : "#sidebar",
+    ).hidden
+      ? "closed"
+      : "open";
+    workspace.dataset[side + "Buttons"] = String(
+      $("#panel-controls-" + side).children.length,
+    );
+  }
   $("#sidebar-toggle").setAttribute("aria-expanded", String(settings.sidebar));
   $("#outline-toggle").setAttribute("aria-expanded", String(settings.outline));
   $("#typeface").value = settings.typeface;

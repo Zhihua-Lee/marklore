@@ -91,6 +91,8 @@ export function createChannel({
     push: canPush,
     started,
     active,
+    // The heartbeat: the server runs, whether or not it is being used.
+    alive: new Date(now()).toISOString(),
   });
   const beat = () => store.writeSession(id, describe()).catch(() => {});
 

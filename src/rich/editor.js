@@ -57,6 +57,7 @@ import {
 import {
   DrawnView,
   closer,
+  readingWith,
   stepIn,
   grab,
   openSelected,
@@ -223,8 +224,15 @@ const splitItem = (state, dispatch, view) => {
     $from.depth >= 2 &&
     $from.node(-1).type === S.list_item &&
     para.firstChild?.type === S.task_box;
-  if (isTask && para.childCount === 1) {
-    const tr = state.tr.delete($from.start(), $from.start() + 1);
+  // Empty: its box alone, or with the space that follows a new one.
+  let empty = isTask;
+  para.forEach(
+    (child, _o, i) =>
+      i && !(child.isText && !child.text.trim()) && (empty = false),
+  );
+  if (empty) {
+    // The box and what is left of the line go; the item leaves the list.
+    const tr = state.tr.delete($from.start(), $from.end());
     view.dispatch(tr);
     return liftListItem(S.list_item)(view.state, view.dispatch);
   }
@@ -832,6 +840,7 @@ export function createRichEditor({
     const k = mapText(source, flat(node), Math.max(0, offset - hit.from), bias);
     return hit.pos + 1 + placeOfText(node, k);
   }
+  readingWith(() => current?.rich?.loaded.env || {});
   // For tests and debugging on the dev server only.
   if (import.meta.env?.DEV) window.__richView = view;
 
@@ -840,8 +849,12 @@ export function createRichEditor({
   // is read again (its undo history here starts over) and the caret stays
   // about where it was. Returns false, editing nothing, for a note that
   // would not be written back exactly as it is.
+  let showing = 0;
   async function show(doc) {
+    const turn = ++showing;
     if (mayContainMath(doc.text)) await loadMath();
+    // Another note was shown while the formulas loaded: that one stays.
+    if (turn !== showing) return true;
     const again = doc.rich && doc.rich.text !== doc.text;
     const at = again ? doc.rich.state.selection.from : 0;
     if (!doc.rich || again) {

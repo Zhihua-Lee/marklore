@@ -214,7 +214,7 @@ export function createAiStore(folder) {
     async liveSessions(now = Date.now(), alive = () => true) {
       const out = [];
       for (const { name, value } of await readAll(sessions, byId)) {
-        const age = now - Date.parse(value.active || 0);
+        const age = now - Date.parse(value.alive || value.active || 0);
         if (age > SESSION_STALE || !alive(value.pid)) {
           if (!(age <= 10 * SESSION_STALE))
             await fs.rm(path.join(sessions, name), { force: true });
@@ -316,19 +316,23 @@ export function createAiStore(folder) {
     },
   };
   return store;
-  async function settle(id, change, now, decided) {
-    const value = await readJson(fileOf(id));
-    if (!value) throw Error(`There is no proposal ${id}.`);
-    if (value.status !== "pending" || isLapsed(value, now.getTime()))
-      throw Error(
-        `Proposal ${id} is already ${isLapsed(value, now.getTime()) ? "lapsed" : value.status}.`,
-      );
-    const next = {
-      ...value,
-      ...change(value),
-      ...(decided ? { decided: now.toISOString() } : {}),
-    };
-    await writeJson(fileOf(id), next);
-    return next;
+  // One at a time: the owner's decision and the assistant's withdrawal
+  // must not both find it waiting.
+  function settle(id, change, now, decided) {
+    return withLock(fileOf(id), async () => {
+      const value = await readJson(fileOf(id));
+      if (!value) throw Error(`There is no proposal ${id}.`);
+      if (value.status !== "pending" || isLapsed(value, now.getTime()))
+        throw Error(
+          `Proposal ${id} is already ${isLapsed(value, now.getTime()) ? "lapsed" : value.status}.`,
+        );
+      const next = {
+        ...value,
+        ...change(value),
+        ...(decided ? { decided: now.toISOString() } : {}),
+      };
+      await writeJson(fileOf(id), next);
+      return next;
+    });
   }
 }

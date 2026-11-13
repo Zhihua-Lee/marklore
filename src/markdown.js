@@ -244,7 +244,7 @@ export function createParser() {
         }
         if (fence || !line.includes("|")) return line;
         return line.replace(
-          /`[^`]*`|\\\([\s\S]*?\\\)|\$\$[^$]+\$\$|\$[^$\n]+\$/g,
+          /`[^`]*`|\\\([\s\S]*?\\\)|\$\$[^$]+\$\$|(?<!\d)\$(?!\s)[^$\n]*?(?<!\s)\$/g,
           (part) =>
             part[0] === "`" ? part : part.replace(/(?<!\\)\|/g, marker),
         );
@@ -477,6 +477,39 @@ export function createParser() {
           const cell = /^t[hd]_open$/.test(state.tokens[i - 1]?.type)
             ? state.tokens[i - 1]
             : null;
+          // The text starts after what begins its line (a list marker, ">",
+          // "#"): a "1" or "*" there is not the text that follows it.
+          if (!cell && cursor === from) {
+            const stop = state.src.indexOf("\n", from),
+              line = state.src
+                .slice(from, stop < 0 || stop > to ? to : stop)
+                .trimEnd(),
+              first = token.content.split("\n")[0].trimEnd();
+            if (first && line.endsWith(first))
+              cursor = from + line.length - first.length;
+          }
+          // Where a piece of the text is in the source, from the cursor on:
+          // as it is, or (over several lines of a quote or a list item)
+          // with each line's beginning between; [start, end] or null.
+          const loosely = (text, spaces = false) => {
+            const exact = state.src.indexOf(text, cursor);
+            if (exact >= 0 && exact + text.length <= to)
+              return [exact, exact + text.length];
+            if (!/[\n ]/.test(text)) return null;
+            const pattern = text
+              .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+              .replace(spaces ? /\n| /g : /\n/g, (ch) =>
+                ch === "\n"
+                  ? "\\n[ \\t]*(?:>[ \\t]*)*"
+                  : "(?: |\\n[ \\t]*(?:>[ \\t]*)*)",
+              );
+            const re = new RegExp(pattern, "g");
+            re.lastIndex = cursor;
+            const m = re.exec(state.src);
+            return m && m.index + m[0].length <= to
+              ? [m.index, m.index + m[0].length]
+              : null;
+          };
           if (cell) {
             if (cursor === from && /^\s*\|/.test(inlineSource))
               cursor = from + inlineSource.indexOf("|") + 1;
@@ -543,6 +576,22 @@ export function createParser() {
               ) {
                 child.meta = { from: at, to: at + child.content.length };
                 cursor = at + child.content.length;
+              } else if (child.type === "code_inline" && child.content) {
+                // Code over several lines (its line breaks read as spaces):
+                // stepped over, so that the text after it is not found in it.
+                const span = loosely(child.content, true);
+                if (span) skipTo(span[1]);
+              }
+            } else if (child.type === "footnote_ref") {
+              // "[^label]", or a footnote written in place: "^[...]".
+              const label = child.meta?.label;
+              if (label !== undefined) {
+                const at = state.src.indexOf("[^" + label + "]", cursor);
+                if (at >= 0) skipTo(at + label.length + 3);
+              } else {
+                const at = state.src.indexOf("^[", cursor),
+                  close = at < 0 ? -1 : closingBracket(state.src, at + 1, to);
+                if (close > 0) skipTo(close + 1);
               }
             } else if (child.type === "text_special" && child.markup) {
               // An escape or entity ("\|", "&amp;") stays a token of its own
@@ -570,6 +619,12 @@ export function createParser() {
                   to: at + child.content.length + child.markup.length * 2,
                 };
                 cursor = child.meta.to;
+              } else {
+                // A formula over several quoted lines: stepped over.
+                const span = loosely(
+                  child.markup + child.content + child.markup,
+                );
+                if (span) skipTo(span[1]);
               }
             }
           }
@@ -639,6 +694,25 @@ export function createParser() {
       ? `<span data-text-from="${from}" data-text-to="${t.meta.to}">${content}</span>`
       : content;
   };
+  // HTML written in the note cannot claim a place in the source: those
+  // marks are the parser's own.
+  const ownMarks =
+    /\sdata-(?:from|to|text-from|text-to|cell-from|heading|fold-key|src-[\w-]+)\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]*)/gi;
+  for (const name of ["html_inline", "html_block"]) {
+    const original = md.renderer.rules[name];
+    md.renderer.rules[name] = (tokens, i, options, env, renderer) => {
+      const token = tokens[i];
+      if (!/\sdata-/i.test(token.content))
+        return original(tokens, i, options, env, renderer);
+      const content = token.content;
+      token.content = content.replace(ownMarks, "");
+      try {
+        return original(tokens, i, options, env, renderer);
+      } finally {
+        token.content = content;
+      }
+    };
+  }
   md.renderer.rules.folio_escape = (tokens, i) => {
     const t = tokens[i];
     return `<span class="md-escape" data-src-from="${t.meta.from}" data-src-to="${t.meta.to}">${escape(t.content)}</span>`;

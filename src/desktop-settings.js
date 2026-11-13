@@ -14,6 +14,7 @@ export const desktopSettingsMarkup = `
   ${setting(`<label for="portable-mode">${t("便携模式")}</label>`, '<small id="portable-status"></small>', '<input id="portable-mode" type="checkbox" class="switch">')}
   ${setting(`<span>${t("托盘")}</span>`, "", `<span class="setting-actions"><button id="hide-to-tray">${t("隐藏到托盘")}</button><button id="quit-app">${t("完全退出")}</button></span>`)}
   <p id="desktop-executable" class="setting-footnote"></p>
+  <p id="desktop-index" class="setting-footnote" hidden></p>
 </fieldset>`;
 
 export function wireDesktopSettings({
@@ -94,6 +95,12 @@ export function wireDesktopSettings({
     q("#desktop-executable").textContent = t("当前程序：{path}", {
       path: status.executable,
     });
+    // Which library index answers backlinks and search, for support.
+    q("#desktop-index").hidden = !status.index;
+    q("#desktop-index").textContent =
+      status.index === "native"
+        ? t("链接与搜索：原生索引")
+        : t("链接与搜索：JavaScript 索引");
     // Updates: the installer or the zip copy is replaced in place, so the
     // program path, file association and startup entry stay the same.
     const update = status.update || {},

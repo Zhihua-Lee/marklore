@@ -89,6 +89,13 @@ export const appFiles = [
   "README.md",
   "README.zh-CN.md",
 ];
+// Also app files when the package has them: the native library index
+// (desktop/native-index.mjs). An update without it keeps the one in place, or
+// uses the JavaScript index. The helper copies it once every process of the
+// program has ended, as it does app.asar, so a loaded binary is never written.
+export const nativeAppFiles = [
+  "resources/app.asar.unpacked/native/index/marklore-index.win32-x64.node",
+];
 
 // "<sha256>  <name>" lines, as sha256sum writes them.
 export function parseSums(text) {

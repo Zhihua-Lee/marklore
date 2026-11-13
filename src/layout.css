@@ -452,6 +452,9 @@ select:focus-visible {
 #desktop-executable {
   overflow-wrap: anywhere;
 }
+#appearance #desktop-index {
+  margin-top: 2px;
+}
 .layout-sample {
   display: flex;
   gap: 5px;

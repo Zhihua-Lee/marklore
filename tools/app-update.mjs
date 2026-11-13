@@ -2,13 +2,14 @@
 // downloads instead of the whole package (desktop/updater.mjs).
 //   node tools/app-update.mjs <win-unpacked> <out folder> [version]
 // Writes Marklore-vX-app-electron-Y.zip, holding one Marklore-vX-win-x64
-// folder with the files in appFiles. Y is read from the package's own
-// Electron "version" file, so it always matches the build.
+// folder with the files in appFiles, and those in nativeAppFiles that the
+// package has. Y is read from the package's own Electron "version" file, so
+// it always matches the build.
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
-import { assetNames, appFiles } from "../desktop/updater.mjs";
+import { assetNames, appFiles, nativeAppFiles } from "../desktop/updater.mjs";
 
 process.noAsar = true;
 const [unpacked, out, given] = process.argv.slice(2);
@@ -28,7 +29,16 @@ const electron = (
 const names = assetNames(version, electron);
 const temp = await fs.mkdtemp(path.join(os.tmpdir(), "marklore-app-"));
 try {
-  for (const file of appFiles) {
+  const native = [];
+  for (const file of nativeAppFiles)
+    if (await fs.stat(path.join(unpacked, file)).catch(() => null))
+      native.push(file);
+  console.log(
+    native.length
+      ? `native index: ${native.join(", ")}`
+      : "native index: none, the update uses the one in place or the JavaScript index",
+  );
+  for (const file of [...appFiles, ...native]) {
     const to = path.join(temp, names.folder, file);
     await fs.mkdir(path.dirname(to), { recursive: true });
     await fs.copyFile(path.join(unpacked, file), to);

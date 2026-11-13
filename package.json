@@ -88,9 +88,13 @@
       "package.json",
       "LICENSE",
       "THIRD-PARTY-NOTICES.txt",
+      "native/index/marklore-index.${platform}-${arch}.node",
       "!node_modules/**"
     ],
     "asar": true,
+    "asarUnpack": [
+      "native/index/*.node"
+    ],
     "afterPack": "build/after-pack.cjs",
     "compression": "maximum",
     "electronLanguages": [

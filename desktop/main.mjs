@@ -22,7 +22,7 @@ import { createIntegration } from "./integration.mjs";
 import { createUpdater, distrusted } from "./updater.mjs";
 import { profileFolder } from "./profile-folder.mjs";
 import { createLibraryWatch } from "./library-watch.mjs";
-import { createIndex } from "./native-index.mjs";
+import { createIndex, indexKind } from "./native-index.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
 import {
@@ -850,6 +850,7 @@ else {
         ...(await integration.status()),
         trayAvailable: Boolean(tray),
         update: updater.status(),
+        index: indexKind(),
         portable: {
           // A Mac app is a signed-or-not bundle: nothing is written inside it.
           available:

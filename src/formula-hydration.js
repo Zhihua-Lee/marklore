@@ -142,7 +142,8 @@ export function createFormulaHydrator(
   function onScreen() {
     frame = null;
     if (!host?.isConnected || !scroller || !rendererReady()) return;
-    if (navigationMoving(scroller)) return;
+    // Hidden (Edit or Source mode): nothing is on screen.
+    if (!host.getClientRects().length || navigationMoving(scroller)) return;
     const view = scroller.getBoundingClientRect(),
       all = markers(host);
     const list = [];
@@ -277,7 +278,10 @@ export function createFormulaHydrator(
     host = null;
     scroller = null;
   }
-  function activate(container) {
+  // `shown`: the note was on the page already and is rendered again in place
+  // (an edit, a format). Changed blocks come in as TeX placeholders (hydrate),
+  // a whole list or table for one word formatted in it.
+  function activate(container, { shown = false } = {}) {
     deactivate();
     host = container;
     ownerWindow = container.ownerDocument.defaultView;
@@ -323,6 +327,10 @@ export function createFormulaHydrator(
       scroller.addEventListener("scroll", onScroll, { passive: true });
     }
     ownerWindow.addEventListener("beforeprint", flush);
+    // The observer reports only after a frame is painted: those on screen
+    // are drawn before it, or they would show their source for a moment. A
+    // note just opened is shown first and drawn as it comes.
+    if (shown) frame = ownerWindow.requestAnimationFrame(onScreen);
     scheduleBackfill();
   }
   return Object.assign(hydrate, { activate, deactivate, flush });

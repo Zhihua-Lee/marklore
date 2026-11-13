@@ -12,8 +12,9 @@ export function createPreviewCache({
     signatures = new WeakMap();
   let active = null,
     bytes = 0;
-  // The source positions the renderer writes (markdown.js).
-  const keys = ["", "text", "edit", "block", "src", "srcInner"].flatMap(
+  // The source positions the renderer writes (markdown.js); a table cell's
+  // too, or a table after an edit was put in anew, its formulas undrawn.
+  const keys = ["", "text", "edit", "block", "cell", "src", "srcInner"].flatMap(
     (kind) => (kind ? [kind + "From", kind + "To"] : ["from", "to"]),
   );
   const mappedSelector = keys
@@ -27,10 +28,15 @@ export function createPreviewCache({
     node.nodeType === 1 &&
     (node.classList.contains("note-section") ||
       node.classList.contains("section-body"));
-  // A section or section body, and of which level.
+  // A section or section body, and of which level. Classes the page sets
+  // (folded, hovered, skipped off screen: offscreen-blocks.js) do not count:
+  // a skipped section body taken for a new one was put in anew, every
+  // formula in it undrawn again.
   const kind = (node) =>
     JSON.stringify([
-      node.className.replace(/\s*collapsed\b/, ""),
+      [...node.classList]
+        .filter((name) => !toggled.includes(name) && name !== "reading-skip")
+        .join(" "),
       node.dataset.level,
     ]);
   const shellKey = (node) => JSON.stringify([kind(node), node.dataset.foldKey]);
@@ -38,7 +44,7 @@ export function createPreviewCache({
   // Without positions.
   const plain = (raw) =>
     raw.replace(
-      / data-(?:text-|edit-|block-|src-(?:inner-)?)?(?:from|to)="\d+"/g,
+      / data-(?:text-|edit-|block-|cell-|src-(?:inner-)?)?(?:from|to)="\d+"/g,
       "",
     );
   function describe(node) {
@@ -305,6 +311,8 @@ export function createPreviewCache({
       { hydrate, bytes: cost } = {},
     ) {
       if (active?.key === key && active.html === html) return false;
+      // The note shown again in place (an edit, a format), not opened.
+      const shown = active?.key === key;
       active?.hydrate?.deactivate?.();
       let entry = entries.get(key);
       if (!entry || entry.html !== html) {
@@ -318,13 +326,13 @@ export function createPreviewCache({
         const nodes = children([...fragment.childNodes], previous, hydrate);
         entry = { key, html, nodes, hydrate, bytes: cost ?? html.length * 2 };
       }
-      if (active?.key === key) reconcile(container, entry.nodes);
+      if (shown) reconcile(container, entry.nodes);
       else container.replaceChildren(...entry.nodes);
       remove(key);
       entries.set(key, entry);
       bytes += entry.bytes;
       active = entry;
-      entry.hydrate?.activate?.(container);
+      entry.hydrate?.activate?.(container, { shown });
       // Keep the visible note, even when it exceeds the retention budget.
       while (
         entries.size > 1 &&

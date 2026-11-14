@@ -162,6 +162,73 @@ function selectionEnd(range, end, other, block, text) {
   return pointPosition(node, offset, end, text);
 }
 
+// Emphasis a highlight or a colour can be split at (closed before its end,
+// opened again after it). Links, code and formulas stay whole.
+const SPLITTABLE = "strong,em,s,del,b,i,u,ins,sub,sup,small,mark,span";
+// One end of the selection inside emphasis that does not hold the other end
+// (part of a bold run, and on past it): where it is in the source, and the
+// markers between it and the rest of the selection (the closing ones of
+// each such element for the start, the opening ones for the end). Null when
+// it is in no such emphasis, or in something always taken whole.
+function splitEnd(node, offset, end, other, block, text) {
+  const holes = [],
+    elements = [];
+  for (
+    let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+    el && el !== block && block.contains(el);
+    el = el.parentElement
+  ) {
+    if (!inlineElement(el)) continue;
+    if (el.matches(".formula,code")) return null;
+    if (el.contains(other)) continue;
+    if (!el.matches(SPLITTABLE)) return null;
+    const outer = outerSpan(el, text),
+      inner = innerSpan(el);
+    if (!outer || !inner) return null;
+    holes.push(end ? [outer[0], inner[0]] : [inner[1], outer[1]]);
+    elements.push(el);
+  }
+  const at = holes.length ? pointPosition(node, offset, end, text) : null;
+  return at == null ? null : { at, holes, elements };
+}
+// A highlight or colour over a selection that starts or ends inside other
+// emphasis marks only the selected text: the selection's pieces between
+// that emphasis's markers, each wrapped on its own. Inside a mark of the
+// same kind it still acts on that whole mark.
+function splitSegments(s, action) {
+  if (action !== "highlight" && action !== "color") return s.segments;
+  const kind = SAME_KIND[action];
+  if (s.around.some((el) => el.matches(kind))) return s.segments;
+  const usable = (split) =>
+    split && !split.elements.some((el) => el.matches(kind)) ? split : null;
+  const start = usable(s.startSplit),
+    end = usable(s.endSplit),
+    last = s.segments.length - 1;
+  if (!start && !end) return s.segments;
+  return s.segments.flatMap((segment, i) => {
+    let { from, to } = segment;
+    const holes = [];
+    if (start && i === 0) {
+      from = start.at;
+      holes.push(...start.holes);
+    }
+    if (end && i === last) {
+      to = end.at;
+      holes.push(...end.holes);
+    }
+    holes.sort((a, b) => a[0] - b[0]);
+    const pieces = [];
+    let cursor = from;
+    for (const [a, b] of holes) {
+      if (Math.min(a, to) > cursor)
+        pieces.push({ ...segment, from: cursor, to: Math.min(a, to) });
+      cursor = Math.max(cursor, b);
+    }
+    if (to > cursor) pieces.push({ ...segment, from: cursor, to });
+    return pieces;
+  });
+}
+
 // The source span of a block's own text (not that of blocks nested in it).
 function blockSpan(block, text) {
   let from = Infinity,
@@ -225,6 +292,23 @@ export function previewTextSelection(
     element(endNode).closest(OFF_LIMITS)
   )
     return null;
+  // Before the ends move out to whole elements (selectionEnd).
+  const startSplit = splitEnd(
+      startNode,
+      range.startOffset,
+      false,
+      endNode,
+      startBlock,
+      text,
+    ),
+    endSplit = splitEnd(
+      endNode,
+      range.endOffset,
+      true,
+      startNode,
+      endBlock,
+      text,
+    );
   const from = selectionEnd(range, false, endNode, startBlock, text),
     to = selectionEnd(range, true, startNode, endBlock, text);
   if (from == null || to == null || to <= from) return null;
@@ -278,6 +362,8 @@ export function previewTextSelection(
     from: segments[0].from,
     to: segments.at(-1).to,
     segments,
+    startSplit,
+    endSplit,
     range,
     inside,
     around,
@@ -509,7 +595,7 @@ export function createSelectionTools({
     if (action === "link" && s.link) return relink(s, options.url);
     try {
       // Every block's change from the same text: one step to undo.
-      const edits = s.segments.map((segment) =>
+      const edits = splitSegments(s, action).map((segment) =>
         segmentEdit(s, segment, action, options),
       );
       let shift = 0;

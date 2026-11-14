@@ -89,6 +89,20 @@ test("inline formats preserve Chinese selection and toggle without nesting", () 
   assert.equal(edit("***hello***", 3, 8, "italic").text, "**hello**");
   assert.equal(edit("**hello**", 0, 9, "italic").text, "***hello***");
 });
+test("bold, italic and strike in HTML tags toggle off like their delimiters", () => {
+  // The text between the tags, or the tags with it.
+  assert.equal(edit("**定<em>义。</em>**", 7, 9, "italic").text, "**定义。**");
+  assert.equal(edit("a<strong>中文</strong>z", 1, 20, "bold").text, "a中文z");
+  assert.equal(edit("a<del>bc</del>", 6, 8, "strike").text, "abc");
+  assert.equal(edit("a<B>bc</B>", 4, 6, "bold").text, "abc");
+  // Another tag, or tags around more than the selection: wrapped as before.
+  assert.equal(edit("<em>bc</em>", 4, 6, "bold").text, "<em>**bc**</em>");
+  assert.equal(edit("<em>bcd</em>", 4, 6, "italic").text, "<em>*bc*d</em>");
+  assert.equal(
+    edit("<em>a</em> b <em>c</em>", 0, 23, "italic").text,
+    "*<em>a</em> b <em>c</em>*",
+  );
+});
 test("multi-line colors change and clear without losing block structure or leaving tags", () => {
   const source = "## Heading\n\n- first\n- second";
   const marked = edit(source, 0, source.length, "highlight", {

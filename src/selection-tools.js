@@ -1,5 +1,6 @@
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { markdownEdit } from "./markdown-edits.js";
+import { ADDED, rendersAsMeant } from "./format-check.js";
 import { textOffset, findPosition } from "./positions.js";
 import { wireColorButton, closeColorPicker } from "./color-picker.js";
 import { icon } from "./icons.js";
@@ -162,17 +163,18 @@ function selectionEnd(range, end, other, block, text) {
   return pointPosition(node, offset, end, text);
 }
 
-// Emphasis a highlight or a colour can be split at (closed before its end,
-// opened again after it). Links, code and formulas stay whole.
+// Emphasis a format can be split at (closed before its end, opened again
+// after it). Links, code and formulas stay whole.
 const SPLITTABLE = "strong,em,s,del,b,i,u,ins,sub,sup,small,mark,span";
 // One end of the selection inside emphasis that does not hold the other end
 // (part of a bold run, and on past it): where it is in the source, and the
 // markers between it and the rest of the selection (the closing ones of
-// each such element for the start, the opening ones for the end). Null when
-// it is in no such emphasis, or in something always taken whole.
+// each such element for the start, the opening ones for the end). An
+// element whose text is selected to its edge is taken whole (its markers
+// stay where they render as they did). Null when it is in no such emphasis,
+// or in something always taken whole.
 function splitEnd(node, offset, end, other, block, text) {
-  const holes = [],
-    elements = [];
+  const chain = [];
   for (
     let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
     el && el !== block && block.contains(el);
@@ -185,18 +187,26 @@ function splitEnd(node, offset, end, other, block, text) {
     const outer = outerSpan(el, text),
       inner = innerSpan(el);
     if (!outer || !inner) return null;
-    holes.push(end ? [outer[0], inner[0]] : [inner[1], outer[1]]);
-    elements.push(el);
+    chain.push({ el, outer, inner });
   }
-  const at = holes.length ? pointPosition(node, offset, end, text) : null;
-  return at == null ? null : { at, holes, elements };
+  let at = chain.length ? pointPosition(node, offset, end, text) : null;
+  if (at == null) return null;
+  const holes = [],
+    elements = [];
+  for (const { el, outer, inner } of chain)
+    if (end ? at >= inner[1] : at <= inner[0]) at = outer[end ? 1 : 0];
+    else {
+      holes.push(end ? [outer[0], inner[0]] : [inner[1], outer[1]]);
+      elements.push(el);
+    }
+  return holes.length ? { at, holes, elements } : null;
 }
-// A highlight or colour over a selection that starts or ends inside other
-// emphasis marks only the selected text: the selection's pieces between
-// that emphasis's markers, each wrapped on its own. Inside a mark of the
-// same kind it still acts on that whole mark.
+// A format over a selection that starts or ends inside other emphasis
+// marks only the selected text: the selection's pieces between that
+// emphasis's markers, each wrapped on its own. Inside emphasis of the same
+// kind it still acts on that whole element (bold across a bold edge merges).
 function splitSegments(s, action) {
-  if (action !== "highlight" && action !== "color") return s.segments;
+  if (!SAME_KIND[action]) return s.segments;
   const kind = SAME_KIND[action];
   if (s.around.some((el) => el.matches(kind))) return s.segments;
   const usable = (split) =>
@@ -439,6 +449,18 @@ function segmentEdit(s, segment, action, options) {
         .filter((_, i) => !cuts.some(([a, b]) => from + i >= a && from + i < b))
         .join("");
   }
+  // In HTML tags (`<strong>`), where the Markdown delimiters would not
+  // open or close there.
+  if (options.tag) {
+    const open = `<${options.tag}>`;
+    return {
+      change: { from, to, insert: open + body + `</${options.tag}>` },
+      selection: {
+        anchor: from + open.length,
+        head: from + open.length + body.length,
+      },
+    };
+  }
   const virtual = text.slice(0, from) + body + text.slice(to);
   const result = markdownEdit(virtual, from, from + body.length, action, {
     ...options,
@@ -454,6 +476,46 @@ function segmentEdit(s, segment, action, options) {
     },
     selection: result.selection,
   };
+}
+
+// The changes for every segment. Bold, italic or strike split at other
+// emphasis (splitSegments) must render as meant: the selected text in the
+// format and nothing else changed. Its delimiters (`**`) are used where
+// they do, around each piece's words (spaces at its edges left outside, as
+// a delimiter next to a space neither opens nor closes); else HTML tags
+// (`<strong>`) around each whole piece, which open and close anywhere;
+// else, as before, the whole emphasis crossed is formatted.
+const TAGS = { bold: "strong", italic: "em", strike: "s" };
+function formatEdits(s, action, options) {
+  const plan = (segments, extra = {}) =>
+    segments.map((segment) =>
+      segmentEdit(s, segment, action, { ...options, ...extra }),
+    );
+  const pieces = splitSegments(s, action);
+  if (pieces === s.segments || !ADDED[action]) return plan(pieces);
+  const words = pieces
+    .map((piece) => {
+      const part = s.text.slice(piece.from, piece.to);
+      return {
+        ...piece,
+        from: piece.from + part.length - part.trimStart().length,
+        to: piece.to - part.length + part.trimEnd().length,
+      };
+    })
+    .filter((piece) => piece.to > piece.from);
+  const meant = (edits) =>
+    rendersAsMeant(
+      s.text,
+      edits.map((edit) => edit.change),
+      pieces,
+      action,
+    );
+  if (words.length) {
+    const edits = plan(words);
+    if (meant(edits)) return edits;
+  }
+  const edits = plan(pieces, { tag: TAGS[action] });
+  return meant(edits) ? edits : plan(s.segments);
 }
 
 export function createSelectionTools({
@@ -595,9 +657,7 @@ export function createSelectionTools({
     if (action === "link" && s.link) return relink(s, options.url);
     try {
       // Every block's change from the same text: one step to undo.
-      const edits = splitSegments(s, action).map((segment) =>
-        segmentEdit(s, segment, action, options),
-      );
+      const edits = formatEdits(s, action, options);
       let shift = 0;
       for (const edit of edits.slice(0, -1))
         shift +=

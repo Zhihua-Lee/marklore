@@ -84,6 +84,26 @@ export function markdownEdit(text, from, to, action, options = {}) {
     inline: "`",
     inlineMath: "$",
   };
+  // The same format in HTML tags (`<strong>`), as a bold, italic or strike
+  // from inside other emphasis may be written: wrapping again removes them.
+  const tags = { bold: "strong|b", italic: "em|i", strike: "s|del|strike" };
+  if (Object.hasOwn(tags, action)) {
+    const whole = new RegExp(
+      `^<(${tags[action]})>([\\s\\S]*)</\\1>$`,
+      "i",
+    ).exec(selected);
+    if (whole && !new RegExp(`</?${whole[1]}>`, "i").test(whole[2]))
+      return result(from, to, whole[2]);
+    const open = new RegExp(`<(${tags[action]})>$`, "i").exec(
+      text.slice(0, from),
+    );
+    const close = open && `</${open[1]}>`;
+    if (
+      open &&
+      text.slice(to, to + close.length).toLowerCase() === close.toLowerCase()
+    )
+      return result(from - open[0].length, to + close.length, selected);
+  }
   if (Object.hasOwn(wraps, action)) {
     let mark = wraps[action];
     if (action === "inline" && selected.includes("`"))

@@ -1266,16 +1266,24 @@ main[data-empty="true"] > #panes {
   outline: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
   border-radius: 3px;
 }
-::selection {
-  background: color-mix(in srgb, var(--accent) 24%, transparent);
-}
 /* A formula is selected whole (it is copied and formatted whole): one flat
    box in the selection colour, not the selection painted glyph by glyph
    (formula-selection.js marks the formulas a selection crosses). An inline
-   formula's box is its line's text height, as the text beside it. Only marked
-   formulas carry the glyph rule: on every formula it would give each KaTeX
-   box a selection style of its own, and restyling a long note would cost
-   several times more. */
+   formula's box is its line's text height, as the text beside it.
+   The glyphs never paint a selection, not even in the frame before the mark
+   lands: selection styles pass down to children, the page's is set once at
+   the root, and the formula's own is clear, which is what its glyphs take.
+   One rule per formula: a rule matching every KaTeX box would give each its
+   own selection style, and restyling a long note would cost several times
+   more. An engine whose selection styles do not pass down gets the colour
+   on every element instead (formula-selection.js), and its glyphs are
+   cleared by the mark alone. */
+:root::selection {
+  background: color-mix(in srgb, var(--accent) 24%, transparent);
+}
+:is(.formula, .math-block)::selection {
+  background: transparent;
+}
 :is(.formula, .math-block)[data-selected-whole] ::selection {
   background: transparent;
 }

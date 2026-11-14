@@ -189,6 +189,153 @@ test("a selection across a display formula marks the formula block", async ({
   await expect.poll(() => marked(page)).toEqual([]);
 });
 
+// Watches every frame (after its animation-frame callbacks and layout, before
+// it is painted: ResizeObserver callbacks run there) and every selection
+// change as it is told: a formula the selection takes in paints no selection
+// glyph by glyph, and is marked (its flat box) in every frame that shows it.
+function watchFrames(page) {
+  return page.evaluate(() => {
+    const transparent = "rgba(0, 0, 0, 0)";
+    const seen = (window.seen = { frames: 0, changes: 0, crossed: 0, bad: [] });
+    // An engine whose selection styles do not pass down to children (older
+    // Chromium) has the page's selection colour on every element: there the
+    // mark alone clears the glyphs, so only frames can be asked of it.
+    const inherits = [...document.styleSheets].some((sheet) =>
+      [...sheet.cssRules].some(
+        (rule) => rule.selectorText === ":root::selection",
+      ),
+    );
+    const check = (when) => {
+      const selection = getSelection();
+      if (!selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      for (const formula of document.querySelectorAll(
+        "#content :is(.formula, .math-block)",
+      )) {
+        const inner = document.createRange();
+        inner.selectNodeContents(formula);
+        if (
+          range.compareBoundaryPoints(Range.START_TO_END, inner) <= 0 ||
+          range.compareBoundaryPoints(Range.END_TO_START, inner) >= 0
+        )
+          continue;
+        seen.crossed++;
+        const glyph = formula.querySelector(".katex-html .mord");
+        const marked = formula.hasAttribute("data-selected-whole");
+        const hidden =
+          getComputedStyle(glyph, "::selection").backgroundColor ===
+          transparent;
+        // As the change is told, before any frame shows it, the glyphs paint
+        // no selection; by the frame that shows it, the mark is in too.
+        if (when === "frame" ? !marked || !hidden : inherits && !hidden)
+          seen.bad.push({ when, formula: formula.className, marked, hidden });
+      }
+    };
+    document.addEventListener("selectionchange", () => {
+      seen.changes++;
+      check("change");
+    });
+    const probe = document.createElement("div");
+    probe.style.cssText =
+      "position:fixed;left:0;top:0;height:1px;width:1px;pointer-events:none";
+    document.body.append(probe);
+    new ResizeObserver(() => {
+      seen.frames++;
+      check("frame");
+    }).observe(probe);
+    let width = 1;
+    const tick = () => {
+      probe.style.width = (width = 3 - width) + "px";
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+const seen = (page) => page.evaluate(() => window.seen);
+
+// Where `phrase` starts in the text (`end`: where it ends), in the page.
+const at = (page, phrase, end = false) =>
+  page.evaluate(
+    ([phrase, end]) => {
+      const walker = document.createTreeWalker(
+        document.querySelector("#content"),
+        NodeFilter.SHOW_TEXT,
+      );
+      let node;
+      while ((node = walker.nextNode()) && !node.data.includes(phrase));
+      const range = document.createRange(),
+        i = node.data.indexOf(phrase) + (end ? phrase.length : 0);
+      range.setStart(node, i);
+      range.setEnd(node, i);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left, y: rect.top + rect.height / 2 };
+    },
+    [phrase, end],
+  );
+
+test("a formula is shown selected whole from the first frame the selection reaches it", async ({
+  page,
+}) => {
+  await boot(page);
+  await watchFrames(page);
+
+  // Dragging across the inline formula, a few pixels a move.
+  const from = await at(page, "The energy"),
+    to = await at(page, "grows", true);
+  await page.mouse.move(from.x + 1, from.y);
+  await page.mouse.down();
+  for (let x = from.x + 1; x <= to.x; x += 4) {
+    await page.mouse.move(x, from.y);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
+  await page.mouse.up();
+  await expect.poll(() => marked(page)).toHaveLength(1);
+  // Dragging down onto the display formula.
+  const below = await at(page, "Before the display"),
+    after = await at(page, "After the display", true);
+  await page.mouse.move(below.x + 1, below.y);
+  await page.mouse.down();
+  for (let y = below.y; y <= after.y; y += 3) {
+    await page.mouse.move(after.x, y);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
+  await page.mouse.up();
+  await expect.poll(() => marked(page)).toHaveLength(1);
+
+  // Shift+arrows from the text before the inline formula past it.
+  // (Read mode has no caret: the keys extend a selection already made.)
+  await select(page, "Plain", "Plain");
+  for (let i = 0; i < 24; i++) {
+    await page.keyboard.press("Shift+ArrowRight");
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
+  await expect.poll(() => marked(page)).toHaveLength(1);
+  // Shift+Down from the line before the display formula.
+  await select(page, "Before", "Before");
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("Shift+ArrowDown");
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+  }
+  await expect.poll(() => marked(page)).toHaveLength(1);
+  // A triple click on the paragraph (a double click on a formula opens
+  // its source to edit).
+  const energy = await at(page, "energy");
+  await page.mouse.click(energy.x + 2, energy.y, { clickCount: 3 });
+  await expect.poll(() => marked(page)).toHaveLength(1);
+  // Select all.
+  await page.keyboard.press("Control+A");
+  await expect.poll(() => marked(page)).toHaveLength(3);
+  for (let i = 0; i < 3; i++)
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+
+  const { frames, changes, crossed, bad } = await seen(page);
+  expect(frames).toBeGreaterThan(50);
+  expect(changes).toBeGreaterThan(20);
+  expect(crossed).toBeGreaterThan(50);
+  expect(bad).toEqual([]);
+});
+
 test("formatting after a formula was selected keeps the other blocks", async ({
   page,
 }) => {

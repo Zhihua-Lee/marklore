@@ -73,7 +73,35 @@ export function formulasIn(range) {
   return out;
 }
 
+// The page's selection colour is set at the root (style.css), and selection
+// styles pass down to children. An engine where they do not (older Chromium)
+// would paint the page's selection in its default colour: the rule is made
+// to match every element there.
+export function selectionColourEverywhere(doc = document) {
+  const view = doc.defaultView,
+    clear = "rgba(0, 0, 0, 0)",
+    colour = (el) => view.getComputedStyle(el, "::selection").backgroundColor;
+  if (!doc.body || colour(doc.documentElement) === clear) return false;
+  if (colour(doc.body) !== clear) return false;
+  let changed = false;
+  for (const sheet of doc.styleSheets) {
+    let rules;
+    try {
+      rules = sheet.cssRules;
+    } catch {
+      continue;
+    }
+    for (const rule of rules)
+      if (rule.selectorText === ":root::selection") {
+        rule.selectorText = "::selection";
+        changed = true;
+      }
+  }
+  return changed;
+}
+
 export function trackFormulaSelection(doc = document) {
+  selectionColourEverywhere(doc);
   const view = doc.defaultView;
   let marked = new Set(),
     frame = 0;
@@ -91,14 +119,34 @@ export function trackFormulaSelection(doc = document) {
       if (!marked.has(formula)) formula.setAttribute(SELECTED, "");
     marked = next;
   }
+  // Once a frame, before it is painted. `selectionchange` comes in a task of
+  // its own, after the change: a frame can be painted in between (a drag
+  // extends the selection as the pointer moves, at the start of a frame), and
+  // the box would come a frame late. So the input that moves the selection
+  // asks for the update too: it runs in that same frame, after the input's
+  // default action moved the selection. (Updating at once on
+  // `selectionchange` instead costs a select-all in a long note several
+  // times more: the other listeners then measure the selection with the
+  // marks already in.)
   const schedule = () => {
     if (!frame) frame = view.requestAnimationFrame(update);
   };
-  doc.addEventListener("selectionchange", schedule);
+  const dragging = (event) => {
+    if (event.buttons & 1) schedule();
+  };
+  const inputs = [
+    ["selectionchange", schedule],
+    ["pointerdown", schedule],
+    ["pointermove", dragging],
+    ["keydown", schedule],
+  ];
+  for (const [type, listener] of inputs)
+    doc.addEventListener(type, listener, true);
   return {
     update,
     destroy() {
-      doc.removeEventListener("selectionchange", schedule);
+      for (const [type, listener] of inputs)
+        doc.removeEventListener(type, listener, true);
       if (frame) view.cancelAnimationFrame(frame);
       for (const formula of marked) formula.removeAttribute(SELECTED);
       marked = new Set();

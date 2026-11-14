@@ -191,6 +191,52 @@ test("new notes start with the default properties only when asked", async ({
   await expect(editor(page).locator(".fm-first")).toHaveCount(0);
 });
 
+// Typed right after Ctrl+N, before the next frame (a slow one here), every
+// letter goes into the new note below its properties: whether the focus was
+// on a tab, in the editor of Edit mode or in the source pane.
+for (const properties of [true, false])
+  test(`typing right after Ctrl+N keeps every letter (properties ${properties ? "on" : "off"})`, async ({
+    page,
+  }) => {
+    await boot(page, plain, {
+      newNoteProperties: properties,
+      propertyTemplate: "title: {title}\ntags: []",
+    });
+    const typeInNew = async (word) => {
+      await page.evaluate(() => {
+        window.__frame = window.requestAnimationFrame;
+        window.requestAnimationFrame = (f) =>
+          setTimeout(() => window.__frame(f), 200);
+      });
+      await page.keyboard.press("Control+n");
+      await page.keyboard.type(word);
+      await page.evaluate(() => {
+        window.requestAnimationFrame = window.__frame;
+      });
+    };
+    const card = editor(page).locator("details.front-matter");
+    // The focus on the tab clicked last.
+    await expect(page.locator("#tabs [aria-selected=true]")).toBeFocused();
+    await typeInNew("One");
+    await expect(card).toHaveCount(properties ? 1 : 0);
+    await expect(editor(page).locator("p")).toHaveText(["One"]);
+    // In the editor of Edit mode.
+    await typeInNew("Two");
+    await expect(card).toHaveCount(properties ? 1 : 0);
+    await expect(editor(page).locator("p")).toHaveText(["Two"]);
+    // In the source pane.
+    await page.keyboard.press("Control+3");
+    await page.locator("#editor .cm-content").focus();
+    await expect(page.locator("#editor .cm-content")).toBeFocused();
+    await typeInNew("Three");
+    await expect(card).toHaveCount(properties ? 1 : 0);
+    await expect(editor(page).locator("p")).toHaveText(["Three"]);
+    await page.keyboard.press("Control+3");
+    await expect(page.locator("#editor .cm-content")).toHaveText(
+      properties ? "---title:tags: []---Three" : "Three",
+    );
+  });
+
 test("the modified time is kept on save only when asked and only if there", async ({
   page,
 }) => {

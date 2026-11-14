@@ -859,7 +859,9 @@ function activateTab(doc, { revealGroup = true } = {}) {
   run(() => checkDisk(doc))();
   if (settings.sidebar) run(followCurrentFolder)();
 }
-function setMode(mode, { anchor: destination } = {}) {
+// `now`: the caret is placed at once rather than after the next frame (a new
+// note, typed into right away), so nothing comes later to move it.
+function setMode(mode, { anchor: destination, now = false } = {}) {
   if (!active || active.mode === mode) return;
   // Leaving a proposal's preview: back where the note was read before it.
   const back = proposals?.leave();
@@ -878,11 +880,27 @@ function setMode(mode, { anchor: destination } = {}) {
   // The reader changes width with the source pane: land it before the first
   // frame, so the note and the scrollbar don't show the old position first.
   if (mode !== "source") goToAnchor(doc, anchor, { expand: true });
-  requestAnimationFrame(() => {
+  const land = () => {
     if (active === doc && doc.mode === mode)
       restore(doc, anchor, { expand: true, select: mode !== "read" });
-  });
+  };
+  if (now) land();
+  else requestAnimationFrame(land);
   scheduleSession();
+}
+// A new note opens in Edit mode with the caret and the focus in it before
+// this returns: keys typed right after Ctrl+N go into the note, below its
+// properties, instead of to what had the focus or onto the properties.
+function editNewNote(doc) {
+  setMode("edit", { now: true });
+  if (!richActive()) view.focus();
+  else if (richEditor.doc === doc) richEditor.focus();
+  // The editor still reading the note in (formulas loading).
+  else
+    requestAnimationFrame(() => {
+      if (active === doc && richActive() && richEditor.doc === doc)
+        richEditor.focus();
+    });
 }
 function render(preserve) {
   editsPendingSince = null;
@@ -1654,11 +1672,8 @@ const {
         })
       : "",
   openNew: (file) => {
-    if (!add(file)) return;
-    setMode("edit");
-    requestAnimationFrame(() =>
-      richActive() ? richEditor.focus() : view.focus(),
-    );
+    const doc = add(file);
+    if (doc) editNewNote(doc);
   },
 });
 // Open tabs of this note, or of the notes under this folder.
@@ -1986,11 +2001,8 @@ const commands = {
     const text = settings.newNoteProperties
       ? templateNote(settings.propertyTemplate, {})
       : "";
-    if (!add({ name: t("未命名.md"), text }, { opener: active })) return;
-    setMode("edit");
-    requestAnimationFrame(() =>
-      richActive() ? richEditor.focus() : view.focus(),
-    );
+    const doc = add({ name: t("未命名.md"), text }, { opener: active });
+    if (doc) editNewNote(doc);
   },
   save: () => save(),
   saveAs: () => save(true),

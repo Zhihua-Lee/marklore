@@ -1,4 +1,5 @@
-import { _electron as electron, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -30,7 +31,7 @@ await fs.writeFile(a, sourceA);
 await fs.writeFile(b, sourceB);
 let instance;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(process.env.FOLIO_TEST_EXE
       ? { executablePath: process.env.FOLIO_TEST_EXE }
       : {}),

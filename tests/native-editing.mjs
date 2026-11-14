@@ -1,4 +1,5 @@
-import { _electron as electron, expect } from "@playwright/test";
+import { expect } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -16,7 +17,7 @@ await fs.writeFile(source, "Hello 中文");
 await fs.copyFile(path.join(root, "desktop/icons/folio.png"), image);
 let instance;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(process.env.FOLIO_TEST_EXE
       ? { executablePath: process.env.FOLIO_TEST_EXE }
       : {}),

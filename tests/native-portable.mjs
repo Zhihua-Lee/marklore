@@ -2,7 +2,7 @@
 // tabs and settings into <app>/data and restarts; disabling moves them back
 // and keeps the folder under a new name. FOLIO_PROFILE_DIR stands in for the
 // user profile, so the real one is never read or written.
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -41,7 +41,7 @@ const exists = (p) =>
 const step = (text) => console.log(`[portable] ${text}`);
 async function launch(args = []) {
   step("launch " + args.length);
-  const app = await electron.launch({
+  const app = await launchApp({
     executablePath: executable,
     args,
     env: {

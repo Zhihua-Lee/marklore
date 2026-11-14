@@ -1,4 +1,4 @@
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -22,7 +22,7 @@ await fs.writeFile(
 );
 let instance;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(process.env.FOLIO_TEST_EXE
       ? { executablePath: process.env.FOLIO_TEST_EXE }
       : {}),
@@ -172,7 +172,7 @@ try {
   assert.ok(session.tabs.some((t) => t.draft?.includes("UNSAVED RECOVERY")));
   await instance.evaluate(({ app }) => app.exit(0));
   instance = null;
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(process.env.FOLIO_TEST_EXE
       ? { executablePath: process.env.FOLIO_TEST_EXE }
       : {}),

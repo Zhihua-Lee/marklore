@@ -73,7 +73,7 @@ pnpm dev
 | `pnpm test:native:all`          | 依次运行全部原生套件。      |
 | `pnpm format:check`             | Prettier 格式检查。         |
 
-浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。原生测试设置 `FOLIO_TEST_INACTIVE=1`（`tools/run-native-suites.mjs` 自动设置）：窗口不激活、放在屏幕外、不进任务栏，并关闭 Chromium 的遮挡检测，以免它停止绘制屏幕外的窗口。这类运行也不建托盘图标；测试托盘的套件（`tests/native-background.mjs`）另设 `FOLIO_TEST_TRAY=1`。托盘图标在应用退出时移除，`app.exit` 也一样。
+浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。原生测试都经 [tests/launch-app.mjs](../tests/launch-app.mjs) 启动应用，它设置 `FOLIO_TEST_INACTIVE=1`（单独运行一个套件也一样）：应用建的每个窗口（[desktop/automated.mjs](../desktop/automated.mjs)）都不激活、放在所有显示器之外、不进任务栏，居中或改大小把它挪回屏幕时会被移回去；仍然显示，所以照常绘制、截图和悬停。Chromium 的遮挡检测也关闭，以免它停止绘制屏幕外的窗口。启动失败只写到 stderr，不弹对话框。这类运行也不建托盘图标；测试托盘的套件（`tests/native-background.mjs`）另设 `FOLIO_TEST_TRAY=1`。托盘图标在应用退出时移除，`app.exit` 也一样。
 
 - 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。

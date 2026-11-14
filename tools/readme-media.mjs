@@ -248,8 +248,8 @@ async function session({ scale, theme = "light", record = false, extra = {} }) {
   if (!record)
     await app.evaluate(({ BrowserWindow }, { width, height }) => {
       const win = BrowserWindow.getAllWindows()[0];
+      // Sized only: it stays off screen (FOLIO_TEST_INACTIVE) and still paints.
       win.setContentSize(width, height);
-      win.center();
     }, size);
   await page.locator("#content h1").waitFor();
   await page.locator("#content .katex").first().waitFor();

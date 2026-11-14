@@ -1,7 +1,7 @@
 // The library follows the disk in the real app: a note that another program
 // (an AI agent) writes into a library folder shows up in the tree, a renamed
 // one follows, and an open note re-renders when that program edits it.
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -37,7 +37,7 @@ await fs.writeFile(
 const exe = process.env.FOLIO_TEST_EXE;
 let instance;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(exe ? { executablePath: exe } : {}),
     args: exe ? [] : [project],
     env: {

@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
 import { realPath } from "./files.mjs";
+import { automatedWindow } from "./automated.mjs";
 
 const limit = 96 * 1024 * 1024;
 const escape = (value) =>
@@ -193,6 +194,7 @@ export function createExporter({
       if (payload.format === "pdf") {
         printer = new BrowserWindow({
           show: false,
+          ...automatedWindow,
           width: 794,
           height: 1123,
           webPreferences: {

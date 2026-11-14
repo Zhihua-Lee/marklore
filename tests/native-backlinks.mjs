@@ -1,7 +1,7 @@
 // Backlinks in the real app: the link index reads the library, counts sit
 // beside what is linked, a note another program writes adds to them, the
 // card opens the source at the link, and broken links are marked.
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -46,7 +46,7 @@ await fs.writeFile(
 const exe = process.env.FOLIO_TEST_EXE;
 let instance;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(exe ? { executablePath: exe } : {}),
     args: [...(exe ? [] : [project]), path.join(library, "Lemma.md")],
     env: {

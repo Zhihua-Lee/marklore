@@ -7,7 +7,7 @@
 // mark goes once that is accepted. A mark handed to a background AI (Claude
 // Code played by tests/fake-claude.mjs) comes back as a proposal from it.
 // Closing the library to AI shuts the server out at once.
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -96,7 +96,7 @@ function connect(setup) {
 const exe = process.env.FOLIO_TEST_EXE;
 let instance, ai;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(exe ? { executablePath: exe } : {}),
     args: exe ? [] : [project],
     env: {

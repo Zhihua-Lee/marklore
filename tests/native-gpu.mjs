@@ -2,7 +2,7 @@
 // out Chromium's WebGPU compiler and its Vulkan/SwiftShader files
 // (build/after-pack.cjs): with the GPU off, a note with formulas, a table and
 // a diagram must still render, and so must the window.
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
@@ -52,7 +52,7 @@ await fs.writeFile(
 );
 let instance;
 try {
-  instance = await electron.launch({
+  instance = await launchApp({
     ...(exe ? { executablePath: exe } : {}),
     args: [...(exe ? [] : [project]), "--disable-gpu", note],
     env: {

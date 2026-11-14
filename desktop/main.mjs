@@ -10,6 +10,7 @@ import {
   Tray,
   nativeImage,
   clipboard,
+  screen,
 } from "electron";
 import fs from "node:fs/promises";
 import { watch } from "node:fs";
@@ -37,6 +38,7 @@ import { t, setLanguage, getLanguage, resolveLanguage } from "./i18n.mjs";
 import { createAiStore, AI_FOLDER } from "./ai-store.mjs";
 import { createAiBridge } from "./ai-bridge.mjs";
 import { fileDensity } from "./image-density-file.mjs";
+import { automated, automatedWindow, keepOffScreen } from "./automated.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -156,7 +158,7 @@ let tray,
 // so tests never take the foreground from whoever is using the computer;
 // off screen and out of the taskbar, so they do not cover what is on it.
 // Chromium would stop painting a window it finds covered or off screen.
-const inactive = Boolean(process.env.FOLIO_TEST_INACTIVE);
+const inactive = automated;
 if (inactive)
   app.commandLine.appendSwitch(
     "disable-features",
@@ -646,7 +648,7 @@ else {
         backgroundColor: dark ? "#202523" : "#f6f5f1",
         title: "Marklore",
         icon: path.join(here, "icons/folio.png"),
-        ...(inactive && { x: -20000, y: -20000, skipTaskbar: true }),
+        ...automatedWindow,
         ...(ownWindowControls && { titleBarStyle: "hidden" }),
         ...(mac && {
           titleBarStyle: "hiddenInset",
@@ -662,6 +664,7 @@ else {
       });
       // The renderer starts loading while the rest is set up below: everything
       // up to the first await runs before it can send a message.
+      keepOffScreen(win, screen);
       const loading = win.loadURL("folio://app/");
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
       win.on("show", () => {
@@ -1517,7 +1520,8 @@ else {
     })
     .catch((error) => {
       console.error(error);
-      dialog.showErrorBox(t("Marklore 启动失败"), error.message);
+      // An automated run reports it on stderr, without a modal box on screen.
+      if (!inactive) dialog.showErrorBox(t("Marklore 启动失败"), error.message);
       app.exit(1);
     });
 }

@@ -15,7 +15,7 @@
 // When the package has the native library index, the zip copy starts without
 // it (as a release from before it): the whole package brings it, and the app
 // files replace it after the copy that had it loaded has quit.
-import { _electron as electron } from "@playwright/test";
+import { launchApp } from "./launch-app.mjs";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -174,7 +174,7 @@ async function until(test, what, ms = 120000) {
 async function update(kind, version) {
   offered = { version, files: await release(kind, version) };
   step(`launch (${installed ? "installed" : "zip"} copy), offered ${kind}`);
-  const app = await electron.launch({
+  const app = await launchApp({
     executablePath: executable,
     args: [note],
     env: {
@@ -258,7 +258,7 @@ async function update(kind, version) {
 
 // Starts the updated copy once more: the index it uses.
 async function inspect() {
-  const app = await electron.launch({
+  const app = await launchApp({
     executablePath: executable,
     args: [note],
     env: {

@@ -86,7 +86,7 @@ import {
   titleWatch,
   firstProperty,
   setFrontMatter,
-  askFirstProperty,
+  askProperty,
 } from "./properties.js";
 
 const S = schema.nodes;
@@ -920,8 +920,9 @@ export function createRichEditor({
     hasFocus: () => view.hasFocus(),
     // The note's front matter set to this YAML (made when it has none).
     setFrontMatter: (yaml, options) => setFrontMatter(view, yaml, options),
-    // The fields for a first property, in a note without any.
-    askFirstProperty: () => askFirstProperty(view),
+    // The fields for a new property: the first, at the top of a note
+    // without any, or one more in the unfolded card.
+    askProperty: () => askProperty(view),
     // Find in the note (Ctrl+F outside the editor itself).
     find: (text) => finder.open(text),
     finding: () => finder.isOpen(),

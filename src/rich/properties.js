@@ -5,7 +5,7 @@
 // at the bottom. Values the card cannot read (nested YAML, blocks of text)
 // open the front matter as source, as "编辑源码" does. The title above the
 // card is changed the same way, a click turning it into a field.
-import { Plugin } from "prosemirror-state";
+import { Plugin, PluginKey } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
 import {
   propertiesCard,
@@ -16,9 +16,8 @@ import {
   removeProperty,
   titleField,
 } from "../properties.js";
-import { open } from "./math.js";
+import { open, OPEN_RAW } from "./math.js";
 import { t } from "../../desktop/i18n.mjs";
-import { icon } from "../icons.js";
 
 // Unfolded stays unfolded while the editor draws the card again.
 let unfolded = false;
@@ -311,43 +310,48 @@ export function setFrontMatter(view, yaml, { history = true } = {}) {
   return true;
 }
 
-// A note without properties shows, in Edit mode only, a quiet "Add
-// property" above its first line (seen while the pointer is over the
-// note; its room is kept, so nothing moves); it asks for the first property's name and value
-// and makes the front matter with it, its card unfolded.
+// A note without properties shows nothing for them in Edit mode (its first
+// line stays where Read mode shows it). Asked to add one ("Add property" in
+// the menu, the toolbar's properties button), it shows the name and value
+// fields above its first line, only while they are open: Enter makes the
+// front matter with that property, its card unfolded; Esc or leaving them
+// empty takes them away again.
+const asking = new PluginKey("fm-first");
 function firstPropertyDom(view) {
   const box = document.createElement("div");
   box.className = "rich-properties fm-first";
   box.contentEditable = "false";
   const inner = document.createElement("div");
   inner.className = "front-matter";
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "fm-first-add";
-  button.innerHTML = `${icon("plus")}<span></span>`;
-  button.lastChild.textContent = t("添加属性");
-  button.addEventListener("click", () => {
-    box.classList.add("asking");
-    const form = newPropertyRow((key, value, refocus) => {
-      box.classList.remove("asking");
-      inner.replaceChildren(button);
-      if (key.trim()) {
-        unfolded = true;
-        setFrontMatter(view, addProperty("", key, value));
-      }
-      if (refocus) view.focus();
-    });
-    inner.replaceChildren(form.row);
-    form.focus();
+  const form = newPropertyRow((key, value, refocus) => {
+    // Gone already (the editor showing another note): nothing to write.
+    if (!box.isConnected || view.isDestroyed) return;
+    view.dispatch(
+      view.state.tr.setMeta(asking, false).setMeta("addToHistory", false),
+    );
+    if (key.trim()) {
+      unfolded = true;
+      setFrontMatter(view, addProperty("", key, value));
+    }
+    if (refocus) view.focus();
   });
-  inner.append(button);
+  inner.append(form.row);
   box.append(inner);
   return box;
 }
 export const firstProperty = new Plugin({
+  key: asking,
+  state: {
+    init: () => false,
+    apply: (tr, value, old, state) => {
+      const meta = tr.getMeta(asking);
+      if (meta !== undefined) return meta;
+      return value && !isFront(state.doc.firstChild);
+    },
+  },
   props: {
     decorations: (state) =>
-      isFront(state.doc.firstChild)
+      !asking.getState(state) || isFront(state.doc.firstChild)
         ? null
         : DecorationSet.create(state.doc, [
             Decoration.widget(0, firstPropertyDom, {
@@ -359,12 +363,39 @@ export const firstProperty = new Plugin({
           ]),
   },
 });
-// Ask for the first property, as a click on "Add property" does (the note's
-// menu); false when the note has properties already.
-export function askFirstProperty(view) {
-  const button = view.dom.querySelector(".fm-first-add");
-  if (!button) return false;
-  button.scrollIntoView({ block: "nearest" });
-  button.click();
+// Ask for a new property: in a note without any, the fields for the first
+// at its top; in one with properties, its card unfolded and its fields for
+// one more (or just the card, when it is open as source). False while the
+// editor has not drawn the card or the fields yet.
+export function askProperty(view) {
+  const first = view.state.doc.firstChild;
+  if (
+    first?.type.name === "code_block" &&
+    first.attrs.params === OPEN_RAW + "frontmatter"
+  ) {
+    view.dom.firstElementChild?.scrollIntoView({ block: "nearest" });
+    return true;
+  }
+  if (isFront(first)) {
+    const card = cards.get(view);
+    if (!card) return false;
+    const open = card.dom.querySelector(".fm-new input");
+    if (open) open.focus();
+    else {
+      unfolded = true;
+      card.draw();
+      card.addForm();
+    }
+    card.dom.scrollIntoView({ block: "nearest" });
+    return true;
+  }
+  if (!asking.getState(view.state))
+    view.dispatch(
+      view.state.tr.setMeta(asking, true).setMeta("addToHistory", false),
+    );
+  const field = view.dom.querySelector(".fm-first .fm-new input");
+  if (!field) return false;
+  field.scrollIntoView({ block: "nearest" });
+  field.focus();
   return true;
 }

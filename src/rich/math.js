@@ -15,7 +15,7 @@ const S = schema.nodes;
 // A display formula or raw block open for editing is a code block marked
 // by its params.
 const OPEN_MATH = "$$";
-const OPEN_RAW = "\u0000raw:";
+export const OPEN_RAW = "\u0000raw:";
 
 // When a whole note is put into the editor, formulas are typeset when they
 // come near the screen (a long note holds thousands); until then they show

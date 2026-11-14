@@ -2,11 +2,13 @@ import { test, expect } from "@playwright/test";
 import { boot, editor, saved, caretAfter } from "./rich-helpers.js";
 
 // Properties a note does not have yet: the first one is added in Edit mode
-// (a quiet "Add property" above the note, or the note's menu); new notes
-// may start with the default properties of Settings → Editing, and "Add
-// default properties" adds those a note lacks. Saving may keep a modified
-// time the note has up to date.
+// (the toolbar's properties button, or the note's menu), with nothing shown
+// above the note until then; new notes may start with the default
+// properties of Settings → Editing, and "Add default properties" adds those
+// a note lacks. Saving may keep a modified time the note has up to date.
 const plain = "# 周会\n\nText.\n";
+const top = (heading) =>
+  heading.evaluate((h) => Math.round(h.getBoundingClientRect().top));
 
 test("a note without properties gets its first one in Edit mode", async ({
   page,
@@ -19,24 +21,15 @@ test("a note without properties gets its first one in Edit mode", async ({
   await expect(
     page.locator("#content :is(.front-matter, .fm-none, .fm-title)"),
   ).toHaveCount(0);
+  const read = await top(page.locator("#content h1"));
+  // Edit mode: nothing either, so the first line stays where it was.
   await page.keyboard.press("Control+2");
+  await expect(editor(page).locator("h1")).toContainText("周会");
+  await expect(editor(page).locator(".fm-first")).toHaveCount(0);
+  expect(await top(editor(page).locator("h1"))).toBe(read);
+  const button = page.getByRole("button", { name: "属性", exact: true });
+  await button.click();
   const first = editor(page).locator(".fm-first");
-  await expect(first).toHaveCount(1);
-  // Quiet until the pointer is over the note; its room is kept, so the
-  // note does not move when it shows.
-  await page.mouse.move(2, 2);
-  await expect(first).toHaveCSS("opacity", "0");
-  const before = await editor(page)
-    .locator("h1")
-    .evaluate((h) => h.getBoundingClientRect().top);
-  await editor(page).locator("h1").hover();
-  await expect(first).toHaveCSS("opacity", "1");
-  expect(
-    await editor(page)
-      .locator("h1")
-      .evaluate((h) => h.getBoundingClientRect().top),
-  ).toBe(before);
-  await first.getByRole("button", { name: "添加属性" }).click();
   const fields = first.locator(".fm-new input");
   await expect(fields.first()).toBeFocused();
   await fields.first().fill("author");
@@ -56,13 +49,46 @@ test("a note without properties gets its first one in Edit mode", async ({
   await page.keyboard.press("Control+z");
   await expect(editor(page).locator(".rich-properties details")).toHaveCount(0);
   expect(await saved(page)).toBe(plain);
-  // Esc drops it, writing nothing.
-  await editor(page).locator("h1").hover();
-  await first.getByRole("button", { name: "添加属性" }).click();
-  await first.locator(".fm-new input").first().fill("x");
-  await first.locator(".fm-new input").first().press("Escape");
-  await expect(first.getByRole("button", { name: "添加属性" })).toBeVisible();
+  // Esc drops it, writing nothing, and takes the fields away again.
+  await button.click();
+  await expect(fields.first()).toBeFocused();
+  await fields.first().fill("x");
+  await fields.first().press("Escape");
+  await expect(editor(page).locator(".fm-first")).toHaveCount(0);
+  expect(await top(editor(page).locator("h1"))).toBe(read);
   expect(await saved(page)).toBe(plain);
+});
+
+test("the properties button adds one more to a note that has some", async ({
+  page,
+}) => {
+  const text = "---\ntags: [x]\n---\n\nText.\n";
+  await boot(page, text);
+  // From Read mode: Edit mode, the card unfolded, asking for one more.
+  await page.keyboard.press("Control+1");
+  await expect(page.locator("#content details.front-matter")).toHaveCount(1);
+  await page.getByRole("button", { name: "属性", exact: true }).click();
+  const card = editor(page).locator("details.front-matter");
+  await expect(card).toHaveAttribute("open", "");
+  const fields = card.locator(".fm-new input");
+  await expect(fields.first()).toBeFocused();
+  await fields.first().fill("author");
+  await fields.first().press("Enter");
+  await fields.nth(1).fill("李");
+  await fields.nth(1).press("Enter");
+  await expect(card.locator('.fm-row[data-key="author"]')).toHaveCount(1);
+  expect(await saved(page)).toBe(
+    text.replace("tags: [x]", "tags: [x]\nauthor: 李"),
+  );
+  // Esc: nothing more written.
+  await page.getByRole("button", { name: "属性", exact: true }).click();
+  await expect(fields.first()).toBeFocused();
+  await fields.first().fill("y");
+  await fields.first().press("Escape");
+  await expect(card.locator(".fm-new")).toHaveCount(0);
+  expect(await saved(page)).toBe(
+    text.replace("tags: [x]", "tags: [x]\nauthor: 李"),
+  );
 });
 
 test("the note's menu adds the first property, also from Read mode", async ({
@@ -164,7 +190,7 @@ test("new notes start with the default properties only when asked", async ({
   await page.keyboard.press("Control+n");
   await page.keyboard.press("Control+2");
   await expect(editor(page).locator(".rich-properties details")).toHaveCount(0);
-  await expect(editor(page).locator(".fm-first")).toHaveCount(1);
+  await expect(editor(page).locator(".fm-first")).toHaveCount(0);
 });
 
 test("the modified time is kept on save only when asked and only if there", async ({
@@ -237,7 +263,7 @@ test("the modified time is kept on save only when asked and only if there", asyn
   await page.getByRole("tab", { name: "Other.md", exact: true }).click();
   await page.keyboard.press("Control+2");
   await expect(editor(page).locator("p")).toHaveText("Second note.");
-  await expect(editor(page).locator(".fm-first")).toHaveCount(1);
+  await expect(editor(page).locator(".fm-first")).toHaveCount(0);
   await editor(page).locator("p").click();
   await page.keyboard.press("End");
   await page.keyboard.type("!");

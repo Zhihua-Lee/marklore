@@ -1,3 +1,5 @@
+import { SELECTED } from "./formula-selection.js";
+
 // Keep recent previews alive, reconciling source skeletons rather than expanded
 // KaTeX/diagram DOM. Matching siblings by content also survives insertions/deletions.
 // The budget is the memory the kept notes hold, as the renderer estimates it
@@ -46,12 +48,17 @@ export function createPreviewCache({
     ]);
   const shellKey = (node) => JSON.stringify([kind(node), node.dataset.foldKey]);
 
-  // Without positions.
+  // Without positions, nor the mark of a formula under the selection
+  // (formula-selection.js).
+  const selected = ` ${SELECTED}=""`;
   const plain = (raw) =>
-    raw.replace(
-      / data-(?:text-|edit-|block-|cell-|src-(?:inner-)?)?(?:from|to)="\d+"/g,
-      "",
-    );
+    raw
+      .split(selected)
+      .join("")
+      .replace(
+        / data-(?:text-|edit-|block-|cell-|src-(?:inner-)?)?(?:from|to)="\d+"/g,
+        "",
+      );
   function describe(node) {
     let value = signatures.get(node);
     if (!value) {
@@ -197,7 +204,7 @@ export function createPreviewCache({
   // and islands, an open <details>, a broken link's mark; classes the
   // reader toggles or the page marks with; and what it adds (backlink
   // counts).
-  const own = ["open", "data-broken"],
+  const own = ["open", "data-broken", SELECTED],
     toggled = [
       "collapsed",
       "code-collapsed",

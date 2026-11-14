@@ -66,6 +66,7 @@ import { wireCodeBlocks } from "./code-blocks.js";
 import { wireFileDrop } from "./file-drop.js";
 import { wireEditing, editingHighlight } from "./editing.js";
 import { createSelectionTools } from "./selection-tools.js";
+import { trackFormulaSelection } from "./formula-selection.js";
 import { createRichEditor } from "./rich/editor.js";
 import { insertImages } from "./rich/commands.js";
 import { createProposals } from "./proposals.js";
@@ -509,6 +510,7 @@ imageInsertion = createImageInsertion({
   api,
   report: toast,
 });
+trackFormulaSelection();
 selectionTools = createSelectionTools({
   content: $("#content"),
   reader: $("#reader"),

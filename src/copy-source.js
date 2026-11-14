@@ -1,4 +1,5 @@
 import { textOffset } from "./positions.js";
+import { SELECTED } from "./formula-selection.js";
 
 // Copying from the rendered note puts the Markdown behind the selection on the
 // clipboard: formulas, links, emphasis and tables paste as their source rather
@@ -163,6 +164,8 @@ function renderedCopy(range) {
   const holder = document.createElement("div");
   holder.append(range.cloneContents());
   for (const node of holder.querySelectorAll(chrome)) node.remove();
+  for (const node of holder.querySelectorAll(`[${SELECTED}]`))
+    node.removeAttribute(SELECTED);
   const html = holder.innerHTML;
   holder.style.cssText =
     "position:fixed;left:-99999px;top:0;white-space:normal";

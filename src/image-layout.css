@@ -1,0 +1,82 @@
+/* Image sizes, alignment and side-by-side layout (image-layout.js). Shared
+   by the reader, the editor and standalone exports. A width is the image's
+   own attribute (a share of the text column); centred is the default. */
+.image-line.image-align-left > img {
+  margin-left: 0;
+  margin-right: auto;
+}
+.image-line.image-align-right > img {
+  margin-left: auto;
+  margin-right: 0;
+}
+/* Images in a row, side by side; stacked when the column gets narrow. */
+.image-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 12px 1.9%;
+  margin: 20px 0;
+  container: image-row / inline-size;
+  break-inside: avoid;
+}
+.image-row.image-align-left {
+  justify-content: flex-start;
+}
+.image-row.image-align-right {
+  justify-content: flex-end;
+}
+.image-row > img,
+.prose .image-row > img {
+  flex: 0 1 auto;
+  min-width: 0;
+  margin: 0;
+}
+/* The spaces between the images in the source. */
+.image-row > span[data-text-from],
+#rich .image-row > .soft-break {
+  display: none;
+}
+@container image-row (max-width: 420px) {
+  .image-row > img,
+  .prose .image-row > img {
+    flex: 0 0 100%;
+  }
+}
+/* Blocks side by side, each column its share; stacked when narrow. */
+.columns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 4%;
+  margin: 1em 0;
+  container: columns / inline-size;
+}
+.columns > .column {
+  flex: var(--share, 50) 1 0%;
+  min-width: 0;
+}
+.columns > .column > :first-child {
+  margin-top: 0;
+}
+.columns > .column > :last-child {
+  margin-bottom: 0;
+}
+@container columns (max-width: 480px) {
+  .columns > .column {
+    flex-basis: 100%;
+  }
+}
+/* In the editor, the spaces between the images (white space a flex row
+   drops once it collapses) and what ProseMirror puts around images at a
+   line's ends take no room in a row. */
+#rich .image-row {
+  white-space: normal;
+}
+#rich .image-row > img.ProseMirror-separator,
+#rich .image-row > br {
+  display: none !important;
+}
+.columns > .column > p:first-child > img:first-child {
+  margin-top: 0;
+}

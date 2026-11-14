@@ -5,6 +5,7 @@ import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
 import exportCSS from "./export.css?raw";
 import tableCSS from "./tables.css?raw";
+import imageLayoutCSS from "./image-layout.css?raw";
 import katexCSS from "katex/dist/katex.min.css?raw";
 import literataCSS from "@fontsource-variable/literata/standard.css?raw";
 import literataItalicCSS from "@fontsource-variable/literata/standard-italic.css?raw";
@@ -196,6 +197,7 @@ export async function exportNote(format, { doc, toc = false }) {
         "\n" +
         exportCSS +
         tableCSS +
+        imageLayoutCSS +
         `\nbody{font-family:${family};font-weight:${[400, 450, 500, 600].includes(weight) ? weight : 400}} strong{font-weight:${Math.max(600, weight + 100)}}`,
       images,
       warnings,

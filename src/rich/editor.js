@@ -70,6 +70,7 @@ import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
 import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
+import { imageLines } from "./image-layout.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 import { CodeView, TableView } from "./blocks.js";
@@ -108,6 +109,7 @@ class ImageView {
     const src = node.attrs.src || "";
     this.dom.alt = node.attrs.alt || "";
     this.dom.decoding = "async";
+    if (node.attrs.width) this.dom.setAttribute("width", node.attrs.width);
     if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src))
       this.dom.src = src;
     else if (fileId && src && !/^(?:https?:|javascript:|blob:)/i.test(src))
@@ -673,6 +675,7 @@ export function createRichEditor({
     selectionBubble({ comment }),
     codeColors,
     imageBox,
+    imageLines,
     finder.plugin,
     caretBlock,
     codeRing,

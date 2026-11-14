@@ -17,6 +17,7 @@ import {
 import { tableNodes } from "prosemirror-tables";
 import { Transform } from "prosemirror-transform";
 import { createParser, lineOffsets } from "../markdown.js";
+import { imgTag, percent } from "../image-layout.js";
 
 // Inline HTML tags taken as formatting when they come in pairs around text.
 const HTML_TAGS = new Set(
@@ -153,8 +154,47 @@ export const schema = new Schema({
         delim: { default: "." },
       },
     })
+    // An image remembers its width ("60%", or pixels as a note had it) and
+    // the alignment of the line it stands alone on (image-layout.js).
+    .update("image", {
+      ...nodes.get("image"),
+      attrs: {
+        src: {},
+        alt: { default: null },
+        title: { default: null },
+        width: { default: null },
+        align: { default: null },
+      },
+      toDOM: ({ attrs: { src, alt, title, width } }) => [
+        "img",
+        { src, alt, title, ...(width ? { width } : {}) },
+      ],
+    })
     .append(tables)
     .append({
+      // Blocks side by side (`<div class="columns">`): each column holds
+      // Markdown blocks and its share of the width.
+      columns: {
+        group: "block",
+        content: "column+",
+        isolating: true,
+        toDOM: () => ["div", { class: "columns" }, 0],
+      },
+      column: {
+        content: "block+",
+        isolating: true,
+        attrs: { width: { default: null } },
+        toDOM: (node) => [
+          "div",
+          {
+            class: "column",
+            ...(node.attrs.width === null
+              ? {}
+              : { style: `--share: ${node.attrs.width}` }),
+          },
+          0,
+        ],
+      },
       // A soft line break inside a paragraph: shown as a space, written as
       // the line break it was.
       // A task item's box, "[ ]" or "[x]" in the source.
@@ -501,6 +541,21 @@ const parser = new MarkdownParser(schema, tokenizer, {
     node: "math_display",
     getAttrs: (tok) => ({ tex: tok.content, raw: tok.meta?.raw ?? null }),
   },
+  image: {
+    node: "image",
+    getAttrs: (tok) => ({
+      src: tok.attrGet("src"),
+      title: tok.attrGet("title") || null,
+      alt: tok.children[0]?.content || null,
+      width: tok.attrGet("width") || null,
+      align: /^html:(\w+)/.exec(tok.info || "")?.[1] ?? null,
+    }),
+  },
+  columns: { block: "columns" },
+  column: {
+    block: "column",
+    getAttrs: (tok) => ({ width: tok.meta?.width ?? null }),
+  },
   html_mark: { mark: "html", getAttrs: (tok) => tok.meta },
   details: { block: "details", getAttrs: (tok) => tok.meta },
   details_summary: { block: "details_summary" },
@@ -747,7 +802,40 @@ const serializer = new MarkdownSerializer(
     raw_inline(state, node) {
       state.write(node.attrs.source);
     },
+    // A line of images aligned to a side: wrapped in `<p align>`.
+    paragraph(state, node) {
+      const align = lineAlign(node);
+      if (align) state.write(`<p align="${align}">`);
+      state.renderInline(node);
+      if (align) state.write("</p>");
+      state.closeBlock(node);
+    },
+    columns(state, node) {
+      state.write('<div class="columns">');
+      state.ensureNewLine();
+      node.forEach((column) => {
+        const width = column.attrs.width;
+        state.write(
+          '<div class="column"' +
+            (width === null ? "" : ` data-width="${percent(width)}"`) +
+            ">",
+        );
+        // Blank lines around the Markdown in a column, which other viewers
+        // need to read it as Markdown.
+        state.closeBlock(column);
+        state.renderContent(column);
+        state.write("</div>");
+        state.ensureNewLine();
+      });
+      state.write("</div>");
+      state.closeBlock(node);
+    },
     image(state, node) {
+      // Resized or aligned: an `<img>` tag (image-layout.js).
+      if (node.attrs.width || node.attrs.align) {
+        state.write(imgTag(node.attrs));
+        return;
+      }
       state.write(
         "![" +
           state.esc(node.attrs.alt || "") +
@@ -871,6 +959,30 @@ const serializer = new MarkdownSerializer(
   // Also what would read as HTML or as an entity.
   { escapeExtraCharacters: /[$<]|&(?=#?\w+;)/g },
 );
+// A paragraph of images only (white space between them): its images, else
+// null. One image is a line of its own; several with widths, a row.
+export function imageLine(node) {
+  if (node.type !== S.paragraph || !node.childCount) return null;
+  const images = [];
+  let only = true;
+  node.forEach((child) => {
+    if (child.type === S.image) images.push(child);
+    else if (
+      child.type !== S.soft_break &&
+      !(child.isText && !child.text.trim())
+    )
+      only = false;
+  });
+  return only && images.length ? images : null;
+}
+// The side such a line is aligned to (all its images agree), else null.
+function lineAlign(node) {
+  const images = imageLine(node);
+  const align = images?.[0].attrs.align;
+  return align && images.every((image) => image.attrs.align === align)
+    ? align
+    : null;
+}
 // A link's or image's address as Markdown takes it: between angle brackets
 // when it holds a space (it would otherwise end at the space).
 const address = (url) =>
@@ -1155,7 +1267,13 @@ export function write(doc, loaded) {
       ? gapAfter(
           w.block,
           last,
-          w.same && !!after && after.same && after.at === w.at + 1,
+          w.same &&
+            !!after &&
+            after.same &&
+            after.at === w.at + 1 &&
+            // HTML written in place of a block (an image resized) goes on
+            // to the next blank line: one must follow it.
+            (kept[i] || !w.text.startsWith("<")),
         )
       : last
         ? endGap()

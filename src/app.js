@@ -87,6 +87,7 @@ import {
   closeColorPicker,
 } from "./color-picker.js";
 import "./tables.css";
+import "./image-layout.css";
 import "./find-bar.css";
 import "./library-search.css";
 import "./library-index.css";

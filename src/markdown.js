@@ -15,6 +15,7 @@ import { decorateTextColors } from "./text-colors.js";
 import { t } from "../desktop/i18n.mjs";
 import { propertiesCard, firstHeading } from "./properties.js";
 import { createSlugger } from "../desktop/slug.mjs";
+import { imageLayout } from "./image-layout.js";
 
 export function lineOffsets(source) {
   const offsets = [0];
@@ -661,6 +662,15 @@ export function createParser() {
               }
               continue;
             }
+            if (child.type === "image" && child.info.startsWith("html")) {
+              // An `<img>` tag (image-layout.js): stepped over as HTML is.
+              const relative = inlineSource.indexOf(
+                child.markup,
+                cursor - from,
+              );
+              if (relative >= 0) skipTo(from + relative + child.markup.length);
+              continue;
+            }
             if (child.type === "image") {
               const at = state.src.indexOf("![", cursor),
                 close = at < 0 ? -1 : closingBracket(state.src, at + 1, to),
@@ -836,6 +846,7 @@ export function createParser() {
       range = t.meta ? `data-from="${t.meta.from}" data-to="${t.meta.to}"` : "";
     return `<span class="formula" ${range}>${formulaMarkup(t.content.split(env.mathPipe).join("|"), t.markup === "$$", env)}</span>`;
   };
+  imageLayout(md);
   return md;
 }
 // Source spans of inline markup (emphasis, links, images, inline code), so a
@@ -878,6 +889,12 @@ function markInlineSpans(src, children, from, to) {
       const at = find(child.content);
       if (at < 0) return;
       cursor = at + child.content.length;
+    } else if (child.type === "image" && child.info.startsWith("html")) {
+      const at = find(child.markup);
+      if (at < 0) return;
+      const end = at + child.markup.length;
+      span(child, [at, end], [at, end]);
+      cursor = end;
     } else if (child.type === "image") {
       const at = find("!["),
         close = at < 0 ? -1 : closingBracket(src, at + 1, to),

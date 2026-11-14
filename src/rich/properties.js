@@ -312,7 +312,7 @@ export function setFrontMatter(view, yaml, { history = true } = {}) {
 
 // A note without properties shows nothing for them in Edit mode (its first
 // line stays where Read mode shows it). Asked to add one ("Add property" in
-// the menu, the toolbar's properties button), it shows the name and value
+// the menu, the properties button of the format toolbar), it shows the name and value
 // fields above its first line, only while they are open: Enter makes the
 // front matter with that property, its card unfolded; Esc or leaving them
 // empty takes them away again.

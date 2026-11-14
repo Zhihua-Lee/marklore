@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { boot, editor, saved, caretAfter } from "./rich-helpers.js";
 
 // Properties a note does not have yet: the first one is added in Edit mode
-// (the toolbar's properties button, or the note's menu), with nothing shown
+// (the properties button of the format toolbar, or the note's menu), with nothing shown
 // above the note until then; new notes may start with the default
 // properties of Settings → Editing, and "Add default properties" adds those
 // a note lacks. Saving may keep a modified time the note has up to date.
@@ -64,9 +64,7 @@ test("the properties button adds one more to a note that has some", async ({
 }) => {
   const text = "---\ntags: [x]\n---\n\nText.\n";
   await boot(page, text);
-  // From Read mode: Edit mode, the card unfolded, asking for one more.
-  await page.keyboard.press("Control+1");
-  await expect(page.locator("#content details.front-matter")).toHaveCount(1);
+  // Edit mode: the card unfolded, asking for one more.
   await page.getByRole("button", { name: "属性", exact: true }).click();
   const card = editor(page).locator("details.front-matter");
   await expect(card).toHaveAttribute("open", "");

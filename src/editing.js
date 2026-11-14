@@ -55,6 +55,7 @@ const buttons = [
   ["link", t("插入链接"), icon("link"), "Ctrl+K"],
   ["image", t("插入图片"), icon("image")],
   ["table", t("插入表格"), icon("table")],
+  ["properties", t("属性"), icon("properties")],
 ];
 export function wireEditing({
   view,
@@ -64,6 +65,8 @@ export function wireEditing({
   // The editor of Edit mode, when it is the one typed into: the toolbar
   // acts on it instead of the source pane.
   rich = { target: () => null },
+  // The note's properties: the first asked for, or the card unfolded.
+  addProperty = null,
 }) {
   const host = document.createElement("div");
   host.className = "editing-tools";
@@ -94,7 +97,7 @@ export function wireEditing({
     [
       t("插入内容"),
       [
-        ...["link", "image", "table", "code", "math", "rule"].map(
+        ...["link", "image", "table", "code", "math", "rule", "properties"].map(
           (id) => `[data-edit="${id}"]`,
         ),
       ],
@@ -231,7 +234,8 @@ export function wireEditing({
   });
   host.addEventListener("click", (event) => {
     const action = event.target.closest("[data-edit]")?.dataset.edit;
-    if (action) execute(action);
+    if (action === "properties") addProperty?.();
+    else if (action) execute(action);
   });
   host.querySelector("select").onchange = (event) => {
     if (event.target.value !== "")

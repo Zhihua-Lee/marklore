@@ -48,7 +48,7 @@ const paths = {
   text: '<path d="M5 7V5h14v2M12 5v14m-3 0h6"/>',
   notebook:
     '<path d="M6 3.5h12a1 1 0 0 1 1 1v15a1 1 0 0 1-1 1H6Z"/><path d="M9 3.5v17M4 8h4m-4 4h4m-4 4h4"/>',
-  // The toolbar's properties button: a card of name/value rows.
+  // The format toolbar's properties button: a card of name/value rows.
   properties:
     '<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7 9.5h3m3 0h4M7 14.5h3m3 0h4"/>',
   minus: '<path d="M5 12h14"/>',

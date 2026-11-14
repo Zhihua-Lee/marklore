@@ -115,7 +115,11 @@ try {
   $alive = -not $app.HasExited
   Check 'installed app starts' $alive
   Check 'isolated profile used' ((Get-ChildItem $profileDir -Force -ErrorAction SilentlyContinue | Measure-Object).Count -gt 0)
-  Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($dir, 'CurrentCultureIgnoreCase') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  # Closed as a user would (WM_CLOSE to its window); forced only if still running.
+  $ours = { Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($dir, 'CurrentCultureIgnoreCase') } }
+  Start-Process taskkill.exe -ArgumentList @('/PID', $app.Id, '/T') -Wait -WindowStyle Hidden
+  for ($i = 0; $i -lt 20 -and (& $ours); $i++) { Start-Sleep -Milliseconds 500 }
+  & $ours | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
   Remove-Item Env:FOLIO_DATA_DIR, Env:FOLIO_TEST_INACTIVE
   Start-Sleep -Seconds 1
 

@@ -25,6 +25,8 @@ try {
     env: {
       ...process.env,
       FOLIO_DATA_DIR: profile,
+      // Automated runs make no tray icon; this suite tests it.
+      FOLIO_TEST_TRAY: "1",
       ELECTRON_RUN_AS_NODE: undefined,
     },
     timeout: 30000,

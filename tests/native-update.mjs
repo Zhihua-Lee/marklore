@@ -139,14 +139,24 @@ function running() {
     .filter(Boolean)
     .map(Number);
 }
-function stop() {
-  for (const id of running())
+// Closes it as a user would (its window gets WM_CLOSE); forced only if it is
+// still running ten seconds later.
+async function stop() {
+  const taskkill = (id, ...force) => {
     try {
-      execFileSync("taskkill", ["/PID", String(id), "/T", "/F"], {
+      execFileSync("taskkill", ["/PID", String(id), "/T", ...force], {
         windowsHide: true,
         stdio: "ignore",
       });
     } catch {}
+  };
+  let ids = running();
+  for (const id of ids) taskkill(id);
+  for (const end = Date.now() + 10000; ids.length && Date.now() < end;) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    ids = running();
+  }
+  for (const id of ids) taskkill(id, "/F");
 }
 // The version the installed copy's uninstall entry names.
 const displayVersion = () =>
@@ -238,7 +248,7 @@ async function update(kind, version) {
       await fs.readFile(path.join(program, "data", "keep.txt"), "utf8"),
       "mine",
     );
-  stop();
+  await stop();
   await new Promise((resolve) => setTimeout(resolve, 1000));
   step(
     `ok: v${version} (${kind}) in place, program restarted at the same path`,
@@ -266,7 +276,7 @@ async function inspect() {
     return (await page.evaluate(() => window.folio.desktopStatus())).index;
   } finally {
     await app.close().catch(() => {});
-    stop();
+    await stop();
   }
 }
 
@@ -313,7 +323,7 @@ try {
         .catch((e) => e.code),
     );
 } finally {
-  stop();
+  await stop();
   server.close();
   await new Promise((resolve) => setTimeout(resolve, 1000));
   await fs.rm(temp, { recursive: true, force: true }).catch(() => {});

@@ -249,6 +249,8 @@ function updateTray() {
   );
 }
 function createTray() {
+  // Automated runs make no tray icon unless a test asks for one.
+  if (inactive && !process.env.FOLIO_TEST_TRAY) return;
   try {
     tray = new Tray(
       nativeImage.createFromPath(path.join(here, "icons/tray.png")),
@@ -257,10 +259,17 @@ function createTray() {
     tray.on("click", showWindow);
     tray.on("double-click", showWindow);
     updateTray();
+    // "quit" also follows app.exit (an update or portable restart), which
+    // skips will-quit: the icon never outlives the process.
+    app.once("quit", destroyTray);
   } catch (error) {
     console.warn("Tray unavailable:", error.message);
     tray = null;
   }
+}
+function destroyTray() {
+  if (tray && !tray.isDestroyed()) tray.destroy();
+  tray = null;
 }
 let win,
   ready = false,
@@ -1501,7 +1510,7 @@ else {
       app.on("will-quit", () => {
         libraryWatch.close();
         ai.close();
-        tray?.destroy();
+        destroyTray();
         for (const entry of watchers.values()) entry.watcher.close();
         watchers.clear();
       });

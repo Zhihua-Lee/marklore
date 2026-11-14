@@ -73,7 +73,7 @@ pnpm dev
 | `pnpm test:native:all`          | 依次运行全部原生套件。      |
 | `pnpm format:check`             | Prettier 格式检查。         |
 
-浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。原生测试设置 `FOLIO_TEST_INACTIVE=1`（`tools/run-native-suites.mjs` 自动设置）：窗口不激活、放在屏幕外、不进任务栏，并关闭 Chromium 的遮挡检测，以免它停止绘制屏幕外的窗口。
+浏览器测试通过 [playwright.config.mjs](../playwright.config.mjs) 启动 Vite，并使用本机 Microsoft Edge。原生测试使用合成笔记和隔离的临时目录，不应改用个人笔记进行自动化回归。原生测试设置 `FOLIO_TEST_INACTIVE=1`（`tools/run-native-suites.mjs` 自动设置）：窗口不激活、放在屏幕外、不进任务栏，并关闭 Chromium 的遮挡检测，以免它停止绘制屏幕外的窗口。这类运行也不建托盘图标；测试托盘的套件（`tests/native-background.mjs`）另设 `FOLIO_TEST_TRAY=1`。托盘图标在应用退出时移除，`app.exit` 也一样。
 
 - 导航与滚动相关的用例会在 `default`（平滑滚动）和 `reduced-motion` 两个 Playwright 项目中各跑一次；新增此类用例时，把文件加入配置中的 `motionSpecs`。
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。

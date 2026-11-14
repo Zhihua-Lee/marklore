@@ -1,6 +1,23 @@
 // Synthetic pictures for the image layout specs: plain PNGs of a size and a
 // colour, as data addresses (the dev server cannot load a note's assets).
 import zlib from "node:zlib";
+import fs from "node:fs";
+
+// With FOLIO_SHOTS set, a screenshot for review in .local/image-layout,
+// `scroll` (a selector) brought into view first.
+const shots = new URL("../../.local/image-layout/", import.meta.url);
+export async function shot(page, name, scroll = null) {
+  if (!process.env.FOLIO_SHOTS) return;
+  if (scroll)
+    await page
+      .locator(scroll)
+      .first()
+      .evaluate((el) => el.scrollIntoView({ block: "center" }));
+  fs.mkdirSync(shots, { recursive: true });
+  await page.screenshot({
+    path: new URL(name + ".png", shots).pathname.slice(1),
+  });
+}
 
 function chunk(type, data) {
   const head = Buffer.alloc(8);

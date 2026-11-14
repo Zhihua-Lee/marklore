@@ -243,9 +243,77 @@
 #rich .rich-folded > :not(.rich-summary) {
   display: none;
 }
-/* An image's box: its address and its description side by side. */
+/* An image's box: its address and its description side by side, its
+   layout below (image-layout.js). */
+.rich-image-box {
+  flex-wrap: wrap;
+  max-width: 520px;
+}
 .rich-image-box input {
   width: 200px;
+}
+.rich-image-layout {
+  display: flex;
+  flex-basis: 100%;
+  gap: 2px;
+  align-items: center;
+}
+.rich-image-layout[hidden] {
+  display: none;
+}
+.rich-image-box .rich-image-layout button {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 5px;
+  color: var(--muted);
+}
+.rich-image-box .rich-image-layout button.text {
+  padding: 3px 8px;
+}
+.rich-image-box .rich-image-layout button[aria-pressed="true"] {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.rich-image-layout .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+/* A selected image's sides, dragged to change its width. */
+.rich-image-frame {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  outline: 1.5px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+.rich-image-frame[hidden] {
+  display: none;
+}
+.rich-image-handle {
+  position: absolute;
+  top: 50%;
+  width: 8px;
+  height: 36px;
+  max-height: 70%;
+  translate: 0 -50%;
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+  background: var(--paper);
+  border: 1.5px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  border-radius: 4px;
+  box-shadow: 0 1px 4px #0002;
+}
+.rich-image-handle[data-side="left"] {
+  left: -6px;
+}
+.rich-image-handle[data-side="right"] {
+  right: -6px;
+}
+.rich-image-frame.dragging .rich-image-handle,
+.rich-image-handle:hover {
+  background: color-mix(in srgb, var(--accent) 30%, var(--paper));
 }
 /* Find in the editor (find.js): the same colors as find in the reading view. */
 #rich .rich-find {

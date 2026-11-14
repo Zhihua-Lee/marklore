@@ -1,6 +1,13 @@
 const paths = {
   inlineMath: '<path d="M4 6 1 12l3 6m16-12 3 6-3 6M9 9l6 6m0-6-6 6"/>',
   rule: '<path d="M3 12h18"/>',
+  // An image to one side of the line, or in its middle.
+  alignLeft:
+    '<path d="M4 4v16"/><rect x="7" y="8" width="9" height="8" rx="1"/>',
+  alignCenter:
+    '<path d="M12 4v4m0 8v4"/><rect x="7" y="8" width="10" height="8" rx="1"/>',
+  alignRight:
+    '<path d="M20 4v16"/><rect x="8" y="8" width="9" height="8" rx="1"/>',
   highlight: '<path d="m14 3 7 7-8 8-7-7 8-8ZM6 11l-3 6 4 4 6-3M3 21h7"/>',
   textColor: '<path d="m6 17 6-14 6 14M8 12h8M4 21h16"/>',
   pencil: '<path d="m15 4 5 5M4 20l5-1L21 7a2 2 0 0 0-5-5L4 14Z"/>',

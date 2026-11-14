@@ -1,9 +1,11 @@
 // Images in the editor: a click selects one, and a small box under it (like
 // a link's) shows its address and its description (alt text) to change, or
-// removes it. Enter or leaving the box applies; Escape goes back.
+// removes it. Enter or leaving the box applies; Escape goes back. Below,
+// its layout: alignment and the original size (image-layout.js).
 import { Plugin, NodeSelection } from "prosemirror-state";
 import { t } from "../../desktop/i18n.mjs";
 import { schema } from "./markdown.js";
+import { layoutButtons } from "./image-layout.js";
 
 const imageAt = (state) => {
   const sel = state.selection;
@@ -30,7 +32,8 @@ export const imageBox = new Plugin({
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = t("移除图片");
-    dom.append(src, alt, remove);
+    const layout = layoutButtons(view);
+    dom.append(src, alt, remove, layout.dom);
     document.body.append(dom);
     let shown = null;
     const inside = () => dom.contains(document.activeElement);
@@ -53,6 +56,7 @@ export const imageBox = new Plugin({
         alt.value = hit.node.attrs.alt || "";
       }
       shown = hit;
+      layout.update(hit);
       dom.hidden = false;
     }
     // The image as changed in the box, in place (it stays selected).

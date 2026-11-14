@@ -1,26 +1,11 @@
 import { test, expect } from "@playwright/test";
-import fs from "node:fs";
 import { installFolio } from "./fixtures.js";
 import { boot, editor, saved } from "./rich-helpers.js";
-import { sage, sand, slate } from "./image-layout-helpers.js";
+import { sage, sand, slate, shot } from "./image-layout-helpers.js";
 
 // Image size, alignment and rows (src/image-layout.js): each stored form
 // reads, edits and exports as laid out, and an image nobody resized stays
 // `![alt](src)`.
-
-const shots = new URL("../../.local/image-layout/", import.meta.url);
-async function shot(page, name, scroll = null) {
-  if (!process.env.FOLIO_SHOTS) return;
-  if (scroll)
-    await page
-      .locator(scroll)
-      .first()
-      .evaluate((el) => el.scrollIntoView({ block: "center" }));
-  fs.mkdirSync(shots, { recursive: true });
-  await page.screenshot({
-    path: new URL(name + ".png", shots).pathname.slice(1),
-  });
-}
 
 const forms = [
   "# Layout",

@@ -19,6 +19,14 @@ export async function shot(page, name, scroll = null) {
   });
 }
 
+function phys(dpi) {
+  const data = Buffer.alloc(9);
+  const ppm = Math.round(dpi / 0.0254);
+  data.writeUInt32BE(ppm, 0);
+  data.writeUInt32BE(ppm, 4);
+  data[8] = 1;
+  return data;
+}
 function chunk(type, data) {
   const head = Buffer.alloc(8);
   head.writeUInt32BE(data.length, 0);
@@ -27,8 +35,9 @@ function chunk(type, data) {
   crc.writeUInt32BE(zlib.crc32(Buffer.concat([head.subarray(4), data])), 0);
   return Buffer.concat([head, data, crc]);
 }
-// A picture of width × height in one colour, a darker band across it.
-export function picture(width, height, [r, g, b]) {
+// A picture of width × height in one colour, a darker band across it;
+// with `dpi`, that density recorded in it.
+export function picture(width, height, [r, g, b], dpi = null) {
   const header = Buffer.alloc(13);
   header.writeUInt32BE(width, 0);
   header.writeUInt32BE(height, 4);
@@ -44,6 +53,7 @@ export function picture(width, height, [r, g, b]) {
   const png = Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", header),
+    ...(dpi ? [chunk("pHYs", phys(dpi))] : []),
     chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))),
     chunk("IEND", Buffer.alloc(0)),
   ]);

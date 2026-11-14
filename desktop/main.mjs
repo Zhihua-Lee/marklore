@@ -36,6 +36,7 @@ import {
 import { t, setLanguage, getLanguage, resolveLanguage } from "./i18n.mjs";
 import { createAiStore, AI_FOLDER } from "./ai-store.mjs";
 import { createAiBridge } from "./ai-bridge.mjs";
+import { fileDensity } from "./image-density-file.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -1242,9 +1243,13 @@ else {
       });
       api("clearRecent", () => recent.clear());
       api("reveal", (id) => shell.showItemInFolder(files.file(id).path));
-      api("imageInfo", async (id, href) => {
+      api("imageInfo", async (id, href, options) => {
         try {
-          return await files.imageInfo(id, href);
+          const info = await files.imageInfo(id, href);
+          // The density recorded in an image it may show (src/image-density.js).
+          if (options?.density && info.authorized)
+            info.density = await fileDensity(info.path);
+          return info;
         } catch (error) {
           return {
             error:

@@ -1,6 +1,18 @@
 /* Image sizes, alignment and side-by-side layout (image-layout.js). Shared
    by the reader, the editor and standalone exports. A width is the image's
    own attribute (a share of the text column); centred is the default. */
+/* An image nobody sized: at its own size (its recorded density taken into
+   account, image-density.js), never larger, never wider than the column,
+   and never taller than most of the window, so a long screenshot does not
+   fill several screens. Its proportions are kept. */
+:root {
+  --image-max-height: min(70vh, 600px);
+}
+article img:not([width]),
+.prose img:not([width]) {
+  max-height: var(--image-max-height);
+  width: auto;
+}
 .image-line.image-align-left > img {
   margin-left: 0;
   margin-right: auto;

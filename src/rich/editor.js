@@ -45,6 +45,7 @@ import {
 } from "prosemirror-tables";
 import { t } from "../../desktop/i18n.mjs";
 import { loadMath, mayContainMath } from "../markdown.js";
+import { applyDensity } from "../image-density.js";
 import {
   schema,
   load,
@@ -118,6 +119,7 @@ class ImageView {
       this.dom.alt = t("{alt}（远程图片默认禁用）", {
         alt: node.attrs.alt || t("图片"),
       });
+    applyDensity(this.dom);
   }
   ignoreMutation() {
     return true;

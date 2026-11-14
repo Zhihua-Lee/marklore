@@ -143,6 +143,15 @@ export async function exportNote(format, { doc, toc = false }) {
           ?.querySelector(":scope > .katex-mathml")
           ?.setAttribute("aria-hidden", "true");
       }
+    // An image shown at its recorded density (image-density.js) keeps that
+    // size as a width of its own: the export embeds its file alone.
+    await Promise.all(
+      [...host.querySelectorAll("img[srcset]")].map(async (image) => {
+        await image.decode().catch(() => {});
+        if (image.naturalWidth) image.style.width = image.naturalWidth + "px";
+        image.removeAttribute("srcset");
+      }),
+    );
     const images = [],
       warnings = [];
     for (const image of host.querySelectorAll("img")) {

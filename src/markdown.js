@@ -16,6 +16,7 @@ import { t } from "../desktop/i18n.mjs";
 import { propertiesCard, firstHeading } from "./properties.js";
 import { createSlugger } from "../desktop/slug.mjs";
 import { imageLayout } from "./image-layout.js";
+import { applyDensity } from "./image-density.js";
 
 export function lineOffsets(source) {
   const offsets = [0];
@@ -1430,10 +1431,14 @@ function finishHtml(
     const src = img.getAttribute("src") || "";
     if (!src) continue;
     img.decoding = "async";
-    if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) continue;
-    if (fileId && !/^(?:https?:|javascript:|blob:)/i.test(src))
+    if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) {
+      applyDensity(img);
+      continue;
+    }
+    if (fileId && !/^(?:https?:|javascript:|blob:)/i.test(src)) {
       img.src = `folio-asset://${fileId}/?path=${encodeURIComponent(src)}`;
-    else {
+      applyDensity(img);
+    } else {
       img.removeAttribute("src");
       img.alt = t("{alt}（远程图片默认禁用）", {
         alt: img.alt || t("图片"),

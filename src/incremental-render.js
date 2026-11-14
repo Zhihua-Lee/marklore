@@ -456,6 +456,8 @@ export function comparable(nodes, doc = document) {
       "aria-sort",
       "aria-expanded",
       "open",
+      // An image's recorded density, set once known (image-density.js).
+      "srcset",
     ])
       el.removeAttribute(name);
     if (

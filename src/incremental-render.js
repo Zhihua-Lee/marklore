@@ -450,6 +450,7 @@ export function comparable(nodes, doc = document) {
     if (el.getAttribute("class") === "") el.removeAttribute("class");
     for (const name of [
       "data-broken",
+      "data-selected-whole",
       "data-diagram-theme",
       "data-view-sorted",
       "aria-sort",

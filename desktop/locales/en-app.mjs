@@ -366,6 +366,16 @@ export default {
   "{n} 项属性": "{n} properties",
   "另 {n} 项": "{n} more",
   添加属性: "Add property",
+  添加默认属性: "Add default properties",
+  新笔记自带属性: "New notes start with properties",
+  "在 Marklore 里新建的笔记按下面的模板写好属性":
+    "Notes made in Marklore get the default properties below",
+  默认属性: "Default properties",
+  "每行一项“名称: 值”；{title} 为文件名，{date}、{time}、{datetime} 为当时的日期和时间。右键笔记“添加默认属性”也用它，已有的属性不变":
+    "One “name: value” per line; {title} is the file name, {date}, {time} and {datetime} the date and time then. “Add default properties” in a note's right-click menu uses it too, keeping the properties it has",
+  保存时更新修改时间: "Update the modified time on save",
+  "只改笔记已有的 modified 或 updated，沿用它原来的写法；不添加":
+    "Only a modified or updated the note already has, written as before; never added",
   编辑源码: "Edit source",
   属性名: "Property name",
   属性值: "Property value",

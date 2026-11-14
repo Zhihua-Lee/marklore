@@ -369,17 +369,20 @@ export class FileStore {
     if (!folder) throw Error(t("未授权的文件夹"));
     return folder;
   }
-  // A new empty note or folder in an authorized folder; never replaces one.
-  async createEntry(id, name, kind) {
+  // A new note or folder in an authorized folder; never replaces one. A
+  // note is empty, or starts with `text` (its default properties).
+  async createEntry(id, name, kind, text = "") {
     const folder = this.folderPath(id);
     await unchangedPath(folder);
     FileStore.checkName(name);
     if (kind !== "folder" && !markdownPath(name))
       throw Error(t("笔记名称须以 .md 结尾"));
+    const body =
+      typeof text === "string" && text.length <= 64 * 1024 ? text : "";
     const target = path.join(folder, name);
     try {
       if (kind === "folder") await fs.mkdir(target);
-      else await fs.writeFile(target, "", { flag: "wx" });
+      else await fs.writeFile(target, body, { flag: "wx" });
     } catch (e) {
       if (e.code === "EEXIST") throw Error(t("已有同名的文件或文件夹"));
       throw e;

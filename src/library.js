@@ -77,6 +77,8 @@ export function createLibrary({
   changeSettings = () => {},
   // A note just created in the tree: open it for writing.
   openNew = (doc) => add(doc),
+  // What a note created in the tree starts with (by its file name).
+  newNoteText = () => "",
 }) {
   const $ = (s) => document.querySelector(s);
   let currentFolder = null;
@@ -753,7 +755,12 @@ export function createLibrary({
     if (!name) return;
     const full =
       kind === "folder" || /\.[a-z0-9]+$/i.test(name) ? name : name + ".md";
-    const made = await api.createEntry(details.dataset.id, full, kind);
+    const made = await api.createEntry(
+      details.dataset.id,
+      full,
+      kind,
+      kind === "folder" ? "" : newNoteText(full),
+    );
     await refresh();
     if (kind === "folder") await revealFolder(made.path);
     else openNew(made);

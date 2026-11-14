@@ -72,6 +72,10 @@ export const appearanceMarkup = `
     ${row("rich-edit", t("在渲染后的正文里编辑"), '<input id="rich-edit" type="checkbox" class="switch">', t("编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑"))}
     ${row("literal-typing", t("字面输入（自动转义）"), '<input id="literal-typing" type="checkbox" class="switch">', t("打出的 Markdown 符号按原样显示，写入文件时自动加反斜杠；关闭时像 Typora，打完 **粗体** 就变粗"))}
     ${row("edit-split", t("编辑模式显示源码栏"), '<input id="edit-split" type="checkbox" class="switch">', t("在正文旁同时显示 Markdown 源码，两边同步"))}
+    ${row("new-note-properties", t("新笔记自带属性"), '<input id="new-note-properties" type="checkbox" class="switch">', t("在 Marklore 里新建的笔记按下面的模板写好属性"))}
+    <div class="setting setting-list"><span class="setting-text"><label for="property-template">${t("默认属性")}</label><small>${t("每行一项“名称: 值”；{title} 为文件名，{date}、{time}、{datetime} 为当时的日期和时间。右键笔记“添加默认属性”也用它，已有的属性不变")}</small></span></div>
+    <textarea id="property-template" class="property-template" rows="4" spellcheck="false"></textarea>
+    ${row("stamp-modified", t("保存时更新修改时间"), '<input id="stamp-modified" type="checkbox" class="switch">', t("只改笔记已有的 modified 或 updated，沿用它原来的写法；不添加"))}
   </fieldset>
   <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
     ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}
@@ -157,6 +161,11 @@ export function applyAppearance(settings) {
   $("#rich-edit").checked = settings.richEdit;
   $("#edit-split").checked = settings.editSplit;
   $("#literal-typing").checked = !settings.typeMarkdown;
+  $("#new-note-properties").checked = settings.newNoteProperties;
+  $("#stamp-modified").checked = settings.stampModified;
+  // Not while it is being written in.
+  if (document.activeElement !== $("#property-template"))
+    $("#property-template").value = settings.propertyTemplate;
   $("#group-counts").checked = settings.groupCounts;
   $("#export-toc").checked = settings.exportToc;
   $("#outline-anchors").value = settings.outlineAnchors;
@@ -276,6 +285,12 @@ export function wireAppearance(change) {
     change({ typeMarkdown: !event.target.checked });
   $("#rich-edit").onchange = (event) =>
     change({ richEdit: event.target.checked });
+  $("#new-note-properties").onchange = (event) =>
+    change({ newNoteProperties: event.target.checked });
+  $("#stamp-modified").onchange = (event) =>
+    change({ stampModified: event.target.checked });
+  $("#property-template").onchange = (event) =>
+    change({ propertyTemplate: event.target.value.slice(0, 2000) });
   $("#reading-format").onchange = (event) =>
     change({ readingFormat: event.target.checked });
   $("#group-counts").onchange = (event) =>

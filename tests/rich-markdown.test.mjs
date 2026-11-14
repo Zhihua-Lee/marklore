@@ -60,6 +60,21 @@ test("a note read and written unchanged is the same text", () => {
     assert.equal(write(load(src).doc, load(src)).text, src, src);
 });
 
+test("a note of properties only has a line to write in below them", () => {
+  for (const src of ["---\na: 1\n---\n\n", "---\na: 1\n---\n"]) {
+    const loaded = load(src);
+    assert.equal(loaded.doc.childCount, 2, src);
+    assert.equal(loaded.doc.lastChild.type.name, "paragraph");
+    assert.equal(write(loaded.doc, loaded).text, src);
+  }
+  const r = edit("---\na: 1\n---\n\n", (tr, doc) =>
+    tr.insert(doc.firstChild.nodeSize + 1, schema.text("Hello")),
+  );
+  assert.equal(r.text, "---\na: 1\n---\n\nHello");
+  // Without a line break after them, as before: nothing below.
+  assert.equal(load("---\na: 1\n---").doc.childCount, 1);
+});
+
 test("an address with a space stays an address", () => {
   const link = "See the plan: [notes](<My Note.md>) here.\n";
   let r = edit(link, split("notes"));

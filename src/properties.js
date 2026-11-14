@@ -345,3 +345,152 @@ export function removeProperty(yaml, key) {
   lines.splice(f.start, f.end - f.start);
   return lines.join("\n");
 }
+
+// ---- The front matter of a whole note ----
+
+// A note's front matter: `yaml` between `open` and `close` (the `---`
+// lines), `from`..`to` being where the YAML lies in the note. Null when the
+// note has none (the same rule as the reading view's, markdown.js).
+const FRONT =
+  /^(---[ \t]*\r?\n)([\s\S]*?)\r?\n((?:---|\.\.\.)[ \t]*)(?:\r?\n|$)/;
+export function splitFront(text) {
+  if (!text.startsWith("---")) return null;
+  const m = FRONT.exec(text);
+  if (!m) return null;
+  const yaml = m[2];
+  const from = m[1].length;
+  return { yaml, from, to: from + yaml.length, open: m[1], close: m[3] };
+}
+// The note with its front matter's YAML replaced, or a front matter put at
+// the top when it had none. The note's line breaks (\n or \r\n) are kept.
+export function withFront(text, yaml) {
+  const front = splitFront(text);
+  const eol = /\r\n/.test(front ? text.slice(0, front.to + 2) : text)
+    ? "\r\n"
+    : "\n";
+  const body = yaml.replace(/\r?\n/g, eol);
+  if (front) return text.slice(0, front.from) + body + text.slice(front.to);
+  const head = `---${eol}${body}${eol}---${eol}`;
+  return text ? head + eol + text : head;
+}
+
+// ---- Default properties: a small template ----
+
+// Every line of the template is `key: value`; a value may hold {title}
+// (the note's name without .md), {date} (2026-03-14), {time} (14:32) and
+// {datetime} (2026-03-14 14:32), all in local time.
+export const DEFAULT_TEMPLATE = "title: {title}\ncreated: {datetime}\ntags: []";
+const pad = (n, w = 2) => String(n).padStart(w, "0");
+const localDate = (d) =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const localTime = (d) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+export function expandTemplate(value, { now = new Date(), title = "" } = {}) {
+  const fill = {
+    title,
+    date: localDate(now),
+    time: localTime(now),
+    datetime: `${localDate(now)} ${localTime(now)}`,
+  };
+  return String(value).replace(
+    /\{(title|date|time|datetime)\}/g,
+    (_, k) => fill[k],
+  );
+}
+// The template's properties added to `yaml` where it has no property of
+// the same name (in any case): nothing it has is changed. Values are
+// written as the card writes them (yamlScalar), so a title with a colon is
+// quoted.
+export function mergeTemplate(yaml, template, context = {}) {
+  const have = new Set(
+    readProperties(yaml || "").map((f) => f.key.toLowerCase()),
+  );
+  const source = String(template || "").split(/\r?\n/);
+  const added = [];
+  for (const f of readProperties(String(template || ""))) {
+    const key = f.key.toLowerCase();
+    if (have.has(key)) continue;
+    have.add(key);
+    const fill = (s) => expandTemplate(s, context);
+    if (f.kind === "list")
+      added.push(
+        ...fieldLines(f.key, "list", f.items.map(fill).join(", "), f.block),
+      );
+    else if (f.kind === "bool") added.push(...fieldLines(f.key, "bool", f.raw));
+    else if (f.kind === "complex" && fill(f.text) === f.text)
+      // Nested YAML or a block of text, with nothing to fill: as written.
+      added.push(...source.slice(f.start, f.end));
+    else if (NUMBER.test(f.raw))
+      added.push(...fieldLines(f.key, "number", f.raw));
+    else added.push(...fieldLines(f.key, "text", fill(f.text ?? f.raw).trim()));
+  }
+  if (!added.length) return yaml || "";
+  const lines = yaml ? yaml.split(/\r?\n/) : [];
+  while (lines.length && !lines.at(-1).trim()) lines.pop();
+  return [...lines, ...added].join("\n");
+}
+// A new note's text from the template (empty when it has no property): the
+// properties, then a blank line to write below.
+export function templateNote(template, context) {
+  const yaml = mergeTemplate("", template, context);
+  return yaml ? withFront("", yaml) + "\n" : "";
+}
+
+// ---- Keeping `modified` up to date ----
+
+const MODIFIED = new Set(KNOWN.find(([, name]) => name === "modified")[0]);
+const STAMP =
+  /^(\d{4})-(\d{2})-(\d{2})(?:([T ])(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d+))?)?)?(?:(\s*)(Z|[+-]\d{2}(:?)\d{2}))?$/;
+// `now` written the way `value` is: date only, or with minutes, seconds
+// and the same number of decimals; with Z in UTC, with an offset as the
+// local one, written alike (+08:00 or +0800); without either in local time.
+// Null for a value that is not such a date (it is left as it is).
+export function restampValue(value, now = new Date()) {
+  const m = STAMP.exec(String(value).trim());
+  if (!m) return null;
+  const [, , , , sep, , , sec, frac, gap = "", zone, colon] = m;
+  if (zone && !sep) return null;
+  const utc = zone === "Z";
+  const part = (local, universal) => (utc ? universal : local).call(now);
+  const D = Date.prototype;
+  let out = `${part(D.getFullYear, D.getUTCFullYear)}-${pad(part(D.getMonth, D.getUTCMonth) + 1)}-${pad(part(D.getDate, D.getUTCDate))}`;
+  if (!sep) return out;
+  out += `${sep}${pad(part(D.getHours, D.getUTCHours))}:${pad(part(D.getMinutes, D.getUTCMinutes))}`;
+  if (sec !== undefined) {
+    out += `:${pad(part(D.getSeconds, D.getUTCSeconds))}`;
+    if (frac !== undefined)
+      out +=
+        "." +
+        pad(now.getMilliseconds(), 3)
+          .padEnd(frac.length, "0")
+          .slice(0, frac.length);
+  }
+  if (!zone) return out;
+  if (utc) return out + gap + "Z";
+  const offset = -now.getTimezoneOffset();
+  const sign = offset < 0 ? "-" : "+";
+  const abs = Math.abs(offset);
+  return out + gap + sign + pad(Math.floor(abs / 60)) + colon + pad(abs % 60);
+}
+// The note as saving should write it: when it changed since `base` (what
+// is on disk), each modified-time property (`modified`, `updated` and the
+// like) it already has, holding a date, is set to now. A property whose
+// value was changed by hand since `base` is left alone, and none is added.
+export function restampNote(text, base, now = new Date()) {
+  if (text === base) return text;
+  const front = splitFront(text);
+  if (!front) return text;
+  const before = new Map(
+    readProperties(splitFront(base ?? "")?.yaml ?? "").map((f) => [
+      f.key,
+      f.raw,
+    ]),
+  );
+  let yaml = front.yaml;
+  for (const f of readProperties(yaml)) {
+    if (!MODIFIED.has(f.key.toLowerCase()) || f.end - f.start !== 1) continue;
+    if (before.get(f.key) !== f.raw) continue;
+    const next = restampValue(f.text ?? "", now);
+    if (next !== null && next !== f.text) yaml = setProperty(yaml, f.key, next);
+  }
+  return yaml === front.yaml ? text : withFront(text, yaml);
+}

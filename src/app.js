@@ -25,6 +25,13 @@ import { renderDocument } from "./document-render.js";
 import { createIncrementalRender } from "./incremental-render.js";
 import { isDiffDocument } from "./diff-view.js";
 import {
+  splitFront,
+  withFront,
+  mergeTemplate,
+  templateNote,
+  restampNote,
+} from "./properties.js";
+import {
   renderMarkdown,
   parseHeadings,
   renderHeadingLabel,
@@ -539,6 +546,10 @@ richEditor = createRichEditor({
   getTheme: () => settings.theme,
   typeMarkdown: () => settings.typeMarkdown,
   comment: () => marks?.startNew(),
+  noteMenu: () =>
+    propertyActions(active)
+      .filter(([, , disabled]) => !disabled)
+      .map(([name, fn]) => [name, run(fn)]),
   follow: (href) => run(() => navigateLink(href))(),
   onFocus: () => {
     if (active) active.pane = "preview";
@@ -1145,6 +1156,12 @@ const { save, checkDisk, showConflict } = createDocumentSync({
   updateStatus,
   updateTabs,
   changed: scheduleSession,
+  beforeSave: (doc) => {
+    if (!settings.stampModified || !dirty(doc) || isDiffDocument(doc)) return;
+    const text = restampNote(doc.text, doc.base);
+    if (text !== doc.text)
+      changeFront(doc, splitFront(text).yaml, { history: false });
+  },
 });
 function jump(from, { record = true } = {}) {
   if (!active) return;
@@ -1604,6 +1621,12 @@ const {
   },
   copyLink: (path) => linkHere.copyNote(path),
   changeSettings: (patch) => changeSettings(patch),
+  newNoteText: (name) =>
+    settings.newNoteProperties
+      ? templateNote(settings.propertyTemplate, {
+          title: name.replace(/\.[^.]+$/, ""),
+        })
+      : "",
   openNew: (file) => {
     if (!add(file)) return;
     setMode("edit");
@@ -1693,8 +1716,85 @@ $("#content").addEventListener("contextmenu", (event) => {
           ];
         })()
       : []),
+    null,
+    ...propertyActions(active),
   ]);
 });
+// The note's properties from its menus: the first one, asked for in Edit
+// mode, for a note without any; and the default ones (the template's of
+// Settings → Editing), leaving those the note has as they are.
+function propertyActions(doc) {
+  if (!doc || isDiffDocument(doc) || doc.preview || proposals?.shown(doc))
+    return [];
+  const front = splitFront(doc.text);
+  const yaml = front?.yaml ?? "";
+  const merged = mergeTemplate(yaml, settings.propertyTemplate, {
+    title: doc.path ? doc.name.replace(/\.[^.]+$/, "") : "",
+  });
+  return [
+    ...(front ? [] : [[t("添加属性"), () => addFirstProperty(doc)]]),
+    [t("添加默认属性"), () => changeFront(doc, merged), merged === yaml],
+  ];
+}
+function addFirstProperty(doc) {
+  if (doc !== active) return;
+  if (doc.mode !== "edit") setMode("edit");
+  // In the editor once it shows the note; in the source, an empty front
+  // matter with the caret inside.
+  let tries = 0;
+  const ask = () => {
+    if (active !== doc) return;
+    if (richActive(doc) && !doc.richBlocked) {
+      if (richEditor.doc === doc && richEditor.askFirstProperty()) return;
+      if (++tries < 30) return requestAnimationFrame(ask);
+    }
+    if (splitFront(doc.text)) return;
+    changeFront(doc, "");
+    view.dispatch({ selection: { anchor: splitFront(doc.text).from } });
+    view.focus();
+  };
+  ask();
+}
+// The note's front matter set to `yaml` (made at the top when it has
+// none). Through the editor of Edit mode while it shows the note, so its
+// undo takes the change back; else as one change in the source.
+// `history: false` for a change that is not the writer's own.
+function changeFront(doc, yaml, { history = true } = {}) {
+  const next = withFront(doc.text, yaml);
+  if (next === doc.text) return;
+  if (
+    doc === active &&
+    richActive(doc) &&
+    richEditor.doc === doc &&
+    doc.rich?.text === doc.text
+  ) {
+    richEditor.setFrontMatter(yaml.replace(/\r\n/g, "\n"), { history });
+    if (doc.text === next) return;
+  }
+  const old = doc.text;
+  let from = 0;
+  while (from < old.length && old[from] === next[from]) from++;
+  let end = 0;
+  while (
+    end < old.length - from &&
+    end < next.length - from &&
+    old[old.length - 1 - end] === next[next.length - 1 - end]
+  )
+    end++;
+  const spec = {
+    changes: {
+      from,
+      to: old.length - end,
+      insert: next.slice(from, next.length - end),
+    },
+    annotations: history ? [] : [Transaction.addToHistory.of(false)],
+  };
+  if (doc === active) return view.dispatch(spec);
+  doc.state = doc.state ? doc.state.update(spec).state : null;
+  doc.text = next;
+  doc.epoch++;
+  doc.htmlText = null;
+}
 wireFileDrop({
   insertImages: (files, event) => imageInsertion.insert(files, event),
   api,
@@ -1848,7 +1948,12 @@ const commands = {
   open: openFiles,
   folder: openFolder,
   new: () => {
-    if (!add({ name: t("未命名.md") }, { opener: active })) return;
+    // With the default properties when asked (Settings → Editing); as
+    // written it is not an unsaved change.
+    const text = settings.newNoteProperties
+      ? templateNote(settings.propertyTemplate, {})
+      : "";
+    if (!add({ name: t("未命名.md"), text }, { opener: active })) return;
     setMode("edit");
     requestAnimationFrame(() =>
       richActive() ? richEditor.focus() : view.focus(),

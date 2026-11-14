@@ -73,7 +73,13 @@ import { imageBox } from "./images.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 import { CodeView, TableView } from "./blocks.js";
-import { PropertiesView, titleWatch } from "./properties.js";
+import {
+  PropertiesView,
+  titleWatch,
+  firstProperty,
+  setFrontMatter,
+  askFirstProperty,
+} from "./properties.js";
 
 const S = schema.nodes;
 const M = schema.marks;
@@ -519,6 +525,8 @@ export function createRichEditor({
   typeMarkdown = () => true,
   // Mark the selection for the AI (marks.js); none without marks.
   comment = null,
+  // The note's own items for the right-click menu (its properties).
+  noteMenu = () => [],
 }) {
   let current = null;
   // Text just typed (handleTextInput), for typing as Markdown.
@@ -671,6 +679,7 @@ export function createRichEditor({
     tickFont,
     closer,
     titleWatch,
+    firstProperty,
     history(),
     ...linkPlugins({ follow: (href) => follow(href) }),
     keymap({
@@ -792,7 +801,10 @@ export function createRichEditor({
       },
     },
   });
-  const detachMenu = attachMenu(view, { follow: (href) => follow(href) });
+  const detachMenu = attachMenu(view, {
+    follow: (href) => follow(href),
+    extra: () => noteMenu(),
+  });
   const scroller = host.parentElement;
   watchFormulas(scroller);
   // How far down the format toolbar covers the pane, when it shows.
@@ -891,6 +903,10 @@ export function createRichEditor({
       view.focus();
     },
     hasFocus: () => view.hasFocus(),
+    // The note's front matter set to this YAML (made when it has none).
+    setFrontMatter: (yaml, options) => setFrontMatter(view, yaml, options),
+    // The fields for a first property, in a note without any.
+    askFirstProperty: () => askFirstProperty(view),
     // Find in the note (Ctrl+F outside the editor itself).
     find: (text) => finder.open(text),
     finding: () => finder.isOpen(),

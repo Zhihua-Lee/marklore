@@ -14,6 +14,9 @@ export function createDocumentSync({
   updateStatus,
   updateTabs,
   changed,
+  // Changes made to a note just before it is written (its modified time);
+  // they become part of the note, as any edit.
+  beforeSave = () => {},
 }) {
   async function save(as = false, doc = getActive()) {
     if (!doc) return false;
@@ -25,6 +28,7 @@ export function createDocumentSync({
     doc.saving = true;
     let conflict = false;
     try {
+      beforeSave(doc);
       const text = doc.text;
       if (as || !doc.fileId) {
         const excludedIds = tabs

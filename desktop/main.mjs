@@ -1074,8 +1074,8 @@ else {
       api("reorderIndex", (id, move) => files.reorderIndex(id, move));
       api("currentFolder", (id) => files.currentFolder(id));
       // The tree's own file operations, inside folders it lists.
-      api("createEntry", async (id, name, kind) => {
-        const created = await files.createEntry(id, name, kind);
+      api("createEntry", async (id, name, kind, text) => {
+        const created = await files.createEntry(id, name, kind, text);
         return created.directory ? created : openFile(created.path);
       });
       api("renameEntry", async (id, name, newName) => {

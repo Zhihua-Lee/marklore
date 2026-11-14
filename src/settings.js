@@ -1,4 +1,5 @@
 import { normalizeExcluded } from "../desktop/excluded.mjs";
+import { DEFAULT_TEMPLATE } from "./properties.js";
 
 // A fresh object each call: tab groups are mutated in place by the tab bar.
 export function defaultSettings() {
@@ -23,6 +24,12 @@ export function defaultSettings() {
     editSplit: false,
     richEdit: true,
     typeMarkdown: true,
+    // Notes made here (Ctrl+N, New note in a folder) start with the
+    // template's properties (Settings → Editing).
+    newNoteProperties: false,
+    propertyTemplate: DEFAULT_TEMPLATE,
+    // Saving a changed note sets the modified time it already has.
+    stampModified: false,
     cjkEmphasis: false,
     groupCounts: false,
     exportToc: true,
@@ -66,6 +73,12 @@ export function normalizeSettings(saved = {}) {
   settings.editSplit = settings.editSplit === true;
   settings.richEdit = settings.richEdit !== false;
   settings.typeMarkdown = settings.typeMarkdown !== false;
+  settings.newNoteProperties = settings.newNoteProperties === true;
+  settings.stampModified = settings.stampModified === true;
+  settings.propertyTemplate =
+    typeof settings.propertyTemplate === "string"
+      ? settings.propertyTemplate.slice(0, 2000)
+      : DEFAULT_TEMPLATE;
   settings.cjkEmphasis = settings.cjkEmphasis === true;
   settings.groupCounts = settings.groupCounts === true;
   settings.exportToc = settings.exportToc !== false;

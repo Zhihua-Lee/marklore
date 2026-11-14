@@ -4,10 +4,13 @@ import { installFolio } from "./fixtures.js";
 // The library's tree: the open note's folder is shown where the library
 // holds it (not twice), and the tree's own menu creates, renames and moves
 // notes and folders to the Recycle Bin; library folders move or leave.
-async function setup(page, { notePath = "C:/kb/Topic/Deep/Note.md" } = {}) {
+async function setup(
+  page,
+  { notePath = "C:/kb/Topic/Deep/Note.md", settings = {} } = {},
+) {
   await installFolio(page);
   await page.addInitScript(
-    ({ notePath }) => {
+    ({ notePath, settings }) => {
       const folder = (id, path) => ({
         id,
         path,
@@ -60,7 +63,7 @@ async function setup(page, { notePath = "C:/kb/Topic/Deep/Note.md" } = {}) {
             { id: "kb", name: "kb", path: "C:/kb" },
             { id: "refs", name: "refs", path: "C:/refs" },
           ],
-          settings: { sidebar: true, searchExclude: [] },
+          settings: { sidebar: true, searchExclude: [], ...settings },
         }),
         currentFolder: async () => ({
           id,
@@ -68,8 +71,9 @@ async function setup(page, { notePath = "C:/kb/Topic/Deep/Note.md" } = {}) {
           name: noteFolder.split("/").at(-1),
         }),
         list: async (folderId) => window.disk[folderId] || [],
-        createEntry: async (folderId, name, kind) => {
+        createEntry: async (folderId, name, kind, text) => {
           window.calls.push(["create", folderId, name, kind]);
+          window.texts = [...(window.texts || []), text];
           const path = paths[folderId] + "/" + name;
           if (kind === "folder") {
             paths[name] = path;
@@ -77,7 +81,7 @@ async function setup(page, { notePath = "C:/kb/Topic/Deep/Note.md" } = {}) {
             return folder(name, path);
           }
           window.disk[folderId].push(note(folderId, path));
-          return { id: "new", name, path, text: "", version: "n1" };
+          return { id: "new", name, path, text, version: "n1" };
         },
         renameEntry: async (folderId, name, newName) => {
           window.calls.push(["rename", folderId, name, newName]);
@@ -110,7 +114,7 @@ async function setup(page, { notePath = "C:/kb/Topic/Deep/Note.md" } = {}) {
         }),
       });
     },
-    { notePath },
+    { notePath, settings },
   );
   await page.goto("/");
   await expect(page.locator("#content h1")).toContainText("Note");
@@ -274,4 +278,37 @@ test("library folders move up or down and leave the library; their files stay", 
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.roots))
     .toEqual(["kb"]);
+});
+
+test("a note made in the tree starts with the default properties when asked", async ({
+  page,
+}) => {
+  await setup(page, {
+    settings: {
+      newNoteProperties: true,
+      propertyTemplate: "title: {title}\ntags: []",
+    },
+  });
+  const topic = tree(page).locator(
+    'details.folder[data-path="C:/kb/Topic"] > summary',
+  );
+  await menu(page, topic, "新建笔记");
+  const name = tree(page).getByRole("textbox", { name: "新笔记名称" });
+  await name.fill("Ideas #1");
+  await name.press("Enter");
+  await expect(page.getByRole("tab", { name: "Ideas #1.md" })).toBeVisible();
+  // Written with the file, so the new note is not an unsaved change.
+  expect(await page.evaluate(() => window.texts)).toEqual([
+    '---\ntitle: "Ideas #1"\ntags: []\n---\n\n',
+  ]);
+  await expect(
+    page.getByRole("tab", { name: "Ideas #1.md" }),
+  ).not.toContainText("●");
+  // Folders get nothing.
+  await menu(page, topic, "新建文件夹");
+  const folderName = tree(page).getByRole("textbox", { name: "新文件夹名称" });
+  await folderName.fill("Drafts");
+  await folderName.press("Enter");
+  await expect.poll(() => page.evaluate(() => window.texts.length)).toBe(2);
+  expect(await page.evaluate(() => window.texts[1])).toBe("");
 });

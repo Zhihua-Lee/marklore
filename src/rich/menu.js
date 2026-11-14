@@ -16,7 +16,7 @@ import { t } from "../../desktop/i18n.mjs";
 import { schema } from "./markdown.js";
 import { linkAt, editLink, setHref } from "./links.js";
 
-export function attachMenu(view, { follow }) {
+export function attachMenu(view, { follow, extra = () => [] }) {
   const menu = document.createElement("div");
   menu.className = "rich-menu";
   menu.setAttribute("role", "menu");
@@ -101,6 +101,9 @@ export function attachMenu(view, { follow }) {
       items.push([t("删除这一列"), run(deleteColumn)]);
       items.push([t("删除表格"), run(deleteTable)]);
     } else items.push([t("插入表格"), insertTable]);
+    // The note's own (its properties), after a line.
+    const more = extra();
+    if (more.length) items.push(null, ...more);
     while (items.at(-1) === null) items.pop();
     menu.replaceChildren(
       ...items.map((item) => {

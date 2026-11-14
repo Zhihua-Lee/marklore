@@ -6,6 +6,7 @@
 // open the front matter as source, as "编辑源码" does. The title above the
 // card is changed the same way, a click turning it into a field.
 import { Plugin } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 import {
   propertiesCard,
   readProperties,
@@ -17,6 +18,7 @@ import {
 } from "../properties.js";
 import { open } from "./math.js";
 import { t } from "../../desktop/i18n.mjs";
+import { icon } from "../icons.js";
 
 // Unfolded stays unfolded while the editor draws the card again.
 let unfolded = false;
@@ -204,44 +206,13 @@ export class PropertiesView {
   addForm() {
     const actions = this.dom.querySelector(".fm-actions");
     if (!actions) return;
-    const row = document.createElement("div");
-    row.className = "fm-row fm-new";
-    const key = document.createElement("input");
-    key.className = "fm-input fm-key-input";
-    key.placeholder = t("属性名");
-    key.setAttribute("aria-label", t("属性名"));
-    const value = document.createElement("input");
-    value.className = "fm-input";
-    value.placeholder = t("属性值");
-    value.setAttribute("aria-label", t("属性值"));
-    key.spellcheck = value.spellcheck = false;
-    row.append(key, value);
-    actions.replaceWith(row);
-    let done = false;
-    const finish = (keep, refocus) => {
-      if (done) return;
-      done = true;
-      if (keep && key.value.trim())
-        this.write(addProperty(this.parts().yaml, key.value, value.value));
+    const form = newPropertyRow((key, value, refocus) => {
+      if (key.trim()) this.write(addProperty(this.parts().yaml, key, value));
       else this.draw();
       if (refocus) this.view.focus();
-    };
-    for (const input of [key, value])
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          if (input === key && key.value.trim()) value.focus();
-          else finish(true, true);
-        } else if (e.key === "Escape") {
-          e.preventDefault();
-          finish(false, true);
-        }
-      });
-    // Leaving the two fields (not going from one to the other) keeps it.
-    row.addEventListener("focusout", (e) => {
-      if (!row.contains(e.relatedTarget)) finish(true, false);
     });
-    key.focus();
+    actions.replaceWith(form.row);
+    form.focus();
   }
   destroy() {
     if (cards.get(this.view) === this) cards.delete(this.view);
@@ -269,4 +240,131 @@ export class PropertiesView {
   ignoreMutation() {
     return true;
   }
+}
+
+// Two fields for a new property, its name and its value: Enter in the name
+// goes on to the value, Enter there keeps it, Esc drops it, and leaving
+// both keeps it. done(key, value, refocus), key "" when dropped.
+function newPropertyRow(done) {
+  const row = document.createElement("div");
+  row.className = "fm-row fm-new";
+  const key = document.createElement("input");
+  key.className = "fm-input fm-key-input";
+  key.placeholder = t("属性名");
+  key.setAttribute("aria-label", t("属性名"));
+  const value = document.createElement("input");
+  value.className = "fm-input";
+  value.placeholder = t("属性值");
+  value.setAttribute("aria-label", t("属性值"));
+  key.spellcheck = value.spellcheck = false;
+  row.append(key, value);
+  let finished = false;
+  const finish = (keep, refocus) => {
+    if (finished) return;
+    finished = true;
+    done(keep ? key.value : "", value.value, refocus);
+  };
+  for (const input of [key, value])
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (input === key && key.value.trim()) value.focus();
+        else finish(true, true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false, true);
+      }
+    });
+  // Leaving the two fields (not going from one to the other) keeps it.
+  row.addEventListener("focusout", (e) => {
+    if (!row.contains(e.relatedTarget)) finish(true, false);
+  });
+  return { row, focus: () => key.focus() };
+}
+
+const isFront = (node) =>
+  node?.type.name === "raw_block" && node.attrs.kind === "frontmatter";
+// The note's front matter set to `yaml` (put at the top when it has none),
+// as one change the editor can undo; `history: false` for a change that is
+// not the writer's own (the modified time saving sets).
+export function setFrontMatter(view, yaml, { history = true } = {}) {
+  const first = view.state.doc.firstChild;
+  const body = yaml.replace(/\n+$/, "");
+  let tr;
+  if (isFront(first)) {
+    const m = SPLIT.exec(first.attrs.source);
+    const source = m
+      ? m[1] + (body ? body + "\n" : "") + m[3]
+      : `---\n${body}\n---`;
+    if (source === first.attrs.source) return false;
+    tr = view.state.tr.setNodeMarkup(0, null, { ...first.attrs, source });
+  } else
+    tr = view.state.tr.insert(
+      0,
+      view.state.schema.nodes.raw_block.create({
+        kind: "frontmatter",
+        source: `---\n${body}\n---`,
+      }),
+    );
+  if (!history) tr.setMeta("addToHistory", false);
+  view.dispatch(tr);
+  return true;
+}
+
+// A note without properties shows, in Edit mode only, a quiet "Add
+// property" above its first line (seen while the pointer is over the
+// note; its room is kept, so nothing moves); it asks for the first property's name and value
+// and makes the front matter with it, its card unfolded.
+function firstPropertyDom(view) {
+  const box = document.createElement("div");
+  box.className = "rich-properties fm-first";
+  box.contentEditable = "false";
+  const inner = document.createElement("div");
+  inner.className = "front-matter";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "fm-first-add";
+  button.innerHTML = `${icon("plus")}<span></span>`;
+  button.lastChild.textContent = t("添加属性");
+  button.addEventListener("click", () => {
+    box.classList.add("asking");
+    const form = newPropertyRow((key, value, refocus) => {
+      box.classList.remove("asking");
+      inner.replaceChildren(button);
+      if (key.trim()) {
+        unfolded = true;
+        setFrontMatter(view, addProperty("", key, value));
+      }
+      if (refocus) view.focus();
+    });
+    inner.replaceChildren(form.row);
+    form.focus();
+  });
+  inner.append(button);
+  box.append(inner);
+  return box;
+}
+export const firstProperty = new Plugin({
+  props: {
+    decorations: (state) =>
+      isFront(state.doc.firstChild)
+        ? null
+        : DecorationSet.create(state.doc, [
+            Decoration.widget(0, firstPropertyDom, {
+              side: -1,
+              key: "fm-first",
+              stopEvent: () => true,
+              ignoreSelection: true,
+            }),
+          ]),
+  },
+});
+// Ask for the first property, as a click on "Add property" does (the note's
+// menu); false when the note has properties already.
+export function askFirstProperty(view) {
+  const button = view.dom.querySelector(".fm-first-add");
+  if (!button) return false;
+  button.scrollIntoView({ block: "nearest" });
+  button.click();
+  return true;
 }

@@ -354,6 +354,44 @@
   width: 14px;
   height: 14px;
 }
+/* A note without properties: "Add property" above its first line, seen
+   while the pointer is over the note (its room is always kept). */
+#rich .fm-first {
+  margin: 0 0 0.6em;
+  font: 12.5px var(--font-ui);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+#rich-reader:hover #rich .fm-first,
+#rich .fm-first:focus-within {
+  opacity: 1;
+}
+#rich .fm-first .fm-first-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: -6px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+#rich .fm-first .fm-first-add:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+#rich .fm-first .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+@media (prefers-reduced-motion: reduce) {
+  #rich .fm-first {
+    transition: none;
+  }
+}
 /* The languages under the field, narrowed as one types. */
 .code-language-menu {
   position: fixed;

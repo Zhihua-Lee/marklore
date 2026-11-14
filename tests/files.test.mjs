@@ -399,6 +399,13 @@ test("the tree creates and renames entries inside authorized folders", async (t)
     store.createEntry(folder.id, "Draft.md", "note"),
     /同名/,
   );
+  // A note may start with its default properties; anything but text is
+  // left out.
+  const front = "---\ntitle: Dated\n---\n";
+  const dated = await store.createEntry(folder.id, "Dated.md", "note", front);
+  assert.equal(await fs.readFile(dated.path, "utf8"), front);
+  const odd = await store.createEntry(folder.id, "Odd.md", "note", { x: 1 });
+  assert.equal(await fs.readFile(odd.path, "utf8"), "");
   await assert.rejects(
     store.createEntry(folder.id, "Draft.png", "note"),
     /\.md/,

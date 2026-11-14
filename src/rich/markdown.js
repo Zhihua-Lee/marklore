@@ -621,6 +621,16 @@ export function load(src) {
     docNodes.push(node);
     blocks.push({ node, text: "", from: 0, gap: src });
     filled.push({ from: 0 });
+  } else if (
+    docNodes.length === 1 &&
+    filled[0].kind === "frontmatter" &&
+    blocks[0].gap
+  ) {
+    // Nothing but properties (a new note made with them): an empty
+    // paragraph after them, standing for nothing, to write in.
+    const node = S.paragraph.create();
+    docNodes.push(node);
+    blocks.push({ node, text: "", from: src.length, gap: "" });
   }
   let at0 = 0;
   for (const b of blocks) {

@@ -1004,6 +1004,9 @@ function updateOutline(headings) {
     });
 }
 function updateTabs() {
+  // What the tab bar shows: a save or a reload clears the mark, and the next
+  // edit must draw it again.
+  for (const doc of tabs) doc.tabDirty = dirty(doc);
   tabBar.update();
 }
 function updateModes() {

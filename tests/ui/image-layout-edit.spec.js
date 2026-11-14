@@ -76,6 +76,61 @@ test("an image's handles change its width; its box aligns it and resets it, each
   }
 });
 
+test("images put beside each other make a row; its divider and taking one out each undo in one step", async ({
+  page,
+}) => {
+  const text = `Intro.\n\n![A](${sage})\n\n![B](${slate})\n\nEnd.\n`;
+  await boot(page, text);
+  const box = page.locator(".rich-image-box");
+  // The first image has no image before it.
+  await editor(page).locator('img[alt="A"]').click();
+  await expect(box).toBeVisible();
+  await expect(box.getByRole("button", { name: "并排到前一块" })).toBeHidden();
+  await editor(page).locator('img[alt="B"]').click();
+  await box.getByRole("button", { name: "并排到前一块" }).click();
+  const row = await saved(page);
+  expect(row).toBe(
+    `Intro.\n\n<img src="${sage}" alt="A" width="49%"> <img src="${slate}" alt="B" width="49%">\n\nEnd.\n`,
+  );
+  const tops = () =>
+    editor(page)
+      .locator(".image-row img:not(.ProseMirror-separator)")
+      .evaluateAll((list) =>
+        list.map((el) => Math.round(el.getBoundingClientRect().top)),
+      );
+  const [a, b] = await tops();
+  expect(a).toBe(b);
+  await shot(page, "row", "#rich .image-row");
+
+  // The divider between them: half way, then dragged right.
+  const [ra, rb] = await editor(page)
+    .locator(".image-row img:not(.ProseMirror-separator)")
+    .evaluateAll((list) =>
+      list.map((el) => el.getBoundingClientRect().toJSON()),
+    );
+  await page.mouse.move((ra.right + rb.left) / 2, ra.top + 40);
+  const divider = page.locator(".rich-divider");
+  await expect(divider).toBeVisible();
+  await drag(page, divider, 68);
+  const moved = await saved(page);
+  const shares = [...moved.matchAll(/width="([\d.]+)%"/g)].map((m) =>
+    Number(m[1]),
+  );
+  expect(shares[0]).toBeGreaterThan(55);
+  expect(shares[0] + shares[1]).toBeCloseTo(98, 5);
+
+  // Taken out: each image alone again, at its own size.
+  await editor(page).locator('img[alt="A"]').click();
+  await box.getByRole("button", { name: "移出并排" }).click();
+  expect(await saved(page)).toBe(
+    `Intro.\n\n![B](${slate})\n\n![A](${sage})\n\nEnd.\n`,
+  );
+  for (const before of [moved, row, text]) {
+    await page.keyboard.press("Control+z");
+    expect(await saved(page)).toBe(before);
+  }
+});
+
 test("an image among text has handles but no alignment", async ({ page }) => {
   await boot(page, `Before ![Pic](${slate}) after.\n`);
   await editor(page).locator('img[alt="Pic"]').click();

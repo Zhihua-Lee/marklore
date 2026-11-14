@@ -70,7 +70,7 @@ import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
 import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
-import { imageLines, imageHandles } from "./image-layout.js";
+import { imageLines, imageHandles, imageDividers } from "./image-layout.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 import { CodeView, TableView } from "./blocks.js";
@@ -677,6 +677,7 @@ export function createRichEditor({
     imageBox,
     imageLines,
     imageHandles,
+    imageDividers,
     finder.plugin,
     caretBlock,
     codeRing,

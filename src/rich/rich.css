@@ -311,6 +311,29 @@
 .rich-image-handle[data-side="right"] {
   right: -6px;
 }
+/* Between two images of a row (or two columns): dragged, it moves width
+   from one to the other. A thin line shows only under the pointer. */
+.rich-divider {
+  position: fixed;
+  z-index: 60;
+  width: 12px;
+  translate: -50% 0;
+  cursor: col-resize;
+  touch-action: none;
+}
+.rich-divider[hidden] {
+  display: none;
+}
+.rich-divider::after {
+  content: "";
+  position: absolute;
+  inset: 0 5px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.rich-divider.dragging::after {
+  background: var(--accent);
+}
 .rich-image-frame.dragging .rich-image-handle,
 .rich-image-handle:hover {
   background: color-mix(in srgb, var(--accent) 30%, var(--paper));

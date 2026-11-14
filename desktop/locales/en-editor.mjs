@@ -152,6 +152,8 @@ export default {
   居中: "Center",
   靠右: "Align right",
   原始大小: "Original size",
+  并排到前一块: "Beside the block before",
+  移出并排: "Take out of the row",
   点击编辑源码: "Click to edit its source",
   编辑链接: "Edit link",
   打开链接: "Open link",

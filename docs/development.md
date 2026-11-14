@@ -152,6 +152,50 @@ pnpm prune-releases --apply    # 移到回收站
 
 ## 源码结构
 
+### 架构总图
+
+外框套内框表示“装在里面”；实线箭头是调用或数据流，虚线箭头表示谁调度、谁执行谁。
+
+```mermaid
+flowchart TB
+  subgraph OS["操作系统（Windows / macOS）：进程、文件、显卡"]
+    subgraph APP["Marklore 程序 = Electron（Chromium + Node.js）"]
+      direction LR
+      subgraph MAIN["主进程 ×1 · Node.js 环境，能读写文件"]
+        direction TB
+        M4["事件循环（Node.js 的 libuv）"]
+        M3["V8 引擎：执行 JS"]
+        M1["主进程代码 desktop/<br/>保存、监视笔记库、导出、更新"]
+        M2["Rust 索引 native/index<br/>（napi-rs 编出的 .node；缺失时用 JS 索引）"]
+        M4 -.->|排队调度| M3 -.->|执行| M1 -->|调用| M2
+      end
+      subgraph REND["渲染进程 ×每窗口 1 个 · 沙箱里的网页"]
+        direction TB
+        R4["事件循环（Chromium）"]
+        R3["V8 引擎：执行 JS 和 WASM"]
+        R1["页面代码 src/ 和库<br/>阅读：markdown-it、DOMPurify、KaTeX、highlight.js<br/>编辑：ProseMirror；源码：CodeMirror"]
+        R2["Ondine（WASM）：图表"]
+        R5["DOM 树：内存里的页面"]
+        R6["Blink：样式 → 排版 → 绘制"]
+        R4 -.->|排队调度| R3 -.->|执行| R1
+        R1 -->|调用| R2
+        R1 -->|生成 HTML、改 DOM| R5 --> R6
+      end
+      M1 <-->|IPC 消息（preload.cjs 的受控接口）| R1
+    end
+    MCP["MCP 服务器进程（每个 AI 会话 1 个）<br/>同一程序以 Node 模式运行 desktop/mcp.mjs"]
+    GPU["显卡：合成画面"]
+    R6 --> GPU
+    MCP <-->|数据目录的 ai 文件夹| M1
+  end
+```
+
+从笔记文件到屏幕：主进程读出 Markdown 文本，经 IPC 交给渲染进程；阅读模式由 markdown-it 生成 HTML，经 DOMPurify 清理后建成 DOM，编辑模式由 ProseMirror 把同一份文本读成文档树再建 DOM；此后的样式、排版、绘制由 Blink 完成，显卡合成画面。两个进程之间只能互发消息，不能直接调用对方的代码。
+
+长笔记的开销主要在最后一段：元素越多，排版、绘制和命中测试越贵，而一个 KaTeX 公式是几十个元素。减少这部分开销的做法（公式按需排版、屏幕外的块跳过排版）见本节末尾关于长文的说明。
+
+### 文件职责
+
 | 路径                                                                                                   | 职责                                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)             | 窗口、隔离接口、文件监听与会话恢复。                                                                                                                   |

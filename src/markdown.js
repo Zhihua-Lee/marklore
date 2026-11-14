@@ -1097,6 +1097,47 @@ export function closedHtml(html) {
   }
   return !open.length;
 }
+// The items of a list, or the body rows of a table, where an edit to one of
+// them may render only it again (incremental-render.js): for each, how many
+// formulas it holds and whether it renders on its own (no heading; HTML in
+// it closes all it opens, no <details>); and whether the list is tight (its
+// items' paragraphs hidden), null if it has no such paragraph.
+const listOpen = new Set(["bullet_list_open", "ordered_list_open"]);
+function blockParts(tokens, first, end) {
+  const type = tokens[first].type,
+    list = listOpen.has(type);
+  if (!list && type !== "table_open") return {};
+  const level = tokens[first].level + (list ? 1 : 2),
+    opening = list ? "list_item_open" : "tr_open";
+  const parts = [];
+  let tight = null,
+    body = list,
+    part = null;
+  for (let i = first; i < end; i++) {
+    const t = tokens[i];
+    if (t.type === "tbody_open") body = true;
+    else if (t.type === opening && t.level === level && body)
+      parts.push((part = { formulas: 0, html: "", heading: false }));
+    else if (list && t.type === "paragraph_open" && t.level === level + 1)
+      tight = t.hidden;
+    if (!part) continue;
+    if (t.type === "folio_math_block") part.formulas++;
+    else if (t.type === "html_block") part.html += t.content;
+    else if (t.type === "heading_open") part.heading = true;
+    else if (t.type === "inline")
+      for (const child of t.children || [])
+        if (child.type === "folio_math") part.formulas++;
+        else if (child.type === "html_inline") part.html += child.content;
+  }
+  return {
+    parts: parts.map(({ formulas, html, heading }) => ({
+      formulas,
+      alone:
+        !heading && (!html || (closedHtml(html) && !/<details\b/i.test(html))),
+    })),
+    tight: list ? tight : undefined,
+  };
+}
 // Token index ranges [first, end) of the top-level blocks.
 function blockGroups(tokens) {
   const groups = [];
@@ -1137,7 +1178,9 @@ function splitBlocks(source, tokens, env, fences = lineFences(source)) {
           if (child.type === "html_inline") html += child.content;
     }
     if (html && !closedHtml(html)) return null;
+    const items = blockParts(tokens, first, end);
     blocks.push({
+      ...items,
       from: offsets[token.map[0]],
       to: offsets[token.map[1]] ?? source.length,
       line: token.map[0],
@@ -1173,6 +1216,15 @@ function splitBlocks(source, tokens, env, fences = lineFences(source)) {
 // "abort": too much to parse again). `window.end` is set to that offset.
 function parseWindow(source, env, window) {
   if (!window) return parser.parse(source, env);
+  const parsed = window.parsed ?? blockWindow(source, env, window);
+  if (!parsed || parsed.used) return null;
+  parsed.used = true;
+  for (const rule of parsed.after) rule.fn(parsed.state);
+  return parsed.state.tokens;
+}
+// The block phase of parseWindow: the window's top-level blocks as tokens
+// whose text is not parsed yet, and the core rules that would parse it.
+function blockWindow(source, env, window) {
   const state = new parser.core.State(source, parser, env);
   const rules = parser.core.ruler.__rules__.filter((rule) => rule.enabled);
   const at = rules.findIndex((rule) => rule.name === "block");
@@ -1203,8 +1255,7 @@ function parseWindow(source, env, window) {
       return null;
     line = block.line;
   }
-  for (const rule of rules.slice(at + 1)) rule.fn(state);
-  return state.tokens;
+  return { state, block, after: rules.slice(at + 1), used: false };
 }
 // The blocks' HTML without the page's work on it (for tests): the whole
 // note, or a window as parseWindow takes it.
@@ -1258,13 +1309,17 @@ export const renderSettings = (source) =>
 // The blocks of `source` from line `line` on, until `stop` finds the rest
 // of the note as it was before (parseWindow), rendered for the page as
 // renderMarkdown renders a note; null if they cannot be rendered apart.
+// `parsed`: the window's blocks from parseBlocks, if renderParts did not
+// take them.
 export function renderBlocks(
   source,
   fileId,
-  { line, stop, deferMath = false, interactiveTasks = false },
+  { line, stop, deferMath = false, interactiveTasks = false, parsed = null },
 ) {
-  const env = { mathFragments: [], deferMath };
-  const window = { line, stop };
+  if (parsed?.used) parsed = null;
+  const env = parsed?.state.env ?? { mathFragments: [], deferMath };
+  const window = parsed?.window ?? { line, stop };
+  window.parsed = parsed;
   const tokens = parseWindow(source, env, window);
   const pieces = tokens && splitBlocks(source, tokens, env, window.fences);
   if (!pieces) return null;
@@ -1276,6 +1331,178 @@ export function renderBlocks(
   });
   const blocks = collectBlocks(fragment, nonce, pieces);
   return blocks && { blocks, formulas: deferred, end: window.end };
+}
+
+// The window renderBlocks would render, parsed into blocks but its text not
+// yet (incremental-render.js looks whether only some items of a list or rows
+// of a table changed): given to renderParts, or to renderBlocks. Null if it
+// cannot be parsed apart.
+export function parseBlocks(source, { line, stop, deferMath = false }) {
+  const env = { mathFragments: [], deferMath };
+  const window = { line, stop };
+  const parsed = blockWindow(source, env, window);
+  if (!parsed) return null;
+  const { state, block } = parsed;
+  // Where a line starts (the line after the last: the end).
+  const at = (n) => (n < block.lineMax ? block.bMarks[n] : source.length);
+  const tokens = state.tokens;
+  const blocks = blockGroups(tokens).map(([first, end]) => {
+    const token = tokens[first],
+      found = {
+        first,
+        end,
+        type: token.type,
+        tag: token.tag,
+        from: at(token.map[0]),
+        to: at(token.map[1]),
+        parts: null,
+      };
+    const list = listOpen.has(token.type);
+    if (!list && token.type !== "table_open") return found;
+    found.parts = [];
+    for (let i = first, body = list; i < end; i++) {
+      const t = tokens[i];
+      if (t.type === "tbody_open") {
+        body = true;
+        found.body = at(t.map[0]);
+      } else if (
+        t.type === (list ? "list_item_open" : "tr_open") &&
+        t.level === token.level + (list ? 1 : 2) &&
+        body
+      )
+        found.parts.push({ first: i, from: at(t.map[0]), to: at(t.map[1]) });
+      else if (
+        list &&
+        t.type === "paragraph_open" &&
+        t.level === token.level + 2
+      )
+        found.tight = t.hidden;
+    }
+    found.tight ??= list ? null : undefined;
+    return found;
+  });
+  // The fence state (lineFences) after the lines from `from` to `to`, read
+  // from the state at `from` in this text: as `text` would read them.
+  const fenceAfter = (text, from, to) => {
+    let low = 0,
+      high = block.lineMax;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (block.bMarks[mid] <= from) low = mid;
+      else high = mid - 1;
+    }
+    let fence = window.fences[low];
+    for (const line of text.slice(block.bMarks[low], to).split("\n"))
+      fence = nextFence(fence, line);
+    return fence;
+  };
+  return Object.assign(parsed, { window, blocks, end: window.end, fenceAfter });
+}
+// The tokens of items `from` to `to` of block `index` of `parsed`, between
+// those opening and closing the list (the table and its body), their text
+// parsed; null if they do not render on their own (blockParts).
+function partTokens(parsed, index, from, to) {
+  if (parsed.used) return null;
+  parsed.used = true;
+  const { state } = parsed,
+    env = state.env,
+    all = state.tokens,
+    block = parsed.blocks[index],
+    list = listOpen.has(block.type);
+  let end = to < block.parts.length ? block.parts[to].first : block.end - 1;
+  if (!list)
+    while (to >= block.parts.length && all[end].type !== "tbody_close") end--;
+  const body = list
+    ? []
+    : all.slice(block.first, block.end).filter((t) => /^tbody_/.test(t.type));
+  const tokens = [
+    all[block.first],
+    ...body.slice(0, 1),
+    ...(from < to ? all.slice(block.parts[from].first, end) : []),
+    ...body.slice(1),
+    all[block.end - 1],
+  ];
+  if (!list && body.length !== 2) return null;
+  state.tokens = tokens;
+  for (const rule of parsed.after) rule.fn(state);
+  if (
+    env.footnotes ||
+    (env.references && Object.keys(env.references).length) ||
+    tokens.some((t) => t.type === "heading_open")
+  )
+    return null;
+  const { parts } = blockParts(tokens, 0, tokens.length);
+  if (parts.length !== to - from || parts.some((part) => !part.alone))
+    return null;
+  return tokens;
+}
+// For tests: the HTML of those items as the renderer gives it (renderParts
+// takes it on), and what blockParts records of them.
+export function partPieces(parsed, index, from, to) {
+  const tokens = partTokens(parsed, index, from, to);
+  if (!tokens) return null;
+  const env = parsed.state.env;
+  return {
+    html: parser.renderer
+      .render(tokens, parser.options, env)
+      .split(env.mathPipe)
+      .join("|"),
+    parts: blockParts(tokens, 0, tokens.length).parts,
+  };
+}
+// Items `from` to `to` of block `index` of `parsed` (parseBlocks), rendered
+// for the page as the whole block would render them: the list or table
+// element (its attributes those of the whole) and, in it, the items' or rows'
+// elements, with what blockParts records of them. Null if they cannot be
+// rendered apart.
+export function renderParts(
+  source,
+  parsed,
+  index,
+  from,
+  to,
+  fileId,
+  { interactiveTasks = false } = {},
+) {
+  const tokens = partTokens(parsed, index, from, to);
+  if (!tokens) return null;
+  const env = parsed.state.env,
+    block = parsed.blocks[index],
+    list = listOpen.has(block.type);
+  const { parts } = blockParts(tokens, 0, tokens.length);
+  const html = parser.renderer.render(tokens, parser.options, env);
+  const { fragment, deferred } = finishHtml(html, env, {
+    deferMath: env.deferMath,
+    interactiveTasks,
+    fileId,
+  });
+  const elements = [...fragment.children];
+  if (elements.length !== 1) return null;
+  const container = list
+    ? elements[0]
+    : elements[0].querySelector(":scope > table");
+  const host = list ? container : container?.tBodies[0];
+  if (
+    !container ||
+    container.tagName !== block.tag.toUpperCase() ||
+    !host ||
+    host.children.length !== to - from ||
+    [...host.children].some((el) => el.tagName !== (list ? "LI" : "TR"))
+  )
+    return null;
+  const text = source.slice(
+    block.parts[from]?.from ?? 0,
+    block.parts[to - 1]?.to ?? 0,
+  );
+  return {
+    container,
+    body: list ? null : host,
+    nodes: [...host.children],
+    parts,
+    formulas: deferred,
+    size: html.length,
+    opens: text.split("\n").some((line) => mathOpening.test(line.trim())),
+  };
 }
 export function renderMarkdown(source, fileId = null, options = {}) {
   const {

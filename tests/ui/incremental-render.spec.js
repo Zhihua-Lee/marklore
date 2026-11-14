@@ -167,6 +167,165 @@ for (const seed of [7, 31])
     expect(verified.full).toBeGreaterThan(3);
   });
 
+// Long lists and tables, edited inside (src/incremental-render.js renders
+// only the items or rows an edit touched).
+const LISTS = [
+  "# Lists and tables",
+  Array.from(
+    { length: 24 },
+    (_, k) =>
+      `- item ${k} with $a_{${k}}$` +
+      (k % 6 === 3 ? "\n  - nested\n  - [ ] nested task" : "") +
+      (k % 8 === 5 ? "\n\n  ```\n  code | pipe\n  ```" : "") +
+      (k % 9 === 7 ? "\n  lazy line" : ""),
+  ).join("\n"),
+  "Between.",
+  Array.from({ length: 12 }, (_, k) => `${k + 3}. ordered ${k} $x|y$`).join(
+    "\n\n",
+  ),
+  "- [ ] task one\n- [x] task two\n- [ ] task three",
+  "| Name | Value | Bound |\n|:---|---:|:-:|\n" +
+    Array.from(
+      { length: 20 },
+      (_, k) => `| row ${k} | $v_{${k}}$ | ${k % 3 ? "`a|b`" : "\\| x"} |`,
+    ).join("\n"),
+  "- tail item\n- another",
+  "| A | B |\n|---|---|\n| 1 | 2 |",
+  "Last paragraph.",
+].join("\n\n");
+// An edit on a line of a list or table: typing, formatting, deleting,
+// pasting lines, indenting, blank lines, numbering, task boxes.
+function listEdit(rnd, text) {
+  // A table's body row two times in five, edited as a row.
+  const items = [],
+    rows = [];
+  for (let from = 0, run = 0; from <= text.length;) {
+    const end = text.indexOf("\n", from),
+      to = end < 0 ? text.length : end,
+      line = text.slice(from, to);
+    run = /^\s*\|/.test(line) ? run + 1 : 0;
+    if (run > 2) rows.push([from, to]);
+    else if (!run && /^\s*(?:[-*]|\d+\.)/.test(line)) items.push([from, to]);
+    if (end < 0) break;
+    from = end + 1;
+  }
+  const row = rows.length && (rnd() < 0.4 || !items.length);
+  const lines = row ? rows : items;
+  const [start, end] = lines.length
+    ? pick(rnd, lines)
+    : [0, Math.min(1, text.length)];
+  const at = start + Math.floor(rnd() * (end - start + 1));
+  const kind = rnd();
+  if (row && kind >= 0.62)
+    return kind < 0.8
+      ? { from: end, to: end, insert: "\n| p | $q|r$ | s |" }
+      : { from: start, to: Math.min(end + 1, text.length), insert: "" };
+  if (kind < 0.3)
+    return { from: at, to: at, insert: pick(rnd, "ab $|*`\\".split("")) };
+  if (kind < 0.5) {
+    const to = Math.min(end, at + 1 + Math.floor(rnd() * 6));
+    const mark = pick(rnd, ["**", "*", "==", "~~"]);
+    return [
+      { from: at, to: at, insert: mark },
+      { from: to, to, insert: mark },
+    ];
+  }
+  if (kind < 0.62)
+    return {
+      from: at,
+      to: Math.min(end, at + 1 + Math.floor(rnd() * 5)),
+      insert: "",
+    };
+  if (kind < 0.74)
+    return {
+      from: end,
+      to: end,
+      insert: pick(rnd, [
+        "\n- pasted",
+        "\n7. pasted",
+        "\n| p | q | r |",
+        "\n  more",
+        "\n",
+        "\n\n",
+        "\n  ```",
+      ]),
+    };
+  if (kind < 0.84)
+    return { from: start, to: start, insert: pick(rnd, ["  ", "- ", "1. "]) };
+  if (kind < 0.92) {
+    const line = text.slice(start, end);
+    const number = line.match(/^(\s*)(\d+)\./);
+    if (number)
+      return {
+        from: start + number[1].length,
+        to: start + number[1].length + number[2].length,
+        insert: String(1 + Math.floor(rnd() * 30)),
+      };
+    const box = line.indexOf("[ ]");
+    if (box >= 0)
+      return { from: start + box + 1, to: start + box + 2, insert: "x" };
+    return { from: start, to: Math.min(end, start + 2), insert: "" };
+  }
+  return { from: at, to: at, insert: "\n" };
+}
+
+for (const seed of [53, 89])
+  test(`edits inside long lists and tables render only their items as the whole note would (seed ${seed})`, async ({
+    page,
+  }) => {
+    test.setTimeout(240000);
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.stack));
+    await boot(page, LISTS, "edit");
+    await expect(page.locator("#editor .cm-content")).toBeVisible();
+    const rnd = random(seed);
+    for (let n = 0; n < 200; n++) {
+      const before = (await stats(page)).log?.length ?? 0;
+      const text = await page.evaluate(() =>
+        document
+          .querySelector("#editor .cm-content")
+          .cmTile.root.view.state.doc.toString(),
+      );
+      const changes = listEdit(rnd, text);
+      const changed = await page.evaluate((changes) => {
+        const view = document.querySelector("#editor .cm-content").cmTile.root
+          .view;
+        const text = view.state.doc.toString();
+        view.dispatch({ changes });
+        return view.state.doc.toString() !== text;
+      }, changes);
+      if (!changed) continue;
+      await expect
+        .poll(async () => (await stats(page)).log?.length ?? 0)
+        .toBeGreaterThan(before);
+      const { mismatches, log } = await stats(page);
+      expect(
+        mismatches ?? [],
+        JSON.stringify([changes, log.slice(before), mismatches, errors]),
+      ).toEqual([]);
+    }
+    const { log, verified } = await stats(page);
+    const outcomes = {};
+    for (const entry of log) {
+      const key = [entry.result, entry.reason, entry.level, entry.parts]
+        .filter(Boolean)
+        .join(":");
+      outcomes[key] = (outcomes[key] || 0) + 1;
+    }
+    console.log(JSON.stringify(outcomes));
+    // Most edits went the item / row way, and each was checked.
+    const level = (name) => log.filter((entry) => entry.level === name).length;
+    expect(
+      level("items") + level("rows"),
+      JSON.stringify(outcomes),
+    ).toBeGreaterThan(100);
+    expect(level("rows"), JSON.stringify(outcomes)).toBeGreaterThan(15);
+    expect(verified.incremental).toBe(
+      log.filter((entry) => entry.result === "incremental").length,
+    );
+    expect(errors).toEqual([]);
+  });
+
 test("a word formatted from the page in Read mode changes only its block", async ({
   page,
 }) => {
@@ -203,6 +362,8 @@ test("a word formatted from the page in Read mode changes only its block", async
   await expect(page.locator("#content li strong")).toHaveText("two");
   const { log, mismatches, verified } = await stats(page);
   expect(log.at(-1).result).toBe("incremental");
+  // Only the item itself was rendered again.
+  expect(log.at(-1)).toMatchObject({ level: "items", replaced: 1, put: 1 });
   expect(mismatches ?? []).toEqual([]);
   expect(verified.incremental).toBe(1);
   // Every other block is the same element as before; the list itself too

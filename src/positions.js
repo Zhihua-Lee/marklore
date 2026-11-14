@@ -173,12 +173,36 @@ function readingAnchor(host) {
   );
   return { from: Number(el.dataset.from), fraction, y: 32 };
 }
+// The elements of `host` in page order, not looking into a formula the
+// renderer drew (data-from on it): its many elements have no position.
+// `visit` returns true to stop.
+function walkPlaces(host, visit) {
+  const drawn = (el) =>
+    el.hasAttribute("data-from") &&
+    (el.classList.contains("formula") || el.classList.contains("math-block"));
+  let el = host.firstElementChild;
+  while (el) {
+    if (visit(el)) return;
+    let next = drawn(el) ? null : el.firstElementChild;
+    while (!next && el !== host) {
+      next = el.nextElementSibling;
+      if (!next) el = el.parentElement;
+    }
+    el = next;
+  }
+}
 export function findPosition(host, from) {
-  const leaves = [...host.querySelectorAll("[data-text-from]")];
-  const leaf = leaves.find(
-    (el) =>
-      Number(el.dataset.textFrom) <= from && Number(el.dataset.textTo) > from,
-  );
+  let leaf = null;
+  walkPlaces(host, (el) => {
+    const start = el.getAttribute("data-text-from");
+    if (
+      start !== null &&
+      Number(start) <= from &&
+      Number(el.getAttribute("data-text-to")) > from
+    )
+      leaf = el;
+    return leaf !== null;
+  });
   if (leaf) {
     const walker = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
     let remaining = from - Number(leaf.dataset.textFrom),
@@ -202,10 +226,13 @@ export function findPosition(host, from) {
       return { element: leaf, range: r };
     }
   }
-  let best = null;
-  for (const el of host.querySelectorAll("[data-from]")) {
+  let best = null,
+    last = null;
+  walkPlaces(host, (el) => {
+    if (!el.hasAttribute("data-from")) return false;
     const start = Number(el.dataset.from),
       end = Number(el.dataset.to);
+    if (start <= from) last = el;
     if (
       start <= from &&
       from < end &&
@@ -213,11 +240,9 @@ export function findPosition(host, from) {
         end - start < Number(best.dataset.to) - Number(best.dataset.from))
     )
       best = el;
-  }
-  if (!best)
-    best = [...host.querySelectorAll("[data-from]")]
-      .filter((el) => Number(el.dataset.from) <= from)
-      .at(-1);
+    return false;
+  });
+  best ??= last;
   return best ? { element: best } : null;
 }
 export function unfold(element) {

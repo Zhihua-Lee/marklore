@@ -15,7 +15,8 @@ export function createPreviewCache({
     // A rendered node and the node kept on the page in its place.
     kept = new WeakMap();
   let active = null,
-    bytes = 0;
+    bytes = 0,
+    staleCount = 0;
   // The source positions the renderer writes (markdown.js); a table cell's
   // too, or a table after an edit was put in anew, its formulas undrawn.
   const keys = ["", "text", "edit", "block", "cell", "src", "srcInner"].flatMap(
@@ -29,8 +30,27 @@ export function createPreviewCache({
   const positional = keys.map(
     (key) => "data-" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()),
   );
-  const mapped = (node) =>
-    node.nodeType === 1 ? [node, ...node.querySelectorAll(mappedSelector)] : [];
+  // Not looking into a formula the renderer made (data-from on it): drawn,
+  // it holds many elements, none with a position.
+  const formula = (element) =>
+    element.hasAttribute("data-from") &&
+    (element.classList.contains("formula") ||
+      element.classList.contains("math-block"));
+  function mapped(node) {
+    if (node.nodeType !== 1) return [];
+    const found = [node];
+    let element = formula(node) ? null : node.firstElementChild;
+    while (element) {
+      if (element.matches(mappedSelector)) found.push(element);
+      let next = formula(element) ? null : element.firstElementChild;
+      while (!next && element !== node) {
+        next = element.nextElementSibling;
+        if (!next) element = element.parentElement;
+      }
+      element = next;
+    }
+    return found;
+  }
   const shell = (node) =>
     node.nodeType === 1 &&
     (node.classList.contains("note-section") ||
@@ -61,6 +81,19 @@ export function createPreviewCache({
       );
   function describe(node) {
     let value = signatures.get(node);
+    if (value?.later) {
+      // Changed in place (stale): as its source renders now, if it does.
+      const html = value.later();
+      value = {
+        raw: null,
+        // Text the renderer never makes (normalize turns NUL into U+FFFD).
+        signature: html === null ? "\0stale:" + ++staleCount : plain(html),
+        ranges: mapped(node).map((element) =>
+          keys.map((key) => element.dataset[key]),
+        ),
+      };
+      signatures.set(node, value);
+    }
     if (!value) {
       const raw = node.nodeType === 1 ? node.outerHTML : node.textContent;
       value = {
@@ -97,9 +130,14 @@ export function createPreviewCache({
     )
       return false;
     const translations = keys.map(() => new Map());
+    // The positions as the block's were moved since (shift).
+    const moved = (at) =>
+      at === undefined || !before.moved
+        ? at
+        : String(Number(at) + before.moved);
     for (let i = 0; i < before.ranges.length; i++) {
       for (let k = 0; k < keys.length; k++) {
-        const previous = before.ranges[i][k],
+        const previous = moved(before.ranges[i][k]),
           next = after.ranges[i][k];
         if (
           translations[k].has(previous) &&
@@ -379,30 +417,35 @@ export function createPreviewCache({
     adoptAs(live, rendered) {
       signatures.set(live, describe(rendered));
     },
+    // A node on the page changed in place in some of its parts: what it
+    // renders as is `later()` (its HTML as rendered, or null if no render
+    // matches it), found only if asked for.
+    stale(live, later) {
+      signatures.set(live, { later });
+    },
     // A block after an edit: its source positions moved by `delta`.
     shift(node, delta) {
       if (node.nodeType !== 1) return;
       const value = signatures.get(node);
-      // Its elements with positions, found once (not again through its
-      // drawn formulas at each edit).
-      let elements = value?.node === node ? value.elements : null;
-      if (!elements) {
-        elements = mapped(node);
-        if (value) Object.assign(value, { node, elements });
+      // Its positions (element, attribute), found once: not again through
+      // its drawn formulas at each edit.
+      let slots = value?.node === node ? value.slots : null;
+      if (!slots) {
+        slots = [];
+        for (const element of mapped(node))
+          for (const name of positional)
+            if (element.hasAttribute(name)) slots.push(element, name);
+        if (value) Object.assign(value, { node, slots });
       }
-      for (const element of elements)
-        for (const name of positional) {
-          const at = element.getAttribute(name);
-          if (at !== null)
-            element.setAttribute(name, String(Number(at) + delta));
-        }
-      if (value) {
-        value.raw = null;
-        value.ranges = value.ranges.map((range) =>
-          range.map((at) =>
-            at === undefined ? at : String(Number(at) + delta),
-          ),
+      for (let i = 0; i < slots.length; i += 2)
+        slots[i].setAttribute(
+          slots[i + 1],
+          String(Number(slots[i].getAttribute(slots[i + 1])) + delta),
         );
+      // Its rendered positions moved as well, when they are read (remap).
+      if (value?.ranges) {
+        value.raw = null;
+        value.moved = (value.moved ?? 0) + delta;
       }
     },
     // The note shown, changed in place in `container`.

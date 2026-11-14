@@ -890,7 +890,23 @@ function render(preserve) {
   $("#panes").dataset.rich = "off";
   const doc = active,
     host = $("#reader");
-  const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
+  // The reading position, measured before the page changes: not when only
+  // blocks below it change (incremental-render.js tells, `before`).
+  let anchor = null;
+  const keep =
+    preserve && doc.mode !== "source"
+      ? (first) => {
+          if (
+            !anchor &&
+            !(
+              first?.isConnected &&
+              first.getBoundingClientRect().top >
+                host.getBoundingClientRect().top + 48
+            )
+          )
+            anchor = visibleAnchor(host);
+        }
+      : () => {};
   let fragment = null,
     result = null;
   // A proposal under preview shows the note as it would read (proposals.js).
@@ -903,7 +919,10 @@ function render(preserve) {
   const patch =
     doc.htmlText !== text &&
     !shown &&
-    incremental.update(doc, text, container, { interactiveTasks: true });
+    incremental.update(doc, text, container, {
+      interactiveTasks: true,
+      before: keep,
+    });
   if (patch) {
     doc.html = patch.html;
     doc.headings = patch.headings;
@@ -930,11 +949,12 @@ function render(preserve) {
     doc.formulaCount = result.formulaCount;
     fragment = result.fragment;
   }
+  if (!patch) keep();
   const changed = previewCache.update(container, doc.id, doc.html, fragment, {
     hydrate: doc.hydrate,
     bytes: doc.renderBytes,
   });
-  if (result) incremental.remember(doc, text, result, container);
+  if (result) incremental.remember(doc, text, result, container, changed);
   if ((patch || result) && !shown && globalThis.__folioIncremental?.verify)
     incremental.verify(
       doc,
@@ -964,7 +984,8 @@ function render(preserve) {
       restoreAnchor(host, currentAnchor.anchor);
   });
   scheduleTableLayout();
-  backlinks?.refresh();
+  // An edit that changed no anchor or link leaves the backlinks as they are.
+  if (!patch?.quiet) backlinks?.refresh();
   proposals?.rendered();
   marks?.rendered();
   proposals?.paint();

@@ -119,7 +119,21 @@ export function skipOffscreenBlocks(host, scroller) {
         return false;
     return true;
   };
+  // Blocks the browser draws now (on screen or near it): their placeholder
+  // size follows what is drawn (`auto`), so a change in one needs no
+  // un-skip. A section body holding most of the note is one of them, and
+  // un-skipping it restyled the whole note (~100 ms) for each edit.
+  const drawn = new WeakSet();
+  host.addEventListener(
+    "contentvisibilityautostatechange",
+    (event) => {
+      if (event.skipped) drawn.delete(event.target);
+      else drawn.add(event.target);
+    },
+    true,
+  );
   function unskip(block) {
+    drawn.delete(block);
     block.classList.remove(SKIP);
     block.style.removeProperty("contain-intrinsic-block-size");
     verdicts.delete(block);
@@ -240,7 +254,7 @@ export function skipOffscreenBlocks(host, scroller) {
         node && node !== host;
         node = node.parentNode
       ) {
-        if (node.classList?.contains(SKIP)) unskip(node);
+        if (node.classList?.contains(SKIP) && !drawn.has(node)) unskip(node);
         verdicts.delete(node);
       }
       for (const node of record.addedNodes) {

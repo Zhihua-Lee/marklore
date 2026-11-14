@@ -9,7 +9,9 @@ export function createPreviewCache({
   maxHtmlBytes = 64 * 1024 * 1024,
 } = {}) {
   const entries = new Map(),
-    signatures = new WeakMap();
+    signatures = new WeakMap(),
+    // A rendered node and the node kept on the page in its place.
+    kept = new WeakMap();
   let active = null,
     bytes = 0;
   // The source positions the renderer writes (markdown.js); a table cell's
@@ -22,6 +24,9 @@ export function createPreviewCache({
       (key) => `[data-${key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase())}]`,
     )
     .join(",");
+  const positional = keys.map(
+    (key) => "data-" + key.replace(/[A-Z]/g, (c) => "-" + c.toLowerCase()),
+  );
   const mapped = (node) =>
     node.nodeType === 1 ? [node, ...node.querySelectorAll(mappedSelector)] : [];
   const shell = (node) =>
@@ -138,6 +143,7 @@ export function createPreviewCache({
       (previous.raw === next.raw || remap(old, previous, next))
     ) {
       signatures.set(old, next);
+      kept.set(node, old);
       return old;
     }
     hydrate?.(node);
@@ -289,7 +295,16 @@ export function createPreviewCache({
     const value = describe(next);
     morph(focused, next);
     signatures.set(focused, value);
+    kept.set(next, focused);
     return nodes.map((node) => (node === next ? focused : node));
+  }
+  // Keep the visible note, even when it exceeds the retention budget.
+  function trim() {
+    while (
+      entries.size > 1 &&
+      (entries.size > maxDocuments || bytes > maxHtmlBytes)
+    )
+      remove(entries.keys().next().value);
   }
   function reconcile(parent, nodes) {
     const keep = new Set(nodes);
@@ -308,7 +323,7 @@ export function createPreviewCache({
       key,
       html,
       fragment = null,
-      { hydrate, bytes: cost } = {},
+      { hydrate, bytes: cost, data } = {},
     ) {
       if (active?.key === key && active.html === html) return false;
       // The note shown again in place (an edit, a format), not opened.
@@ -324,7 +339,14 @@ export function createPreviewCache({
         const previous =
           active?.key === key ? [...container.childNodes] : entry?.nodes || [];
         const nodes = children([...fragment.childNodes], previous, hydrate);
-        entry = { key, html, nodes, hydrate, bytes: cost ?? html.length * 2 };
+        entry = {
+          key,
+          html,
+          nodes,
+          hydrate,
+          bytes: cost ?? html.length * 2,
+          data,
+        };
       }
       if (shown) reconcile(container, entry.nodes);
       else container.replaceChildren(...entry.nodes);
@@ -333,12 +355,58 @@ export function createPreviewCache({
       bytes += entry.bytes;
       active = entry;
       entry.hydrate?.activate?.(container, { shown });
-      // Keep the visible note, even when it exceeds the retention budget.
-      while (
-        entries.size > 1 &&
-        (entries.size > maxDocuments || bytes > maxHtmlBytes)
-      )
-        remove(entries.keys().next().value);
+      trim();
+      return true;
+    },
+    has: (key) => entries.has(key),
+    // The node on the page in place of a rendered one (the last update).
+    live: (node) => kept.get(node) ?? node,
+    // What was kept with the note shown (incremental-render.js).
+    data: (key) => (active?.key === key ? active.data : undefined),
+    // Nodes put in the page by incremental-render.js, known as rendered
+    // (before their formulas are drawn), as update() knows its own.
+    adopt(nodes) {
+      for (const node of nodes) describe(node);
+    },
+    // A node on the page changed in place to render as `rendered`.
+    adoptAs(live, rendered) {
+      signatures.set(live, describe(rendered));
+    },
+    // A block after an edit: its source positions moved by `delta`.
+    shift(node, delta) {
+      if (node.nodeType !== 1) return;
+      const value = signatures.get(node);
+      // Its elements with positions, found once (not again through its
+      // drawn formulas at each edit).
+      let elements = value?.node === node ? value.elements : null;
+      if (!elements) {
+        elements = mapped(node);
+        if (value) Object.assign(value, { node, elements });
+      }
+      for (const element of elements)
+        for (const name of positional) {
+          const at = element.getAttribute(name);
+          if (at !== null)
+            element.setAttribute(name, String(Number(at) + delta));
+        }
+      if (value) {
+        value.raw = null;
+        value.ranges = value.ranges.map((range) =>
+          range.map((at) =>
+            at === undefined ? at : String(Number(at) + delta),
+          ),
+        );
+      }
+    },
+    // The note shown, changed in place in `container`.
+    patch(container, key, { html, bytes: cost, data }) {
+      if (active?.key !== key) return false;
+      active.html = html;
+      bytes += cost - active.bytes;
+      active.bytes = cost;
+      active.data = data;
+      active.nodes = [...container.childNodes];
+      trim();
       return true;
     },
     release(key) {

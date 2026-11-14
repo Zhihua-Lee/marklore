@@ -22,6 +22,7 @@ import {
 } from "@codemirror/search";
 import { markdown } from "@codemirror/lang-markdown";
 import { renderDocument } from "./document-render.js";
+import { createIncrementalRender } from "./incremental-render.js";
 import { isDiffDocument } from "./diff-view.js";
 import {
   renderMarkdown,
@@ -124,6 +125,7 @@ let active = null,
 let settings = defaultSettings(),
   currentAnchor = null;
 const previewCache = createPreviewCache();
+const incremental = createIncrementalRender({ cache: previewCache });
 const readingHistory = createNavigationHistory();
 let replayingHistory = false,
   pendingLocation = null,
@@ -875,28 +877,57 @@ function render(preserve) {
   const doc = active,
     host = $("#reader");
   const anchor = preserve && doc.mode !== "source" ? visibleAnchor(host) : null;
-  let fragment = null;
+  let fragment = null,
+    result = null;
   // A proposal under preview shows the note as it would read (proposals.js).
   const shown = proposals?.shown(doc),
     text = shown?.text ?? doc.text;
-  if (doc.htmlText !== text) {
-    const result = renderDocument(shown ? { ...doc, ...shown } : doc, {
+  const container = $("#content");
+  // The note shown, edited: only the blocks the edit touched, when that can
+  // be done (incremental-render.js). A note changed in place no longer has
+  // its whole HTML, so it is rendered again once the cache has let it go.
+  const patch =
+    doc.htmlText !== text &&
+    !shown &&
+    incremental.update(doc, text, container, { interactiveTasks: true });
+  if (patch) {
+    doc.html = patch.html;
+    doc.headings = patch.headings;
+    doc.htmlText = text;
+    doc.htmlPatched = true;
+    doc.renderBytes = patch.bytes;
+    doc.formulaCount = patch.formulaCount;
+    updateOutline(doc.headings);
+  } else if (
+    doc.htmlText !== text ||
+    (doc.htmlPatched && !previewCache.has(doc.id))
+  ) {
+    result = renderDocument(shown ? { ...doc, ...shown } : doc, {
       deferMath: true,
       interactiveTasks: true,
+      blocks: !shown,
     });
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = text;
+    doc.htmlPatched = false;
     doc.hydrate = result.hydrate;
     doc.renderBytes = result.bytes;
     doc.formulaCount = result.formulaCount;
     fragment = result.fragment;
   }
-  const container = $("#content");
   const changed = previewCache.update(container, doc.id, doc.html, fragment, {
     hydrate: doc.hydrate,
     bytes: doc.renderBytes,
   });
+  if (result) incremental.remember(doc, text, result, container);
+  if ((patch || result) && !shown && globalThis.__folioIncremental?.verify)
+    incremental.verify(
+      doc,
+      container,
+      renderDocument(doc, { deferMath: true, interactiveTasks: true }),
+      patch ? "incremental" : "full",
+    );
   doc.previewText = text;
   doc.pending = null;
   doc.partial = false;

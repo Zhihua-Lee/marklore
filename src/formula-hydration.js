@@ -59,7 +59,7 @@ export function createFormulaHydrator(
     // 600 px; a jump (the scroll bar dragged, Page Down, a scripted move)
     // can land on undrawn ones, drawn then before they are shown.
     if (jump && frame === null && ownerWindow)
-      frame = ownerWindow.requestAnimationFrame(onScreen);
+      frame = ownerWindow.requestAnimationFrame(() => onScreen());
   };
 
   function expand(marker) {
@@ -138,14 +138,14 @@ export function createFormulaHydrator(
     }
     return low;
   }
-  // What is on screen now, top to bottom.
-  function onScreen() {
+  // What is on screen now, top to bottom (of `all`, in page order).
+  function onScreen(all = null) {
     frame = null;
     if (!host?.isConnected || !scroller || !rendererReady()) return;
     // Hidden (Edit or Source mode): nothing is on screen.
     if (!host.getClientRects().length || navigationMoving(scroller)) return;
-    const view = scroller.getBoundingClientRect(),
-      all = markers(host);
+    const view = scroller.getBoundingClientRect();
+    all ??= markers(host);
     const list = [];
     for (let i = firstBelow(all, view.top); i < all.length; i++) {
       const rect = all[i].getBoundingClientRect();
@@ -330,8 +330,21 @@ export function createFormulaHydrator(
     // The observer reports only after a frame is painted: those on screen
     // are drawn before it, or they would show their source for a moment. A
     // note just opened is shown first and drawn as it comes.
-    if (shown) frame = ownerWindow.requestAnimationFrame(onScreen);
+    if (shown) frame = ownerWindow.requestAnimationFrame(() => onScreen());
     scheduleBackfill();
   }
-  return Object.assign(hydrate, { activate, deactivate, flush });
+  // Blocks put in the page while it is shown (incremental-render.js), after
+  // `hydrate`: their formulas join those drawn as they come near, the ones
+  // on screen before the next frame is painted.
+  function add(nodes) {
+    // Not active, or the renderer still loading: activate() finds them.
+    if (!observer || !rendererReady()) return;
+    const list = nodes.flatMap(markers).filter((marker) => !failed.has(marker));
+    if (!list.length) return;
+    for (const marker of list) observer.observe(marker);
+    if (frame === null)
+      frame = ownerWindow.requestAnimationFrame(() => onScreen(list));
+    scheduleBackfill();
+  }
+  return Object.assign(hydrate, { activate, deactivate, flush, add });
 }

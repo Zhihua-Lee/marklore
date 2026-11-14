@@ -38,6 +38,14 @@ function applyWidths(table, widths) {
   table.style.setProperty("--table-min-width", Math.ceil(sum) + "px");
 }
 
+// A table whose rows changed in place (incremental-render.js): measured again
+// as a new one would be.
+export function tableChanged(table) {
+  clearWidths(table);
+  cache.delete(table);
+  settled.delete(table);
+}
+
 // `beforeChange` runs once, just before the table is first modified.
 export function optimizeTable(table, beforeChange) {
   if (!table.isConnected || !table.getClientRects().length) return false;

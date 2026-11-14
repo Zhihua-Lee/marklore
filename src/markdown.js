@@ -1,7 +1,11 @@
 import MarkdownIt from "markdown-it";
 import footnote from "markdown-it-footnote";
 import tasks from "markdown-it-task-lists";
-import { highlightCode } from "./highlighting.js";
+import {
+  highlightCode,
+  highlighterReady,
+  mayContainCode,
+} from "./highlighting.js";
 import { createFormulaHydrator } from "./formula-hydration.js";
 import { decorateSortableTables } from "./table-sort.js";
 import DOMPurify from "dompurify";
@@ -295,6 +299,27 @@ function cjkFriendly(md) {
     }
   };
 }
+// Whether a line is in a fenced code block, as the guard of table pipes in
+// formulas below reads it (line by line, not as the parser does): kept from
+// line to line through the whole note.
+const fenceLine = /^\s*(`{3,}|~{3,})/;
+function nextFence(fence, line) {
+  const f = line.match(fenceLine);
+  if (!f) return fence;
+  if (!fence) return f[1][0];
+  return f[1][0] === fence ? null : fence;
+}
+// That state at the start of each line.
+function lineFences(source) {
+  const states = [];
+  let fence = null;
+  for (const line of source.split("\n")) {
+    states.push(fence);
+    fence = nextFence(fence, line);
+  }
+  states.push(fence);
+  return states;
+}
 export function createParser() {
   const md = new MarkdownIt({
     html: true,
@@ -318,10 +343,8 @@ export function createParser() {
     state.src = state.src
       .split("\n")
       .map((line) => {
-        const f = line.match(/^\s*(`{3,}|~{3,})/);
-        if (f) {
-          if (!fence) fence = f[1][0];
-          else if (f[1][0] === fence) fence = null;
+        if (fenceLine.test(line)) {
+          fence = nextFence(fence, line);
           return line;
         }
         if (fence || !line.includes("|")) return line;
@@ -933,6 +956,10 @@ function attrs(t) {
 // Front matter at the very top (YAML between `---` lines) reads as a small
 // folded card of the note's properties, not as a rule and a heading.
 const FRONT = /^---[ \t]*\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)[ \t]*(?:\r?\n|$)/;
+// How much of `source` its front matter takes (0: none). A closing line
+// anywhere below makes a note that starts with `---` take it.
+export const frontMatterLength = (source) =>
+  source.startsWith("---") ? (FRONT.exec(source)?.[0].length ?? 0) : 0;
 function frontMatter(md) {
   md.block.ruler.before(
     "table",
@@ -997,10 +1024,243 @@ export function parseHeadings(source) {
   parser.parse(source, env);
   return env.headings || [];
 }
-export function renderMarkdown(
+
+// A note's top-level blocks, each rendered on its own (src/incremental-render.js
+// puts only the blocks an edit touched in the page again). A block renders
+// the same whatever is around it unless the note has what reaches across
+// blocks: link reference definitions, footnotes, or HTML that leaves an
+// element open; such a note is not split.
+const continuing = new Set([
+  // Lists, indented code and quotes may go on past a blank line (a list
+  // item, indented text, a lazy line after it).
+  "bullet_list_open",
+  "ordered_list_open",
+  "code_block",
+  "blockquote_open",
+  "html_block",
+]);
+// A display formula opened on a line of its own looks past a blank line for
+// its closing line (folio_math_block), whether it is a formula in the end
+// or not, and also when it is checked for as the end of a paragraph.
+const mathOpening =
+  /^(?:\$\$|\\\\?\[|\\begin\{(?:align\*?|aligned|equation\*?|gather\*?|gathered)\})$/;
+// Elements whose contents the HTML parser reads its own way.
+const opaque =
+  /^(?:script|style|textarea|title|xmp|iframe|noembed|noframes|noscript|plaintext|template|select|svg|math|object|frameset|frame|head|body|html|image)$/;
+const voidTags = new Set(
+  "area base br col embed hr img input link meta source track wbr".split(" "),
+);
+const htmlTag =
+  /<(\/?)([a-zA-Z][a-zA-Z0-9-]*)(?:\s+[^\s"'>/=]+(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/?>/y;
+// The HTML written in a block closes all it opens, so nothing of it reaches
+// the blocks after it (an open <b> would be carried into the next paragraph).
+// Anything unusual counts as reaching.
+export function closedHtml(html) {
+  const open = [];
+  for (let at = html.indexOf("<"); at >= 0; at = html.indexOf("<", at + 1)) {
+    if (html.startsWith("<!--", at)) {
+      const end = html.indexOf("-->", at + 4);
+      if (end < 0) return false;
+      at = end + 2;
+      continue;
+    }
+    htmlTag.lastIndex = at;
+    const m = htmlTag.exec(html);
+    if (!m) {
+      if (/[a-zA-Z/!?]/.test(html[at + 1] || "")) return false;
+      continue;
+    }
+    const name = m[2].toLowerCase();
+    if (opaque.test(name)) return false;
+    if (m[1]) {
+      if (open.pop() !== name) return false;
+    } else if (!voidTags.has(name)) open.push(name);
+    at += m[0].length - 1;
+  }
+  return !open.length;
+}
+// Token index ranges [first, end) of the top-level blocks.
+function blockGroups(tokens) {
+  const groups = [];
+  for (let i = 0; i < tokens.length;) {
+    let j = i;
+    if (tokens[i].nesting === 1)
+      for (let depth = 1; depth > 0 && j + 1 < tokens.length;)
+        depth += tokens[++j].nesting;
+    groups.push([i, j + 1]);
+    i = j + 1;
+  }
+  return groups;
+}
+// The blocks of parsed `tokens`, each with its place in the source, what in
+// it matters to the page around it, and its HTML; null when they cannot be
+// rendered apart.
+function splitBlocks(source, tokens, env, fences = lineFences(source)) {
+  if (
+    /[\r\0]/.test(source) ||
+    env.footnotes ||
+    (env.references && Object.keys(env.references).length)
+  )
+    return null;
+  const offsets = lineOffsets(source);
+  const groups = blockGroups(tokens),
+    blocks = [];
+  for (const [first, end] of groups) {
+    const token = tokens[first];
+    if (!token.map || token.level !== 0) return null;
+    let heading = false,
+      html = "";
+    for (let i = first; i < end; i++) {
+      const t = tokens[i];
+      if (t.type === "heading_open") heading = true;
+      else if (t.type === "html_block") html += t.content;
+      else if (t.type === "inline")
+        for (const child of t.children || [])
+          if (child.type === "html_inline") html += child.content;
+    }
+    if (html && !closedHtml(html)) return null;
+    blocks.push({
+      from: offsets[token.map[0]],
+      to: offsets[token.map[1]] ?? source.length,
+      line: token.map[0],
+      endLine: token.map[1],
+      fence: fences[token.map[0]],
+      type: token.type,
+      continues:
+        continuing.has(token.type) ||
+        source
+          .slice(offsets[token.map[0]], offsets[token.map[1]] ?? source.length)
+          .split("\n")
+          .some((line) => mathOpening.test(line.trim())),
+      heading,
+      frontMatter: token.type === "front_matter",
+      details: /<details\b/i.test(html),
+    });
+  }
+  // Rendered in order, as the whole note would be (formulas are numbered).
+  groups.forEach(([first, end], i) => {
+    const formulas = env.mathFragments.length;
+    blocks[i].html = parser.renderer.render(
+      tokens.slice(first, end),
+      parser.options,
+      env,
+    );
+    blocks[i].formulas = env.mathFragments.length - formulas;
+  });
+  return blocks;
+}
+// Parses the whole source, or (`window`) its top-level blocks from
+// `window.line` on, until `window.stop(offset)` is true at the start of one:
+// the blocks from there on are those of the note before the edit (or
+// "abort": too much to parse again). `window.end` is set to that offset.
+function parseWindow(source, env, window) {
+  if (!window) return parser.parse(source, env);
+  const state = new parser.core.State(source, parser, env);
+  const rules = parser.core.ruler.__rules__.filter((rule) => rule.enabled);
+  const at = rules.findIndex((rule) => rule.name === "block");
+  for (const rule of rules.slice(0, at)) rule.fn(state);
+  // As markdown-it's top level (ParserBlock#tokenize) goes from block to block.
+  const block = new parser.block.State(state.src, parser, env, state.tokens);
+  const blockRules = parser.block.ruler.getRules("");
+  const last = block.lineMax;
+  window.end = source.length;
+  window.fences = lineFences(source);
+  for (let line = window.line; line < last;) {
+    line = block.skipEmptyLines(line);
+    if (line >= last) break;
+    const verdict = window.stop(block.bMarks[line]);
+    if (verdict === "abort") return null;
+    // An old block starts here, and the pipe guard reads the lines from
+    // here on as before.
+    if (verdict && verdict.fence === window.fences[line]) {
+      window.end = block.bMarks[line];
+      break;
+    }
+    block.line = line;
+    if (
+      !blockRules.some((rule) => rule(block, line, last, false)) ||
+      block.line <= line ||
+      block.level
+    )
+      return null;
+    line = block.line;
+  }
+  for (const rule of rules.slice(at + 1)) rule.fn(state);
+  return state.tokens;
+}
+// The blocks' HTML without the page's work on it (for tests): the whole
+// note, or a window as parseWindow takes it.
+export function blockPieces(source, window = null) {
+  const env = { mathFragments: [], deferMath: true };
+  const tokens = parseWindow(source, env, window);
+  const blocks = tokens && splitBlocks(source, tokens, env, window?.fences);
+  return (
+    blocks &&
+    blocks.map((block) => ({
+      ...block,
+      html: block.html.split(env.mathPipe).join("|"),
+    }))
+  );
+}
+// Each block's nodes, from the markers put between the blocks' HTML; null
+// if a marker is not where it was put (HTML that reached across blocks).
+function collectBlocks(fragment, nonce, blocks) {
+  const nodes = blocks.map(() => []);
+  let at = -1;
+  for (const node of [...fragment.childNodes]) {
+    if (
+      node.nodeType === 1 &&
+      node.tagName === "DIV" &&
+      node.getAttribute("data-folio-block") === nonce
+    ) {
+      node.remove();
+      at++;
+    } else if (at < 0 || at >= blocks.length) return null;
+    else nodes[at].push(node);
+  }
+  if (at !== blocks.length) return null;
+  return blocks.map(({ html, ...block }, i) => ({
+    ...block,
+    size: html.length,
+    nodes: nodes[i],
+  }));
+}
+const blockMarks = (blocks, nonce) => {
+  const mark = `<div data-folio-block="${nonce}"></div>`;
+  return mark + blocks.map((block) => block.html).join(mark) + mark;
+};
+// The text of a section's block count (shown when it is folded).
+export const sectionSummary = (count) =>
+  count === 1 ? t("1 块") : t("{count} 块", { count });
+// What else renders a note: a block rendered under other settings is not
+// the same.
+export const renderSettings = (source) =>
+  (cjkEmphasis ? "c" : "") +
+  (highlighterReady() && mayContainCode(source) ? "h" : "");
+// The blocks of `source` from line `line` on, until `stop` finds the rest
+// of the note as it was before (parseWindow), rendered for the page as
+// renderMarkdown renders a note; null if they cannot be rendered apart.
+export function renderBlocks(
   source,
-  fileId = null,
-  {
+  fileId,
+  { line, stop, deferMath = false, interactiveTasks = false },
+) {
+  const env = { mathFragments: [], deferMath };
+  const window = { line, stop };
+  const tokens = parseWindow(source, env, window);
+  const pieces = tokens && splitBlocks(source, tokens, env, window.fences);
+  if (!pieces) return null;
+  const nonce = crypto.randomUUID();
+  const { fragment, deferred } = finishHtml(blockMarks(pieces, nonce), env, {
+    deferMath,
+    interactiveTasks,
+    fileId,
+  });
+  const blocks = collectBlocks(fragment, nonce, pieces);
+  return blocks && { blocks, formulas: deferred, end: window.end };
+}
+export function renderMarkdown(source, fileId = null, options = {}) {
+  const {
     deferMath = false,
     interactiveTasks = false,
     // Typeset deferred formulas as they come near the view (always for small
@@ -1014,10 +1274,41 @@ export function renderMarkdown(
     // The source is a slice of a note starting here (a tab's preview card):
     // positions point into the whole note.
     base = 0,
-  } = {},
-) {
+    // Return the top-level blocks with their nodes (incremental-render.js).
+    blocks: split = false,
+  } = options;
   const env = { mathFragments: [], deferMath };
-  let raw = parser.render(source, env);
+  const tokens = parser.parse(source, env);
+  const pieces =
+    split && !mapPosition && !base ? splitBlocks(source, tokens, env) : null;
+  const nonce = pieces && crypto.randomUUID();
+  const { template, fragment, deferred } = finishHtml(
+    pieces
+      ? blockMarks(pieces, nonce)
+      : parser.renderer.render(tokens, parser.options, env),
+    env,
+    { deferMath, interactiveTasks, fileId, expandCode },
+  );
+  const blocks = pieces && collectBlocks(fragment, nonce, pieces);
+  if (pieces && !blocks)
+    return renderMarkdown(source, fileId, { ...options, blocks: false });
+  return finishNote(source, template, env, {
+    deferMath,
+    progressive,
+    mapPosition,
+    base,
+    deferred,
+    blocks,
+  });
+}
+// Sanitizes rendered HTML and does the page's own work on it: formulas,
+// tables, task boxes, images, links, code blocks, editing places. Each of
+// these is done to a block on its own.
+function finishHtml(
+  raw,
+  env,
+  { deferMath, interactiveTasks, fileId, expandCode = false },
+) {
   raw = raw.split(env.mathPipe).join("|");
   const clean = DOMPurify.sanitize(raw, {
     RETURN_DOM_FRAGMENT: true,
@@ -1159,6 +1450,15 @@ export function renderMarkdown(
     target.dataset.editTo = String(block.to);
     target.dataset.editKind = block.kind;
   }
+  return { template, fragment: template.content, deferred };
+}
+// The note's sections, and what renderMarkdown returns.
+function finishNote(
+  source,
+  template,
+  env,
+  { deferMath, progressive, mapPosition, base, deferred, blocks },
+) {
   // HTML is sanitized before heading controls are created. Source mapping stays on headings/blocks.
   const fragment = template.content,
     stack = [];
@@ -1219,7 +1519,7 @@ export function renderMarkdown(
     section.dataset.blockCount = String(count);
     const summary = document.createElement("span");
     summary.className = "section-summary";
-    summary.textContent = count === 1 ? t("1 块") : t("{count} 块", { count });
+    summary.textContent = sectionSummary(count);
     summary.setAttribute("aria-hidden", "true");
     section.firstElementChild.append(summary);
   }
@@ -1296,5 +1596,9 @@ export function renderMarkdown(
     bytes:
       html.length * 12 + (deferMath ? env.mathFragments.length * 96 * 1024 : 0),
     formulaCount: env.mathFragments.length,
+    // The top-level blocks (asked for with `blocks`) and the formulas the
+    // hydrator draws from, for incremental-render.js.
+    blocks,
+    formulas: deferred,
   };
 }

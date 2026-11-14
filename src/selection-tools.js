@@ -358,7 +358,10 @@ export function previewTextSelection(
       range.compareBoundaryPoints(Range.END_TO_END, span) >= 0
     );
   };
-  const inside = [...content.querySelectorAll(INLINE)].filter(
+  // Only under what holds the whole range (not every span of every drawn
+  // formula in the note).
+  const holder = element(range.commonAncestorContainer);
+  const inside = [...holder.querySelectorAll(INLINE)].filter(
     (el) => !inFormula(el) && range.intersectsNode(el) && whole(el),
   );
   const around = [];

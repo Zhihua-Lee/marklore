@@ -334,6 +334,19 @@
 .rich-divider.dragging::after {
   background: var(--accent);
 }
+/* Where a dragged image goes beside an image, a column or a block. */
+.rich-drop-side {
+  position: fixed;
+  z-index: 60;
+  width: 3px;
+  translate: -50% 0;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.rich-drop-side[hidden] {
+  display: none;
+}
 .rich-image-frame.dragging .rich-image-handle,
 .rich-image-handle:hover {
   background: color-mix(in srgb, var(--accent) 30%, var(--paper));

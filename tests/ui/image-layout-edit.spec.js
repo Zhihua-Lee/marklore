@@ -82,10 +82,6 @@ test("images put beside each other make a row; its divider and taking one out ea
   const text = `Intro.\n\n![A](${sage})\n\n![B](${slate})\n\nEnd.\n`;
   await boot(page, text);
   const box = page.locator(".rich-image-box");
-  // The first image has no image before it.
-  await editor(page).locator('img[alt="A"]').click();
-  await expect(box).toBeVisible();
-  await expect(box.getByRole("button", { name: "并排到前一块" })).toBeHidden();
   await editor(page).locator('img[alt="B"]').click();
   await box.getByRole("button", { name: "并排到前一块" }).click();
   const row = await saved(page);

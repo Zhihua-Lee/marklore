@@ -71,7 +71,13 @@ import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
 import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
-import { imageLines, imageHandles, imageDividers } from "./image-layout.js";
+import {
+  imageLines,
+  imageHandles,
+  imageDividers,
+  imageDrop,
+  ColumnView,
+} from "./image-layout.js";
 import { findPlugin } from "./find.js";
 import { attachMenu } from "./menu.js";
 import { CodeView, TableView } from "./blocks.js";
@@ -667,6 +673,7 @@ export function createRichEditor({
     task_box: (n, v, g) => new TaskView(n, v, g),
     code_block: (n, v, g) => new CodeView(n, v, g),
     table: () => new TableView(),
+    column: (n) => new ColumnView(n),
   };
   const options = () => ({ fileId: current?.fileId, theme: getTheme() });
   const finder = findPlugin();
@@ -680,6 +687,7 @@ export function createRichEditor({
     imageLines,
     imageHandles,
     imageDividers,
+    imageDrop,
     finder.plugin,
     caretBlock,
     codeRing,

@@ -89,6 +89,7 @@ article img:not([width]),
 #rich .image-row > br {
   display: none !important;
 }
-.columns > .column > p:first-child > img:first-child {
+.columns > .column > p:first-child > img,
+.prose .columns > .column > p:first-child > img {
   margin-top: 0;
 }

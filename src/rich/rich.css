@@ -185,10 +185,44 @@
 #rich .ProseMirror > * {
   contain-intrinsic-size: auto 3em;
 }
-/* Not lists: skipping contains them, and the margins of their items stop
-   collapsing through them (a list grew by 11px when the caret left it). */
 #rich .ProseMirror > :not(.rich-current, .ProseMirror-gapcursor, ul, ol) {
   content-visibility: auto;
+}
+/* Lists too, once they have been laid out (editor.js adds the class a frame
+   after a note is put in): a long list skipped before it was ever measured
+   would stand at 3em, and the scroll bar would change as it is reached. */
+#rich.rich-lists-skip .ProseMirror > :is(ul, ol):not(.rich-current) {
+  content-visibility: auto;
+}
+/* Skipping contains a list: its items' margins no longer collapse through
+   it (a list grew by 11px when the caret left it). A top-level list is
+   therefore always its own formatting context, and the margins at its edges,
+   which only collapsed into its own larger ones, are zero (as in the reading
+   view, style.css): skipped or not, with the caret or without, it has the
+   same height, the one it has when read. */
+#rich .ProseMirror > :is(ul, ol) {
+  display: flow-root;
+}
+#rich .ProseMirror > :is(ul, ol) > li:first-child,
+#rich .ProseMirror > :is(ul, ol) > li:first-child > p:first-child {
+  margin-top: 0;
+}
+#rich .ProseMirror > :is(ul, ol) > li:last-child,
+#rich .ProseMirror > :is(ul, ol) > li:last-child > :is(p, ul, ol):last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > p:last-child {
+  margin-bottom: 0;
 }
 /* The caret between two blocks (before or after a table, a formula...): a
    line across the note, so it is seen at once. */

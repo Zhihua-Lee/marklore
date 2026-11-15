@@ -878,6 +878,20 @@ export function createRichEditor({
   // about where it was. Returns false, editing nothing, for a note that
   // would not be written back exactly as it is.
   let showing = 0;
+  // Long lists are skipped off screen like the other blocks (rich.css), but
+  // only once a frame has laid them out: each then keeps its measured height
+  // while skipped, instead of a stand-in.
+  let listsFrame = 0;
+  function skipListsSoon() {
+    if (listsFrame || host.classList.contains("rich-lists-skip")) return;
+    listsFrame = requestAnimationFrame(() => {
+      listsFrame = requestAnimationFrame(() => {
+        listsFrame = 0;
+        // Not shown (Read mode came back first): next time.
+        if (host.getClientRects().length) host.classList.add("rich-lists-skip");
+      });
+    });
+  }
   async function show(doc) {
     const turn = ++showing;
     if (mayContainMath(doc.text)) await loadMath();
@@ -891,8 +905,11 @@ export function createRichEditor({
       doc.rich = next;
     }
     current = doc;
-    if (view.state !== doc.rich.state)
+    if (view.state !== doc.rich.state) {
+      host.classList.remove("rich-lists-skip");
       wholeNote(() => view.updateState(doc.rich.state));
+    }
+    skipListsSoon();
     if (again) {
       const pos = Math.min(at, view.state.doc.content.size);
       view.dispatch(

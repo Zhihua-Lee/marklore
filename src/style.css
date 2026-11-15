@@ -678,15 +678,55 @@ main[data-empty="true"] > #panes {
 .prose li > p {
   margin-block: 0.4em;
 }
-/* A top-level list's own margins are larger, so these edge margins only
-   collapsed into them: zero, nothing moves, and the list keeps its height
+/* The margins at a top-level list's edges (of its first and last items, and
+   of the blocks starting or ending them) are zero: those of items and
+   paragraphs only collapsed into the list's own larger ones, and with those
+   of a code block, a formula or a quote the list would be taller in Edit
+   mode, where it is always contained (rich.css). The list keeps its height
    when it is drawn contained (offscreen-blocks.js). */
 :is(.prose, .section-body) > :is(ul, ol) > li:first-child,
-:is(.prose, .section-body) > :is(ul, ol) > li:first-child > p:first-child {
+:is(.prose, .section-body) > :is(ul, ol) > li:first-child > :first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child {
   margin-top: 0;
 }
 :is(.prose, .section-body) > :is(ul, ol) > li:last-child,
-:is(.prose, .section-body) > :is(ul, ol) > li:last-child > p:last-child {
+:is(.prose, .section-body) > :is(ul, ol) > li:last-child > :last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child {
   margin-bottom: 0;
 }
 .prose .task-list-item {

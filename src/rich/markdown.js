@@ -452,9 +452,17 @@ function displayRaw(tok, lines) {
   if (/^[\s>*+\-\d.)]*\\\[/.test(first)) return "\\[" + tok.content + "\\]";
   return "$$" + tok.content + "$$";
 }
+// Whether a list is tight: markdown-it hides the paragraphs directly in its
+// items. The first of them tells, not the item's first block, which can be
+// a formula or a code block; a list with no such paragraph is loose.
 const tight = (tokens, i) => {
-  while (++i < tokens.length)
-    if (tokens[i].type !== "list_item_open") return tokens[i].hidden;
+  const level = tokens[i].level;
+  while (++i < tokens.length) {
+    const tok = tokens[i];
+    if (tok.level <= level) break;
+    if (tok.type === "paragraph_open" && tok.level === level + 2)
+      return Boolean(tok.hidden);
+  }
   return false;
 };
 const alignOf = (tok) => ({

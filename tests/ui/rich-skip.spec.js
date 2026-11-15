@@ -27,14 +27,18 @@ function layoutDifference(page) {
     const blocks = [...document.querySelectorAll("#rich .ProseMirror > *")];
     const tops = () =>
       blocks.map((b) => b.getBoundingClientRect().top + scroller.scrollTop);
+    // The note's own height, not the scroller's (a whole number of pixels:
+    // a skipped list keeps its height to within a hundredth of a pixel, and
+    // over a hundred lists that can round the scroller's up by one).
+    const note = document.querySelector("#rich .ProseMirror");
     const before = tops(),
-      height = scroller.scrollHeight;
+      height = note.getBoundingClientRect().height;
     const style = document.createElement("style");
     style.textContent =
       "#rich .ProseMirror > :is(ul, ol) { content-visibility: visible !important }";
     document.head.append(style);
     const after = tops(),
-      full = scroller.scrollHeight;
+      full = note.getBoundingClientRect().height;
     style.remove();
     return {
       blocks: Math.max(...before.map((top, i) => Math.abs(top - after[i]))),

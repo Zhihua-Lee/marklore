@@ -67,3 +67,100 @@ test("plain, numbered and task items line up in a mixed list", async ({
   expect(at(1)).toBeGreaterThan(at(0) + 10);
   expect(at(2)).toBeGreaterThan(at(1) + 10);
 });
+
+// The same list takes the same room in Read and Edit mode, so nothing below
+// it moves on switching: loose lists (their items' paragraphs spaced as
+// paragraphs), task lists, and lists starting or ending with a code block,
+// a formula, a quote or a heading (Edit mode always contains a list, so the
+// margins at its edges cannot collapse into the list's own).
+const lists = {
+  tight: "- one\n- two\n- three",
+  loose: "- one\n\n- two\n\n- three",
+  orderedLoose: "1. one\n\n2. two\n\n3. three",
+  taskTight: "- [ ] one\n- [x] two\n- [ ] three",
+  taskLoose: "- [ ] one\n\n- [x] two\n\n- [ ] three",
+  nestedLoose: "- one\n\n  - inner a\n  - inner b\n\n- two",
+  twoParagraphs: "- [ ] one\n\n  more of one\n\n- [x] two",
+  endsCode: "- one\n- two\n\n  ```js\n  let a = 1;\n  ```",
+  startsCode: "- ```js\n  let a = 1;\n  ```\n- two",
+  endsFormula: "- one\n- two\n\n  $$\n  x^2 + y^2\n  $$",
+  startsFormula: "- $$\n  x^2\n  $$\n- two\n- three",
+  nestedEndsCode: "- one\n  - two\n\n    ```js\n    let a = 1;\n    ```",
+  endsQuote: "- one\n- two\n\n  > quoted",
+  startsQuote: "- > quoted\n- two",
+  endsHeading: "- one\n- ## two",
+};
+
+test("a list is as tall in Edit mode as when read", async ({ page }) => {
+  const text =
+    "# Lists\n\n" +
+    Object.entries(lists)
+      .map(([name, list]) => `Before ${name}.\n\n${list}\n\nAfter ${name}.\n\n`)
+      .join("");
+  await installFolio(page);
+  await page.addInitScript((text) => {
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: [
+          {
+            id: "lists",
+            path: "C:/notes/Lists.md",
+            name: "Lists.md",
+            text,
+            version: "v1",
+          },
+        ],
+        roots: [],
+        restored: [],
+        settings: { sidebar: false, outline: false, richEdit: true },
+      }),
+    });
+  }, text);
+  await page.goto("/");
+  await page.locator("#content li").first().waitFor();
+  // From the end of each "Before" paragraph to the start of its "After",
+  // each shown first (formulas are drawn as they come into view).
+  const room = async (root) => {
+    const out = {};
+    for (const name of Object.keys(lists)) {
+      await page.evaluate(
+        ({ root, name }) =>
+          [...document.querySelectorAll(root + " p")]
+            .find((p) => p.textContent.trim() === `Before ${name}.`)
+            .scrollIntoView({ block: "start" }),
+        { root, name },
+      );
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (root) =>
+              document.querySelectorAll(
+                root + " [data-folio-math], " + root + " .math-pending",
+              ).length,
+            root,
+          ),
+        )
+        .toBe(0);
+      await page.waitForTimeout(50);
+      out[name] = await page.evaluate(
+        ({ root, name }) => {
+          const ps = [...document.querySelectorAll(root + " p")];
+          const top = (label) =>
+            ps.find((p) => p.textContent.trim() === `${label} ${name}.`);
+          return (
+            top("After").getBoundingClientRect().top -
+            top("Before").getBoundingClientRect().bottom
+          );
+        },
+        { root, name },
+      );
+    }
+    return out;
+  };
+  const read = await room("#content");
+  await page.keyboard.press("Control+2");
+  await expect(page.locator("#rich-reader")).toBeVisible();
+  const edit = await room("#rich .ProseMirror");
+  for (const name of Object.keys(lists))
+    expect(Math.abs(edit[name] - read[name]), name).toBeLessThan(0.5);
+});

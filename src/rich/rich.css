@@ -23,6 +23,11 @@
 #rich .ProseMirror li > p {
   margin: 0.15em 0;
 }
+/* A loose list (blank lines between its items) is read with its items'
+   paragraphs spaced as paragraphs (style.css): the same height here. */
+#rich .ProseMirror :is(ul, ol):not([data-tight]) > li > p {
+  margin-block: 0.4em;
+}
 #rich .ProseMirror li.task-item,
 #rich .ProseMirror li:has(> p > .task-list-item-checkbox:first-child) {
   list-style: none;
@@ -196,19 +201,33 @@
 }
 /* Skipping contains a list: its items' margins no longer collapse through
    it (a list grew by 11px when the caret left it). A top-level list is
-   therefore always its own formatting context, and the margins at its edges,
-   which only collapsed into its own larger ones, are zero (as in the reading
-   view, style.css): skipped or not, with the caret or without, it has the
-   same height, the one it has when read. */
+   therefore always its own formatting context, and the margins at its edges
+   (of its first and last items, and of the blocks starting or ending them,
+   a code block or a formula too) are zero, as in the reading view
+   (style.css): skipped or not, with the caret or without, it has the same
+   height, the one it has when read. */
 #rich .ProseMirror > :is(ul, ol) {
   display: flow-root;
 }
 #rich .ProseMirror > :is(ul, ol) > li:first-child,
-#rich .ProseMirror > :is(ul, ol) > li:first-child > p:first-child {
+#rich .ProseMirror > :is(ul, ol) > li:first-child > :first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child {
   margin-top: 0;
 }
 #rich .ProseMirror > :is(ul, ol) > li:last-child,
-#rich .ProseMirror > :is(ul, ol) > li:last-child > :is(p, ul, ol):last-child,
+#rich .ProseMirror > :is(ul, ol) > li:last-child > :last-child,
 #rich
   .ProseMirror
   > :is(ul, ol)
@@ -221,7 +240,24 @@
   > li:last-child
   > :is(ul, ol):last-child
   > li:last-child
-  > p:last-child {
+  > :last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child {
   margin-bottom: 0;
 }
 /* The caret between two blocks (before or after a table, a formula...): a

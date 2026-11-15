@@ -156,53 +156,88 @@ function readingAnchor(host) {
       ),
     };
   }
-  let el = null,
-    r = null;
-  // Stop at the first visible block crossing the viewport anchor. Filtering the
-  // whole document first measured every block on each session/scroll capture.
-  for (const candidate of host.querySelectorAll("[data-from]")) {
-    if (!candidate.getClientRects().length) continue;
-    el = candidate;
-    r = candidate.getBoundingClientRect();
-    if (r.bottom > y) break;
-  }
-  if (!el) return { from: 0, y: 0, top: true };
+  const found = firstBelow(host, y);
+  if (!found) return { from: 0, y: 0, top: true };
+  const { el, r } = found;
   const fraction = Math.max(
     0,
     Math.min(1, (y - r.top) / Math.max(1, r.height)),
   );
   return { from: Number(el.dataset.from), fraction, y: 32 };
 }
-// The elements of `host` in page order, not looking into a formula the
-// renderer drew (data-from on it): its many elements have no position.
-// `visit` returns true to stop.
-function walkPlaces(host, visit) {
-  const drawn = (el) =>
-    el.hasAttribute("data-from") &&
-    (el.classList.contains("formula") || el.classList.contains("math-block"));
-  let el = host.firstElementChild;
-  while (el) {
-    if (visit(el)) return;
-    let next = drawn(el) ? null : el.firstElementChild;
-    while (!next && el !== host) {
-      next = el.nextElementSibling;
-      if (!next) el = el.parentElement;
+// The first shown block (data-from) in page order reaching below `y`, or the
+// last one shown when none does: the reading line fell between blocks.
+// Found from the top down by halving each level's children, so only blocks
+// on the way are measured: measuring every block from the top of the note
+// laid out every part skipped off screen (offscreen-blocks.js), most of a
+// long note.
+function firstBelow(host, y) {
+  const shown = (el) => el.getClientRects().length > 0;
+  function within(parent) {
+    const kids = parent.children;
+    // Children in flow lie in page order: the first whose bottom is below y.
+    // Children not shown (folded, hidden) are passed over.
+    let lo = 0,
+      hi = kids.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      let at = mid;
+      while (at < hi && !shown(kids[at])) at++;
+      if (at === hi) hi = mid;
+      else if (kids[at].getBoundingClientRect().bottom > y) hi = mid;
+      else lo = at + 1;
     }
-    el = next;
+    for (let i = lo; i < kids.length; i++) {
+      const el = kids[i];
+      if (!shown(el)) continue;
+      if (el.hasAttribute("data-from"))
+        return { el, r: el.getBoundingClientRect() };
+      const inner = within(el);
+      if (inner) return inner;
+    }
+    return null;
   }
+  const hit = within(host);
+  if (hit) return hit;
+  const last = lastBlock(host);
+  return last ? { el: last, r: last.getBoundingClientRect() } : null;
+}
+// The last shown block (data-from) in page order within el, el too, or null.
+function lastBlock(el) {
+  for (let i = el.children.length - 1; i >= 0; i--) {
+    const kid = el.children[i];
+    if (!kid.getClientRects().length) continue;
+    const found = lastBlock(kid);
+    if (found) return found;
+  }
+  return el.hasAttribute("data-from") ? el : null;
+}
+// Whether el lies inside a formula the renderer drew (data-from on it): its
+// many elements have no position in the note.
+function inDrawn(host, el) {
+  const formula = el.parentElement?.closest(
+    ".formula[data-from], .math-block[data-from]",
+  );
+  return Boolean(formula && host.contains(formula));
+}
+// The places of `host` (elements with `attribute`) in page order, none
+// inside a drawn formula. A selector query: walking a long note's tens of
+// thousands of elements in script took 100 ms and more.
+function* placesWith(host, attribute) {
+  for (const el of host.querySelectorAll(`[${attribute}]`))
+    if (!inDrawn(host, el)) yield el;
 }
 export function findPosition(host, from) {
   let leaf = null;
-  walkPlaces(host, (el) => {
-    const start = el.getAttribute("data-text-from");
+  for (const el of host.querySelectorAll("[data-text-from]"))
     if (
-      start !== null &&
-      Number(start) <= from &&
-      Number(el.getAttribute("data-text-to")) > from
-    )
+      Number(el.getAttribute("data-text-from")) <= from &&
+      Number(el.getAttribute("data-text-to")) > from &&
+      !inDrawn(host, el)
+    ) {
       leaf = el;
-    return leaf !== null;
-  });
+      break;
+    }
   if (leaf) {
     const walker = document.createTreeWalker(leaf, NodeFilter.SHOW_TEXT);
     let remaining = from - Number(leaf.dataset.textFrom),
@@ -228,8 +263,7 @@ export function findPosition(host, from) {
   }
   let best = null,
     last = null;
-  walkPlaces(host, (el) => {
-    if (!el.hasAttribute("data-from")) return false;
+  for (const el of placesWith(host, "data-from")) {
     const start = Number(el.dataset.from),
       end = Number(el.dataset.to);
     if (start <= from) last = el;
@@ -240,8 +274,7 @@ export function findPosition(host, from) {
         end - start < Number(best.dataset.to) - Number(best.dataset.from))
     )
       best = el;
-    return false;
-  });
+  }
   best ??= last;
   return best ? { element: best } : null;
 }
@@ -298,12 +331,14 @@ export function navigationMoving(host) {
 // responsive; path tables keep native widths (never raw source) until idle.
 // Listeners get viewport-coordinate ranges plus the destination's position.
 const PREPARE_CONTENT_MS = 120;
-function prepareDestination(host, anchor) {
+function prepareDestination(host, anchor, smooth) {
   if (!anchor || anchor.top) return;
   const element = anchorHit(host, anchor)?.element;
   if (!element?.getClientRects().length) return;
-  // Growth above the current screen (upward jumps) must not move what is shown.
-  const keep = visibleAnchor(host);
+  // Growth above the current screen (upward jumps) must not move what is
+  // shown while a glide sets off. An instant jump shows only its landing,
+  // measured after this.
+  const keep = smooth ? visibleAnchor(host) : null;
   for (const phase of ["content", "layout"]) {
     const view = host.getBoundingClientRect(),
       top = element.getBoundingClientRect().top,
@@ -324,9 +359,9 @@ function prepareDestination(host, anchor) {
       }),
     );
   }
+  if (!keep || keep.top) return;
   const held = anchorTop(host, keep, false);
-  if (held !== null && !keep.top)
-    host.scrollTo({ behavior: "instant", top: held });
+  if (held !== null) host.scrollTo({ behavior: "instant", top: held });
 }
 function place(host, navigation, top) {
   host.scrollTo({ behavior: "instant", top });
@@ -344,15 +379,34 @@ export function navigateToAnchor(
   anchor,
   { expand = false, behavior = "instant" } = {},
 ) {
-  navigations.get(host)?.stop();
+  const smooth = behavior === "smooth";
+  const under = navigations.get(host);
+  // The same position asked for again while it is being held (a mode
+  // switch lands before its first frame and again after it): the
+  // navigation under way already re-aims as the page settles.
+  if (
+    under?.anchor === anchor &&
+    !smooth &&
+    !under.moving &&
+    (under.expanded || !expand) &&
+    under.expected !== null &&
+    Math.abs(host.scrollTop - under.expected) <= 2
+  )
+    return;
+  under?.stop();
   // Unfold first (it changes layout), prepare the destination, then measure.
   if (anchorTop(host, anchor, expand) === null) return;
-  prepareDestination(host, anchor);
+  prepareDestination(host, anchor, smooth);
   const top = anchorTop(host, anchor, false);
   if (top === null) return;
   const view = host.ownerDocument.defaultView;
-  const smooth = behavior === "smooth";
-  const navigation = { anchor, moving: smooth, expected: null, corrections: 0 };
+  const navigation = {
+    anchor,
+    moving: smooth,
+    expanded: expand,
+    expected: null,
+    corrections: 0,
+  };
   let quiet = null;
   const moved = () =>
     navigation.expected !== null &&

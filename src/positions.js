@@ -443,7 +443,16 @@ export function restoreAnchor(
   { expand = false, behavior = "instant" } = {},
 ) {
   const navigation = navigations.get(host);
-  if (navigation) return retarget(host, navigation);
+  // Scrolled by something else since it landed, before that scroll's event
+  // stopped the navigation: that place wins, as in settle.
+  if (
+    navigation &&
+    !navigation.moving &&
+    navigation.expected !== null &&
+    Math.abs(host.scrollTop - navigation.expected) > 2
+  )
+    navigation.stop();
+  else if (navigation) return retarget(host, navigation);
   if (!anchor || anchor.top) {
     host.scrollTop = 0;
     return;

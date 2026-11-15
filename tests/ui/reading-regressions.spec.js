@@ -218,3 +218,39 @@ test("table headers: text double-click locates source, only the button sorts", a
   await expect(header).toHaveAttribute("aria-sort", "ascending");
   await expect(page.locator(".cm-content")).toContainText("| Name | Value |");
 });
+
+test("a scroll made by code right after a jump lands is not undone", async ({
+  page,
+}) => {
+  // A jump stays armed a moment after landing, to re-aim if late formulas
+  // move its target (src/positions.js). A scroll made by code in that
+  // moment (its scroll event not dispatched yet), then a reading position
+  // kept around a formula drawn: the scroll wins, not the jump's target.
+  await page.goto("/");
+  const kept = await page.evaluate(async () => {
+    const { navigateToAnchor, visibleAnchor, restoreAnchor } =
+      await import("/src/positions.js");
+    const host = document.createElement("div");
+    host.style.cssText =
+      "position:fixed;left:0;top:0;width:600px;height:300px;overflow:auto;font:16px/40px sans-serif";
+    host.innerHTML = Array.from(
+      { length: 200 },
+      (_, n) =>
+        `<p data-from="${n * 10}" data-to="${n * 10 + 9}" style="margin:0">` +
+        `<span data-text-from="${n * 10}" data-text-to="${n * 10 + 8}">line ${n}</span></p>`,
+    ).join("");
+    document.body.append(host);
+    navigateToAnchor(host, { top: true });
+    await new Promise((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve)),
+    );
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    host.scrollTop = 4000;
+    const anchor = visibleAnchor(host);
+    restoreAnchor(host, anchor);
+    const top = host.scrollTop;
+    host.remove();
+    return top;
+  });
+  expect(Math.abs(kept - 4000)).toBeLessThanOrEqual(2);
+});

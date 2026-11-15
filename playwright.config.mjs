@@ -17,6 +17,9 @@ export default defineConfig({
     // Edge ships with Windows; FOLIO_BROWSER_CHANNEL="" uses bundled Chromium elsewhere.
     channel: (process.env.FOLIO_BROWSER_CHANNEL ?? "msedge") || undefined,
     headless: true,
+    // Headless Edge still makes a real (hidden) window, which Windows can
+    // bring up for a moment: keep it off every display.
+    launchOptions: { args: ["--window-position=-32000,-32000"] },
     viewport: { width: 1360, height: 900 },
     // The interface follows the system language; specs assert Chinese text.
     // tests/ui/english.spec.js switches to en-US.

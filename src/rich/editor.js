@@ -868,6 +868,38 @@ export function createRichEditor({
     const k = mapText(source, flat(node), Math.max(0, offset - hit.from), bias);
     return hit.pos + 1 + placeOfText(node, k);
   }
+  // The top of the box of the character at pos (or of the caret there when
+  // no character follows it in the same text), in the viewport; null when
+  // it is not shown.
+  function charTop(pos) {
+    try {
+      const { node, offset } = view.domAtPos(pos);
+      if (node.nodeType === Node.TEXT_NODE && offset < node.length) {
+        const range = document.createRange();
+        range.setStart(node, offset);
+        range.setEnd(node, offset + 1);
+        const rect = range.getBoundingClientRect();
+        if (rect.height) return rect.top;
+      }
+      const at = view.coordsAtPos(pos, 1);
+      return at.bottom > at.top ? at.top : null;
+    } catch {
+      return null;
+    }
+  }
+  // A reading position at the character at pos, when pos is in text: the
+  // character after it, or the last one of its block at the block's end (a
+  // point right of a line's end). Measured as scrollTo measures it.
+  function textAnchor(pos) {
+    const $pos = view.state.doc.resolve(pos);
+    if (!$pos.parent.inlineContent || !$pos.parent.content.size) return null;
+    const at = pos < $pos.end() ? pos : Math.max($pos.start(), pos - 1);
+    if (!$pos.parent.nodeAt(at - $pos.start())?.isText) return null;
+    const from = offsetAt(at);
+    const back = from === null ? null : posAt(from);
+    const top = back === null ? null : charTop(back);
+    return top === null ? null : { from, exact: true, y: top };
+  }
   readingWith(() => current?.rich?.loaded.env || {});
   // For tests and debugging on the dev server only.
   if (import.meta.env?.DEV) window.__richView = view;
@@ -1005,6 +1037,9 @@ export function createRichEditor({
     },
     // The reading position, as the reading view keeps it ({from, y,
     // fraction}): the block at the top of the pane, and how far into it.
+    // In text, as the reading view keeps it too ({from, exact, y}): the
+    // character at the reading line and how far below the pane's top its
+    // box is, so a tall paragraph comes back at the same line.
     anchor() {
       if (scroller.scrollTop < 2) return { from: 0, y: 0, top: true };
       const box = scroller.getBoundingClientRect();
@@ -1012,6 +1047,8 @@ export function createRichEditor({
       const hit = view.posAtCoords({ left: box.left + box.width / 2, top: y });
       const starts = startsOf.get(view.state.doc);
       if (!hit || !starts) return { from: 0, y: 0, top: true };
+      const exact = textAnchor(hit.pos);
+      if (exact) return { ...exact, y: exact.y - box.top };
       const index = view.state.doc.resolve(hit.pos).index(0);
       let pos = 0;
       view.state.doc.forEach((_n, p, i) => i === index && (pos = p));
@@ -1025,6 +1062,19 @@ export function createRichEditor({
     // Scroll to a reading position (from the reading view or this pane).
     scrollTo(anchor, behavior = "instant") {
       if (!anchor || anchor.top) return scroller.scrollTo({ top: 0, behavior });
+      // A character in text (either pane's reading position): its box goes
+      // back to the same height, as the note does not move between reading
+      // and editing (the toolbar floats over both). A jump to a block
+      // (below) lands below the toolbar.
+      const pos = anchor.exact ? posAt(anchor.from) : null;
+      const top = pos === null ? null : charTop(pos);
+      if (top !== null) {
+        const box = scroller.getBoundingClientRect();
+        return scroller.scrollTo({
+          top: scroller.scrollTop + top - box.top - (anchor.y ?? 32),
+          behavior,
+        });
+      }
       const hit = blockAt(anchor.from || 0);
       const dom = hit && view.nodeDOM(hit.pos);
       if (!dom?.getBoundingClientRect) return;

@@ -129,7 +129,10 @@ test("offline math, details, code, selectable CJK; malicious HTML sanitized", as
     page,
     '## Test\n\n中文 **bold** and $a^2$ and \\(b^2\\).\n\n$$\n\\frac{1}{2}\n$$\n\n<details><summary>展开</summary>\n\n隐藏 **内容**\n\n</details>\n\n<script>window.pwned=true</script>\n<img src="x" onerror="window.pwned=true">\n\n```js\nconst a=1;\n```',
   );
-  expect(await page.locator("#content .katex").count()).toBe(3);
+  // KaTeX loads on first use (src/markdown.js, loadMath): the note is shown
+  // first with its formulas as TeX placeholders, drawn once it has arrived.
+  await expect(page.locator("#content .katex")).toHaveCount(3);
+  await expect(page.locator("#content [data-folio-math]")).toHaveCount(0);
   expect(await page.evaluate(() => window.pwned)).toBeUndefined();
   expect(await page.locator("#content script").count()).toBe(0);
   await page.getByText("展开", { exact: true }).click();

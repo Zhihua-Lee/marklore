@@ -95,6 +95,131 @@ export function selectionSource(host) {
       textOffset(end, range.endContainer, range.endOffset),
   };
 }
+
+// A formula drawn in the reading view, inline or display.
+const DRAWN = ".formula[data-from], .math-block[data-from]";
+// A selection's end at a point in `formula` takes in some of it.
+export function holds(formula, node, offset, end) {
+  const part = document.createRange();
+  part.selectNodeContents(formula);
+  if (end) part.setEnd(node, offset);
+  else part.setStart(node, offset);
+  return part.toString() !== "";
+}
+// The mapped place nearest to a DOM point, looking into the selection (on
+// from a start, back from an end): a character of a run of mapped text, or a
+// formula, whole. A point between elements (the edge of a paragraph, a
+// paragraph selected by triple click, the gap beside a display formula)
+// lands on the text or formula next to it. `skip` leaves out what matches
+// it (and what is in it). Null when nothing mapped is that way in `host`.
+//   { node, offset }: in a text node of a mapped run;
+//   { formula }: a formula.
+export function mappedPoint(host, node, offset, end, skip = null) {
+  const element = (n) =>
+    n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement;
+  const take = (n, edge) => {
+    const el = element(n);
+    if (!el || !host.contains(el) || (skip && el.closest(skip))) return null;
+    const formula = el.closest(DRAWN);
+    if (formula && host.contains(formula)) return { formula };
+    if (n.nodeType !== Node.TEXT_NODE || !n.length) return null;
+    const leaf = el.closest("[data-text-from]");
+    if (!leaf || !host.contains(leaf)) return null;
+    return { node: n, offset: edge ?? (end ? n.length : 0) };
+  };
+  // Where it is. A point in a formula that holds none of it on the
+  // selection's side (an end at its very start, as a triple click leaves
+  // it) is beside it.
+  const here = take(node, node.nodeType === Node.TEXT_NODE ? offset : null);
+  if (here?.formula && !holds(here.formula, node, offset, end)) {
+    const parent = here.formula.parentNode;
+    return mappedPoint(
+      host,
+      parent,
+      [...parent.childNodes].indexOf(here.formula) + (end ? 0 : 1),
+      end,
+      skip,
+    );
+  }
+  if (here && (here.formula || node.nodeType === Node.TEXT_NODE)) return here;
+  const walker = document.createTreeWalker(
+    host,
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT,
+  );
+  let first;
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    walker.currentNode = node;
+    first = end ? walker.previousNode() : walker.nextNode();
+  } else if (end) {
+    // The last node before the point: the deepest last one of the child
+    // before it.
+    let child = node.childNodes[offset - 1];
+    if (child) {
+      while (child.lastChild) child = child.lastChild;
+      first = child;
+    } else {
+      walker.currentNode = node;
+      first = walker.previousNode();
+    }
+  } else {
+    first = node.childNodes[offset];
+    if (!first) {
+      let last = node;
+      while (last.lastChild) last = last.lastChild;
+      walker.currentNode = last;
+      first = walker.nextNode();
+    }
+  }
+  if (!first) return null;
+  walker.currentNode = first;
+  for (let n = first; n; n = end ? walker.previousNode() : walker.nextNode()) {
+    const found = take(n);
+    if (found) return found;
+  }
+  return null;
+}
+// The source offset of a selection's end: a formula is taken whole.
+function mappedOffset(host, node, offset, end) {
+  const point = mappedPoint(host, node, offset, end);
+  if (!point) return null;
+  if (point.formula) return Number(point.formula.dataset[end ? "to" : "from"]);
+  const leaf = point.node.parentElement.closest("[data-text-from]");
+  return (
+    Number(leaf.dataset.textFrom) + textOffset(leaf, point.node, point.offset)
+  );
+}
+// The selection in the source, for a mark: as selectionSource, and also
+// where an end is in a formula or between elements (an end in a formula
+// takes the whole formula).
+export function selectionSpan(host) {
+  const selected = window.getSelection();
+  if (!selected?.rangeCount || selected.isCollapsed) return null;
+  const range = selected.getRangeAt(0);
+  if (
+    !host.contains(range.startContainer) ||
+    !host.contains(range.endContainer)
+  )
+    return null;
+  const cell = (node) =>
+    (node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement)?.closest(
+      "th,td",
+    );
+  const sorted = (node) =>
+    cell(node)?.closest('table[data-view-sorted="true"]');
+  if (
+    (sorted(range.startContainer) || sorted(range.endContainer)) &&
+    cell(range.startContainer) !== cell(range.endContainer)
+  )
+    return null;
+  const from = mappedOffset(
+      host,
+      range.startContainer,
+      range.startOffset,
+      false,
+    ),
+    to = mappedOffset(host, range.endContainer, range.endOffset, true);
+  return from != null && to != null && to > from ? { from, to } : null;
+}
 // Windows word selection may include the following space, even across an inline
 // formatting boundary. Keep a double-click inside its actual text leaf so source
 // replacement cannot accidentally consume a closing **, link target or HTML tag.

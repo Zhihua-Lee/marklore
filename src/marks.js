@@ -1,6 +1,6 @@
 import { t } from "../desktop/i18n.mjs";
 import { anchorOf, locateAnchor } from "../desktop/comment-anchors.mjs";
-import { atPoint, selectionSource } from "./positions.js";
+import { atPoint, selectionSpan } from "./positions.js";
 import { markText } from "./proposals.js";
 import { icon } from "./icons.js";
 import "./marks.css";
@@ -139,7 +139,7 @@ export function createMarks({
         const chosen = surface()
           ? surface().selected()
           : doc.previewText === doc.text
-            ? selectionSource(content)
+            ? selectionSpan(content)
             : null;
         if (chosen && chosen.to > chosen.from)
           selection = {
@@ -355,7 +355,7 @@ export function createMarks({
 
   // A new mark on the selected text.
   function startNew(
-    selected = surface() ? surface().selected() : selectionSource(content),
+    selected = surface() ? surface().selected() : selectionSpan(content),
   ) {
     const doc = getActive();
     if (!doc) return;

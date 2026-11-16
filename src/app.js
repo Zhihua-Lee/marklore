@@ -53,6 +53,7 @@ import {
   findPosition,
   unfold,
   selectionSource,
+  selectionSpan,
   constrainWordSelection,
   anchorOffset,
 } from "./positions.js";
@@ -1747,7 +1748,7 @@ $("#content").addEventListener("contextmenu", (event) => {
     ...(selected && marks
       ? (() => {
           // The selection as it is now: the menu click may change it.
-          const source = selectionSource($("#content"));
+          const source = selectionSpan($("#content"));
           return [
             [
               t("标记给 AI… Ctrl+Alt+M"),

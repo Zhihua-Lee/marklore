@@ -111,6 +111,8 @@ export class DrawnView {
     this.dom.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
+      if (this.node.type === S.math_inline)
+        return pressFormula(view, getPos, e);
       const pos = getPos();
       if (typeof pos === "number") open(view, pos, -1);
     });
@@ -370,34 +372,194 @@ export function formulaUnder(view, x, y) {
     ? pos
     : null;
 }
+// Selecting inline formulas with the mouse, per editor: the formula last
+// selected whole by a double click or by a drag started on it (`unit`),
+// which Shift+click extends from; whether the selection is a word a double
+// click selected (`word`); the formula a click just opened, which a
+// second click makes a double click on (`opened`); the formula just
+// double-clicked, which a third click makes a triple click on (`picked`).
+const picking = new WeakMap();
+function pickingOf(view) {
+  let own = picking.get(view);
+  if (!own) picking.set(view, (own = {}));
+  return own;
+}
+const stamp = (e, more) => ({
+  time: Date.now(),
+  x: e.clientX,
+  y: e.clientY,
+  ...more,
+});
+// A press soon after and near another: the next click of a double or
+// triple click (the browser's count is lost once the formula is redrawn).
+const again = (was, e) =>
+  !!was &&
+  Date.now() - was.time < 500 &&
+  Math.abs(e.clientX - was.x) < 6 &&
+  Math.abs(e.clientY - was.y) < 6;
+const select = (view, selection) =>
+  view.dispatch(view.state.tr.setSelection(selection).setMeta("pointer", true));
+// The selection from `unit` (a formula selected whole, or a point) to
+// lo..hi (a formula, or a point), holding both whole.
+function spanning(doc, unit, lo, hi) {
+  let anchor = unit.from,
+    head = hi;
+  if (hi <= unit.from) [anchor, head] = [unit.to, lo];
+  else if (lo < unit.to)
+    [anchor, head] = [Math.min(unit.from, lo), Math.max(unit.to, hi)];
+  return TextSelection.between(doc.resolve(anchor), doc.resolve(head));
+}
+// What a point of the page reaches: the formula under it, else the
+// position there.
+function reach(view, x, y) {
+  const at = formulaUnder(view, x, y);
+  if (at !== null) return [at, at + 1];
+  const hit = view.posAtCoords({ left: x, top: y });
+  return hit ? [hit.pos, hit.pos] : null;
+}
+// A press on a drawn inline formula. A click opens it for editing (once
+// the button is up); a drag started on it selects it whole and on to where
+// the mouse goes; a double click selects it whole (Enter then opens it);
+// a triple click selects its paragraph; Shift+click extends the selection
+// over it.
+function pressFormula(view, getPos, e) {
+  const pos = getPos();
+  if (typeof pos !== "number") return;
+  const own = pickingOf(view);
+  const { doc } = view.state;
+  if (!view.hasFocus()) view.focus();
+  if (e.detail >= 3 || again(own.picked, e)) {
+    own.picked = null;
+    const $pos = doc.resolve(pos);
+    return select(view, TextSelection.create(doc, $pos.start(), $pos.end()));
+  }
+  if (e.shiftKey) {
+    // From a formula or a word selected whole by a double click, the
+    // selection keeps it (as the browser keeps a word); else it runs on
+    // from its anchor.
+    const { anchor, from, to } = view.state.selection;
+    const unit =
+      own.unit && (anchor === own.unit.from || anchor === own.unit.to)
+        ? own.unit
+        : own.word && from < to
+          ? { from, to }
+          : { from: anchor, to: anchor };
+    return select(view, spanning(doc, unit, pos, pos + 1));
+  }
+  if (e.detail === 2) {
+    select(view, TextSelection.create(doc, pos, pos + 1));
+    return pick(view, e);
+  }
+  own.unit = null;
+  own.word = false;
+  const unit = { from: pos, to: pos + 1 };
+  let dragging = false;
+  const move = (m) => {
+    if (!(m.buttons & 1)) return up(m);
+    if (
+      !dragging &&
+      Math.abs(m.clientX - e.clientX) <= 4 &&
+      Math.abs(m.clientY - e.clientY) <= 4
+    )
+      return;
+    dragging = true;
+    const to = reach(view, m.clientX, m.clientY);
+    if (to) select(view, spanning(view.state.doc, unit, ...to));
+  };
+  const up = (u) => {
+    document.removeEventListener("mousemove", move);
+    document.removeEventListener("mouseup", up);
+    if (dragging) {
+      own.unit = unit;
+      return;
+    }
+    const at = getPos();
+    if (typeof at !== "number") return;
+    own.opened = stamp(u, { pos: at });
+    open(view, at, -1);
+  };
+  document.addEventListener("mousemove", move);
+  document.addEventListener("mouseup", up);
+}
+// The selection is now the formula selected whole: remembered for Shift+click
+// and a triple click.
+function pick(view, e) {
+  const own = pickingOf(view);
+  const { from, to } = view.state.selection;
+  own.unit = { from, to };
+  own.picked = stamp(e);
+}
+// The source of a formula opened at pos (math_src text), as a range.
+function sourceAt(doc, pos) {
+  let to = pos;
+  while (to < doc.content.size) {
+    const node = doc.nodeAt(to);
+    if (!node?.isText || !schema.marks.math_src.isInSet(node.marks)) break;
+    to += node.nodeSize;
+  }
+  return to > pos ? { from: pos, to } : null;
+}
 // A formula is selected whole: a drag (or a Shift+click) let go of over an
 // inline formula ends past it, on the far side from where it started, as
 // Read mode takes a formula an end of the selection is in. The browser
-// would end it at the formula's nearer edge, often before it.
+// would end it at the formula's nearer edge, often before it. A Shift+click
+// from a formula selected whole extends from its far side. A double click
+// on a formula (its first click opened it) selects it whole, closed again.
 export const formulaEnds = new Plugin({
+  props: {
+    handleDOMEvents: {
+      mousedown(view, e) {
+        const own = pickingOf(view);
+        const was = own.opened;
+        own.opened = null;
+        if (e.button !== 0 || e.shiftKey || !again(was, e)) return false;
+        const source = sourceAt(view.state.doc, was.pos);
+        if (!source) return false;
+        e.preventDefault();
+        // Selected whole, its source is left: it is drawn again (closer).
+        select(
+          view,
+          TextSelection.create(view.state.doc, source.from, source.to),
+        );
+        pick(view, e);
+        return true;
+      },
+    },
+  },
   view(view) {
     let down = null;
     const press = (e) => {
-      // A press on a formula itself is the formula's own (DrawnView).
-      down =
-        e.button === 0 && !e.defaultPrevented ? { shift: e.shiftKey } : null;
+      // A press on a formula, or the second of a double click on one, is
+      // handled above (pressFormula, mousedown).
+      if (e.button !== 0 || e.defaultPrevented) return (down = null);
+      down = { shift: e.shiftKey };
+      const own = pickingOf(view);
+      own.picked = null;
+      if (e.shiftKey) return;
+      own.unit = null;
+      own.word = e.detail === 2;
     };
     const release = (e) => {
       const was = down;
       down = null;
-      if (!was || !view.hasFocus()) return;
+      // Once the editor has read the selection the browser made (a
+      // Shift+click's comes after the button is up).
+      if (was) setTimeout(() => settle(was, e.clientX, e.clientY));
+    };
+    const settle = (was, x, y) => {
+      if (view.isDestroyed || !view.hasFocus()) return;
       const sel = view.state.selection;
       if (!(sel instanceof TextSelection) || sel.empty) return;
-      const at = formulaUnder(view, e.clientX, e.clientY);
-      if (at === null) return;
-      const { anchor } = sel;
-      const head = at >= anchor ? at + 1 : at;
-      if (head === sel.head) return;
-      view.dispatch(
-        view.state.tr
-          .setSelection(TextSelection.create(view.state.doc, anchor, head))
-          .setMeta("pointer", true),
-      );
+      let { anchor, head } = sel;
+      const { unit } = pickingOf(view);
+      if (was.shift && unit) {
+        if (anchor === unit.from && head < unit.from) anchor = unit.to;
+        else if (anchor === unit.to && head > unit.to) anchor = unit.from;
+      }
+      const at = formulaUnder(view, x, y);
+      if (at !== null) head = at >= anchor ? at + 1 : at;
+      if (anchor === sel.anchor && head === sel.head) return;
+      select(view, TextSelection.create(view.state.doc, anchor, head));
     };
     view.dom.addEventListener("mousedown", press);
     document.addEventListener("mouseup", release);
@@ -410,9 +572,16 @@ export const formulaEnds = new Plugin({
   },
 });
 
-// Enter on a selected formula or raw block opens it.
+// Enter on a selected formula or raw block opens it, also on an inline
+// formula selected whole with the mouse.
 export const openSelected = (state, dispatch, view) => {
   const sel = state.selection;
-  if (!(sel instanceof NodeSelection)) return false;
-  return open(view, sel.from, -1);
+  if (sel instanceof NodeSelection) return open(view, sel.from, -1);
+  if (
+    sel instanceof TextSelection &&
+    sel.to - sel.from === 1 &&
+    state.doc.nodeAt(sel.from)?.type === S.math_inline
+  )
+    return open(view, sel.from, -1);
+  return false;
 };

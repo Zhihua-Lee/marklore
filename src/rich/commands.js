@@ -111,7 +111,7 @@ function paint(action, color) {
     const kind = paints[action];
     const tr = state.tr;
     state.doc.nodesBetween(from, to, (node, pos) => {
-      if (!node.isText) return;
+      if (!node.isInline) return;
       for (const m of node.marks)
         if (m.type === M.html && kind.is(m))
           tr.removeMark(
@@ -126,7 +126,7 @@ function paint(action, color) {
     const colors = [];
     if (color && action === "highlight")
       tr.doc.nodesBetween(from, to, (node, pos) => {
-        if (!node.isText) return;
+        if (!node.isInline) return;
         for (const m of node.marks)
           if (m.type === M.html && paints.color.is(m))
             colors.push([

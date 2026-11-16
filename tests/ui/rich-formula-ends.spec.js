@@ -112,18 +112,30 @@ async function drag(page, a, b) {
   await page.mouse.move(q.x, q.y, { steps: 3 });
   await page.mouse.up();
 }
+// Click or double-click a point (found where it is now: a mark card
+// can scroll the note).
+async function click(page, spec, count = 1) {
+  const p = await point(page, spec);
+  await page.mouse.click(p.x, p.y, { clickCount: count });
+}
+const dblclick = (page, spec) => click(page, spec, 2);
 // Double-click the first point, Shift+click the second.
 async function dblShift(page, a, b) {
-  const p = await point(page, a);
+  await dblclick(page, a);
   const q = await point(page, b);
-  await page.mouse.dblclick(p.x, p.y);
   await page.keyboard.down("Shift");
   await page.mouse.click(q.x, q.y);
   await page.keyboard.up("Shift");
 }
 // Nothing selected, the caret in the title.
+// Each time at another place of the title, so two in a row never make a
+// double click.
+let resets = 0;
 async function reset(page) {
-  await editor(page).locator("h1").click();
+  const x = 10 + 40 * (resets++ % 4);
+  await editor(page)
+    .locator("h1")
+    .click({ position: { x, y: 10 } });
   await expect(tools(page)).toBeHidden();
 }
 async function saved(page) {
@@ -189,6 +201,75 @@ test("a drag ending inside an inline formula takes the whole formula", async ({
   // Starting from the end, back into a formula.
   await drag(page, { text: "words", at: "end" }, { formula: "Alpha" });
   expect(await quote(page, 9)).toBe("$a+b$ beta words");
+});
+
+test("a formula is selected whole by a drag over it, a drag from it or a double click", async ({
+  page,
+}) => {
+  await boot(page);
+  await reset(page);
+  // Dragged over from edge to edge.
+  await drag(
+    page,
+    { formula: "Only", pos: "left" },
+    { formula: "Only", pos: "right" },
+  );
+  expect(await format(page, "高亮", 1)).toContain(
+    `Only ${MARK}$e=mc^2$</mark> here.`,
+  );
+  await drag(
+    page,
+    { formula: "Only", pos: "left" },
+    { formula: "Only", pos: "right" },
+  );
+  expect(await format(page, "加粗", 2)).toContain("Only **$e=mc^2$** here.");
+  // A drag starting inside a formula.
+  await drag(page, { formula: "Alpha" }, { text: "words", at: "end" });
+  expect(await format(page, "斜体", 3)).toContain(
+    "Alpha text *$a+b$ beta words* end.",
+  );
+  // Double-clicked.
+  await dblclick(page, { formula: "Only" });
+  expect(await quote(page, 4)).toBe("$e=mc^2$");
+  await dblclick(page, { formula: "Only" });
+  expect(await format(page, "文字颜色", 5)).toContain(
+    'Only <span style="color: #b23c36">$e=mc^2$</span> here.',
+  );
+  // Double-clicked, then Shift+click after it or before it.
+  await dblShift(page, { formula: "Alpha" }, { text: "words", at: "end" });
+  expect(await quote(page, 6)).toBe("$a+b$ beta words");
+  await dblShift(page, { formula: "Alpha" }, { text: "Alpha" });
+  expect(await quote(page, 7)).toBe("Alpha text $a+b$");
+  // Shift+click on a formula extends the selection over it.
+  await dblclick(page, { text: "beta" });
+  await page.keyboard.down("Shift");
+  const formula = await point(page, { formula: "Alpha" });
+  await page.mouse.click(formula.x, formula.y);
+  await page.keyboard.up("Shift");
+  expect(await quote(page, 8)).toBe("$a+b$ beta");
+});
+
+test("a click still opens a formula for editing, and Enter a selected one", async ({
+  page,
+}) => {
+  await boot(page);
+  const formula = editor(page)
+    .locator("p", { hasText: "Only" })
+    .locator(".formula");
+  await click(page, { formula: "Only" });
+  const src = editor(page).locator(".math-src");
+  await expect(src).toHaveText("$e=mc^2$");
+  await reset(page);
+  await expect(src).toHaveCount(0);
+  await expect(formula).toBeVisible();
+  // Double-clicked: selected, not open; Enter opens it.
+  await dblclick(page, { formula: "Only" });
+  await expect(src).toHaveCount(0);
+  await expect(tools(page)).toBeVisible();
+  await expect(formula).toHaveAttribute("data-selected-whole", "");
+  await page.keyboard.press("Enter");
+  await expect(src).toHaveText("$e=mc^2$");
+  expect(await saved(page)).toContain("Only $e=mc^2$ here.");
 });
 
 test("formatting text and part of a bold run writes Markdown that reads as shown", async ({

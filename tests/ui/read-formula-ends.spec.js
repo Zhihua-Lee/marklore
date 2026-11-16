@@ -168,6 +168,11 @@ async function saved(page) {
     .toBe(count + 1);
   return page.evaluate(() => window.mock.saved.at(-1));
 }
+// A double click on the middle of a formula as drawn.
+async function dblclick(page, formula) {
+  const box = await formula.boundingBox();
+  await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
+}
 const MARK = '<mark style="background-color: #f2d878; color: #000000">';
 async function highlight(page, step) {
   await expect(tools(page), "step " + step).toBeVisible();
@@ -299,4 +304,52 @@ test("an end inside a formula inside bold marks only the selection, the bold kep
   );
   await expect(block.locator("strong")).toHaveCount(1);
   await expect(block.locator("mark")).toHaveCount(2);
+});
+
+test("a formula double-clicked with the format bar on stays in Read mode, selected whole", async ({
+  page,
+}) => {
+  await boot(page);
+  const mode = () =>
+    page.locator('.modes [aria-pressed="true"]').getAttribute("data-mode");
+  const formula = page
+    .locator("#content p", { hasText: "Only" })
+    .locator(".formula");
+  await dblclick(page, formula);
+  await expect(tools(page)).toBeVisible();
+  expect(await mode()).toBe("read");
+  expect(await quote(page, 13)).toBe("$e=mc^2$");
+  await dblclick(page, formula);
+  expect(await highlight(page, 7)).toContain(
+    `Only ${MARK}$e=mc^2$</mark> here.`,
+  );
+  expect(await mode()).toBe("read");
+
+  // And on from there with Shift and a click.
+  await dblclick(
+    page,
+    page.locator("#content p", { hasText: "Alpha" }).locator(".formula"),
+  );
+  const words = await page.evaluate(() => {
+    const walker = document.createTreeWalker(
+      document.querySelector("#content"),
+      NodeFilter.SHOW_TEXT,
+    );
+    for (let node; (node = walker.nextNode());) {
+      const at = node.data.indexOf("words");
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at + 4);
+      range.setEnd(node, at + 5);
+      const box = range.getBoundingClientRect();
+      return { x: box.right - 1, y: box.top + box.height / 2 };
+    }
+  });
+  await page.keyboard.down("Shift");
+  await page.mouse.click(words.x, words.y);
+  await page.keyboard.up("Shift");
+  expect(await mode()).toBe("read");
+  expect(await highlight(page, 8)).toContain(
+    `Alpha text ${MARK}$a+b$ beta words</mark> end.`,
+  );
 });

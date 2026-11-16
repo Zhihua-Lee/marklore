@@ -1450,11 +1450,26 @@ $("#content").addEventListener("dblclick", (event) => {
   const selected = selectionSource($("#content"));
   // A word selection belongs to the formatting tools: in split editing, and in
   // Read mode with its format bar on (it stays in Read mode).
-  // Alt-double-click retains the explicit source-location gesture.
+  // Alt-double-click retains the explicit source-location gesture. An
+  // inline formula double-clicked there is selected whole, as a word (and,
+  // as for a word, Shift+click then extends by characters, not words with
+  // their trailing spaces).
+  const formula =
+    active.mode === "read" &&
+    settings.readingFormat &&
+    !selected &&
+    !event.altKey &&
+    event.target.closest(".formula[data-from]");
+  if (formula) {
+    const range = document.createRange();
+    range.selectNode(formula);
+    window.getSelection().removeAllRanges();
+    window.getSelection().addRange(range);
+  }
   if (
     active.mode === "read" &&
     settings.readingFormat &&
-    selected &&
+    (selected || formula) &&
     !event.altKey
   )
     return;

@@ -172,8 +172,17 @@ const SPLITTABLE = "strong,em,s,del,b,i,u,ins,sub,sup,small,mark,span";
 // each such element for the start, the opening ones for the end). An
 // element whose text is selected to its edge is taken whole (its markers
 // stay where they render as they did). Null when it is in no such emphasis,
-// or in something always taken whole.
+// or in a link (always taken whole).
 function splitEnd(node, offset, end, other, block, text) {
+  // An end in a formula or code span (taken whole) is at its outer edge,
+  // and from there as any end in the emphasis around it.
+  const whole = (
+    node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement
+  )?.closest(".formula,code");
+  if (whole && block.contains(whole) && !whole.contains(other)) {
+    node = whole.parentNode;
+    offset = [...node.childNodes].indexOf(whole) + (end ? 1 : 0);
+  }
   const chain = [];
   for (
     let el = node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;

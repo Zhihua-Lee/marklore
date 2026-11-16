@@ -287,3 +287,16 @@ test("a paragraph selected by triple click before a display formula is highlight
   await line.click({ clickCount: 3, position: { x: 30, y: 10 } });
   expect((await quote(page, 12)).trim()).toBe("Before display line.");
 });
+
+test("an end inside a formula inside bold marks only the selection, the bold kept", async ({
+  page,
+}) => {
+  await boot(page);
+  await select(page, { text: "Some" }, { formula: "Some" });
+  const block = page.locator("#content p", { hasText: "Some" });
+  expect(await highlight(page, 6)).toContain(
+    `${MARK}Some </mark>**${MARK}bold $z$</mark> words** after.`,
+  );
+  await expect(block.locator("strong")).toHaveCount(1);
+  await expect(block.locator("mark")).toHaveCount(2);
+});

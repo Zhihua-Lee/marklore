@@ -70,6 +70,12 @@ function toggleTask(state, dispatch, view) {
   dispatch?.(tr);
   return true;
 }
+// Bold, italic or strike on the selection: taken off where all of it has
+// it, else added (over text and part of a bold run, the bold extends, as in
+// Read mode). Spaces at its ends stay out.
+export const toggleFormat = (type) =>
+  toggleMark(type, null, { removeWhenPresent: false });
+
 // Highlight and text color are inline HTML, as the source pane writes them.
 const paints = {
   highlight: {
@@ -282,13 +288,13 @@ export function richCommand(view, action, options = {}) {
       done = run(heading(Number(options.level)));
       break;
     case "bold":
-      done = run(toggleMark(M.strong));
+      done = run(toggleFormat(M.strong));
       break;
     case "italic":
-      done = run(toggleMark(M.em));
+      done = run(toggleFormat(M.em));
       break;
     case "strike":
-      done = run(toggleMark(M.strike));
+      done = run(toggleFormat(M.strike));
       break;
     case "inline":
       done = run(toggleMark(M.code));

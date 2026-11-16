@@ -21,7 +21,6 @@ import {
   deleteSelection,
   joinBackward,
   selectNodeBackward,
-  toggleMark,
   exitCode,
 } from "prosemirror-commands";
 import {
@@ -69,6 +68,7 @@ import {
 import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
+import { toggleFormat } from "./commands.js";
 import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
 import {
@@ -716,8 +716,8 @@ export function createRichEditor({
       "Mod-z": undo,
       "Mod-y": redo,
       "Mod-Shift-z": redo,
-      "Mod-b": toggleMark(M.strong),
-      "Mod-i": toggleMark(M.em),
+      "Mod-b": toggleFormat(M.strong),
+      "Mod-i": toggleFormat(M.em),
       "Mod-k": (_s, _d, view) => editLink(view),
       ArrowLeft: chainCommands(
         codeEdge(-1),

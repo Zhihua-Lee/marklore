@@ -192,3 +192,27 @@ test("formatting text and part of a bold run writes Markdown that reads as shown
   await expect(para.locator("mark")).toHaveCount(2);
   await expect(para).not.toContainText("*");
 });
+
+test("bold over text and part of a bold run extends the bold", async ({
+  page,
+}) => {
+  await boot(page);
+  await reset(page);
+  await drag(page, { text: "Some" }, { text: "bold", at: "end" });
+  expect(await format(page, "加粗", 1)).toContain(
+    "**Some bold $z$ words** after.",
+  );
+  await drag(
+    page,
+    { text: "words", block: "Some" },
+    { text: "after", at: "end", block: "Some" },
+  );
+  expect(await format(page, "加粗", 2)).toContain(
+    "Some **bold $z$ words after**.",
+  );
+  // Wholly inside the bold, it is taken off.
+  await drag(page, { text: "bold" }, { text: "bold", at: "end" });
+  expect(await format(page, "加粗", 3)).toContain(
+    "Some bold **$z$ words** after.",
+  );
+});

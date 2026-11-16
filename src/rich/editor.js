@@ -68,7 +68,7 @@ import {
 import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
 import { selectionBubble } from "./bubble.js";
-import { toggleFormat } from "./commands.js";
+import { toggleFormat, trimmed } from "./commands.js";
 import { codeColors } from "./code.js";
 import { imageBox } from "./images.js";
 import {
@@ -1002,10 +1002,16 @@ export function createRichEditor({
         ),
       );
     },
-    // The selection as offsets in the note (null when nothing is selected).
+    // The selection as offsets in the note (null when nothing is selected),
+    // without the spaces at its ends.
     selected() {
-      const { from, to, empty } = view.state.selection;
+      const { empty } = view.state.selection;
       if (empty) return null;
+      const { from, to } = trimmed(
+        view.state.doc,
+        view.state.selection.from,
+        view.state.selection.to,
+      );
       const a = offsetAt(from);
       const b = offsetAt(to, -1);
       return a === null || b === null || b <= a ? null : { from: a, to: b };

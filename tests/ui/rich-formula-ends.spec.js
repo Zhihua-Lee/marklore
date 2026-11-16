@@ -216,3 +216,16 @@ test("bold over text and part of a bold run extends the bold", async ({
     "Some bold **$z$ words** after.",
   );
 });
+
+test("a double click and Shift+click leave the space after the last word out of a highlight", async ({
+  page,
+}) => {
+  await boot(page);
+  await reset(page);
+  await dblShift(page, { text: "text" }, { text: "beta", at: "end" });
+  expect(await format(page, "高亮", 1)).toContain(
+    `Alpha ${MARK}text $a+b$ beta</mark> words end.`,
+  );
+  await dblShift(page, { text: "text" }, { text: "beta", at: "end" });
+  expect(await quote(page, 2)).toBe("text $a+b$ beta");
+});

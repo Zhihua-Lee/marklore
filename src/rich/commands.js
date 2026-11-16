@@ -76,6 +76,16 @@ function toggleTask(state, dispatch, view) {
 export const toggleFormat = (type) =>
   toggleMark(type, null, { removeWhenPresent: false });
 
+// A range without the spaces at its ends (a double click and Shift+click
+// take the space after the last word), unless it holds only spaces.
+export function trimmed(doc, from, to) {
+  let a = from,
+    b = to;
+  while (a < b && /^\s$/.test(doc.textBetween(a, a + 1))) a++;
+  while (b > a && /^\s$/.test(doc.textBetween(b - 1, b))) b--;
+  return a < b ? { from: a, to: b } : { from, to };
+}
+
 // Highlight and text color are inline HTML, as the source pane writes them.
 const paints = {
   highlight: {
@@ -126,10 +136,12 @@ function paint(action, color) {
             ]);
       });
     for (const [a, b, m] of colors) tr.removeMark(a, b, m);
+    // Spaces at the ends of the selection stay out, as in Read mode.
+    const paintable = trimmed(state.doc, from, to);
     if (color)
       tr.addMark(
-        from,
-        to,
+        paintable.from,
+        paintable.to,
         M.html.create({
           tag: kind.tag,
           open: kind.open(color.toLowerCase()),

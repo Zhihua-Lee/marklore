@@ -542,7 +542,7 @@ function formatEdits(s, action, options) {
       segmentEdit(s, segment, action, { ...options, ...extra }),
     );
   const pieces = splitSegments(s, action);
-  if (pieces === s.segments || !ADDED[action]) return plan(pieces);
+  if (!ADDED[action]) return plan(pieces);
   const words = pieces
     .map((piece) => {
       const part = s.text.slice(piece.from, piece.to);
@@ -553,6 +553,10 @@ function formatEdits(s, action, options) {
       };
     })
     .filter((piece) => piece.to > piece.from);
+  // Not split: the delimiters go around the words all the same (spaces
+  // selected at an edge, as a double click and Shift+click take them, stay
+  // outside: `**words **` would not close).
+  if (pieces === s.segments) return plan(words.length ? words : pieces);
   const meant = (edits) =>
     rendersAsMeant(
       s.text,

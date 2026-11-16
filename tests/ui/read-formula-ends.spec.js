@@ -353,3 +353,23 @@ test("a formula double-clicked with the format bar on stays in Read mode, select
     `Alpha text ${MARK}$a+b$ beta words</mark> end.`,
   );
 });
+
+test("bold, italic or strike over a selection with spaces at its edges leaves the spaces outside", async ({
+  page,
+}) => {
+  await boot(page);
+  const bar = async (name, step) => {
+    await expect(tools(page), "step " + step).toBeVisible();
+    await tools(page).getByRole("button", { name, exact: true }).click();
+    return saved(page);
+  };
+  // "text $a+b$ beta " with the space after it.
+  await select(page, { text: "text" }, { text: "beta ", at: "end" });
+  expect(await bar("加粗", 9)).toContain("Alpha **text $a+b$ beta** words");
+  // " gamma \(c+d\)" with the space before it.
+  await select(page, { text: " gamma" }, { formula: "Paren", edge: "last" });
+  expect(await bar("斜体", 10)).toContain("Paren *gamma \\(c+d\\)* delta");
+  // Spaces at both ends.
+  await select(page, { text: " start" }, { text: "quote ", at: "end" });
+  expect(await bar("删除线", 11)).toContain("> Quote ~~start $q$ quote~~ end.");
+});

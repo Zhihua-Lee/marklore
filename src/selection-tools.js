@@ -1,7 +1,7 @@
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { markdownEdit } from "./markdown-edits.js";
 import { ADDED, rendersAsMeant } from "./format-check.js";
-import { textOffset, findPosition } from "./positions.js";
+import { textOffset, findPosition, mappedPoint, holds } from "./positions.js";
 import { wireColorButton, closeColorPicker } from "./color-picker.js";
 import { icon } from "./icons.js";
 import { t } from "../desktop/i18n.mjs";
@@ -266,6 +266,43 @@ function insideTag(text, block, from) {
   );
 }
 
+// An end of the selection the format bar cannot place moves into the
+// selection, onto the nearest text or inline formula: an end in a display
+// formula or a code block that the other end is not in (as Edit mode's
+// selection ends at its edge), or between blocks (a paragraph selected by
+// triple click ends at the start of the next one). False when nothing is
+// left to format.
+function settle(range, content) {
+  const element = (node) =>
+    node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
+  const placed = (node, offset, end) => {
+    const el = element(node);
+    if (!el?.closest(BLOCKS) || el.closest(OFF_LIMITS)) return false;
+    // In a formula, but at its edge (none of it selected).
+    const formula = el.closest(".formula");
+    if (formula && !holds(formula, node, offset, end)) return false;
+    if (node.nodeType !== Node.ELEMENT_NODE)
+      return Boolean(el.closest("[data-text-from], .formula"));
+    return Boolean(node.childNodes[end ? offset - 1 : offset]);
+  };
+  for (const end of [false, true]) {
+    const node = end ? range.endContainer : range.startContainer,
+      offset = end ? range.endOffset : range.startOffset,
+      other = end ? range.startContainer : range.endContainer;
+    const off = element(node)?.closest(OFF_LIMITS);
+    if (off ? off.contains(other) : placed(node, offset, end)) continue;
+    const point = mappedPoint(content, node, offset, end, OFF_LIMITS);
+    if (!point) return false;
+    if (point.formula)
+      end
+        ? range.setEndAfter(point.formula)
+        : range.setStartBefore(point.formula);
+    else if (end) range.setEnd(point.node, point.offset);
+    else range.setStart(point.node, point.offset);
+  }
+  return !range.collapsed;
+}
+
 // editable(doc): the mode allows formatting from the page (Edit mode, or Read
 // mode once the reader turns on its format bar).
 export function previewTextSelection(
@@ -287,6 +324,7 @@ export function previewTextSelection(
     return null;
   const text = doc.text;
   const range = selected.getRangeAt(0).cloneRange();
+  if (!settle(range, content)) return null;
   const element = (node) =>
     node.nodeType === Node.ELEMENT_NODE ? node : node.parentElement;
   const startNode = range.startContainer,

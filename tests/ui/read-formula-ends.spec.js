@@ -241,3 +241,49 @@ test("a mark for the AI takes a selection with an end in or at a formula", async
   expect(await quote(page, 11)).toBe("After display line.");
 });
 
+test("an end inside a display formula or a code block formats the text before it", async ({
+  page,
+}) => {
+  await boot(page);
+  // Ending inside $$ … $$: the paragraph before it.
+  await select(page, { text: "display" }, { after: "Before display" });
+  expect(await highlight(page, 1)).toContain(
+    `Before ${MARK}display line.</mark>\n\n$$`,
+  );
+  // Starting inside \[ … \]: the paragraph after it.
+  await select(
+    page,
+    { after: "Brackets before" },
+    { text: "Brackets after", at: "end" },
+  );
+  expect(await highlight(page, 2)).toContain(
+    `\\]\n\n${MARK}Brackets after</mark>.`,
+  );
+  // Ending inside a code block.
+  await select(page, { text: "before text" }, { after: "Code before" });
+  expect(await highlight(page, 3)).toContain(
+    `Code ${MARK}before text.</mark>\n`,
+  );
+  // Ending at the start of the next block: no more than what is selected.
+  await select(
+    page,
+    { text: "After display" },
+    { blockStart: "Brackets before" },
+  );
+  expect(await highlight(page, 4)).toContain(
+    `${MARK}After display line.</mark>\n\nBrackets`,
+  );
+});
+
+test("a paragraph selected by triple click before a display formula is highlighted", async ({
+  page,
+}) => {
+  await boot(page);
+  const line = page.locator("#content p", { hasText: "Before display" });
+  await line.click({ clickCount: 3, position: { x: 30, y: 10 } });
+  expect(await highlight(page, 5)).toContain(
+    `${MARK}Before display line.</mark>\n\n$$`,
+  );
+  await line.click({ clickCount: 3, position: { x: 30, y: 10 } });
+  expect((await quote(page, 12)).trim()).toBe("Before display line.");
+});

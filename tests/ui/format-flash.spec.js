@@ -114,6 +114,20 @@ async function formatFrames(page, { block, phrase, button, result }) {
       () => document.querySelectorAll("#content .reading-skip").length,
     );
   await expect.poll(skipped, { timeout: 10000 }).toBeGreaterThan(40);
+  // Blocks far away are skipped while formulas are still drawn; those near
+  // the screen once the last is: the page is quiet when the count holds.
+  let last = -1;
+  await expect
+    .poll(
+      async () => {
+        const now = await skipped();
+        const same = now === last;
+        last = now;
+        return same;
+      },
+      { timeout: 10000, intervals: [700] },
+    )
+    .toBe(true);
   const skippedBefore = await skipped();
 
   const tools = page.getByRole("toolbar", { name: "选中文字格式" });

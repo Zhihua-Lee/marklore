@@ -100,6 +100,71 @@ test("finished blocks off screen are skipped without changing the note's layout"
   expect(difference.height).toBeLessThan(1);
 });
 
+test("blocks whose formulas are drawn are skipped while the rest of the note is still drawn", async ({
+  page,
+}) => {
+  // A long note with a section wrapping it all and some 2,000 formulas takes
+  // a while to draw them all in idle time. Waiting for the last one, nothing
+  // was skipped meanwhile, and each batch drawn painted the whole note
+  // again: the page stayed busy for the best part of a minute.
+  const lemmas = Array.from(
+    { length: 120 },
+    (_, n) =>
+      `### Lemma ${n}\n\n` +
+      `Let $f_{${n}} \\in H$ with $\\langle f_{${n}}, g \\rangle = 0$ and $\\|T f\\| < \\varepsilon_{${n}}$, so $\\sum_k |a_k|^2 \\le ${n}$.\n\n` +
+      `$$\\int_0^1 \\frac{f_{${n}}(x)}{1+x^2} \\, dx \\le \\sum_{k=0}^{${n}} \\frac{1}{k^2+1}$$\n\n` +
+      `- Case $k = ${n}$: $a_{${n}} \\to 0$.\n- Case $k > ${n}$: $|a_k| \\le 2^{-k}$ and $e^{-x} \\le 1$.\n\n` +
+      `Then $\\|P_{${n}}\\| = 1$, $P_{${n}}^2 = P_{${n}}$ and $\\operatorname{tr} P_{${n}} = ${n}$.\n\n`,
+  );
+  const text =
+    "# Guide\n\n" +
+    Array.from(
+      { length: 8 },
+      (_, c) =>
+        `## Chapter ${c}\n\n` + lemmas.slice(c * 15, c * 15 + 15).join(""),
+    ).join("");
+  await boot(page, text);
+  await page.evaluate(() => {
+    const reader = document.querySelector("#reader");
+    reader.scrollTop = reader.scrollHeight / 2;
+  });
+  // Sampled until every formula is drawn: a moment with blocks skipped and
+  // formulas still waiting, the note's layout as without skipping. Blocks
+  // within a screen of the view are not skipped meanwhile: one skipped on
+  // screen is not hit-tested until the next frame, and the reading position
+  // measured then (formulas drawn above it) threw the page off by thousands
+  // of pixels.
+  let seen = null;
+  const near = [];
+  const until = Date.now() + 60000;
+  while (Date.now() < until && near.length < 40) {
+    const now = await page.evaluate(() => {
+      const view = document.querySelector("#reader").getBoundingClientRect();
+      const skipped = [...document.querySelectorAll("#content .reading-skip")];
+      return {
+        undrawn: document.querySelectorAll("#content [data-folio-math]").length,
+        skipped: skipped.length,
+        near: skipped.filter((block) => {
+          const rect = block.getBoundingClientRect();
+          return (
+            rect.bottom > view.top - view.height + 2 &&
+            rect.top < view.bottom + view.height - 2
+          );
+        }).length,
+      };
+    });
+    if (!now.undrawn) break;
+    near.push(now.near);
+    if (now.skipped) seen ??= now;
+    await page.waitForTimeout(100);
+  }
+  expect(seen).not.toBeNull();
+  expect(Math.max(...near)).toBe(0);
+  const difference = await layoutDifference(page);
+  expect(difference.blocks).toBeLessThan(1);
+  expect(difference.height).toBeLessThan(1);
+});
+
 test("a new reading width measures skipped blocks again", async ({ page }) => {
   await boot(page, longNote);
   await allDrawn(page);

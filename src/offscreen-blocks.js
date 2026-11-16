@@ -164,10 +164,12 @@ export function skipOffscreenBlocks(host, scroller) {
     const quiet = Math.max(paused, lastScroll + 300);
     if (performance.now() < quiet || navigationMoving(scroller))
       return schedule(Math.max(50, quiet - performance.now()));
-    // Not while formulas are still being drawn: each pass measures the note,
-    // and between drawing batches that is a whole layout each time. The last
-    // formula drawn (a change in the note) schedules the next pass.
-    if (host.querySelector("[data-folio-math]")) return;
+    // Also while the note's other formulas are still being drawn (in idle
+    // time, formula-hydration.js): a block is skipped once its own are drawn.
+    // Waiting for the whole note kept everything drawn for the minute a long
+    // note takes, and each batch drawn then painted the whole note again
+    // (measured: 4,400 formulas, ~200 frames over 100 ms, the page busy for
+    // 57 s, against 16 s). Each batch drawn schedules the next pass.
     const budget = Math.max(4, Math.min(12, deadline?.timeRemaining() ?? 8)),
       candidates = host.querySelectorAll(CANDIDATES),
       start = performance.now();
@@ -201,11 +203,27 @@ export function skipOffscreenBlocks(host, scroller) {
       if (finished(el)) found.push(el);
       else waiting = true;
     }
+    // While formulas are still drawn, blocks on or near the screen wait for
+    // the last: a block skipped on screen is taken for skipped until the next
+    // frame is drawn, and the reading position measured meanwhile (a batch
+    // of formulas drawn above it) missed its text and threw the page by
+    // thousands of pixels.
+    const drawing = Boolean(host.querySelector("[data-folio-math]")),
+      view = drawing ? scroller.getBoundingClientRect() : null;
     // Then styles and heights (one style and layout update for the batch),
     // then the writes.
     const blocks = found.filter((el) => {
+      const rect = el.getBoundingClientRect();
       // Not shown now (a folded section): judged when it is.
-      if (!el.getBoundingClientRect().height) return false;
+      if (!rect.height) return false;
+      if (
+        view &&
+        rect.bottom > view.top - view.height &&
+        rect.top < view.bottom + view.height
+      ) {
+        waiting = true;
+        return false;
+      }
       const ok = safe(el);
       verdicts.set(el, ok);
       return ok;

@@ -57,6 +57,7 @@ import {
 import {
   DrawnView,
   closer,
+  formulaEnds,
   readingWith,
   stepIn,
   grab,
@@ -693,6 +694,7 @@ export function createRichEditor({
     codeRing,
     tickFont,
     closer,
+    formulaEnds,
     titleWatch,
     firstProperty,
     history(),

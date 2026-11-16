@@ -96,6 +96,8 @@ function scheduleBackfill() {
   });
 }
 const waiting = new Set();
+// Where each drawn node is (its node view's getPos), by its element.
+const drawn = new WeakMap();
 
 export class DrawnView {
   constructor(node, view, getPos, options) {
@@ -104,6 +106,7 @@ export class DrawnView {
     const inline = node.type === S.math_inline || node.type === S.raw_inline;
     this.dom = document.createElement(inline ? "span" : "div");
     this.dom.contentEditable = "false";
+    drawn.set(this.dom, getPos);
     this.draw(node, options);
     this.dom.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
@@ -356,6 +359,57 @@ export const grab = (dir) => (state, dispatch) => {
   dispatch?.(state.tr.setSelection(NodeSelection.create(state.doc, hit.pos)));
   return true;
 };
+// The inline formula drawn under a point of the page: its position, else
+// null.
+export function formulaUnder(view, x, y) {
+  const el = document.elementFromPoint(x, y)?.closest(".formula.rich-drawn");
+  if (!el || !view.dom.contains(el)) return null;
+  const pos = drawn.get(el)?.();
+  return typeof pos === "number" &&
+    view.state.doc.nodeAt(pos)?.type === S.math_inline
+    ? pos
+    : null;
+}
+// A formula is selected whole: a drag (or a Shift+click) let go of over an
+// inline formula ends past it, on the far side from where it started, as
+// Read mode takes a formula an end of the selection is in. The browser
+// would end it at the formula's nearer edge, often before it.
+export const formulaEnds = new Plugin({
+  view(view) {
+    let down = null;
+    const press = (e) => {
+      // A press on a formula itself is the formula's own (DrawnView).
+      down =
+        e.button === 0 && !e.defaultPrevented ? { shift: e.shiftKey } : null;
+    };
+    const release = (e) => {
+      const was = down;
+      down = null;
+      if (!was || !view.hasFocus()) return;
+      const sel = view.state.selection;
+      if (!(sel instanceof TextSelection) || sel.empty) return;
+      const at = formulaUnder(view, e.clientX, e.clientY);
+      if (at === null) return;
+      const { anchor } = sel;
+      const head = at >= anchor ? at + 1 : at;
+      if (head === sel.head) return;
+      view.dispatch(
+        view.state.tr
+          .setSelection(TextSelection.create(view.state.doc, anchor, head))
+          .setMeta("pointer", true),
+      );
+    };
+    view.dom.addEventListener("mousedown", press);
+    document.addEventListener("mouseup", release);
+    return {
+      destroy() {
+        view.dom.removeEventListener("mousedown", press);
+        document.removeEventListener("mouseup", release);
+      },
+    };
+  },
+});
+
 // Enter on a selected formula or raw block opens it.
 export const openSelected = (state, dispatch, view) => {
   const sel = state.selection;

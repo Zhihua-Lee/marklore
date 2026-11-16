@@ -155,6 +155,42 @@ async function quote(page, step) {
   return text;
 }
 
+test("a drag ending inside an inline formula takes the whole formula", async ({
+  page,
+}) => {
+  await boot(page);
+  await reset(page);
+  await drag(page, { text: "Alpha" }, { formula: "Alpha" });
+  expect(await format(page, "高亮", 1)).toContain(
+    `${MARK}Alpha text $a+b$</mark> beta`,
+  );
+  await drag(page, { text: "Alpha" }, { formula: "Alpha" });
+  expect(await quote(page, 2)).toBe("Alpha text $a+b$");
+  await drag(page, { text: "Alpha" }, { formula: "Alpha" });
+  expect(await format(page, "加粗", 3)).toContain("**Alpha text $a+b$** beta");
+  // The \( \) syntax, in a list item.
+  await drag(page, { text: "List two" }, { formula: "List two" });
+  expect(await format(page, "文字颜色", 4)).toContain(
+    '- <span style="color: #b23c36">List two \\(v_2\\)</span> more',
+  );
+  // In a table cell, a quote, next to CJK text, inside bold.
+  await drag(page, { text: "cell" }, { formula: "cell" });
+  expect(await quote(page, 5)).toBe("cell one $w$");
+  await drag(page, { text: "Quote" }, { formula: "Quote" });
+  expect(await quote(page, 6)).toBe("Quote start $q$");
+  await drag(page, { text: "核心" }, { formula: "核心", i: 1 });
+  expect(await format(page, "加粗", 7)).toContain(
+    "**核心 $\\mu V = V$ 且 $\\mu \\ge 1$**，有界。",
+  );
+  await drag(page, { text: "Some" }, { formula: "Some" });
+  expect(await format(page, "高亮", 8)).toContain(
+    `${MARK}Some </mark>**${MARK}bold $z$</mark> words** after.`,
+  );
+  // Starting from the end, back into a formula.
+  await drag(page, { text: "words", at: "end" }, { formula: "Alpha" });
+  expect(await quote(page, 9)).toBe("$a+b$ beta words");
+});
+
 test("formatting text and part of a bold run writes Markdown that reads as shown", async ({
   page,
 }) => {

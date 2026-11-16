@@ -648,3 +648,68 @@ test("Settings opens libraries to AI and connects assistants with one button", a
   );
   await expect(page.locator("#ai-setup")).toContainText("mcp.mjs");
 });
+
+test("formatting a note read, with no proposal shown, does not search the note for review marks", async ({
+  page,
+}) => {
+  // Each render takes out a review's marks; with none drawn, looking for
+  // them went through the whole note four times (~50 ms of each word
+  // formatted in a long note).
+  await installFolio(page);
+  await page.addInitScript(() => {
+    const text =
+      "# Notes\n\n" +
+      Array.from(
+        { length: 40 },
+        (_, n) => `Paragraph ${n} with a phrase to format here.\n\n`,
+      ).join("");
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: [
+          {
+            id: "note",
+            name: "Notes.md",
+            path: "C:/synthetic/Notes.md",
+            text,
+            version: "v1",
+          },
+        ],
+        restored: [],
+        roots: [],
+        settings: { readingFormat: true },
+      }),
+      save: async () => ({ version: "v2" }),
+      proposals: async () => [],
+    });
+  });
+  await page.goto("/");
+  const paragraph = page.locator("#content p", { hasText: "Paragraph 7 " });
+  await expect(paragraph).toBeVisible();
+  await page.evaluate(() => {
+    const content = document.querySelector("#content");
+    window.searches = [];
+    for (const target of [content, content.parentElement]) {
+      const all = target.querySelectorAll;
+      target.querySelectorAll = function (selector) {
+        if (/proposal/.test(selector)) window.searches.push(selector);
+        return all.call(this, selector);
+      };
+    }
+  });
+  await paragraph.evaluate((p) => {
+    const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
+    let node;
+    while ((node = walker.nextNode()) && !node.data.includes("phrase"));
+    const at = node.data.indexOf("phrase");
+    document.querySelector("#reader").focus();
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + 6);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+  const tools = page.getByRole("toolbar", { name: "选中文字格式" });
+  await tools.getByRole("button", { name: "加粗", exact: true }).click();
+  await expect(paragraph.locator("strong")).toHaveText("phrase");
+  expect(await page.evaluate(() => window.searches)).toEqual([]);
+});

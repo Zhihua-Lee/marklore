@@ -731,12 +731,18 @@ export function createProposals({
     preview(doc, p);
   }
 
-  // The marks of the shown review, drawn again.
+  // The marks of the shown review, drawn again. With none drawn since they
+  // were last taken out, the page is not searched for them: that is four
+  // looks through the whole note, some 50 ms of each word formatted in a
+  // long note read.
+  let drawn = false;
   function marks() {
-    unmark(content);
+    if (drawn) unmark(content);
+    drawn = false;
     const doc = getActive(),
       shown = doc?.preview;
     if (!shown) return;
+    drawn = true;
     const p = list.find((x) => x.id === shown.id);
     const decisions = p ? decisionsOf(p) : new Map();
     shown.states = itemsOf(shown).map((ix) => decisions.get(ix) || "pending");

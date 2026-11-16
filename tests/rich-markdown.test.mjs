@@ -222,7 +222,11 @@ test("marks that cross are written nested and read back as they are", () => {
   );
   assert.equal(
     over(out, "part", "tail", M.strike.create()),
-    "Plain then **strong** ~~**part** tail~~ text.\n",
+    "Plain then **strong ~~part~~** ~~tail~~ text.\n",
+  );
+  assert.equal(
+    over(out, "part", "tail", M.em.create()),
+    "Plain then **strong *part*** *tail* text.\n",
   );
   // A highlight holding all of a bold run stays one.
   assert.equal(

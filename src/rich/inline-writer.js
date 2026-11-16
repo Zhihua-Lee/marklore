@@ -9,8 +9,9 @@
 // Here the marks of each piece are put in an order that nests: a mark whose
 // run holds another's is outside it; of two runs that cross, bold, italic,
 // strike and links stay whole and inline HTML closes before their
-// delimiters and opens again inside them (as Read mode's format bar does),
-// else the one going on longer stays whole. Code is innermost. Spaces at the
+// delimiters and opens again inside them (as Read mode's format bar does);
+// of bold, italic and strike, bold stays whole, then italic; else the one
+// going on longer stays whole. Code is innermost. Spaces at the
 // edge of a run of bold, italic or strike go outside its delimiters also
 // where the run is closed to let another mark close.
 import { MarkdownSerializerState } from "prosemirror-markdown";
@@ -57,7 +58,7 @@ export function markOrders(parent, { hardBreak = "hard_break", raw } = {}) {
         if (af <= bf && at >= bt) return -1;
         if (bf <= af && bt >= at) return 1;
         if (a.html !== b.html) return a.html ? 1 : -1;
-        return bt - at;
+        return a.mark.type.rank - b.mark.type.rank || bt - at;
       }
       if (a.was >= 0 && b.was >= 0) return a.was - b.was;
       if (a.was !== b.was) return a.was >= 0 ? -1 : 1;

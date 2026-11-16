@@ -168,3 +168,75 @@ test("places in a long table map to its Markdown", () => {
   const offset = mapText(flat, src, k);
   assert.equal(src.slice(offset, offset + 6), "row399");
 });
+
+// Marks whose runs cross are written nested, each closed before the other's
+// delimiters and opened again inside them, so the block reads back as it
+// is: a highlight over text and part of a bold run stays out of the bold's
+// `**`, and spaces at the edge of bold, italic or strike stay outside them
+// (so only those spaces may read back without the mark).
+test("marks that cross are written nested and read back as they are", () => {
+  const MARK = '<mark style="background-color: #f2d878; color: #000000">';
+  const COLOR = '<span style="color: #b23c36">';
+  const paint = (open, tag) => M.html.create({ tag, open, close: `</${tag}>` });
+  // Each character but spaces, and each formula, with its marks.
+  const marked = (doc) => {
+    const out = [];
+    doc.descendants((node) => {
+      const marks = node.marks.map((m) => m.type.name + (m.attrs.open || ""));
+      if (node.isText)
+        for (const ch of node.text) if (/\S/.test(ch)) out.push(ch + marks);
+      if (node.isLeaf && !node.isText) out.push(node.type.name + marks);
+    });
+    return out;
+  };
+  // The mark from the start of `from` to the end of `to`.
+  const over = (src, from, to, mark) => {
+    const r = edit(src, (tr, doc) =>
+      tr.addMark(at(doc, from), at(doc, to, to.length), mark),
+    );
+    assert.deepEqual(marked(load(r.text).doc), marked(r.doc), r.text);
+    return r.text;
+  };
+  const bold = "Some **bold $z$ words** after.\n";
+  assert.equal(
+    over(bold, "Some", "bold", paint(MARK, "mark")),
+    `${MARK}Some </mark>**${MARK}bold</mark> $z$ words** after.\n`,
+  );
+  assert.equal(
+    over(bold, "Some", "bold", paint(COLOR, "span")),
+    `${COLOR}Some </span>**${COLOR}bold</span> $z$ words** after.\n`,
+  );
+  assert.equal(
+    over(bold, "Some", "bold", M.em.create()),
+    "*Some* ***bold* $z$ words** after.\n",
+  );
+  assert.equal(
+    over(bold, "Some", "bold", M.strike.create()),
+    "~~Some~~ **~~bold~~ $z$ words** after.\n",
+  );
+  // From bold out into plain text.
+  const out = "Plain then **strong part** tail text.\n";
+  assert.equal(
+    over(out, "part", "tail", paint(MARK, "mark")),
+    `Plain then **strong ${MARK}part</mark>**${MARK} tail</mark> text.\n`,
+  );
+  assert.equal(
+    over(out, "part", "tail", M.strike.create()),
+    "Plain then **strong** ~~**part** tail~~ text.\n",
+  );
+  // A highlight holding all of a bold run stays one.
+  assert.equal(
+    over(out, "then", "tail", paint(MARK, "mark")),
+    `Plain ${MARK}then **strong part** tail</mark> text.\n`,
+  );
+  // Next to CJK text and punctuation.
+  assert.equal(
+    over("中文**加粗**，接着文字。\n", "文", "加", paint(MARK, "mark")),
+    `中${MARK}文</mark>**${MARK}加</mark>粗**，接着文字。\n`,
+  );
+  // Code stays innermost, written as it is.
+  assert.equal(
+    over("A `x*y` b\n", "A", "b", paint(MARK, "mark")),
+    `${MARK}A \`x*y\` b</mark>\n`,
+  );
+});

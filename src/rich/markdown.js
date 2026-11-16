@@ -18,6 +18,7 @@ import { tableNodes } from "prosemirror-tables";
 import { Transform } from "prosemirror-transform";
 import { createParser, lineOffsets } from "../markdown.js";
 import { imgTag, percent } from "../image-layout.js";
+import { useInlineWriter } from "./inline-writer.js";
 
 // Inline HTML tags taken as formatting when they come in pairs around text.
 const HTML_TAGS = new Set(
@@ -712,260 +713,268 @@ export function load(src) {
 
 let escaping = true;
 let inCell = false;
-const serializer = new MarkdownSerializer(
-  {
-    ...defaultMarkdownSerializer.nodes,
-    text(state, node) {
-      // In a table cell a pipe would end the cell.
-      const escape = escaping && !state.inAutolink;
-      if (!inCell) return state.text(node.text, escape);
-      const text = escape ? state.esc(node.text) : node.text;
-      state.text(escapePipes(text), false);
-    },
-    soft_break(state) {
-      state.write("\n");
-    },
-    horizontal_rule(state, node) {
-      state.write(node.attrs.markup || "---");
-      state.closeBlock(node);
-    },
-    details(state, node) {
-      const summary = node.firstChild;
-      state.write(node.attrs.head);
-      state.renderInline(summary);
-      state.write(node.attrs.tail);
-      state.closeBlock(summary);
-      for (let i = 1; i < node.childCount; i++)
-        state.render(node.child(i), node, i);
-      state.write(node.attrs.close);
-      state.closeBlock(node);
-    },
-    task_box(state, node) {
-      state.write(node.attrs.checked ? "[x]" : "[ ]");
-    },
-    heading(state, node) {
-      if (node.attrs.markup === "=" || node.attrs.markup === "-") {
-        state.renderInline(node);
-        state.ensureNewLine();
-        state.write(node.attrs.underline || node.attrs.markup.repeat(3));
+// Marks are written nested where their runs cross (inline-writer.js).
+const serializer = useInlineWriter(
+  new MarkdownSerializer(
+    {
+      ...defaultMarkdownSerializer.nodes,
+      text(state, node) {
+        // In a table cell a pipe would end the cell.
+        const escape = escaping && !state.inAutolink;
+        if (!inCell) return state.text(node.text, escape);
+        const text = escape ? state.esc(node.text) : node.text;
+        state.text(escapePipes(text), false);
+      },
+      soft_break(state) {
+        state.write("\n");
+      },
+      horizontal_rule(state, node) {
+        state.write(node.attrs.markup || "---");
         state.closeBlock(node);
-        return;
-      }
-      state.write(state.repeat("#", node.attrs.level) + " ");
-      state.renderInline(node, false);
-      state.closeBlock(node);
-    },
-    code_block(state, node) {
-      if (
-        node.attrs.params === "$$" ||
-        node.attrs.params.startsWith("\u0000raw:")
-      ) {
-        // A display formula or raw block open for editing (math.js): its
-        // text is its source, between its delimiters.
-        state.text(node.attrs.lead + node.textContent + node.attrs.tail, false);
+      },
+      details(state, node) {
+        const summary = node.firstChild;
+        state.write(node.attrs.head);
+        state.renderInline(summary);
+        state.write(node.attrs.tail);
+        state.closeBlock(summary);
+        for (let i = 1; i < node.childCount; i++)
+          state.render(node.child(i), node, i);
+        state.write(node.attrs.close);
         state.closeBlock(node);
-        return;
-      }
-      // A fence longer than any run of its character starting a line of
-      // the code, which would otherwise close it.
-      let fence = node.attrs.markup || "```";
-      const runs = new RegExp("^ {0,3}(\\" + fence[0] + "{3,})", "gm");
-      for (const m of node.textContent.matchAll(runs))
-        if (m[1].length >= fence.length)
-          fence = fence[0].repeat(m[1].length + 1);
-      state.write(fence + (node.attrs.params || "") + "\n");
-      state.text(node.textContent, false);
-      state.ensureNewLine();
-      state.write(fence);
-      state.closeBlock(node);
-    },
-    bullet_list(state, node) {
-      state.renderList(node, "  ", () => (node.attrs.bullet || "-") + " ");
-    },
-    ordered_list(state, node) {
-      const start = node.attrs.order || 1;
-      const width = String(start + node.childCount - 1).length;
-      const space = state.repeat(" ", width + 2);
-      state.renderList(node, space, (i) => {
-        const n = String(start + i);
-        return (
-          state.repeat(" ", width - n.length) +
-          n +
-          (node.attrs.delim || ".") +
-          " "
-        );
-      });
-    },
-    math_inline(state, node) {
-      state.write(node.attrs.raw ?? "$" + node.attrs.tex + "$");
-    },
-    math_display(state, node) {
-      state.text(node.attrs.raw ?? "$$\n" + node.attrs.tex + "\n$$", false);
-      state.closeBlock(node);
-    },
-    raw_block(state, node) {
-      state.text(node.attrs.source, false);
-      state.closeBlock(node);
-    },
-    raw_inline(state, node) {
-      state.write(node.attrs.source);
-    },
-    // A line of images aligned to a side: wrapped in `<p align>`.
-    paragraph(state, node) {
-      const align = lineAlign(node);
-      if (align) state.write(`<p align="${align}">`);
-      state.renderInline(node);
-      if (align) state.write("</p>");
-      state.closeBlock(node);
-    },
-    columns(state, node) {
-      state.write('<div class="columns">');
-      state.ensureNewLine();
-      node.forEach((column) => {
-        const width = column.attrs.width;
-        state.write(
-          '<div class="column"' +
-            (width === null ? "" : ` data-width="${percent(width)}"`) +
-            ">",
-        );
-        // Blank lines around the Markdown in a column, which other viewers
-        // need to read it as Markdown.
-        state.closeBlock(column);
-        state.renderContent(column);
-        state.write("</div>");
-        state.ensureNewLine();
-      });
-      state.write("</div>");
-      state.closeBlock(node);
-    },
-    image(state, node) {
-      // Resized or aligned: an `<img>` tag (image-layout.js).
-      if (node.attrs.width || node.attrs.align) {
-        state.write(imgTag(node.attrs));
-        return;
-      }
-      state.write(
-        "![" +
-          state.esc(node.attrs.alt || "") +
-          "](" +
-          address(node.attrs.src) +
-          titleOf(node.attrs.title) +
-          ")",
-      );
-    },
-    table(state, node) {
-      const rows = [];
-      node.forEach((row) => {
-        const cells = [];
-        row.forEach((cell) => cells.push(cellText(cell)));
-        rows.push(cells);
-      });
-      const aligns = [];
-      node.firstChild.forEach((cell) => aligns.push(cell.attrs.align));
-      // Padded tables keep their columns lined up (wide characters count
-      // twice, as in the editors that pad them).
-      const widths = aligns.map((_, c) =>
-        node.attrs.padded
-          ? Math.max(3, ...rows.map((r) => textWidth(r[c] || "")))
-          : 3,
-      );
-      const pad = (text, c) => {
-        if (!node.attrs.padded) return text || " ";
-        const room = widths[c] - textWidth(text);
-        if (aligns[c] === "right") return " ".repeat(room) + text;
-        if (aligns[c] === "center")
-          return (
-            " ".repeat(Math.floor(room / 2)) +
-            text +
-            " ".repeat(Math.ceil(room / 2))
+      },
+      task_box(state, node) {
+        state.write(node.attrs.checked ? "[x]" : "[ ]");
+      },
+      heading(state, node) {
+        if (node.attrs.markup === "=" || node.attrs.markup === "-") {
+          state.renderInline(node);
+          state.ensureNewLine();
+          state.write(node.attrs.underline || node.attrs.markup.repeat(3));
+          state.closeBlock(node);
+          return;
+        }
+        state.write(state.repeat("#", node.attrs.level) + " ");
+        state.renderInline(node, false);
+        state.closeBlock(node);
+      },
+      code_block(state, node) {
+        if (
+          node.attrs.params === "$$" ||
+          node.attrs.params.startsWith("\u0000raw:")
+        ) {
+          // A display formula or raw block open for editing (math.js): its
+          // text is its source, between its delimiters.
+          state.text(
+            node.attrs.lead + node.textContent + node.attrs.tail,
+            false,
           );
-        return text + " ".repeat(room);
-      };
-      const line = (cells) =>
-        "| " + aligns.map((_, c) => pad(cells[c] || "", c)).join(" | ") + " |";
-      const rule = aligns.map((a, c) => {
-        const w = widths[c];
-        if (a === "center") return ":" + "-".repeat(w - 2) + ":";
-        if (a === "right") return "-".repeat(w - 1) + ":";
-        if (a === "left") return ":" + "-".repeat(w - 1);
-        return "-".repeat(w);
-      });
-      const lines = [line(rows[0]), "| " + rule.join(" | ") + " |"];
-      for (const r of rows.slice(1)) lines.push(line(r));
-      lines.forEach((l, i) => {
-        state.write(l);
-        if (i < lines.length - 1) state.ensureNewLine();
-      });
-      state.closeBlock(node);
-    },
-  },
-  {
-    ...defaultMarkdownSerializer.marks,
-    em: {
-      open: (_s, mark) => mark.attrs.markup || "*",
-      close: (_s, mark) => mark.attrs.markup || "*",
-      mixable: true,
-      expelEnclosingWhitespace: true,
-    },
-    strong: {
-      open: (_s, mark) => mark.attrs.markup || "**",
-      close: (_s, mark) => mark.attrs.markup || "**",
-      mixable: true,
-      expelEnclosingWhitespace: true,
-    },
-    strike: {
-      open: (_s, mark) => mark.attrs.markup || "~~",
-      close: (_s, mark) => mark.attrs.markup || "~~",
-      mixable: true,
-      expelEnclosingWhitespace: true,
-    },
-    link: {
-      open(state, mark, parent, index) {
-        const bare =
-          mark.attrs.markup === "linkify" && plainLink(mark, parent, index);
-        state.inAutolink = bare ? "bare" : undefined;
-        if (bare) return "";
-        return defaultMarkdownSerializer.marks.link.open(
-          state,
-          mark,
-          parent,
-          index,
+          state.closeBlock(node);
+          return;
+        }
+        // A fence longer than any run of its character starting a line of
+        // the code, which would otherwise close it.
+        let fence = node.attrs.markup || "```";
+        const runs = new RegExp("^ {0,3}(\\" + fence[0] + "{3,})", "gm");
+        for (const m of node.textContent.matchAll(runs))
+          if (m[1].length >= fence.length)
+            fence = fence[0].repeat(m[1].length + 1);
+        state.write(fence + (node.attrs.params || "") + "\n");
+        state.text(node.textContent, false);
+        state.ensureNewLine();
+        state.write(fence);
+        state.closeBlock(node);
+      },
+      bullet_list(state, node) {
+        state.renderList(node, "  ", () => (node.attrs.bullet || "-") + " ");
+      },
+      ordered_list(state, node) {
+        const start = node.attrs.order || 1;
+        const width = String(start + node.childCount - 1).length;
+        const space = state.repeat(" ", width + 2);
+        state.renderList(node, space, (i) => {
+          const n = String(start + i);
+          return (
+            state.repeat(" ", width - n.length) +
+            n +
+            (node.attrs.delim || ".") +
+            " "
+          );
+        });
+      },
+      math_inline(state, node) {
+        state.write(node.attrs.raw ?? "$" + node.attrs.tex + "$");
+      },
+      math_display(state, node) {
+        state.text(node.attrs.raw ?? "$$\n" + node.attrs.tex + "\n$$", false);
+        state.closeBlock(node);
+      },
+      raw_block(state, node) {
+        state.text(node.attrs.source, false);
+        state.closeBlock(node);
+      },
+      raw_inline(state, node) {
+        state.write(node.attrs.source);
+      },
+      // A line of images aligned to a side: wrapped in `<p align>`.
+      paragraph(state, node) {
+        const align = lineAlign(node);
+        if (align) state.write(`<p align="${align}">`);
+        state.renderInline(node);
+        if (align) state.write("</p>");
+        state.closeBlock(node);
+      },
+      columns(state, node) {
+        state.write('<div class="columns">');
+        state.ensureNewLine();
+        node.forEach((column) => {
+          const width = column.attrs.width;
+          state.write(
+            '<div class="column"' +
+              (width === null ? "" : ` data-width="${percent(width)}"`) +
+              ">",
+          );
+          // Blank lines around the Markdown in a column, which other viewers
+          // need to read it as Markdown.
+          state.closeBlock(column);
+          state.renderContent(column);
+          state.write("</div>");
+          state.ensureNewLine();
+        });
+        state.write("</div>");
+        state.closeBlock(node);
+      },
+      image(state, node) {
+        // Resized or aligned: an `<img>` tag (image-layout.js).
+        if (node.attrs.width || node.attrs.align) {
+          state.write(imgTag(node.attrs));
+          return;
+        }
+        state.write(
+          "![" +
+            state.esc(node.attrs.alt || "") +
+            "](" +
+            address(node.attrs.src) +
+            titleOf(node.attrs.title) +
+            ")",
         );
       },
-      close(state, mark, parent, index) {
-        if (state.inAutolink === "bare") {
-          state.inAutolink = undefined;
-          return "";
-        }
-        if (state.inAutolink)
-          return defaultMarkdownSerializer.marks.link.close(
+      table(state, node) {
+        const rows = [];
+        node.forEach((row) => {
+          const cells = [];
+          row.forEach((cell) => cells.push(cellText(cell)));
+          rows.push(cells);
+        });
+        const aligns = [];
+        node.firstChild.forEach((cell) => aligns.push(cell.attrs.align));
+        // Padded tables keep their columns lined up (wide characters count
+        // twice, as in the editors that pad them).
+        const widths = aligns.map((_, c) =>
+          node.attrs.padded
+            ? Math.max(3, ...rows.map((r) => textWidth(r[c] || "")))
+            : 3,
+        );
+        const pad = (text, c) => {
+          if (!node.attrs.padded) return text || " ";
+          const room = widths[c] - textWidth(text);
+          if (aligns[c] === "right") return " ".repeat(room) + text;
+          if (aligns[c] === "center")
+            return (
+              " ".repeat(Math.floor(room / 2)) +
+              text +
+              " ".repeat(Math.ceil(room / 2))
+            );
+          return text + " ".repeat(room);
+        };
+        const line = (cells) =>
+          "| " +
+          aligns.map((_, c) => pad(cells[c] || "", c)).join(" | ") +
+          " |";
+        const rule = aligns.map((a, c) => {
+          const w = widths[c];
+          if (a === "center") return ":" + "-".repeat(w - 2) + ":";
+          if (a === "right") return "-".repeat(w - 1) + ":";
+          if (a === "left") return ":" + "-".repeat(w - 1);
+          return "-".repeat(w);
+        });
+        const lines = [line(rows[0]), "| " + rule.join(" | ") + " |"];
+        for (const r of rows.slice(1)) lines.push(line(r));
+        lines.forEach((l, i) => {
+          state.write(l);
+          if (i < lines.length - 1) state.ensureNewLine();
+        });
+        state.closeBlock(node);
+      },
+    },
+    {
+      ...defaultMarkdownSerializer.marks,
+      em: {
+        open: (_s, mark) => mark.attrs.markup || "*",
+        close: (_s, mark) => mark.attrs.markup || "*",
+        mixable: true,
+        expelEnclosingWhitespace: true,
+      },
+      strong: {
+        open: (_s, mark) => mark.attrs.markup || "**",
+        close: (_s, mark) => mark.attrs.markup || "**",
+        mixable: true,
+        expelEnclosingWhitespace: true,
+      },
+      strike: {
+        open: (_s, mark) => mark.attrs.markup || "~~",
+        close: (_s, mark) => mark.attrs.markup || "~~",
+        mixable: true,
+        expelEnclosingWhitespace: true,
+      },
+      link: {
+        open(state, mark, parent, index) {
+          const bare =
+            mark.attrs.markup === "linkify" && plainLink(mark, parent, index);
+          state.inAutolink = bare ? "bare" : undefined;
+          if (bare) return "";
+          return defaultMarkdownSerializer.marks.link.open(
             state,
             mark,
             parent,
             index,
           );
-        return (
-          "](" + address(mark.attrs.href) + titleOf(mark.attrs.title) + ")"
-        );
+        },
+        close(state, mark, parent, index) {
+          if (state.inAutolink === "bare") {
+            state.inAutolink = undefined;
+            return "";
+          }
+          if (state.inAutolink)
+            return defaultMarkdownSerializer.marks.link.close(
+              state,
+              mark,
+              parent,
+              index,
+            );
+          return (
+            "](" + address(mark.attrs.href) + titleOf(mark.attrs.title) + ")"
+          );
+        },
+        mixable: true,
       },
-      mixable: true,
+      math_src: { open: "", close: "", escape: false },
+      html: {
+        open: (_s, mark) => mark.attrs.open,
+        close: (_s, mark) => mark.attrs.close,
+        mixable: true,
+      },
+      code: {
+        open: (_s, mark, parent, index) =>
+          codeFence(mark, parent.child(index), 1),
+        close: (_s, mark, parent, index) =>
+          codeFence(mark, parent.child(index - 1), -1),
+        escape: false,
+      },
     },
-    math_src: { open: "", close: "", escape: false },
-    html: {
-      open: (_s, mark) => mark.attrs.open,
-      close: (_s, mark) => mark.attrs.close,
-      mixable: true,
-    },
-    code: {
-      open: (_s, mark, parent, index) =>
-        codeFence(mark, parent.child(index), 1),
-      close: (_s, mark, parent, index) =>
-        codeFence(mark, parent.child(index - 1), -1),
-      escape: false,
-    },
-  },
-  // Also what would read as HTML or as an entity.
-  { escapeExtraCharacters: /[$<]|&(?=#?\w+;)/g },
+    // Also what would read as HTML or as an entity.
+    { escapeExtraCharacters: /[$<]|&(?=#?\w+;)/g },
+  ),
 );
 // A paragraph of images only (white space between them): its images, else
 // null. One image is a line of its own; several with widths, a row.

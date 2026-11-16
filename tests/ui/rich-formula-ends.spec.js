@@ -27,6 +27,8 @@ const source = [
   "",
   "核心 $\\mu V = V$ 且 $\\mu \\ge 1$，有界。",
   "",
+  "中文**加粗**，接着文字。",
+  "",
 ].join("\n");
 
 async function boot(page) {
@@ -345,4 +347,23 @@ test("a double click and Shift+click leave the space after the last word out of 
   );
   await dblShift(page, { text: "text" }, { text: "beta", at: "end" });
   expect(await quote(page, 2)).toBe("text $a+b$ beta");
+});
+
+test("italic next to CJK punctuation, where its markers would not work, is written as tags", async ({
+  page,
+}) => {
+  await boot(page);
+  await reset(page);
+  const comma = [{ text: "，接着" }, { text: "，接着", at: "end" }];
+  await drag(page, ...comma);
+  expect(await format(page, "斜体", 1)).toContain(
+    "中文**加粗**<em>，接着</em>文字。",
+  );
+  await drag(page, ...comma);
+  await tools(page).getByRole("button", { name: "斜体", exact: true }).click();
+  await saved(page);
+  await page.keyboard.press("Control+1");
+  const para = page.locator("#content p", { hasText: "接着" });
+  await expect(para.locator("em")).toHaveText("，接着");
+  await expect(para).not.toContainText("*");
 });

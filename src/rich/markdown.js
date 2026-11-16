@@ -1071,6 +1071,38 @@ function serializeNodes(list) {
 // One touched block as Markdown: unescaped when that reads back as the same
 // block, escaped otherwise.
 export function writeBlock(node, env = {}) {
+  return written(node, env).text;
+}
+// Where bold, italic or strike delimiters would not open or close (next to
+// other delimiters, or to CJK punctuation: `中文**加粗***，接着*`), a run of
+// them is written as HTML tags instead (`<em>，接着</em>`), as Read mode's
+// format bar writes it: one run if that is enough (first those the block
+// did not have `before`), else all. The block then reads back with those
+// tags (`as`).
+function written(node, env, before = null) {
+  const text = checked(node, env);
+  if (text !== null) return { text, as: node };
+  const had = new Set(before ? emphasisRuns(before).map((r) => r.key) : []);
+  const runs = emphasisRuns(node).sort(
+    (a, b) => had.has(a.key) - had.has(b.key),
+  );
+  // A few at most: a block that reads back otherwise for another reason
+  // costs little more to write.
+  for (const run of runs.slice(0, 6)) {
+    const as = withTags(node, [run]);
+    const one = checked(as, env);
+    if (one !== null) return { text: one, as };
+  }
+  if (runs.length > 1) {
+    const as = withTags(node, runs);
+    const all = checked(as, env);
+    if (all !== null) return { text: all, as };
+  }
+  return { text: serializeNodes([node]), as: node };
+}
+// The block written unescaped, else escaped, when that reads back as it
+// is; else null.
+function checked(node, env) {
   escaping = false;
   let text;
   try {
@@ -1078,11 +1110,53 @@ export function writeBlock(node, env = {}) {
   } finally {
     escaping = true;
   }
-  try {
-    const back = parser.parse(text, { ...env }).content;
-    if (back.childCount === 1 && back.firstChild.eq(node)) return text;
-  } catch {}
-  return serializeNodes([node]);
+  if (readsAs(text, node, env)) return text;
+  text = serializeNodes([node]);
+  return readsAs(text, node, env) ? text : null;
+}
+const TAGS = { strong: "strong", em: "em", strike: "s" };
+// The runs of bold, italic and strike in a block: { from, to, mark } in a
+// document holding only the block.
+function emphasisRuns(node) {
+  const runs = [];
+  const doc = S.doc.create(null, node);
+  doc.descendants((block, pos) => {
+    if (!block.inlineContent) return true;
+    let open = [];
+    block.forEach((child, offset) => {
+      const at = pos + 1 + offset;
+      open = open.filter((run) => run.mark.isInSet(child.marks));
+      for (const mark of child.marks) {
+        if (!TAGS[mark.type.name]) continue;
+        const run = open.find((r) => r.mark.eq(mark));
+        if (run) run.to = at + child.nodeSize;
+        else {
+          const made = { from: at, to: at + child.nodeSize, mark };
+          open.push(made);
+          runs.push(made);
+        }
+      }
+    });
+    return false;
+  });
+  // What a run is known by in another writing of the block.
+  for (const run of runs)
+    run.key = run.mark.type.name + ":" + doc.textBetween(run.from, run.to);
+  return runs;
+}
+// The block with those runs as HTML tags.
+function withTags(node, runs) {
+  const tr = new Transform(S.doc.create(null, node));
+  for (const { from, to, mark } of runs) {
+    const tag = TAGS[mark.type.name];
+    tr.removeMark(from, to, mark);
+    tr.addMark(
+      from,
+      to,
+      schema.marks.html.create({ tag, open: `<${tag}>`, close: `</${tag}>` }),
+    );
+  }
+  return tr.doc.firstChild;
 }
 
 // Where each block read from the note now starts in the editor's document
@@ -1106,22 +1180,44 @@ function merge(origin, node, env) {
   origin.plain ??= unescaped(origin.node);
   for (const plain of splices(origin.text, origin.plain, unescaped(node)))
     if (readsAs(plain, node, env)) return plain;
-  const after = writeBlock(node, env);
+  const { text: after, as } = written(node, env, origin.node);
   for (const merged of splices(
     origin.text,
     writeBlock(origin.node, env),
     after,
   ))
-    if (readsAs(merged, node, env)) return merged;
+    if (readsAs(merged, as, env)) return merged;
   return after;
 }
 function readsAs(text, node, env) {
   try {
     const back = parser.parse(text, { ...env }).content;
-    return back.childCount === 1 && back.firstChild.eq(node);
+    return (
+      back.childCount === 1 &&
+      (back.firstChild.eq(node) ||
+        spacesBare(back.firstChild).eq(spacesBare(node)))
+    );
   } catch {
     return false;
   }
+}
+// The block with no bold, italic or strike on its spaces: spaces at the
+// edge of a run are written outside its markers (inline-writer.js), so
+// they read back without it, which looks the same.
+function spacesBare(node) {
+  const doc = S.doc.create(null, node);
+  const tr = new Transform(doc);
+  doc.descendants((child, pos) => {
+    if (!child.isText) return;
+    for (const m of child.text.matchAll(/\s+/g))
+      for (const type of [
+        schema.marks.strong,
+        schema.marks.em,
+        schema.marks.strike,
+      ])
+        tr.removeMark(pos + m.index, pos + m.index + m[0].length, type);
+  });
+  return tr.doc.firstChild;
 }
 // The source with the change from `before` to `after` (two writings of the
 // block) carried over where they line up: the ways it can be done (none

@@ -240,3 +240,42 @@ test("marks that cross are written nested and read back as they are", () => {
     `${MARK}A \`x*y\` b</mark>\n`,
   );
 });
+
+// Where delimiters would not open or close (next to CJK punctuation, or
+// run into other delimiters), the run is written as HTML tags, as Read
+// mode writes it, and reads back as shown.
+test("emphasis whose delimiters would not work is written as tags", () => {
+  const over = (src, from, to, mark) => {
+    const r = edit(src, (tr, doc) =>
+      tr.addMark(at(doc, from), at(doc, to, to.length), mark),
+    );
+    const back = load(r.text).doc;
+    assert.equal(back.textContent, r.doc.textContent, r.text);
+    return r.text;
+  };
+  const src = "中文**加粗**，接着文字。\n";
+  assert.equal(
+    over(src, "，接着", "，接着", M.em.create()),
+    "中文**加粗**<em>，接着</em>文字。\n",
+  );
+  assert.equal(
+    over(src, "中文", "加", M.em.create()),
+    "<em>中文</em>**<em>加</em>粗**，接着文字。\n",
+  );
+  assert.equal(
+    over(src, "接着", "接着", M.strike.create()),
+    "中文**加粗**，~~接着~~文字。\n",
+  );
+  // Only the run that needs it: other emphasis keeps its delimiters.
+  assert.equal(
+    over("*a* 中文**加粗**，接着。\n", "，接着", "，接着", M.em.create()),
+    "*a* 中文**加粗**<em>，接着</em>。\n",
+  );
+  // Read back, the tags show as the emphasis did.
+  const shownAs = load("中文**加粗**<em>，接着</em>文字。\n").doc;
+  let tagged = null;
+  shownAs.descendants((node) => {
+    if (node.isText && node.text === "，接着") tagged = node.marks[0];
+  });
+  assert.equal(tagged?.attrs.tag, "em");
+});

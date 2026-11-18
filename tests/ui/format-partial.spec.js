@@ -314,10 +314,10 @@ test("Chinese text and full-width punctuation at the emphasis edge", async ({
   expect(await words(block, "em")).toEqual(["义。", "其中  为变量，", "粗"]);
   expect(await words(block, "strong")).toEqual(["定义。", "粗体"]);
   await clean(block);
-  // `*` after `。` and before `<` or a Chinese character would not close
-  // or open: HTML tags there.
+  // Each piece in delimiters where they render so; the middle one, whose
+  // `*` after `。` and before `<` would not open or close, in HTML tags.
   expect(await saved(page)).toContain(
-    "**定<em>义。</em>**<em> 其中 $x$ 为变量，</em>**<em>粗</em>体**结尾。",
+    "**定*义。*** <em>其中 $x$ 为变量，</em>***粗*体**结尾。",
   );
 
   // Again, to the end of a bold run followed by Chinese text: the run is
@@ -335,7 +335,7 @@ test("Chinese text and full-width punctuation at the emphasis edge", async ({
   await expect(block.locator("em")).toHaveCount(2);
   expect(await words(block, "strong")).toEqual(["定义。", "粗体"]);
   await clean(block);
-  expect(await saved(page)).toContain("**定义。**<em> 其中 $x$ 为");
+  expect(await saved(page)).toContain("**定义。** <em>其中 $x$ 为");
 });
 
 test("with bold beside CJK text turned on, the same", async ({ page }) => {

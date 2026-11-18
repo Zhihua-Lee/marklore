@@ -139,7 +139,7 @@ export function createMarks({
         const chosen = surface()
           ? surface().selected()
           : doc.previewText === doc.text
-            ? selectionSpan(content)
+            ? selectionSpan(content, doc.text)
             : null;
         if (chosen && chosen.to > chosen.from)
           selection = {
@@ -355,7 +355,9 @@ export function createMarks({
 
   // A new mark on the selected text.
   function startNew(
-    selected = surface() ? surface().selected() : selectionSpan(content),
+    selected = surface()
+      ? surface().selected()
+      : selectionSpan(content, getActive()?.previewText ?? getActive()?.text),
   ) {
     const doc = getActive();
     if (!doc) return;

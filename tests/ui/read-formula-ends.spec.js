@@ -210,7 +210,8 @@ test("a mark for the AI takes a selection with an end in or at a formula", async
     { formula: "Only", edge: "last" },
   );
   expect(await quote(page, 4)).toBe("$e=mc^2$");
-  // Starting right after a formula: the formula is not taken.
+  // Starting right after a formula: the formula is not taken (nor the
+  // space at the start, as in Edit mode).
   await page
     .locator("#content p", { hasText: "Alpha" })
     .locator(".formula")
@@ -222,7 +223,7 @@ test("a mark for the AI takes a selection with an end in or at a formula", async
       getSelection().removeAllRanges();
       getSelection().addRange(range);
     });
-  expect(await quote(page, 5)).toBe(" beta");
+  expect(await quote(page, 5)).toBe("beta");
   // In a list item, a table cell, a quote, inside bold.
   await select(page, { text: "List two" }, { formula: "List two" });
   expect(await quote(page, 6)).toBe("List two \\(v_2\\)");
@@ -236,14 +237,31 @@ test("a mark for the AI takes a selection with an end in or at a formula", async
   expect(await quote(page, 8)).toBe("$q$ quote end");
   await select(page, { text: "Some" }, { formula: "Some" });
   expect(await quote(page, 9)).toBe("Some **bold $z$");
-  // Ending inside a display formula: the whole formula.
+  // Ending inside a display formula: the whole formula, not the line break
+  // after it.
   await select(page, { text: "Before" }, { after: "Before display" });
-  expect((await quote(page, 10)).trim()).toBe(
+  expect(await quote(page, 10)).toBe(
     "Before display line.\n\n$$\\int_0^1 f(x)\\,dx$$",
   );
   // A paragraph selected to the start of the next block.
   await select(page, { text: "After" }, { blockStart: "Brackets before" });
   expect(await quote(page, 11)).toBe("After display line.");
+  // To the start of the paragraph after a code block: the whole code
+  // block, its closing fence too.
+  await select(page, { text: "Code before" }, { blockStart: "Code after" });
+  expect(await quote(page, 14)).toBe(
+    "Code before text.\n\n```js\nlet x = 1;\n```",
+  );
+  // From the start of a paragraph before a display formula to the start
+  // of the one after it: no line breaks at either end.
+  await select(
+    page,
+    { blockStart: "Before display" },
+    { blockStart: "After display" },
+  );
+  expect(await quote(page, 15)).toBe(
+    "Before display line.\n\n$$\\int_0^1 f(x)\\,dx$$",
+  );
 });
 
 test("an end inside a display formula or a code block formats the text before it", async ({
@@ -290,7 +308,7 @@ test("a paragraph selected by triple click before a display formula is highlight
     `${MARK}Before display line.</mark>\n\n$$`,
   );
   await line.click({ clickCount: 3, position: { x: 30, y: 10 } });
-  expect((await quote(page, 12)).trim()).toBe("Before display line.");
+  expect(await quote(page, 12)).toBe("Before display line.");
 });
 
 test("an end inside a formula inside bold marks only the selection, the bold kept", async ({

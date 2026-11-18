@@ -113,15 +113,19 @@ export function holds(formula, node, offset, end) {
 // lands on the text or formula next to it. `skip` leaves out what matches
 // it (and what is in it). Null when nothing mapped is that way in `host`.
 //   { node, offset }: in a text node of a mapped run;
-//   { formula }: a formula.
+//   { formula }: a formula;
+//   { block }: a code block reached from outside it, taken whole (its
+//   fences too).
 export function mappedPoint(host, node, offset, end, skip = null) {
   const element = (n) =>
     n.nodeType === Node.ELEMENT_NODE ? n : n.parentElement;
-  const take = (n, edge) => {
+  const take = (n, edge, beside = false) => {
     const el = element(n);
     if (!el || !host.contains(el) || (skip && el.closest(skip))) return null;
     const formula = el.closest(DRAWN);
     if (formula && host.contains(formula)) return { formula };
+    const block = beside && el.closest("pre[data-from][data-to]");
+    if (block && host.contains(block)) return { block };
     if (n.nodeType !== Node.TEXT_NODE || !n.length) return null;
     const leaf = el.closest("[data-text-from]");
     if (!leaf || !host.contains(leaf)) return null;
@@ -173,16 +177,18 @@ export function mappedPoint(host, node, offset, end, skip = null) {
   if (!first) return null;
   walker.currentNode = first;
   for (let n = first; n; n = end ? walker.previousNode() : walker.nextNode()) {
-    const found = take(n);
+    const found = take(n, undefined, true);
     if (found) return found;
   }
   return null;
 }
-// The source offset of a selection's end: a formula is taken whole.
+// The source offset of a selection's end: a formula is taken whole, and a
+// code block the end is beside.
 function mappedOffset(host, node, offset, end) {
   const point = mappedPoint(host, node, offset, end);
   if (!point) return null;
-  if (point.formula) return Number(point.formula.dataset[end ? "to" : "from"]);
+  const whole = point.formula ?? point.block;
+  if (whole) return Number(whole.dataset[end ? "to" : "from"]);
   const leaf = point.node.parentElement.closest("[data-text-from]");
   return (
     Number(leaf.dataset.textFrom) + textOffset(leaf, point.node, point.offset)
@@ -190,8 +196,10 @@ function mappedOffset(host, node, offset, end) {
 }
 // The selection in the source, for a mark: as selectionSource, and also
 // where an end is in a formula or between elements (an end in a formula
-// takes the whole formula).
-export function selectionSpan(host) {
+// takes the whole formula). With the note's `text`, without the spaces and
+// line breaks at its ends (a display formula or code block taken whole
+// ends with its line break), as Edit mode's selection.
+export function selectionSpan(host, text = null) {
   const selected = window.getSelection();
   if (!selected?.rangeCount || selected.isCollapsed) return null;
   const range = selected.getRangeAt(0);
@@ -218,7 +226,12 @@ export function selectionSpan(host) {
       false,
     ),
     to = mappedOffset(host, range.endContainer, range.endOffset, true);
-  return from != null && to != null && to > from ? { from, to } : null;
+  if (from == null || to == null || to <= from) return null;
+  if (text == null) return { from, to };
+  const part = text.slice(from, to);
+  const a = from + part.length - part.trimStart().length,
+    b = to - part.length + part.trimEnd().length;
+  return b > a ? { from: a, to: b } : null;
 }
 // Windows word selection may include the following space, even across an inline
 // formatting boundary. Keep a double-click inside its actual text leaf so source

@@ -484,8 +484,8 @@ function segmentEdit(s, segment, action, options) {
     if (span) [from, to] = span;
   }
   let body = text.slice(from, to);
+  const cuts = [];
   if (kind && action !== "highlight" && action !== "color") {
-    const cuts = [];
     for (const el of s.inside) {
       if (!el.matches(kind) || el.dataset.srcFrom == null) continue;
       const outer = [Number(el.dataset.srcFrom), Number(el.dataset.srcTo)],
@@ -494,6 +494,9 @@ function segmentEdit(s, segment, action, options) {
       if (outer[0] === from && outer[1] === to) continue; // whole: toggles off
       cuts.push([outer[0], inner[0]], [inner[1], outer[1]]);
     }
+    // A run of the same format next to the piece, taken in (joined).
+    for (const { outer, inner } of segment.joined ?? [])
+      cuts.push([outer[0], inner[0]], [inner[1], outer[1]]);
     if (cuts.length)
       body = [...body]
         .filter((_, i) => !cuts.some(([a, b]) => from + i >= a && from + i < b))
@@ -518,23 +521,78 @@ function segmentEdit(s, segment, action, options) {
   });
   const shift = to - from - body.length,
     change = result.changes;
+  // Joined to a run beside it: the selection stays on the text selected.
+  const at = (x) =>
+    result.selection.anchor +
+    x -
+    from -
+    cuts.reduce((n, [a, b]) => n + Math.max(0, Math.min(b, x) - a), 0);
   return {
     change: {
       from: change.from,
       to: change.to >= from + body.length ? change.to + shift : change.to,
       insert: change.insert,
     },
-    selection: result.selection,
+    selection: segment.selected
+      ? { anchor: at(segment.selected.from), head: at(segment.selected.to) }
+      : result.selection,
   };
 }
 
-// The changes for every segment. Bold, italic or strike split at other
-// emphasis (splitSegments) must render as meant: the selected text in the
-// format and nothing else changed. Its delimiters (`**`) are used where
-// they do, around each piece's words (spaces at its edges left outside, as
-// a delimiter next to a space neither opens nor closes); else HTML tags
-// (`<strong>`) around each whole piece, which open and close anywhere;
-// else, as before, the whole emphasis crossed is formatted.
+// A bold, italic or strike run of the action's kind right beside a piece
+// (its markers touching the piece's ends), which the piece can join:
+// `**加粗**，接着` made bold is `**加粗，接着**`, as Edit mode writes it.
+// The piece with those runs taken in, or null.
+function joinedPiece(s, piece, action, others) {
+  const kind = SAME_KIND[action];
+  if (!kind || !TAGS[action]) return null;
+  const joined = [];
+  let { from, to } = piece;
+  for (const el of piece.block.querySelectorAll(kind)) {
+    if (el.closest(BLOCKS) !== piece.block || inFormula(el)) continue;
+    const outer = outerSpan(el, s.text),
+      inner = innerSpan(el);
+    if (!outer || !inner || (outer[1] !== piece.from && outer[0] !== piece.to))
+      continue;
+    joined.push({ outer, inner });
+    from = Math.min(from, outer[0]);
+    to = Math.max(to, outer[1]);
+  }
+  if (
+    !joined.length ||
+    others.some(
+      (other) => other !== piece && other.from < to && other.to > from,
+    )
+  )
+    return null;
+  return { ...piece, from, to, joined, selected: piece };
+}
+
+// Whether bold, italic or strike on the selection takes that format off
+// (the selection is in such an element, or is one whole) rather than adds
+// it.
+function removes(s, action, segments) {
+  const kind = SAME_KIND[action];
+  if (s.around.some((el) => el.matches(kind))) return true;
+  return segments.some((segment) =>
+    s.inside.some((el) => {
+      if (!el.matches(kind)) return false;
+      const outer = outerSpan(el, s.text);
+      return outer && outer[0] === segment.from && outer[1] === segment.to;
+    }),
+  );
+}
+// The changes for every segment. Bold, italic or strike must render as
+// meant: the selected text in the format and nothing else changed
+// (delimiters next to other delimiters or to punctuation, CJK punctuation
+// above all, do not always open or close where they are put). Spaces at a
+// piece's edges stay outside (a delimiter next to a space neither opens
+// nor closes). For each piece the first of these that does: joined to a
+// run of the same format right beside it (`**加粗，接着**`); its delimiters
+// (`**`) around its words; HTML tags (`<em>，接着</em>`), which open and
+// close anywhere, so only the pieces that need them get them. Else HTML
+// tags around every whole piece; else, as before, the whole emphasis
+// crossed (or the words) is formatted.
 const TAGS = { bold: "strong", italic: "em", strike: "s" };
 function formatEdits(s, action, options) {
   const plan = (segments, extra = {}) =>
@@ -553,23 +611,31 @@ function formatEdits(s, action, options) {
       };
     })
     .filter((piece) => piece.to > piece.from);
+  const split = pieces !== s.segments;
   // Not split: the delimiters go around the words all the same (spaces
   // selected at an edge, as a double click and Shift+click take them, stay
   // outside: `**words **` would not close).
-  if (pieces === s.segments) return plan(words.length ? words : pieces);
-  const meant = (edits) =>
+  const last = () =>
+    split ? plan(s.segments) : plan(words.length ? words : pieces);
+  if (!words.length || removes(s, action, words)) return last();
+  const meant = (edits, selected = pieces) =>
     rendersAsMeant(
       s.text,
       edits.map((edit) => edit.change),
-      pieces,
+      selected,
       action,
     );
-  if (words.length) {
-    const edits = plan(words);
-    if (meant(edits)) return edits;
-  }
-  const edits = plan(pieces, { tag: TAGS[action] });
-  return meant(edits) ? edits : plan(s.segments);
+  const chosen = words.map((piece) => {
+    const ways = [joinedPiece(s, piece, action, words), piece].filter(Boolean);
+    for (const way of ways) {
+      const [edit] = plan([way]);
+      if (meant([edit], [piece])) return edit;
+    }
+    return plan([piece], { tag: TAGS[action] })[0];
+  });
+  if (meant(chosen)) return chosen;
+  const tagged = plan(pieces, { tag: TAGS[action] });
+  return meant(tagged) ? tagged : last();
 }
 
 export function createSelectionTools({

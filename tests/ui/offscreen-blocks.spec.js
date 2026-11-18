@@ -103,6 +103,9 @@ test("finished blocks off screen are skipped without changing the note's layout"
 test("blocks whose formulas are drawn are skipped while the rest of the note is still drawn", async ({
   page,
 }) => {
+  // Drawing the formulas, then the note laid out with nothing skipped, takes
+  // half a minute or more on a slow runner.
+  test.setTimeout(120000);
   // A long note with a section wrapping it all and some 2,000 formulas takes
   // a while to draw them all in idle time. Waiting for the last one, nothing
   // was skipped meanwhile, and each batch drawn painted the whole note
@@ -134,30 +137,44 @@ test("blocks whose formulas are drawn are skipped while the rest of the note is 
   // screen is not hit-tested until the next frame, and the reading position
   // measured then (formulas drawn above it) threw the page off by thousands
   // of pixels.
-  let seen = null;
-  const near = [];
-  const until = Date.now() + 60000;
-  while (Date.now() < until && near.length < 40) {
-    const now = await page.evaluate(() => {
-      const view = document.querySelector("#reader").getBoundingClientRect();
-      const skipped = [...document.querySelectorAll("#content .reading-skip")];
-      return {
-        undrawn: document.querySelectorAll("#content [data-folio-math]").length,
-        skipped: skipped.length,
-        near: skipped.filter((block) => {
-          const rect = block.getBoundingClientRect();
-          return (
-            rect.bottom > view.top - view.height + 2 &&
-            rect.top < view.bottom + view.height - 2
-          );
-        }).length,
-      };
-    });
-    if (!now.undrawn) break;
-    near.push(now.near);
-    if (now.skipped) seen ??= now;
-    await page.waitForTimeout(100);
-  }
+  // Sampled in the page: a round trip from the test each time (and, on CI,
+  // the trace snapshot of the note taken with it) took about a second on a
+  // slow runner and held up the drawing it watches.
+  const { seen, near } = await page.evaluate(
+    () =>
+      new Promise((resolve) => {
+        let seen = null;
+        const near = [];
+        const until = performance.now() + 60000;
+        const sample = () => {
+          const view = document
+            .querySelector("#reader")
+            .getBoundingClientRect();
+          const skipped = [
+            ...document.querySelectorAll("#content .reading-skip"),
+          ];
+          const now = {
+            undrawn: document.querySelectorAll("#content [data-folio-math]")
+              .length,
+            skipped: skipped.length,
+            near: skipped.filter((block) => {
+              const rect = block.getBoundingClientRect();
+              return (
+                rect.bottom > view.top - view.height + 2 &&
+                rect.top < view.bottom + view.height - 2
+              );
+            }).length,
+          };
+          if (!now.undrawn) return resolve({ seen, near });
+          near.push(now.near);
+          if (now.skipped) seen ??= now;
+          if (near.length >= 40 || performance.now() > until)
+            return resolve({ seen, near });
+          setTimeout(sample, 250);
+        };
+        sample();
+      }),
+  );
   expect(seen).not.toBeNull();
   expect(Math.max(...near)).toBe(0);
   const difference = await layoutDifference(page);

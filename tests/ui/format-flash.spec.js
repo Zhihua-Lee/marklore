@@ -73,25 +73,6 @@ async function boot(page, text) {
   await expect(page.locator("#content h1")).toBeVisible();
 }
 
-// Formulas not drawn yet: on screen, and in the whole note.
-function undrawn(page) {
-  return page.evaluate(() => {
-    const view = document.querySelector("#reader").getBoundingClientRect();
-    const all = [...document.querySelectorAll("#content [data-folio-math]")];
-    return {
-      all: all.length,
-      onScreen: all.filter((marker) => {
-        const rect = marker.getBoundingClientRect();
-        return (
-          (rect.width || rect.height) &&
-          rect.bottom > view.top &&
-          rect.top < view.bottom
-        );
-      }).length,
-    };
-  });
-}
-
 // Formats `phrase` in `block` (in the middle of the view, every formula of
 // the note drawn) with `button`. Returns each frame painted with the format
 // in the page (`result` found): the undrawn formulas on screen and outside
@@ -106,28 +87,30 @@ async function formatFrames(page, { block, phrase, button, result }) {
     reader.scrollTop +=
       el.getBoundingClientRect().top - reader.getBoundingClientRect().top - 300;
   });
-  await expect
-    .poll(async () => (await undrawn(page)).all, { timeout: 30000 })
-    .toBe(0);
+  // Waited for in the page: each round trip from the test (and, on CI, the
+  // trace snapshot of a note this size taken with it) holds up the page's
+  // own drawing and frames for a moment.
+  await page.waitForFunction(
+    () => !document.querySelector("#content [data-folio-math]"),
+    null,
+    { polling: 250, timeout: 60000 },
+  );
   const skipped = () =>
     page.evaluate(
       () => document.querySelectorAll("#content .reading-skip").length,
     );
-  await expect.poll(skipped, { timeout: 10000 }).toBeGreaterThan(40);
   // Blocks far away are skipped while formulas are still drawn; those near
   // the screen once the last is: the page is quiet when the count holds.
-  let last = -1;
-  await expect
-    .poll(
-      async () => {
-        const now = await skipped();
-        const same = now === last;
-        last = now;
-        return same;
-      },
-      { timeout: 10000, intervals: [700] },
-    )
-    .toBe(true);
+  await page.waitForFunction(
+    () => {
+      const now = document.querySelectorAll("#content .reading-skip").length;
+      const same = now > 40 && now === window.skippedLast;
+      window.skippedLast = now;
+      return same;
+    },
+    null,
+    { polling: 700, timeout: 30000 },
+  );
   const skippedBefore = await skipped();
 
   const tools = page.getByRole("toolbar", { name: "选中文字格式" });
@@ -189,9 +172,11 @@ async function formatFrames(page, { block, phrase, button, result }) {
   }, result);
   await tools.getByRole("button", { name: button, exact: true }).click();
   await expect(page.locator(result)).toHaveText(phrase);
-  await expect
-    .poll(() => page.evaluate(() => window.formatFrames.length))
-    .toBeGreaterThanOrEqual(90);
+  // 90 frames is 1.5 s at 60 Hz, a few seconds on a slow runner.
+  await page.waitForFunction(() => window.formatFrames.length >= 90, null, {
+    polling: "raf",
+    timeout: 30000,
+  });
   return {
     frames: await page.evaluate(() => window.formatFrames),
     skippedBefore,
@@ -218,7 +203,7 @@ function expectSteady({ frames, skippedBefore, skippedAfter }) {
 test("highlighting a word in a long list keeps the note's formulas drawn and still", async ({
   page,
 }) => {
-  test.setTimeout(90000);
+  test.setTimeout(120000);
   expectSteady(
     await formatFrames(page, {
       block: page.locator("#content li", { hasText: "item 150 " }),
@@ -232,7 +217,7 @@ test("highlighting a word in a long list keeps the note's formulas drawn and sti
 test("bold in a long table keeps the note's formulas drawn and still", async ({
   page,
 }) => {
-  test.setTimeout(90000);
+  test.setTimeout(120000);
   expectSteady(
     await formatFrames(page, {
       block: page.locator("#content td", { hasText: "row 75" }),
@@ -246,7 +231,7 @@ test("bold in a long table keeps the note's formulas drawn and still", async ({
 test("bold in a paragraph above a long table keeps the table as it was", async ({
   page,
 }) => {
-  test.setTimeout(90000);
+  test.setTimeout(120000);
   expectSteady(
     await formatFrames(page, {
       block: page

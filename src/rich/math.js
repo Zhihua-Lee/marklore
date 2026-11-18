@@ -4,7 +4,12 @@
 // into its source text right where it is; once the caret leaves, it is a
 // formula again. Raw blocks (HTML, diagrams, footnote definitions) open the
 // same way, as their source.
-import { NodeSelection, TextSelection, Plugin } from "prosemirror-state";
+import {
+  NodeSelection,
+  Selection,
+  TextSelection,
+  Plugin,
+} from "prosemirror-state";
 import { formulaFragmentFor, renderMarkdown } from "../markdown.js";
 import { renderDiagrams } from "../diagrams.js";
 import { composing, settled } from "../composing.js";
@@ -16,6 +21,9 @@ const S = schema.nodes;
 // by its params.
 const OPEN_MATH = "$$";
 export const OPEN_RAW = "\u0000raw:";
+// What a selection takes whole, and a press selects or (a click) opens:
+// formulas, inline and display, and inline HTML or footnote references.
+const PICKED = new Set([S.math_inline, S.raw_inline, S.math_display]);
 
 // When a whole note is put into the editor, formulas are typeset when they
 // come near the screen (a long note holds thousands); until then they show
@@ -111,8 +119,7 @@ export class DrawnView {
     this.dom.addEventListener("mousedown", (e) => {
       if (e.button !== 0) return;
       e.preventDefault();
-      if (this.node.type === S.math_inline)
-        return pressFormula(view, getPos, e);
+      if (PICKED.has(this.node.type)) return pressFormula(view, getPos, e);
       const pos = getPos();
       if (typeof pos === "number") open(view, pos, -1);
     });
@@ -243,7 +250,9 @@ export function open(view, pos, side) {
       pos + 1,
       schema.text(text, [schema.marks.math_src.create()]),
     );
-    inner = pos + text.length;
+    // Before its last character (`]`, `>`): just past it, it would be
+    // left, and drawn again at once.
+    inner = pos + Math.max(1, text.length - 1);
   } else return false;
   tr.setSelection(TextSelection.create(tr.doc, inner));
   view.dispatch(tr.setMeta("addToHistory", false).setMeta("rich-open", true));
@@ -361,16 +370,28 @@ export const grab = (dir) => (state, dispatch) => {
   dispatch?.(state.tr.setSelection(NodeSelection.create(state.doc, hit.pos)));
   return true;
 };
-// The inline formula drawn under a point of the page: its position, else
-// null.
-export function formulaUnder(view, x, y) {
-  const el = document.elementFromPoint(x, y)?.closest(".formula.rich-drawn");
+// The formula (inline or display) or inline HTML drawn under a point of the
+// page, or at pos: what a selection holding it whole runs between, { from,
+// to }, else null. For a display formula, the nearest text on either side
+// (the end of the block before it, the start of the one after), so a text
+// selection holds it (TextSelection.between would move ends between blocks
+// inward, past it).
+function formulaUnder(view, x, y) {
+  const el = document.elementFromPoint(x, y)?.closest(".rich-drawn");
   if (!el || !view.dom.contains(el)) return null;
   const pos = drawn.get(el)?.();
-  return typeof pos === "number" &&
-    view.state.doc.nodeAt(pos)?.type === S.math_inline
-    ? pos
-    : null;
+  return typeof pos === "number" ? formulaAt(view.state.doc, pos) : null;
+}
+function formulaAt(doc, pos) {
+  const node = doc.nodeAt(pos);
+  if (!node || !PICKED.has(node.type)) return null;
+  let from = pos,
+    to = pos + node.nodeSize;
+  if (node.isBlock) {
+    from = Selection.findFrom(doc.resolve(from), -1, true)?.$head.pos ?? from;
+    to = Selection.findFrom(doc.resolve(to), 1, true)?.$head.pos ?? to;
+  }
+  return { from, to, block: node.isBlock };
 }
 // Selecting inline formulas with the mouse, per editor: the formula last
 // selected whole by a double click or by a drag started on it (`unit`),
@@ -413,22 +434,60 @@ function spanning(doc, unit, lo, hi) {
 // position there.
 function reach(view, x, y) {
   const at = formulaUnder(view, x, y);
-  if (at !== null) return [at, at + 1];
+  if (at !== null) return [at.from, at.to];
   const hit = view.posAtCoords({ left: x, top: y });
   return hit ? [hit.pos, hit.pos] : null;
 }
-// A press on a drawn inline formula. A click opens it for editing (once
-// the button is up); a drag started on it selects it whole and on to where
-// the mouse goes; a double click selects it whole (Enter then opens it);
-// a triple click selects its paragraph; Shift+click extends the selection
-// over it.
+// While a drag started on a formula is held beyond the top or bottom of
+// the pane, the pane scrolls (as the browser does for its own drags) and
+// the selection follows: `follow(x, y)` again at each step. Stopped by the
+// returned function.
+function autoscroll(view, follow) {
+  const scroller = view.dom.closest("#rich-reader") || view.dom.parentElement;
+  let last = null,
+    timer = 0;
+  const step = () => {
+    timer = 0;
+    if (!last || !scroller) return;
+    const box = scroller.getBoundingClientRect();
+    const over =
+      last.y < box.top + 8
+        ? last.y - box.top - 8
+        : last.y > box.bottom - 8
+          ? last.y - box.bottom + 8
+          : 0;
+    if (!over) return;
+    const before = scroller.scrollTop;
+    scroller.scrollTop += Math.max(-40, Math.min(40, over));
+    if (scroller.scrollTop === before) return;
+    follow(last.x, Math.max(box.top + 2, Math.min(box.bottom - 2, last.y)));
+    timer = setTimeout(step, 30);
+  };
+  return {
+    at(x, y) {
+      last = { x, y };
+      if (!timer) timer = setTimeout(step, 30);
+    },
+    stop() {
+      clearTimeout(timer);
+      last = null;
+    },
+  };
+}
+// A press on a drawn formula, inline or display, or on inline HTML. A
+// click opens it for editing (once the button is up); a drag started on it
+// selects it whole and on to where the mouse goes; Shift+click extends the
+// selection over it. An inline one is selected whole by a double click
+// (Enter then opens it), and a triple click selects its paragraph.
 function pressFormula(view, getPos, e) {
   const pos = getPos();
   if (typeof pos !== "number") return;
   const own = pickingOf(view);
   const { doc } = view.state;
+  const it = formulaAt(doc, pos);
+  if (!it) return;
   if (!view.hasFocus()) view.focus();
-  if (e.detail >= 3 || again(own.picked, e)) {
+  if (!it.block && (e.detail >= 3 || again(own.picked, e))) {
     own.picked = null;
     const $pos = doc.resolve(pos);
     return select(view, TextSelection.create(doc, $pos.start(), $pos.end()));
@@ -444,16 +503,21 @@ function pressFormula(view, getPos, e) {
         : own.word && from < to
           ? { from, to }
           : { from: anchor, to: anchor };
-    return select(view, spanning(doc, unit, pos, pos + 1));
+    return select(view, spanning(doc, unit, it.from, it.to));
   }
-  if (e.detail === 2) {
+  if (e.detail === 2 && !it.block) {
     select(view, TextSelection.create(doc, pos, pos + 1));
     return pick(view, e);
   }
   own.unit = null;
   own.word = false;
-  const unit = { from: pos, to: pos + 1 };
+  const unit = { from: it.from, to: it.to };
   let dragging = false;
+  const follow = (x, y) => {
+    const to = reach(view, x, y);
+    if (to) select(view, spanning(view.state.doc, unit, ...to));
+  };
+  const scrolling = autoscroll(view, follow);
   const move = (m) => {
     if (!(m.buttons & 1)) return up(m);
     if (
@@ -463,12 +527,13 @@ function pressFormula(view, getPos, e) {
     )
       return;
     dragging = true;
-    const to = reach(view, m.clientX, m.clientY);
-    if (to) select(view, spanning(view.state.doc, unit, ...to));
+    follow(m.clientX, m.clientY);
+    scrolling.at(m.clientX, m.clientY);
   };
   const up = (u) => {
     document.removeEventListener("mousemove", move);
     document.removeEventListener("mouseup", up);
+    scrolling.stop();
     if (dragging) {
       own.unit = unit;
       return;
@@ -557,8 +622,10 @@ export const formulaEnds = new Plugin({
         else if (anchor === unit.to && head > unit.to) anchor = unit.from;
       }
       const at = formulaUnder(view, x, y);
-      if (at !== null) head = at >= anchor ? at + 1 : at;
+      if (at !== null) head = at.from >= anchor ? at.to : at.from;
       if (anchor === sel.anchor && head === sel.head) return;
+      // A display formula with no text past it: as the browser left it.
+      if (!view.state.doc.resolve(head).parent.inlineContent) return;
       select(view, TextSelection.create(view.state.doc, anchor, head));
     };
     view.dom.addEventListener("mousedown", press);
@@ -573,15 +640,35 @@ export const formulaEnds = new Plugin({
 });
 
 // Enter on a selected formula or raw block opens it, also on an inline
-// formula selected whole with the mouse.
+// formula or inline HTML selected whole with the mouse.
 export const openSelected = (state, dispatch, view) => {
   const sel = state.selection;
   if (sel instanceof NodeSelection) return open(view, sel.from, -1);
+  const type = state.doc.nodeAt(sel.from)?.type;
   if (
     sel instanceof TextSelection &&
     sel.to - sel.from === 1 &&
-    state.doc.nodeAt(sel.from)?.type === S.math_inline
+    (type === S.math_inline || type === S.raw_inline)
   )
     return open(view, sel.from, -1);
+  return false;
+};
+// Shift+Left from a formula a double click selected whole (its anchor
+// before it): the selection runs on leftward from its far side, keeping it,
+// as the browser does from a double-clicked word.
+export const flipPicked = (state, dispatch, view) => {
+  const { unit } = pickingOf(view);
+  const sel = state.selection;
+  if (
+    !unit ||
+    !(sel instanceof TextSelection) ||
+    sel.anchor !== unit.from ||
+    sel.head !== unit.to
+  )
+    return false;
+  view.dispatch(
+    state.tr.setSelection(TextSelection.create(state.doc, unit.to, unit.from)),
+  );
+  // The browser then moves the head on by one character.
   return false;
 };

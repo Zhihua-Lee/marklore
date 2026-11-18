@@ -62,6 +62,7 @@ import {
   stepIn,
   grab,
   openSelected,
+  flipPicked,
   watchFormulas,
   wholeNote,
   openMathBlock,
@@ -727,6 +728,7 @@ export function createRichEditor({
         leaveBlock(-1, "left"),
       ),
       ArrowRight: chainCommands(codeEdge(1), stepIn(1), leaveBlock(1, "right")),
+      "Shift-ArrowLeft": flipPicked,
       Enter: chainCommands(openSelected, cellBelow, blockOnEnter, splitItem),
       "Shift-Enter": chainCommands(exitCode, hardBreak),
       Tab: chainCommands(
@@ -1005,7 +1007,9 @@ export function createRichEditor({
       );
     },
     // The selection as offsets in the note (null when nothing is selected),
-    // without the spaces at its ends.
+    // without the spaces at its ends, nor the line breaks between it and
+    // the next block it ends at the start of (one ending past a display
+    // formula takes it whole).
     selected() {
       const { empty } = view.state.selection;
       if (empty) return null;
@@ -1014,9 +1018,13 @@ export function createRichEditor({
         view.state.selection.from,
         view.state.selection.to,
       );
-      const a = offsetAt(from);
-      const b = offsetAt(to, -1);
-      return a === null || b === null || b <= a ? null : { from: a, to: b };
+      let a = offsetAt(from);
+      let b = offsetAt(to, -1);
+      if (a === null || b === null) return null;
+      const text = current.text;
+      while (a < b && /\s/.test(text[a])) a++;
+      while (b > a && /\s/.test(text[b - 1])) b--;
+      return b <= a ? null : { from: a, to: b };
     },
     // The text at note offsets from..to, as DOM ranges (marks).
     ranges(from, to, out = []) {

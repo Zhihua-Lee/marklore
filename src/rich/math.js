@@ -598,6 +598,10 @@ export const formulaEnds = new Plugin({
       // handled above (pressFormula, mousedown).
       if (e.button !== 0 || e.defaultPrevented) return (down = null);
       down = { shift: e.shiftKey };
+      // Heard after the editor's own handler for the release, which this
+      // press has just set up.
+      view.root.removeEventListener("mouseup", release);
+      view.root.addEventListener("mouseup", release);
       const own = pickingOf(view);
       own.picked = null;
       if (e.shiftKey) return;
@@ -605,14 +609,21 @@ export const formulaEnds = new Plugin({
       own.word = e.detail === 2;
     };
     const release = (e) => {
+      view.root.removeEventListener("mouseup", release);
       const was = down;
       down = null;
-      // Once the editor has read the selection the browser made (a
-      // Shift+click's comes after the button is up).
-      if (was) setTimeout(() => settle(was, e.clientX, e.clientY));
+      if (!was || view.isDestroyed || !view.hasFocus() || view.composing)
+        return;
+      // Settled at once, from the selection the browser made (by a drag's
+      // last move, by a Shift+click), read now. Newer Chromium tells of it
+      // (`selectionchange`), and runs a timer set here, only after its next
+      // frame, after a key pressed by then: that key took the selection as
+      // the browser left it (a mark for the AI without the formula).
+      view.domObserver.forceFlush();
+      view.domObserver.flush();
+      settle(was, e.clientX, e.clientY);
     };
     const settle = (was, x, y) => {
-      if (view.isDestroyed || !view.hasFocus()) return;
       const sel = view.state.selection;
       if (!(sel instanceof TextSelection) || sel.empty) return;
       let { anchor, head } = sel;
@@ -629,11 +640,10 @@ export const formulaEnds = new Plugin({
       select(view, TextSelection.create(view.state.doc, anchor, head));
     };
     view.dom.addEventListener("mousedown", press);
-    document.addEventListener("mouseup", release);
     return {
       destroy() {
         view.dom.removeEventListener("mousedown", press);
-        document.removeEventListener("mouseup", release);
+        view.root.removeEventListener("mouseup", release);
       },
     };
   },

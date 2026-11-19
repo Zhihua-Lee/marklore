@@ -182,6 +182,43 @@ test("blocks whose formulas are drawn are skipped while the rest of the note is 
   expect(difference.height).toBeLessThan(1);
 });
 
+// A block skipped on screen is taken for skipped by hit tests until the next
+// frame is drawn: a click on a link there went to the section around it.
+test("blocks near the screen are skipped only once the reader has left them", async ({
+  page,
+}) => {
+  await boot(page, longNote);
+  await allDrawn(page);
+  await expect.poll(() => skipped(page)).toBeGreaterThan(40);
+  const firstBody = () =>
+    page.evaluate(() =>
+      document
+        .querySelector("#content .note-section .note-section > .section-body")
+        .classList.contains("reading-skip"),
+    );
+  const near = () =>
+    page.evaluate(() => {
+      const view = document.querySelector("#reader").getBoundingClientRect();
+      return [...document.querySelectorAll("#content .reading-skip")].filter(
+        (block) => {
+          const rect = block.getBoundingClientRect();
+          return (
+            rect.bottom > view.top - view.height + 2 &&
+            rect.top < view.bottom + view.height - 2
+          );
+        },
+      ).length;
+    });
+  await page.waitForTimeout(600);
+  expect(await near()).toBe(0);
+  expect(await firstBody()).toBe(false);
+  await page.evaluate(() => {
+    const reader = document.querySelector("#reader");
+    reader.scrollTop = reader.scrollHeight / 2;
+  });
+  await expect.poll(firstBody).toBe(true);
+});
+
 test("a new reading width measures skipped blocks again", async ({ page }) => {
   await boot(page, longNote);
   await allDrawn(page);

@@ -9,10 +9,11 @@
 //
 // It was dropped once because estimated heights made jumps land short. Here a
 // block is skipped only once it is finished (formulas drawn, images loaded, no
-// pending diagram) and has been laid out, and its measured height is its
-// placeholder height, so the note keeps exactly its layout: jumps, reading
-// positions and the scrollbar see the same geometry. The DOM is unchanged, so
-// find-in-note and selection still reach every block.
+// pending diagram), has been laid out and is away from the screen (see pass),
+// and its measured height is its placeholder height, so the note keeps
+// exactly its layout: jumps, reading positions and the scrollbar see the same
+// geometry. The DOM is unchanged, so find-in-note and selection still reach
+// every block.
 //
 // Whatever could change a skipped block's height un-skips it: a change inside
 // it, a new width (window, panes), the type size or face, fonts arriving. It
@@ -105,7 +106,9 @@ export function skipOffscreenBlocks(host, scroller) {
     retry = 500,
     cursor = 0,
     width = -1,
-    signature = "";
+    signature = "",
+    // Blocks the last pass left for being near the screen.
+    near = false;
   // Class changes that move nothing: the hover and focus marks of sections
   // (sections.js) and the skip itself.
   const cosmetic = (record) => {
@@ -203,13 +206,16 @@ export function skipOffscreenBlocks(host, scroller) {
       if (finished(el)) found.push(el);
       else waiting = true;
     }
-    // While formulas are still drawn, blocks on or near the screen wait for
-    // the last: a block skipped on screen is taken for skipped until the next
-    // frame is drawn, and the reading position measured meanwhile (a batch
-    // of formulas drawn above it) missed its text and threw the page by
-    // thousands of pixels.
+    // Blocks on or near the screen are left drawn: a block skipped on screen
+    // is taken for skipped until the next frame is drawn. A click there
+    // meanwhile missed the link under it (the section took it), and a reading
+    // position measured meanwhile (a batch of formulas drawn above it) missed
+    // its text and threw the page by thousands of pixels. They are looked at
+    // again after the next batch of formulas, or once the reader has
+    // scrolled.
     const drawing = Boolean(host.querySelector("[data-folio-math]")),
-      view = drawing ? scroller.getBoundingClientRect() : null;
+      view = scroller.getBoundingClientRect();
+    near = false;
     // Then styles and heights (one style and layout update for the batch),
     // then the writes.
     const blocks = found.filter((el) => {
@@ -217,11 +223,11 @@ export function skipOffscreenBlocks(host, scroller) {
       // Not shown now (a folded section): judged when it is.
       if (!rect.height) return false;
       if (
-        view &&
         rect.bottom > view.top - view.height &&
         rect.top < view.bottom + view.height
       ) {
-        waiting = true;
+        if (drawing) waiting = true;
+        else near = true;
         return false;
       }
       const ok = safe(el);
@@ -335,7 +341,13 @@ export function skipOffscreenBlocks(host, scroller) {
   scroller.addEventListener(
     "scroll",
     () => {
-      if (!isCorrection(scroller)) lastScroll = performance.now();
+      if (isCorrection(scroller)) return;
+      lastScroll = performance.now();
+      // The pass waits for the scrolling to stop.
+      if (near) {
+        near = false;
+        schedule();
+      }
     },
     { passive: true },
   );

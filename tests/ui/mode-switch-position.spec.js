@@ -83,6 +83,32 @@ test("reading positions in a long note are found without measuring it all", asyn
   page,
 }) => {
   await boot(page);
+  // The reading line falls between blocks only where the hit test finds no
+  // text: in a part skipped off screen, which stays skipped for hit tests
+  // until the frame after the scroll that brings it on screen. boot() waits
+  // for some parts to be skipped; the probes below need every part away from
+  // the screen to be, or a part a slow runner had not skipped yet gave its
+  // text (an exact anchor) and fewer probes reached the walk down the note.
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const view = document
+            .querySelector("#reader")
+            .getBoundingClientRect();
+          return [
+            ...document.querySelectorAll(
+              "#content .note-section .note-section > .section-body",
+            ),
+          ].filter(
+            (body) =>
+              body.getBoundingClientRect().top > view.bottom + view.height &&
+              !body.classList.contains("reading-skip"),
+          ).length;
+        }),
+      { timeout: 20000 },
+    )
+    .toBe(0);
   const result = await page.evaluate(async () => {
     const { visibleAnchor, findPosition } = await import("/src/positions.js");
     const reader = document.querySelector("#reader");

@@ -27,6 +27,13 @@ const SCREEN_MS = 24;
 const SLICE_MS = 50;
 // Formulas a slice takes from, nearest the reading position first.
 const AHEAD = 128;
+// Input waiting (a pointer moved, a click, a key) ends a slice after its
+// current group, and slices keep to the short budget while a button is held
+// (selecting text) and for this long after the last click or key (a mark
+// chosen, a menu opened). Long slices made a click or a drag wait for them
+// (measured at full speed: half the clicks and drags waited 70-90 ms, against
+// 20-30 ms with short slices).
+const INPUT_QUIET_MS = 500;
 const shown = (rect) => rect.width > 0 || rect.height > 0;
 
 // Only authenticated parser markers reach this helper. The renderer supplies a
@@ -56,8 +63,27 @@ export function createFormulaHydrator(
     direction = 1,
     // Markers not drawn yet, in page order, and when the last slice ended.
     left = null,
-    sliceEnd = 0;
+    sliceEnd = 0,
+    // The last click or key, and whether a button is held.
+    lastInput = 0,
+    held = false;
   const ready = new Set();
+  const onInput = (event) => {
+    lastInput = performance.now();
+    held =
+      event.type === "pointerdown"
+        ? true
+        : event.type === "keydown"
+          ? held
+          : false;
+  };
+  const inputEvents = ["pointerdown", "pointerup", "pointercancel", "keydown"];
+  // Input waiting to be handled, a pointer move included: the move to the
+  // text comes before the click on it.
+  const inputWaiting = () =>
+    ownerWindow?.navigator.scheduling?.isInputPending?.({
+      includeContinuous: true,
+    }) ?? false;
   // Markers that cannot be drawn (no formula behind them) are not retried.
   const failed = new WeakSet();
   const onScroll = () => {
@@ -91,8 +117,9 @@ export function createFormulaHydrator(
     if (!progressive) draw(markers(node), Infinity, false);
   }
   // Draws `list` in order, a group at a time, until `limit` ms have passed
-  // (at least one group). Returns how many were drawn.
-  function draw(list, limit, inHost = true) {
+  // (at least one group), or, with `yieldToInput`, input is waiting. Returns
+  // how many were drawn.
+  function draw(list, limit, inHost = true, yieldToInput = false) {
     const start = performance.now();
     let count = 0;
     for (let at = 0; at < list.length; at += GROUP) {
@@ -112,7 +139,11 @@ export function createFormulaHydrator(
             .filter(Boolean),
         );
       for (const marker of group) if (expand(marker)) count++;
-      if (performance.now() - start >= limit) break;
+      if (
+        performance.now() - start >= limit ||
+        (yieldToInput && inputWaiting())
+      )
+        break;
     }
     return count;
   }
@@ -220,7 +251,8 @@ export function createFormulaHydrator(
       timer !== null ||
       frame !== null ||
       (scroller && navigationMoving(scroller)) ||
-      performance.now() - lastScroll < 250;
+      performance.now() - lastScroll < 250 ||
+      inputWaiting();
     if (busy) {
       // The first slice after scrolling or a jump is a short one.
       sliceEnd = 0;
@@ -236,11 +268,14 @@ export function createFormulaHydrator(
     const list =
       (direction < 0 && above.length) || !below.length ? above : below;
     const anchor = anchorFor(list);
+    const now = performance.now(),
+      // A release missed (outside the window) holds no longer than 10 s.
+      quiet = now - lastInput > (held ? 10000 : INPUT_QUIET_MS);
     const budget = Math.max(
       Math.min(budgetMs, deadline ? deadline.timeRemaining() : budgetMs),
-      sliceEnd ? Math.min(SLICE_MS, performance.now() - sliceEnd) : 0,
+      quiet && sliceEnd ? Math.min(SLICE_MS, now - sliceEnd) : 0,
     );
-    if (draw(list, Math.max(2, budget))) changed(anchor);
+    if (draw(list, Math.max(2, budget), true, true)) changed(anchor);
     sliceEnd = performance.now();
     if (all.some((marker) => marker.isConnected && !failed.has(marker)))
       scheduleBackfill();
@@ -302,6 +337,8 @@ export function createFormulaHydrator(
     if (frame !== null) ownerWindow?.cancelAnimationFrame(frame);
     frame = null;
     scroller?.removeEventListener("scroll", onScroll);
+    for (const type of inputEvents)
+      ownerWindow?.removeEventListener(type, onInput, true);
     host?.removeEventListener("folio:prepare-content", prepare);
     ownerWindow?.removeEventListener("beforeprint", flush);
     ownerWindow = null;
@@ -357,6 +394,11 @@ export function createFormulaHydrator(
       scroller.addEventListener("scroll", onScroll, { passive: true });
     }
     ownerWindow.addEventListener("beforeprint", flush);
+    for (const type of inputEvents)
+      ownerWindow.addEventListener(type, onInput, {
+        capture: true,
+        passive: true,
+      });
     // The observer reports only after a frame is painted: those on screen
     // are drawn before it, or they would show their source for a moment. A
     // note just opened is shown first and drawn as it comes.

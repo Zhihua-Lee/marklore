@@ -284,6 +284,94 @@ test("formulas drawn in idle time come in slices as long as the frames between t
   expect(result.slices).toBeLessThan(30);
 });
 
+test("while a button is held, formulas drawn in idle time keep to short slices", async ({
+  page,
+}) => {
+  // Selecting or marking text while a long note's formulas are drawn: a
+  // long slice made the click or the drag wait for it.
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    const { createFormulaHydrator } = await import("/src/formula-hydration.js");
+    const spin = (ms) => {
+      const end = performance.now() + ms;
+      while (performance.now() < end);
+    };
+    const scroller = document.createElement("div");
+    scroller.style.cssText =
+      "position:fixed;left:0;top:0;width:400px;height:200px;overflow:auto";
+    const host = document.createElement("div");
+    const count = 480;
+    host.innerHTML =
+      '<div style="height:4000px"></div>' +
+      Array.from(
+        { length: count },
+        (_, i) => `<p><span data-folio-math="${i}">x_${i}</span></p>`,
+      ).join("");
+    scroller.append(host);
+    document.body.append(scroller);
+    const formulas = new Map(
+      Array.from({ length: count }, (_, i) => [String(i), i]),
+    );
+    const hydrator = createFormulaHydrator(
+      formulas,
+      (i) => {
+        spin(1);
+        const drawn = document.createElement("span");
+        drawn.textContent = `drawn ${i}`;
+        return drawn;
+      },
+      { progressive: true },
+    );
+    const left = () => host.querySelectorAll("[data-folio-math]").length;
+    let before = count,
+      held = true,
+      released = 0,
+      queued = false;
+    const slices = [];
+    host.addEventListener("folio:math-rendered", () => {
+      const now = left();
+      slices.push({
+        drawn: before - now,
+        held,
+        settled: !held && performance.now() - released > 600,
+      });
+      before = now;
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        spin(30);
+      });
+    });
+    hydrator.activate(host);
+    window.dispatchEvent(new PointerEvent("pointerdown"));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    held = false;
+    released = performance.now();
+    window.dispatchEvent(new PointerEvent("pointerup"));
+    const start = performance.now();
+    await new Promise((resolve) => {
+      const check = () =>
+        left() && performance.now() - start < 60000
+          ? setTimeout(check, 50)
+          : resolve();
+      check();
+    });
+    hydrator.deactivate();
+    scroller.remove();
+    return {
+      left: left(),
+      held: slices.filter((s) => s.held).map((s) => s.drawn),
+      settled: slices.filter((s) => s.settled).map((s) => s.drawn),
+    };
+  });
+  expect(result.left).toBe(0);
+  expect(result.held.length).toBeGreaterThan(3);
+  // One group of 8 at a time while held; longer slices once let go.
+  expect(Math.max(...result.held)).toBeLessThanOrEqual(8);
+  expect(Math.max(...result.settled)).toBeGreaterThan(8);
+});
+
 test("anchor fallback measures only blocks needed to locate the reading line", async ({
   page,
 }) => {

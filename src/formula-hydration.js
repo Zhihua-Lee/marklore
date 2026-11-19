@@ -18,6 +18,15 @@ const GROUP = 8;
 // What has come on screen is drawn before that frame is painted, up to this
 // much time; the rest follows in the next tasks.
 const SCREEN_MS = 24;
+// In idle time a slice draws for as long as the page took since the last one
+// ended (mostly the frame that laid the note out and painted it again), up to
+// this much. That frame costs about the same however few formulas the slice
+// drew: with a fixed 8 ms a slow machine drew one group of 8 per frame, and
+// the frames took most of the time (measured on 4,400 formulas: ~550 slices
+// at 3x CPU slowdown against ~300 at full speed, 80 s against 10-20 s).
+const SLICE_MS = 50;
+// Formulas a slice takes from, nearest the reading position first.
+const AHEAD = 128;
 const shown = (rect) => rect.width > 0 || rect.height > 0;
 
 // Only authenticated parser markers reach this helper. The renderer supplies a
@@ -44,7 +53,10 @@ export function createFormulaHydrator(
     hidden = null,
     lastScroll = 0,
     lastTop = 0,
-    direction = 1;
+    direction = 1,
+    // Markers not drawn yet, in page order, and when the last slice ended.
+    left = null,
+    sliceEnd = 0;
   const ready = new Set();
   // Markers that cannot be drawn (no formula behind them) are not retried.
   const failed = new WeakSet();
@@ -209,24 +221,40 @@ export function createFormulaHydrator(
       frame !== null ||
       (scroller && navigationMoving(scroller)) ||
       performance.now() - lastScroll < 250;
-    if (busy) return scheduleBackfill();
-    const all = markers(host).filter((marker) => !failed.has(marker));
+    if (busy) {
+      // The first slice after scrolling or a jump is a short one.
+      sliceEnd = 0;
+      return scheduleBackfill();
+    }
+    const all = undrawn();
     if (!all.length) return;
     const split = atTop()
       ? 0
       : firstBelow(all, scroller.getBoundingClientRect().top);
-    const below = all.slice(split, split + 32),
-      above = all.slice(Math.max(0, split - 32), split).reverse();
+    const below = all.slice(split, split + AHEAD),
+      above = all.slice(Math.max(0, split - AHEAD), split).reverse();
     const list =
       (direction < 0 && above.length) || !below.length ? above : below;
     const anchor = anchorFor(list);
-    const budget = Math.min(
-      budgetMs,
-      deadline ? deadline.timeRemaining() : budgetMs,
+    const budget = Math.max(
+      Math.min(budgetMs, deadline ? deadline.timeRemaining() : budgetMs),
+      sliceEnd ? Math.min(SLICE_MS, performance.now() - sliceEnd) : 0,
     );
     if (draw(list, Math.max(2, budget))) changed(anchor);
+    sliceEnd = performance.now();
     if (all.some((marker) => marker.isConnected && !failed.has(marker)))
       scheduleBackfill();
+  }
+  // Kept between slices: looking the markers up in the page each time went
+  // through every drawn formula's elements, a fifth of each slice on a long
+  // note. A new note (activate) or new blocks (add) look them up again, and
+  // so does an empty list, so none is left behind.
+  function undrawn() {
+    const keep = (marker) =>
+      marker.isConnected && !failed.has(marker) && host.contains(marker);
+    left = (left ?? markers(host)).filter(keep);
+    if (!left.length) left = markers(host).filter(keep);
+    return left;
   }
   function flush() {
     if (!host) return;
@@ -263,6 +291,8 @@ export function createFormulaHydrator(
       changed(null);
   }
   function deactivate() {
+    left = null;
+    sliceEnd = 0;
     clearTimeout(timer);
     timer = null;
     observer?.disconnect();
@@ -341,6 +371,7 @@ export function createFormulaHydrator(
     if (!observer || !rendererReady()) return;
     const list = nodes.flatMap(markers).filter((marker) => !failed.has(marker));
     if (!list.length) return;
+    left = null;
     for (const marker of list) observer.observe(marker);
     if (frame === null)
       frame = ownerWindow.requestAnimationFrame(() => onScreen(list));

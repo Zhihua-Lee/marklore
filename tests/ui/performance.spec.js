@@ -211,6 +211,79 @@ test("preview retention respects document and HTML budgets and releases closed t
   });
 });
 
+test("formulas drawn in idle time come in slices as long as the frames between them", async ({
+  page,
+}) => {
+  // Each slice of a long note's formulas is followed by a frame that lays
+  // out and paints the note again, at a cost of its own. With a fixed 8 ms
+  // a slow machine drew one group of 8 per frame, and the frames took most
+  // of the time. Here a formula takes 1 ms to draw and each frame after a
+  // slice 30 ms.
+  await page.goto("/");
+  const result = await page.evaluate(async () => {
+    const { createFormulaHydrator } = await import("/src/formula-hydration.js");
+    const spin = (ms) => {
+      const end = performance.now() + ms;
+      while (performance.now() < end);
+    };
+    const scroller = document.createElement("div");
+    scroller.style.cssText =
+      "position:fixed;left:0;top:0;width:400px;height:200px;overflow:auto";
+    const host = document.createElement("div");
+    const count = 480;
+    // Far below the screen: drawn in idle time only.
+    host.innerHTML =
+      '<div style="height:4000px"></div>' +
+      Array.from(
+        { length: count },
+        (_, i) => `<p><span data-folio-math="${i}">x_${i}</span></p>`,
+      ).join("");
+    scroller.append(host);
+    document.body.append(scroller);
+    const formulas = new Map(
+      Array.from({ length: count }, (_, i) => [String(i), i]),
+    );
+    const hydrator = createFormulaHydrator(
+      formulas,
+      (i) => {
+        spin(1);
+        const drawn = document.createElement("span");
+        drawn.textContent = `drawn ${i}`;
+        return drawn;
+      },
+      { progressive: true },
+    );
+    let slices = 0,
+      queued = false;
+    host.addEventListener("folio:math-rendered", () => {
+      slices++;
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        spin(30);
+      });
+    });
+    hydrator.activate(host);
+    const start = performance.now();
+    await new Promise((resolve) => {
+      const check = () =>
+        host.querySelector("[data-folio-math]") &&
+        performance.now() - start < 60000
+          ? setTimeout(check, 50)
+          : resolve();
+      check();
+    });
+    const left = host.querySelectorAll("[data-folio-math]").length;
+    hydrator.deactivate();
+    scroller.remove();
+    return { left, slices };
+  });
+  expect(result.left).toBe(0);
+  // About 30 a slice (8 with the fixed budget: 60 slices).
+  expect(result.slices).toBeLessThan(30);
+});
+
 test("anchor fallback measures only blocks needed to locate the reading line", async ({
   page,
 }) => {

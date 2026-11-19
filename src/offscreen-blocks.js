@@ -173,6 +173,7 @@ export function skipOffscreenBlocks(host, scroller) {
     // note takes, and each batch drawn then painted the whole note again
     // (measured: 4,400 formulas, ~200 frames over 100 ms, the page busy for
     // 57 s, against 16 s). Each batch drawn schedules the next pass.
+    const began = performance.now();
     const budget = Math.max(4, Math.min(12, deadline?.timeRemaining() ?? 8)),
       candidates = host.querySelectorAll(CANDIDATES),
       start = performance.now();
@@ -256,7 +257,13 @@ export function skipOffscreenBlocks(host, scroller) {
     });
     // Our own writes are not changes to the blocks.
     observer.takeRecords();
-    if (more) schedule();
+    // Stopped for time: go on at once, or, while formulas are still being
+    // drawn, after a pause four times as long as this pass (at least the
+    // 150 ms a batch drawn waits). Going on at once, a slow machine ran a
+    // pass after nearly every batch, each one longer as more formulas were
+    // drawn (looking through drawn blocks), with a frame of its own.
+    if (more)
+      schedule(drawing ? Math.max(150, 4 * (performance.now() - began)) : 0);
     // Parts still waiting for something that changes nothing in the page
     // (a table's widths found fitting as they are): look again, less often.
     else if (waiting) {

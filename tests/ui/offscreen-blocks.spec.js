@@ -219,6 +219,56 @@ test("blocks near the screen are skipped only once the reader has left them", as
   await expect.poll(firstBody).toBe(true);
 });
 
+test("while formulas are drawn, a pass cut short by its time budget goes on after a pause", async ({
+  page,
+}) => {
+  // On a slow machine a pass ran out of time after its first few blocks,
+  // and went on at once: one pass between every two batches of formulas,
+  // each longer as more of them were drawn (looking through drawn blocks).
+  // Here every block still waits for a formula, and looking into one takes
+  // 2 ms.
+  await page.goto("/");
+  const passes = await page.evaluate(async () => {
+    const { skipOffscreenBlocks } = await import("/src/offscreen-blocks.js");
+    const scroller = document.createElement("div");
+    scroller.style.cssText =
+      "position:fixed;left:0;top:0;width:400px;height:200px;overflow:auto";
+    const host = document.createElement("div");
+    host.innerHTML = Array.from(
+      { length: 200 },
+      (_, i) =>
+        `<div class="section-body">${"<span>text</span>".repeat(20)}<span data-folio-math="${i}">x</span></div>`,
+    ).join("");
+    scroller.append(host);
+    document.body.append(scroller);
+    let passes = 0;
+    const all = host.querySelectorAll.bind(host);
+    host.querySelectorAll = (selector) => {
+      if (selector.includes(".section-body")) passes++;
+      return all(selector);
+    };
+    const original = Element.prototype.querySelector;
+    Element.prototype.querySelector = function (selector) {
+      if (this.classList.contains("section-body")) {
+        const end = performance.now() + 2;
+        while (performance.now() < end);
+      }
+      return original.call(this, selector);
+    };
+    try {
+      skipOffscreenBlocks(host, scroller);
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    } finally {
+      Element.prototype.querySelector = original;
+    }
+    scroller.remove();
+    return passes;
+  });
+  // At least one pass, then one every 150 ms or more (dozens back to back).
+  expect(passes).toBeGreaterThan(0);
+  expect(passes).toBeLessThan(16);
+});
+
 test("a new reading width measures skipped blocks again", async ({ page }) => {
   await boot(page, longNote);
   await allDrawn(page);

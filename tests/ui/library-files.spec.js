@@ -86,6 +86,7 @@ async function setup(
         renameEntry: async (folderId, name, newName) => {
           window.calls.push(["rename", folderId, name, newName]);
           const entry = window.disk[folderId].find((e) => e.name === name);
+          const old = entry.path;
           entry.name = newName;
           entry.path = paths[folderId] + "/" + newName;
           return {
@@ -94,7 +95,9 @@ async function setup(
               entry.path.endsWith(".md") && name === "Note.md"
                 ? [{ id: "note", path: entry.path, name: newName }]
                 : [],
-            links: 2,
+            moves: [[old, entry.path]],
+            // The notes whose links followed it.
+            rewritten: 2,
           };
         },
         trashEntry: async (folderId, name) => {

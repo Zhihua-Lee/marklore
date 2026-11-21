@@ -339,6 +339,29 @@ export function rewriteLinks(text, { file, from = file, moves = [] }) {
   return { text: out, edits, count: edits.length };
 }
 
+// Where a path is after the moves ([[old, new]]), written with the new
+// path's separators; the same path when no move applies.
+export function movedPathOf(p, moves) {
+  const target = split(p);
+  const sorted = [...moves].sort(
+    (a, b) => split(b[0]).parts.length - split(a[0]).parts.length,
+  );
+  for (const [from, to] of sorted) {
+    const source = split(from);
+    if (
+      lower(source.root) !== lower(target.root) ||
+      source.parts.length > target.parts.length ||
+      source.parts.some((part, i) => lower(part) !== lower(target.parts[i]))
+    )
+      continue;
+    const rest = target.parts.slice(source.parts.length);
+    if (!rest.length) return to;
+    const sep = /\\/.test(to) || (!/\//.test(to) && /\\/.test(p)) ? "\\" : "/";
+    return to.replace(/[\\/]+$/, "") + sep + rest.join(sep);
+  }
+  return p;
+}
+
 // The paths the note's relative links lead to (decoded, resolved against its
 // folder), with the kind of each link: for finding the links into a folder.
 export function linkedPaths(text, file) {

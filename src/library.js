@@ -2,6 +2,8 @@ import { t } from "../desktop/i18n.mjs";
 import { MATH } from "../desktop/snippet.mjs";
 import { excludedBy } from "../desktop/excluded.mjs";
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
+import { movedPathOf } from "../desktop/link-rewrite.mjs";
+import { askCreateIndex, askLinks, pickFolder } from "./tree-dialogs.js";
 // Folder browser: lazily loaded tree, current-folder following and search
 // (file names in the folders shown, and the text of the library's notes).
 
@@ -71,6 +73,15 @@ export function createLibrary({
   unsavedUnder = () => [],
   // Notes renamed or moved on disk by the tree: [{ id, path, name }].
   renamed = () => {},
+  // Paths of open notes with unsaved changes (never written under them).
+  drafts = () => [],
+  // Before `renamed`: what a rename, move or undo did to notes open with
+  // unsaved changes, for their drafts: { moves, links, drafts: [{ path,
+  // ops }] }. Returns how many drafts changed.
+  patchDrafts = () => 0,
+  // Open notes with unsaved changes whose links these moves would change:
+  // [{ path, name, links }].
+  draftLinks = () => [],
   // A note or folder went to the Recycle Bin: close its tabs.
   trashed = () => {},
   copyLink = () => {},
@@ -198,18 +209,29 @@ export function createLibrary({
   }
   // A folder's entries. In a folder with an index file (desktop/
   // folder-index.mjs) they come in the index's order, a note listed under
-  // another showing as its sub-item (depth); dragging rewrites the index.
+  // another showing as its sub-item (depth), and those the index does not
+  // list after a quiet separator; dragging rewrites the index (a folder
+  // without one is asked to start one first).
   async function fillFolder(details, entry, children, open) {
     const indexFile = children.find((child) => child.index);
+    if (indexFile) details.dataset.index = indexFile.path;
+    else delete details.dataset.index;
     const stack = [{ depth: -1, box: details }];
+    let separated = false;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
       const depth = child.listed ? child.depth : 0;
       while (stack.length > 1 && stack.at(-1).depth >= depth) stack.pop();
       const box = stack.at(-1).box;
+      if (indexFile && !child.listed && !child.index && !separated) {
+        separated = true;
+        const line = element("div", "tree-unlisted", t("未列入目录"));
+        line.setAttribute("role", "separator");
+        box.append(line);
+      }
       if (child.directory) {
         const folder = await branch(child, open);
-        if (indexFile) draggable(folder.firstChild, entry, child, indexFile);
+        draggable(folder.firstChild, entry, child, indexFile);
         box.append(folder);
         continue;
       }
@@ -220,7 +242,7 @@ export function createLibrary({
       b.onclick = run(async () =>
         add(await api.openChild(entry.id, child.name)),
       );
-      if (indexFile) draggable(b, entry, child, indexFile);
+      draggable(b, entry, child, indexFile);
       const next = children[i + 1];
       if (!(next?.listed && child.listed && next.depth > depth)) {
         box.append(b);
@@ -250,15 +272,33 @@ export function createLibrary({
       stack.push({ depth, box: pages });
     }
   }
-  // Dragging in a folder with an index file: a drop before, after or (on a
-  // note) into a listed entry moves the dragged one there in the index.
+  // Dragging in the tree. A drop before or after an entry of the same
+  // folder reorders it in the folder's index; in the middle of a note, it
+  // becomes that note's child page; in the middle of a folder (or on a
+  // library folder), it moves there. A folder without an index is asked to
+  // start one before its first reordering.
   const DRAG_TYPE = "application/x-marklore-tree";
   let dragging = null;
-  const placeOf = (event, target, child) => {
+  const placeOf = (event, target, child, sortable) => {
     const box = target.getBoundingClientRect();
     const y = (event.clientY - box.top) / box.height;
-    if (child.directory) return y < 0.5 ? "before" : "after";
+    if (child.directory) {
+      if (!sortable) return "move";
+      return y < 0.25 ? "before" : y > 0.75 ? "after" : "move";
+    }
+    // Only notes nest: a folder goes before or after a note.
+    if (dragging?.directory) return y < 0.5 ? "before" : "after";
     return y < 0.3 ? "before" : y > 0.7 ? "after" : "into";
+  };
+  // Whether the entry being dragged may go there.
+  const allowed = (place, entry, child) => {
+    if (!dragging) return false;
+    if (place === "move")
+      return (
+        !samePath(dragging.folderPath, child.path) &&
+        !within(child.path, dragging.path)
+      );
+    return dragging.folder === entry?.id && dragging.name !== child.name;
   };
   const clearDrop = () => {
     for (const el of $("#tree").querySelectorAll(".drop-target")) {
@@ -266,31 +306,19 @@ export function createLibrary({
       delete el.dataset.drop;
     }
   };
-  function draggable(target, entry, child, indexFile) {
-    if (child.index) {
-      target.dataset.indexFile = "";
-      return;
-    }
-    target.dataset.indexName = child.name;
-    target.dataset.listed = String(Boolean(child.listed));
-    target.draggable = true;
-    target.addEventListener("dragstart", (event) => {
-      dragging = { folder: entry.id, name: child.name };
-      event.dataTransfer.setData(DRAG_TYPE, child.name);
-      event.dataTransfer.effectAllowed = "move";
-    });
-    target.addEventListener("dragend", () => {
-      dragging = null;
-      clearDrop();
-    });
-    if (!child.listed) return;
-    const accepts = () =>
-      dragging?.folder === entry.id && dragging.name !== child.name;
+  // Drops on a row: reorder (in its folder `entry`), and for a folder's
+  // row, moving into it.
+  function dropZone(target, entry, child, sortable) {
+    const placeNow = (event) => {
+      const place = placeOf(event, target, child, sortable);
+      if (place !== "move" && !sortable) return null;
+      return allowed(place, entry, child) ? place : null;
+    };
     target.addEventListener("dragover", (event) => {
-      if (!accepts()) return;
+      const place = placeNow(event);
+      if (!place) return;
       event.preventDefault();
       event.dataTransfer.dropEffect = "move";
-      const place = placeOf(event, target, child);
       if (target.dataset.drop === place) return;
       clearDrop();
       target.classList.add("drop-target");
@@ -302,35 +330,145 @@ export function createLibrary({
       delete target.dataset.drop;
     });
     target.addEventListener("drop", (event) => {
-      if (!accepts()) return;
+      const place = placeNow(event);
+      if (!place) return;
       event.preventDefault();
-      const name = dragging.name;
-      const place = placeOf(event, target, child);
+      const moved = dragging;
       dragging = null;
       clearDrop();
-      run(() => reorder(entry, indexFile, name, child.name, place))();
+      if (place === "move") run(() => moveEntry(moved, child.path))();
+      else
+        run(() =>
+          reorder(folderInfoOf(entry), moved.name, child.name, place),
+        )();
     });
   }
-  async function reorder(entry, indexFile, name, target, place) {
-    // An index open with unsaved changes is not rewritten under them.
-    if (isUnsaved(indexFile.path)) {
-      report(
-        t("{name} 有未保存的修改，请先保存，再在文件树中拖动排序", {
-          name: indexFile.name,
-        }),
-      );
+  function draggable(target, entry, child, indexFile) {
+    if (child.index) {
+      target.dataset.indexFile = "";
       return;
     }
-    if (!api.reorderIndex) return;
-    await api.reorderIndex(entry.id, { name, target, place });
+    target.dataset.indexName = child.name;
+    target.dataset.listed = String(Boolean(child.listed));
+    target.draggable = true;
+    target.addEventListener("dragstart", (event) => {
+      dragging = {
+        folder: entry.id,
+        folderPath: entry.path,
+        name: child.name,
+        path: child.path,
+        directory: Boolean(child.directory),
+      };
+      event.dataTransfer.setData(DRAG_TYPE, child.name);
+      event.dataTransfer.effectAllowed = "move";
+    });
+    target.addEventListener("dragend", () => {
+      dragging = null;
+      clearDrop();
+    });
+    // Reordering onto the index's entries (any entry, in a folder that has
+    // no index yet); a folder's row also takes moves into it.
+    const sortable = indexFile ? Boolean(child.listed) : true;
+    if (sortable || child.directory) dropZone(target, entry, child, sortable);
+  }
+  // A folder of the tree as the operations need it.
+  const folderInfoOf = (entry) => {
+    const details = [...$("#tree").querySelectorAll("details.folder")].find(
+      (el) => el.dataset.id === entry.id,
+    );
+    return {
+      id: entry.id,
+      path: entry.path ?? details?.dataset.path,
+      name: entry.name ?? details?.dataset.name,
+      index: details?.dataset.index || null,
+    };
+  };
+  const folderInfo = (details) => ({
+    id: details.dataset.id,
+    path: details.dataset.path,
+    name: details.dataset.name,
+    index: details.dataset.index || null,
+  });
+  // The folder's index, started on the reader's word when it has none.
+  // Returns its path, or null.
+  async function ensureIndex(folder) {
+    if (folder.index) return folder.index;
+    if (!(await askCreateIndex(folder.name))) return null;
+    const made = await api.createIndex(folder.id);
     await refresh();
+    return made.path;
+  }
+  // An index open with unsaved changes is not rewritten under them.
+  function indexBusy(index, message) {
+    if (!isUnsaved(index)) return false;
+    report(message(index.split(/[\\/]/).pop()));
+    return true;
+  }
+  async function reorder(folder, name, target, place) {
+    const index = await ensureIndex(folder);
+    if (!index) return;
+    if (
+      indexBusy(index, (name) =>
+        t("{name} 有未保存的修改，请先保存，再在文件树中拖动排序", { name }),
+      )
+    )
+      return;
+    if (!api.reorderIndex) return;
+    await api.reorderIndex(folder.id, { name, target, place });
+    await refresh();
+  }
+  // The row of this path in the rebuilt tree (its folders load a moment
+  // later), focused.
+  async function focusRow(path) {
+    for (let i = 0; i < 40; i++) {
+      const again = [
+        ...$("#tree").querySelectorAll("button.file, details.folder > summary"),
+      ].find((el) => el.title === path);
+      if (again) return again.focus();
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+  }
+  // One change of the index from the keyboard (Alt+↑/↓ in a folder without
+  // an index, Alt+Shift+←/→): asks for an index first, then focuses the
+  // entry again. Returns whether it changed (null: not tried).
+  async function changeIndex(folder, op, path) {
+    const index = await ensureIndex(folder);
+    if (!index) return null;
+    if (
+      indexBusy(index, (name) =>
+        t("{name} 有未保存的修改，请先保存，再调整目录", { name }),
+      )
+    )
+      return null;
+    const done = await api.editIndex(folder.id, op);
+    await refresh();
+    await focusRow(path);
+    return Boolean(done);
   }
   // Alt+↑/↓ on a listed entry: the same move by keyboard, past the entry
   // before or after it at its level.
   $("#tree").addEventListener("keydown", (event) => {
-    if (!event.altKey || !/^Arrow(Up|Down)$/.test(event.key)) return;
+    if (!event.altKey || event.shiftKey || !/^Arrow(Up|Down)$/.test(event.key))
+      return;
     const item = event.target.closest?.("[data-index-name]");
     if (!item) return;
+    const up = event.key === "ArrowUp";
+    const folderEl = folderOf(
+      item.matches("summary") ? item.parentElement.parentElement : item,
+    );
+    if (!folderEl) return;
+    // A folder without an index: start one, then move.
+    if (!folderEl.dataset.index) {
+      event.preventDefault();
+      run(() =>
+        changeIndex(
+          folderInfo(folderEl),
+          { kind: "shift", ref: item.dataset.indexName, step: up ? -1 : 1 },
+          item.title,
+        ),
+      )();
+      return;
+    }
     const own =
       item.matches("summary") || item.parentElement.matches(".page-row")
         ? item.parentElement.closest("details, .page")
@@ -345,28 +483,40 @@ export function createLibrary({
       )
       .filter((el) => el?.dataset.listed === "true");
     const at = level.indexOf(item);
-    const up = event.key === "ArrowUp";
     const other = level[at + (up ? -1 : 1)];
     if (at < 0 || !other) return;
     event.preventDefault();
-    const folder = own.parentElement.closest("details.folder");
-    const indexFile = folder.querySelector(":scope > [data-index-file]");
     run(async () => {
       await reorder(
-        { id: folder.dataset.id },
-        { path: indexFile.title, name: indexFile.textContent },
+        folderInfo(folderEl),
         item.dataset.indexName,
         other.dataset.indexName,
         up ? "before" : "after",
       );
-      // The rebuilt folders load their entries a moment later.
-      for (let i = 0; i < 40; i++) {
-        const again = [
-          ...$("#tree").querySelectorAll("[data-index-name]"),
-        ].find((el) => el.title === item.title);
-        if (again) return again.focus();
-        await new Promise((resolve) => setTimeout(resolve, 25));
-      }
+      await focusRow(item.title);
+    })();
+  });
+  // Alt+Shift+→ makes a note the child page of the note above it, Alt+Shift+←
+  // takes it a level up (Tab stays the way through the tree).
+  $("#tree").addEventListener("keydown", (event) => {
+    if (
+      !event.altKey ||
+      !event.shiftKey ||
+      !/^Arrow(Left|Right)$/.test(event.key)
+    )
+      return;
+    const item = event.target.closest?.("#tree button.file[data-index-name]");
+    if (!item) return;
+    event.preventDefault();
+    const indent = event.key === "ArrowRight";
+    run(async () => {
+      const changed = await changeIndex(
+        folderInfo(folderOf(item)),
+        { kind: indent ? "indent" : "outdent", ref: item.dataset.indexName },
+        item.title,
+      );
+      if (changed === false)
+        report(indent ? t("上面没有可作为上级的笔记") : t("已在最上一层"));
     })();
   });
   async function branch(entry, open = null) {
@@ -443,6 +593,8 @@ export function createLibrary({
     for (const root of displayedRoots) {
       const el = await branch(root, open);
       el.classList.add("root");
+      // A library folder takes notes and folders dropped on its name.
+      dropZone(el.firstChild, null, { ...root, directory: true }, false);
       // The open note's folder outside the library: said so beside its name.
       if (root === outsideFolder()) {
         el.classList.add("outside");
@@ -740,15 +892,45 @@ export function createLibrary({
     const dot = name.lastIndexOf(".");
     return dot > 0 ? dot : name.length;
   };
-  async function create(details, kind) {
+  // kind: "note" | "folder"; under: a note of the folder whose child page
+  // the new note becomes (the folder's index lists it under that note).
+  async function create(details, kind, under = null) {
     await details.load();
+    const folder = folderInfo(details);
+    if (under) {
+      const index = await ensureIndex(folder);
+      if (!index) return;
+      if (
+        indexBusy(index, (name) =>
+          t("{name} 有未保存的修改，请先保存，再调整目录", { name }),
+        )
+      )
+        return;
+    }
+    // The parent's row, found again after an index was started.
+    const parentRow = () => {
+      const row = [...$("#tree").querySelectorAll("button.file")].find(
+        (el) => el.title === under.path,
+      );
+      return row?.closest(".page") || row;
+    };
     const name = await askName({
-      label: kind === "folder" ? t("新文件夹名称") : t("新笔记名称"),
+      label: under
+        ? t("新子页名称")
+        : kind === "folder"
+          ? t("新文件夹名称")
+          : t("新笔记名称"),
       place: (input) => {
         const row = element("div", "tree-new");
-        row.dataset.kind = kind;
+        row.dataset.kind = under ? "child" : kind;
         row.append(input);
-        details.querySelector(":scope > summary").after(row);
+        const parent = under && parentRow();
+        if (parent) parent.after(row);
+        else
+          [...$("#tree").querySelectorAll("details.folder")]
+            .find((el) => el.dataset.id === folder.id)
+            ?.querySelector(":scope > summary")
+            .after(row);
         return () => row.remove();
       },
     });
@@ -756,14 +938,66 @@ export function createLibrary({
     const full =
       kind === "folder" || /\.[a-z0-9]+$/i.test(name) ? name : name + ".md";
     const made = await api.createEntry(
-      details.dataset.id,
+      folder.id,
       full,
       kind,
       kind === "folder" ? "" : newNoteText(full),
+      { under: under?.name ?? null, drafts: drafts() },
     );
+    if (made.index?.draft) patchDrafts({ moves: [], drafts: [made.index] });
     await refresh();
     if (kind === "folder") await revealFolder(made.path);
     else openNew(made);
+    if (made.index?.error) report(made.index.error);
+  }
+  // The rename or move last made, for its undo (the menu offers it).
+  let lastMove = null;
+  const refreshLastMove = () =>
+    api?.lastMove?.().then(
+      (value) => (lastMove = value),
+      () => {},
+    );
+  refreshLastMove();
+  // The notes whose links a rename or move changes: on disk (from main),
+  // with the open drafts' own counts in their place.
+  function withDrafts(affected, moves) {
+    const own = draftLinks(moves);
+    const keys = new Set(own.map((note) => note.path.toLowerCase()));
+    return [
+      ...affected.filter((note) => !keys.has(note.path.toLowerCase())),
+      ...own,
+    ].sort((a, b) => a.name.localeCompare(b.name, "zh-CN", { numeric: true }));
+  }
+  // After a rename, move or undo: drafts patched, tabs and folds follow.
+  function followMoves(result, links) {
+    const patched = patchDrafts({
+      moves: result.moves || [],
+      links,
+      drafts: result.drafts || [],
+    });
+    renamed(result.files || []);
+    for (const page of [...closedPages]) {
+      const next = movedPathOf(page, result.moves || []);
+      if (next !== page) {
+        closedPages.delete(page);
+        closedPages.add(next);
+      }
+    }
+    return patched || 0;
+  }
+  // The toast after a rename or move, with its undo.
+  function reportMove(message, result) {
+    const failed = (result.failed || []).map((f) =>
+      f.path ? f.path.split(/[\\/]/).pop() : f.error,
+    );
+    if (failed.length)
+      message +=
+        t("；") +
+        t("{count} 个文件未能更新：{names}", {
+          count: failed.length,
+          names: failed.join(", "),
+        });
+    report(message, [t("撤销"), run(undoMove)]);
   }
   async function rename(target) {
     const isFolder = target.matches("summary");
@@ -790,15 +1024,134 @@ export function createLibrary({
     });
     if (!name || name === old) return;
     const full = isFolder || /\.[a-z0-9]+$/i.test(name) ? name : name + ".md";
-    const result = await api.renameEntry(folder.dataset.id, old, full);
-    renamed(result.files);
+    const plan = api.planRename
+      ? await api.planRename(folder.dataset.id, old, full)
+      : { moves: [], affected: [] };
+    const affected = withDrafts(plan.affected, plan.moves);
+    let links = true;
+    if (affected.length) {
+      const choice = await askLinks({
+        kind: "rename",
+        title: t("把“{name}”改名为“{to}”", { name: old, to: full }),
+        affected,
+      });
+      if (!choice) return;
+      links = choice.links;
+    }
+    const result = await api.renameEntry(folder.dataset.id, old, full, {
+      links,
+      drafts: drafts(),
+    });
+    const patched = followMoves(result, links);
     await refresh();
-    if (result.links)
-      report(
+    await refreshLastMove();
+    const count = (result.rewritten || 0) + patched;
+    if (!result.moves?.length) return;
+    if (links && count)
+      reportMove(t("已改名，{count} 篇笔记中的链接已更新", { count }), result);
+    else if (!links)
+      reportMove(
         t("已重命名。{count} 篇笔记中的链接仍指向旧名称", {
-          count: result.links,
+          count: affected.length,
         }),
+        result,
       );
+    else reportMove(t("已改名为“{name}”", { name: full }), result);
+  }
+  // A note or folder (moved: { folder: id, folderPath, name, path,
+  // directory }) moved to another folder (dest: its path; asked for when
+  // not given), with its child pages if the reader keeps them along.
+  async function moveEntry(moved, dest = null) {
+    if (!api.planMove) return;
+    if (!dest) {
+      const folders = await api.libraryFolders();
+      dest = await pickFolder({
+        title: t("把“{name}”移动到…", { name: moved.name }),
+        folders,
+        exclude: (p) =>
+          samePath(p, moved.folderPath) ||
+          (moved.directory && within(p, moved.path)),
+      });
+      if (!dest) return;
+    }
+    const plan = await api.planMove(moved.folder, moved.name, dest);
+    const to = plan.to.split(/[\\/]/).filter(Boolean).pop() || plan.to;
+    const affected = withDrafts(plan.affected, plan.moves);
+    const along = plan.children.length
+      ? {
+          children: plan.children,
+          affected: withDrafts(plan.affectedWith, plan.movesWith),
+        }
+      : null;
+    let choice = { links: true, children: false };
+    if (affected.length || along) {
+      choice = await askLinks({
+        kind: "move",
+        title: t("把“{name}”移到“{to}”", { name: moved.name, to }),
+        affected,
+        with: along,
+      });
+      if (!choice) return;
+    }
+    const result = await api.moveEntry(moved.folder, moved.name, dest, {
+      ...choice,
+      drafts: drafts(),
+    });
+    const patched = followMoves(result, choice.links);
+    await refresh();
+    await refreshLastMove();
+    const count = (result.rewritten || 0) + patched;
+    reportMove(
+      choice.links && count
+        ? t("已移到“{folder}”，{count} 篇笔记中的链接已更新", {
+            folder: to,
+            count,
+          })
+        : t("已移到“{folder}”", { folder: to }),
+      result,
+    );
+  }
+  // The row's entry as moveEntry takes it.
+  function movingOf(target) {
+    const isFolder = target.matches("summary");
+    const details = folderOf(target);
+    const folder = isFolder ? parentFolderOf(details) : details;
+    return {
+      folder: folder.dataset.id,
+      folderPath: folder.dataset.path,
+      name: isFolder ? details.dataset.name : target.textContent,
+      path: isFolder ? details.dataset.path : target.title,
+      directory: isFolder,
+    };
+  }
+  // The last rename or move taken back: names, index entries and links.
+  async function undoMove() {
+    const result = await api.undoMove(drafts());
+    followMoves(result, true);
+    await refresh();
+    await refreshLastMove();
+    const skipped = (result.skipped || []).map((p) => p.split(/[\\/]/).pop());
+    report(
+      skipped.length
+        ? t(
+            "已撤销上次改名/移动；{count} 个文件之后又有修改，未还原：{names}",
+            {
+              count: skipped.length,
+              names: skipped.join(", "),
+            },
+          )
+        : t("已撤销上次改名/移动"),
+    );
+  }
+  // What the menu says undo would take back.
+  function lastMoveItem() {
+    const label = lastMove?.label;
+    const detail = !label
+      ? undefined
+      : label.kind === "rename"
+        ? t("“{name}”改名为“{to}”", { name: label.name, to: label.to })
+        : t("“{name}”移到“{to}”", { name: label.name, to: label.to });
+    return [t("撤销上次改名/移动"), run(undoMove), !lastMove, detail];
   }
   async function trash(target) {
     const isFolder = target.matches("summary");
@@ -815,7 +1168,8 @@ export function createLibrary({
       ? t("把文件夹“{name}”及其中的全部内容移到回收站？", { name })
       : t("把“{name}”移到回收站？", { name });
     if (!window.confirm(question)) return;
-    const result = await api.trashEntry(folder.dataset.id, name);
+    const result = await api.trashEntry(folder.dataset.id, name, drafts());
+    if (result.index?.draft) patchDrafts({ moves: [], drafts: [result.index] });
     trashed(result.path);
     await refresh();
   }
@@ -857,16 +1211,31 @@ export function createLibrary({
     const file = el.closest("#tree button.file");
     if (file) {
       const folder = folderOf(file);
+      // The index file itself has no child pages and does not move.
+      const own = folder && file.dataset.indexName;
       return [
         [t("打开"), () => file.click()],
         [t("复制链接"), () => copyLink(file.title)],
         null,
+        [
+          t("新建子页"),
+          run(() =>
+            create(folder, "note", {
+              name: file.dataset.indexName,
+              path: file.title,
+            }),
+          ),
+          !own,
+        ],
         [t("重命名…"), run(() => rename(file)), !folder],
+        [t("移动到…"), run(() => moveEntry(movingOf(file))), !own],
         [
           t("在资源管理器中显示"),
           run(() => api.revealEntry(folder.dataset.id, file.textContent)),
           !folder,
         ],
+        null,
+        lastMoveItem(),
         null,
         [t("移到回收站"), run(() => trash(file)), !folder],
       ];
@@ -903,13 +1272,18 @@ export function createLibrary({
           false,
           t("只是不再列出，文件不会删除"),
         ],
+        null,
+        lastMoveItem(),
       ];
     }
     return [
       ...own,
       [t("重命名…"), run(() => rename(summary))],
+      [t("移动到…"), run(() => moveEntry(movingOf(summary)))],
       reveal,
       exclusionItem(details.dataset.path),
+      null,
+      lastMoveItem(),
       null,
       [t("移到回收站"), run(() => trash(summary))],
     ];

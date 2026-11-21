@@ -5,6 +5,7 @@ import {
   findDestinations,
   linkedPaths,
   isUnder,
+  movedPathOf,
 } from "../desktop/link-rewrite.mjs";
 
 // A note in C:/kb/notes linking to Plan.md, renamed to Roadmap.md.
@@ -277,4 +278,21 @@ test("destinations and linked paths are found where Markdown has them", () => {
   ]);
   assert.equal(isUnder("C:/KB/a/b.md", "c:\\kb\\a"), true);
   assert.equal(isUnder("C:/kb/ab.md", "C:/kb/a"), false);
+});
+
+test("a path after moves keeps the new path's separators", () => {
+  const moves = [["C:\\kb\\Topics", "C:\\kb\\Subjects"]];
+  assert.equal(
+    movedPathOf("c:\\KB\\topics\\a\\b.md", moves),
+    "C:\\kb\\Subjects\\a\\b.md",
+  );
+  assert.equal(movedPathOf("C:\\kb\\Topics", moves), "C:\\kb\\Subjects");
+  assert.equal(
+    movedPathOf("C:\\kb\\Topicsx\\a.md", moves),
+    "C:\\kb\\Topicsx\\a.md",
+  );
+  assert.equal(
+    movedPathOf("/home/u/kb/a.md", [["/home/u/kb/a.md", "/home/u/kb/b.md"]]),
+    "/home/u/kb/b.md",
+  );
 });

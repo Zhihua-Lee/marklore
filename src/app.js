@@ -8,6 +8,8 @@ import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
 import { defaultSettings, normalizeSettings } from "./settings.js";
 import { createLibrary } from "./library.js";
+import { rewriteLinks, movedPathOf } from "../desktop/link-rewrite.mjs";
+import { applyIndexOp } from "../desktop/folder-index.mjs";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
 import { createMenus } from "./menus.js";
@@ -290,11 +292,24 @@ const findBar = createFindBar({
   },
 });
 
-function toast(message) {
-  $("#toast").textContent = message;
-  $("#toast").hidden = false;
+// A short message at the bottom; action: [label, fn], a button beside it
+// (undo), shown a little longer.
+function toast(message, action = null) {
+  const box = $("#toast");
+  box.textContent = message;
+  if (Array.isArray(action)) {
+    const button = document.createElement("button");
+    button.className = "toast-action";
+    button.textContent = action[0];
+    button.onclick = () => {
+      box.hidden = true;
+      action[1]();
+    };
+    box.append(button);
+  }
+  box.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => ($("#toast").hidden = true), 5000);
+  toastTimer = setTimeout(() => (box.hidden = true), action ? 9000 : 5000);
 }
 function run(fn) {
   return (...args) =>
@@ -1673,11 +1688,53 @@ const {
     if (moved.length) {
       updateTabs();
       scheduleSession();
+      // A note moved may have been rewritten (its links) where it went,
+      // while its folder was not watched: saved tabs read it again.
+      run(() => checkDisk())();
     }
   },
   trashed: (path) => {
     // Checked unsaved first; closing asks nothing.
     for (const doc of tabsUnder(path)) run(() => closeTab(doc))();
+  },
+  drafts: () =>
+    tabs
+      .filter((doc) => doc.path && (dirty(doc) || doc.saving))
+      .map((doc) => doc.path),
+  draftLinks: (moves) =>
+    tabs.flatMap((doc) => {
+      if (!doc.path || !dirty(doc) || !moves.length) return [];
+      const { count } = rewriteLinks(doc.text, {
+        from: doc.path,
+        file: movedPathOf(doc.path, moves),
+        moves,
+      });
+      return count ? [{ path: doc.path, name: doc.name, links: count }] : [];
+    }),
+  patchDrafts: ({ moves = [], links = false, drafts: edits = [] }) => {
+    let patched = 0;
+    for (const doc of tabs) {
+      if (!doc.path || !dirty(doc)) continue;
+      let text = doc.text;
+      // The index's own changes first (they name entries as they were),
+      // then the links, both into the draft: nothing is written under it.
+      for (const { path, ops } of edits)
+        if (
+          samePath(path, doc.path) ||
+          samePath(movedPathOf(path, moves), doc.path)
+        )
+          for (const op of ops) text = applyIndexOp(text, op) ?? text;
+      if (links && moves.length)
+        text = rewriteLinks(text, {
+          from: doc.path,
+          file: movedPathOf(doc.path, moves),
+          moves,
+        }).text;
+      if (text === doc.text) continue;
+      replaceDraft(doc, text);
+      patched++;
+    }
+    return patched;
   },
   copyLink: (path) => linkHere.copyNote(path),
   changeSettings: (patch) => changeSettings(patch),
@@ -1692,6 +1749,8 @@ const {
     if (doc) editNewNote(doc);
   },
 });
+// The same path, letter case aside (Windows).
+const samePath = (a, b) => a.toLowerCase() === b.toLowerCase();
 // Open tabs of this note, or of the notes under this folder.
 function tabsUnder(path) {
   const key = path.toLowerCase().replace(/[\\/]+$/, "");
@@ -1838,6 +1897,13 @@ function changeFront(doc, yaml, { history = true } = {}) {
     richEditor.setFrontMatter(yaml.replace(/\r\n/g, "\n"), { history });
     if (doc.text === next) return;
   }
+  replaceDraft(doc, next, { history });
+}
+// A note's text set to `next` as one change (the span that differs), into
+// the editor when it shows the note. history: false for a change that is
+// not the writer's own (links that follow a rename or move): it stays out
+// of undo, and the tab stays unsaved; nothing is written.
+function replaceDraft(doc, next, { history = false } = {}) {
   const old = doc.text;
   let from = 0;
   while (from < old.length && old[from] === next[from]) from++;

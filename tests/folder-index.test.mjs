@@ -19,6 +19,7 @@ import {
   applyIndexOp,
   newIndexText,
   subtreeOf,
+  parseIndex,
 } from "../desktop/folder-index.mjs";
 import { FileStore } from "../desktop/files.mjs";
 
@@ -484,5 +485,71 @@ test("a child listed twice in a subtree is moved once", () => {
       (e) => e.name,
     ),
     ["a.md", "b.md"],
+  );
+});
+
+// The tree's index operations keep sub-pages under their entry as the index
+// view does (src/index-list.js): wider markers, tabs stepping past the
+// width taken away, a first sub-item under a wide numbered entry.
+const depths = (text) =>
+  parseIndex(text).entries.map((e) => [e.text, indexDepth(text, e)]);
+function indexDepth(text, entry) {
+  const { entries } = parseIndex(text);
+  let depth = 0;
+  for (let up = entry.parent; up >= 0; up = entries[up].parent) depth++;
+  return depth;
+}
+
+test("sub-pages stay under an entry moved beside or into a numbered one", () => {
+  const text = "1. [B](b.md)\n- [A](a.md)\n  - [A1](a1.md)\n";
+  assert.deepEqual(depths(indentEntry(text, "a.md")), [
+    ["B", 0],
+    ["A", 1],
+    ["A1", 2],
+  ]);
+  // Before B, and back after it: A1 stays under A each time (the tree
+  // keeps an entry's own marker, so its text does not move).
+  const before = moveInIndex(text, "a.md", "b.md", "before");
+  assert.deepEqual(depths(before), [
+    ["A", 0],
+    ["A1", 1],
+    ["B", 0],
+  ]);
+  assert.deepEqual(depths(moveInIndex(before, "a.md", "b.md", "after")), [
+    ["B", 0],
+    ["A", 0],
+    ["A1", 1],
+  ]);
+});
+
+test("a tab stepping past the width taken away keeps the rest as spaces", () => {
+  const text = "- [P](p.md)\n  - [C](c.md)\n\t- [G](g.md)\n";
+  assert.deepEqual(depths(removeEntry(text, "p.md")), [
+    ["C", 0],
+    ["G", 1],
+  ]);
+  assert.deepEqual(depths(outdentEntry(text, "c.md")), [
+    ["P", 0],
+    ["C", 0],
+    ["G", 1],
+  ]);
+});
+
+test("a first sub-item under a wide numbered entry in a tab-nested index reaches its text", () => {
+  const text = "- [A](a.md)\n\t100. [X](x.md)\n";
+  assert.deepEqual(
+    depths(insertEntry(text, "y.md", { under: "x.md" })).at(-1),
+    ["y", 2],
+  );
+  assert.deepEqual(
+    depths(
+      moveInIndex(
+        "- [A](a.md)\n\t100. [X](x.md)\n- [Z](z.md)\n",
+        "z.md",
+        "x.md",
+        "into",
+      ),
+    ).at(-1),
+    ["Z", 2],
   );
 });

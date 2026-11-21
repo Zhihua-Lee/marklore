@@ -239,7 +239,9 @@ function reindent(block, from, lead) {
       width = line[i] === "\t" ? width + 4 - (width % 4) : width + 1;
       i++;
     }
-    return lead + line.slice(i);
+    // A tab reaching past the width taken away: the columns beyond it
+    // stay, as spaces (as the index view does, src/index-list.js).
+    return lead + " ".repeat(Math.max(0, width - from)) + line.slice(i);
   });
 }
 // The marker a new entry gets next to `entry`: the same bullet, or the
@@ -280,11 +282,19 @@ function moveBlock(text, parsed, from, to, place, line = null) {
   if (place === "into") {
     // As the entry's sub-items are indented, or under its text.
     const child = entries.findIndex((entry) => entry.parent === to);
+    // In an index that nests with tabs: a tab, and spaces after it when
+    // the entry's text starts further in (a wide number), so the sub-item
+    // still reaches it.
+    const tabbed =
+      goal.lead.includes("\t") ||
+      entries.some((entry) => entry.parent >= 0 && entry.lead.includes("\t"));
     lead =
       child >= 0
         ? entries[child].lead
-        : goal.lead.includes("\t")
-          ? goal.lead + "\t"
+        : tabbed
+          ? goal.lead +
+            "\t" +
+            " ".repeat(Math.max(0, goal.content - columns(goal.lead + "\t")))
           : " ".repeat(goal.content);
   }
   const moved = reindent(block, fromIndent, lead);

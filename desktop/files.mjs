@@ -607,10 +607,14 @@ export class FileStore {
           { ...entry, under },
         ]
       : [entry];
-    // The entry exists either way; a failed index write is reported.
-    const index = await this.changeIndex(folder, ops, {
-      drafts: draftList(place?.drafts),
-    }).catch((e) => ({ error: e.message }));
+    // The entry exists either way; a failed index write is reported. A
+    // caller that lists it itself (the index's own view) says list: false.
+    const index =
+      place?.list === false
+        ? null
+        : await this.changeIndex(folder, ops, {
+            drafts: draftList(place?.drafts),
+          }).catch((e) => ({ error: e.message }));
     return kind === "folder"
       ? { ...(await this.directory(target)), directory: true, index }
       : { path: target, index };

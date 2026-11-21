@@ -767,7 +767,10 @@ export function createIndexView({
   // The file of a new page. One place to change when the main process
   // offers creating index pages itself.
   async function createPageFile(folderId, name) {
-    return api.createEntry(folderId, name, "note", newNoteText(name));
+    // The view lists it itself (in its draft): main leaves the index alone.
+    return api.createEntry(folderId, name, "note", newNoteText(name), {
+      list: false,
+    });
   }
   const fileName = (name) => (NOTE_NAME.test(name) ? name : name + ".md");
   // A name typed for a new page, in a row where it will be listed.
@@ -861,7 +864,8 @@ export function createIndexView({
     const folder =
       /\/\s*$/.test(target(found.entry.href)) || !EXTENSION.test(name);
     if (!folder && !NOTE_NAME.test(name)) return;
-    if (folder) await api.createEntry(info.folderId, name, "folder", "");
+    if (folder)
+      await api.createEntry(info.folderId, name, "folder", "", { list: false });
     else await createPageFile(info.folderId, name);
     addChild(info, { name, directory: folder });
     info.version++;

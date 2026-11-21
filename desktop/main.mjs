@@ -1192,6 +1192,7 @@ else {
       api("createEntry", async (id, name, kind, text, place) => {
         const created = await files.createEntry(id, name, kind, text, {
           under: place?.under ?? null,
+          list: place?.list !== false,
           drafts: draftsOf(place?.drafts),
         });
         return created.directory

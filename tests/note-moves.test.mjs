@@ -881,3 +881,16 @@ test("the link index does not read a note through a symbolic link", async (t) =>
     await fs.rm(dir, { recursive: true, force: true });
   }
 });
+
+test("a note made by the index's own view is not listed again by main", async () => {
+  const lib = await library();
+  const { store, root, read } = lib;
+  try {
+    const before = await read("_目录.md");
+    await store.createEntry(root.id, "Example.md", "note", "", { list: false });
+    await store.createEntry(root.id, "Box", "folder", "", { list: false });
+    assert.equal(await read("_目录.md"), before);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

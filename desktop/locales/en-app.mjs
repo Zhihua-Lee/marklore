@@ -662,4 +662,7 @@ export default {
   "编辑这段 Markdown": "Edit this Markdown",
   "这段文字已在别处改动，这次修改未写入":
     "This text was changed elsewhere; the edit was not applied",
+  "文件夹“{name}”里没有目录文件": "The folder “{name}” has no index file",
+  "{title}（Ctrl+单击打开，双击改标题）":
+    "{title} (Ctrl+click to open, double-click to edit the title)",
 };

@@ -15,7 +15,7 @@
 // Every change is a small edit of the note's text (src/index-list.js) made
 // through the source editor, so it is undone, kept as a draft and saved as
 // any edit is. Prose is edited by double-clicking it (its Markdown, in place).
-import { isolateHistory } from "@codemirror/commands";
+import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { t } from "../desktop/i18n.mjs";
 import { isIndexName } from "../desktop/folder-index.mjs";
 import { renderDocument } from "./document-render.js";
@@ -34,12 +34,24 @@ import {
   noteExcerpt,
   titleFor,
   hrefFor,
+  difference,
 } from "./index-list.js";
 import "./folder-index-view.css";
 
 const DRAG_TYPE = "application/x-marklore-index";
 // Pages read for their first sentence, at most (an index lists a folder).
 const EXCERPT_LIMIT = 200;
+// Links main checks at once (desktop/main.mjs "linkStatus").
+const STATUS_BATCH = 2000;
+// Names of notes (desktop/files.mjs markdownPath); a name with another
+// extension is an attachment, which the folder's listing leaves out.
+const NOTE_NAME = /\.(md|markdown|mdown|mkd|txt)$/i;
+// A file extension ("1.1 Sets" or "v1.2" have none).
+const EXTENSION = /\.[a-z][a-z0-9]{0,7}$/i;
+const attachment = (name) => EXTENSION.test(name) && !NOTE_NAME.test(name);
+// A link to a file elsewhere (not a site, not this note's own anchor).
+const localHref = (href) => href && !/^([a-z][a-z0-9+.-]*:|#)/i.test(href);
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
 export function createIndexView({
   api,
@@ -76,12 +88,31 @@ export function createIndexView({
     return state;
   };
   const foldKey = (entry) => (entry.name || entry.href).toLowerCase();
+  // The folder's entries by name (any letter case).
   const childOf = (info, name) =>
     name && info?.status === "ready"
-      ? info.children.find(
-          (child) => child.name.toLowerCase() === name.toLowerCase(),
-        )
+      ? info.byName.get(name.toLowerCase()) || null
       : null;
+  function setChildren(info, children) {
+    info.children = children;
+    info.byName = new Map();
+    for (const child of children)
+      if (!info.byName.has(child.name.toLowerCase()))
+        info.byName.set(child.name.toLowerCase(), child);
+  }
+  function addChild(info, child) {
+    info.children.push(child);
+    info.byName.set(child.name.toLowerCase(), child);
+  }
+  // Is the entry's file missing? A file of the folder that is not listed (a
+  // note or folder named), or a link deeper or outside that main reports
+  // missing. Attachments are not listed by the folder: not known missing.
+  function isMissing(info, entry) {
+    if (info?.status !== "ready") return false;
+    if (entry.name)
+      return !childOf(info, entry.name) && !attachment(entry.name);
+    return info.statuses.get(target(entry.href)) === "missing-file";
+  }
 
   // ── What is known about the folder ──
   function folderOf(doc) {
@@ -91,8 +122,12 @@ export function createIndexView({
       info = {
         status: "loading",
         children: [],
+        byName: new Map(),
         excerpts: new Map(),
         asked: new Set(),
+        // Links deeper or outside the folder: main's answer, by href.
+        statuses: new Map(),
+        checking: new Set(),
         version: 0,
       };
       folders.set(doc.fileId, info);
@@ -103,16 +138,61 @@ export function createIndexView({
   async function load(doc, info) {
     try {
       const folder = await api.currentFolder(doc.fileId);
-      info.children = (await api.list(folder.id)) || [];
+      setChildren(info, (await api.list(folder.id)) || []);
       info.folderId = folder.id;
       info.status = "ready";
+      // Files came or went: deeper links are asked about again.
+      info.statuses.clear();
+      info.checking.clear();
     } catch {
       // Listed before: what was known stays.
       if (info.status !== "ready") info.status = "error";
     }
     if (folders.get(doc.fileId) !== info) return;
     info.version++;
-    rerender(doc);
+    refresh(doc);
+  }
+  // Shown again for what was learnt in the background, unless a title, a
+  // block or a choice is being typed in the view: then once it closes.
+  let pending = null;
+  const inlineEditor = () =>
+    host.querySelector(
+      ".ix-title-input, .ix-block-editor, .ix-relocate, .ix-new-row",
+    );
+  function refresh(doc) {
+    if (inlineEditor()) pending = doc;
+    else rerender(doc);
+  }
+  function flush() {
+    const doc = pending;
+    pending = null;
+    if (doc && !inlineEditor()) rerender(doc);
+  }
+  // Whether links deeper or outside the folder lead somewhere, asked in
+  // parts main accepts.
+  async function loadStatuses(doc, info) {
+    if (!api?.linkStatus || !doc.fileId || info.status !== "ready") return;
+    const hrefs = [];
+    for (const entry of scanIndex(doc.text).entries) {
+      const href = target(entry.href);
+      if (entry.name || !localHref(href) || info.checking.has(href)) continue;
+      info.checking.add(href);
+      hrefs.push(href);
+    }
+    if (!hrefs.length) return;
+    let missing = false;
+    for (let i = 0; i < hrefs.length; i += STATUS_BATCH) {
+      const part = hrefs.slice(i, i + STATUS_BATCH);
+      const results = await api.linkStatus(doc.fileId, part).catch(() => null);
+      part.forEach((href, k) => {
+        const status = results?.[k] || "ok";
+        info.statuses.set(href, status);
+        if (status === "missing-file") missing = true;
+      });
+    }
+    if (!missing || folders.get(doc.fileId) !== info) return;
+    info.version++;
+    refresh(doc);
   }
   // The first sentence of each listed page not read yet.
   async function loadExcerpts(doc, info) {
@@ -135,17 +215,29 @@ export function createIndexView({
         let text = "";
         try {
           const file = await api.preview(doc.fileId, hrefFor(child.name));
-          text = file?.text ?? openText(file?.id) ?? "";
+          // A file main knows already (opened before) comes back without
+          // its text: an open tab's, else read from disk.
+          text =
+            typeof file?.text === "string"
+              ? file.text
+              : (openText(file?.id) ??
+                (file?.id && api.read
+                  ? (await api.read(file.id))?.text
+                  : null) ??
+                "");
         } catch {
           /* Shown without a sentence. */
         }
-        info.excerpts.set(child.name.toLowerCase(), noteExcerpt(text, title));
+        info.excerpts.set(
+          child.name.toLowerCase(),
+          noteExcerpt(typeof text === "string" ? text : "", title),
+        );
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
     if (folders.get(doc.fileId) !== info) return;
     info.version++;
-    rerender(doc);
+    refresh(doc);
   }
   // "library": files were created, renamed or removed: the shown index's
   // folder is listed again (the view stays as it is until then), others
@@ -161,6 +253,18 @@ export function createIndexView({
     }
     for (const [id, info] of folders) if (info !== shown) folders.delete(id);
     if (shown) load(doc, shown);
+  }
+  // The app shows this note now (any note, every time it is shown): an
+  // index shown again after notes changed reads their first sentences anew.
+  function shown(doc) {
+    if (doc === lastShown) return;
+    lastShown = doc;
+    const info = applies(doc) && doc.fileId ? folders.get(doc.fileId) : null;
+    if (!info?.stale) return;
+    info.excerpts.clear();
+    info.asked.clear();
+    info.stale = false;
+    info.version++;
   }
   // What the shown view depends on besides the text.
   function key(doc) {
@@ -196,13 +300,10 @@ export function createIndexView({
   function render(doc) {
     const scan = scanIndex(doc.text);
     const info = folderOf(doc);
-    if (doc !== lastShown && info?.stale) {
-      info.excerpts.clear();
-      info.asked.clear();
-      info.stale = false;
+    if (info?.status === "ready") {
+      loadExcerpts(doc, info);
+      loadStatuses(doc, info);
     }
-    lastShown = doc;
-    if (info?.status === "ready") loadExcerpts(doc, info);
     // The list lines blanked (same length: every other block keeps its
     // source positions), the note rendered, the lists put in their places.
     let masked = doc.text;
@@ -240,6 +341,15 @@ export function createIndexView({
       place(fragment, scan.lines[run.first].start, node);
       last = node;
     }
+    // Edit mode: HTML comments show as their source, to be edited in
+    // place like any block (they render as nothing).
+    if (context.edit)
+      for (const block of commentBlocks(scan)) {
+        const node = element("pre", "ix-comment", block.text);
+        node.dataset.from = String(block.from);
+        node.dataset.to = String(block.to);
+        place(fragment, block.from, node);
+      }
     const footer = footerNode(context);
     if (footer) {
       if (last) last.after(footer);
@@ -259,6 +369,53 @@ export function createIndexView({
       fragment,
       bytes: html.length * 12 + (result.bytes - result.html.length * 12 || 0),
     };
+  }
+  // Where a line ends (its line ending left out).
+  const lineEnd = (scan, k) => scan.lines[k].start + scan.lines[k].text.length;
+  // The note's HTML comment blocks (a line starting with `<!--` up to the
+  // line holding `-->`), outside front matter and code.
+  function commentBlocks(scan) {
+    const { lines, skip } = scan;
+    const out = [];
+    let i = 0;
+    if (lines.length > 1 && skip[0] && /^---[ \t]*$/.test(lines[0].text)) {
+      i = 1;
+      while (i < lines.length && !/^(---|\.\.\.)[ \t]*$/.test(lines[i].text))
+        i++;
+      i++;
+    }
+    let fence = null;
+    for (; i < lines.length; i++) {
+      const text = lines[i].text;
+      if (fence) {
+        const m = FENCE.exec(text);
+        if (
+          m &&
+          m[1][0] === fence[0] &&
+          m[1].length >= fence.length &&
+          !text.slice(m[0].length).trim()
+        )
+          fence = null;
+        continue;
+      }
+      const open = FENCE.exec(text);
+      if (open) {
+        fence = open[1];
+        continue;
+      }
+      if (!/^ {0,3}<!--/.test(text)) continue;
+      let end = i;
+      if (!text.includes("-->", text.indexOf("<!--") + 4)) {
+        end = i + 1;
+        while (end < lines.length && !lines[end].text.includes("-->")) end++;
+        end = Math.min(end, lines.length - 1);
+      }
+      const from = lines[i].start,
+        to = lineEnd(scan, end);
+      out.push({ from, to, text: scan.source.slice(from, to) });
+      i = end;
+    }
+    return out;
   }
   // A list put after the last block that starts before it (inside the
   // section of the heading above it).
@@ -304,8 +461,19 @@ export function createIndexView({
     list.setAttribute("role", "tree");
     list.setAttribute("aria-label", t("目录中的页面"));
     list.dataset.run = String(run.index);
+    // Its place in the note, as other blocks have, so the place read is
+    // kept when the note is shown again or the mode switched.
+    list.dataset.from = String(context.scan.lines[run.first].start);
+    list.dataset.to = String(lineEnd(context.scan, run.last));
     for (const i of run.roots) list.append(itemNode(context, i));
     return list;
+  }
+  // The last line of an entry and the entries under it.
+  function lastLine(scan, i) {
+    const entry = scan.entries[i];
+    return entry.children.length
+      ? lastLine(scan, entry.children.at(-1))
+      : entry.line;
   }
   function itemNode(context, i) {
     const { scan, info, edit, state, doc } = context;
@@ -315,12 +483,14 @@ export function createIndexView({
     item.setAttribute("aria-level", String(entry.depth + 1));
     item.dataset.line = String(entry.line);
     item.dataset.href = entry.href;
+    item.dataset.from = String(scan.lines[entry.line].start);
+    item.dataset.to = String(lineEnd(scan, lastLine(scan, i)));
     // One stop for Tab: the first entry (moved with the focus).
     item.tabIndex = context.first ? 0 : -1;
     context.first = false;
     const row = element("div", "ix-row");
     const child = childOf(info, entry.name);
-    const missing = Boolean(info?.status === "ready" && entry.name && !child);
+    const missing = isMissing(info, entry);
     if (missing) item.classList.add("missing");
     if (child?.directory) item.dataset.kind = "folder";
     if (entry.children.length) {
@@ -344,7 +514,11 @@ export function createIndexView({
       title.tabIndex = -1;
       if (edit) title.draggable = false;
     }
-    title.title = entry.title;
+    // Edit mode: a click picks the entry, a double click edits the title.
+    title.title =
+      edit && !missing
+        ? t("{title}（Ctrl+单击打开，双击改标题）", { title: entry.title })
+        : entry.title;
     row.append(title);
     const written = entry.name
       ? entry.name + (child?.directory ? "/" : "")
@@ -358,8 +532,11 @@ export function createIndexView({
       row.append(element("span", "ix-missing", t("不存在")));
       if (!doc.preview) {
         const actions = element("span", "ix-repair");
+        // Created only in the folder itself (a deeper link: pointed
+        // elsewhere or removed).
+        if (entry.name)
+          actions.append(button("ix-text-button", t("创建"), null, "create"));
         actions.append(
-          button("ix-text-button", t("创建"), null, "create"),
           button("ix-text-button", t("改为指向…"), null, "relocate"),
           button("ix-text-button", t("移出目录"), null, "remove"),
         );
@@ -479,6 +656,7 @@ export function createIndexView({
       annotations: isolateHistory.of("full"),
       userEvent: "input.index",
     });
+    pending = null;
     rerender(doc);
     if (result.line != null) focusLine(result.line);
     return true;
@@ -486,6 +664,39 @@ export function createIndexView({
   function focusLine(line) {
     const item = host.querySelector(`.ix-item[data-line="${line}"]`);
     if (item) focusItem(item);
+  }
+  // The entry at a line, else the nearest after it, else the last.
+  function focusNear(line) {
+    const items = visibleItems();
+    if (!items.length) return;
+    focusItem(
+      items.find((item) => Number(item.dataset.line) >= line) || items.at(-1),
+    );
+  }
+  // An inline editor closed without a change: what came meanwhile is
+  // shown, the keys back on the entry.
+  function closed(item) {
+    const line = item.dataset.line;
+    flush();
+    if (item.isConnected) focusItem(item);
+    else focusLine(line);
+  }
+  // Undo or redo in the index (keys or the toolbar): shown again, the keys
+  // on the entry the change was at.
+  function history(kind) {
+    const doc = getDocument();
+    if (!applies(doc) || doc.preview) return false;
+    const before = view.state.doc.toString();
+    (kind === "redo" ? redo : undo)(view);
+    const after = view.state.doc.toString();
+    pending = null;
+    rerender(doc);
+    const change = difference(before, after);
+    if (change) {
+      const line = after.slice(0, change.from).split("\n").length - 1;
+      focusNear(line);
+    }
+    return true;
   }
   function focusItem(item) {
     for (const other of host.querySelectorAll('.ix-item[tabindex="0"]'))
@@ -518,6 +729,9 @@ export function createIndexView({
     input.spellcheck = false;
     title.hidden = true;
     title.after(input);
+    // Selecting text in the box drags no row.
+    const row = item.querySelector(":scope > .ix-row");
+    row.draggable = false;
     input.focus();
     input.select();
     let done = false;
@@ -527,13 +741,14 @@ export function createIndexView({
       const value = input.value;
       input.remove();
       title.hidden = false;
+      row.draggable = true;
       const again = keep && entryAt(item);
       if (
         again &&
         apply(again.doc, retitleEntry(again.doc.text, again.index, value))
       )
         return;
-      focusItem(item);
+      closed(item);
     };
     input.addEventListener("keydown", (event) => {
       event.stopPropagation();
@@ -552,8 +767,7 @@ export function createIndexView({
   async function createPageFile(folderId, name) {
     return api.createEntry(folderId, name, "note", newNoteText(name));
   }
-  const fileName = (name) =>
-    /\.(md|markdown|txt)$/i.test(name) ? name : name + ".md";
+  const fileName = (name) => (NOTE_NAME.test(name) ? name : name + ".md");
   // A name typed for a new page, in a row where it will be listed.
   function askName(container, before = null) {
     return new Promise((resolve) => {
@@ -582,7 +796,8 @@ export function createIndexView({
           finish(null);
         }
       });
-      input.addEventListener("blur", () => finish(input.value.trim() || null));
+      // Leaving the box (another tab, a click elsewhere) makes no file.
+      input.addEventListener("blur", () => finish(null));
     });
   }
   async function newPage(item) {
@@ -607,15 +822,16 @@ export function createIndexView({
     if (!container) return;
     const typed = await askName(container, before);
     made?.remove();
-    if (!typed) {
-      if (item) focusItem(item);
+    if (!typed || getDocument() !== doc) {
+      if (item) closed(item);
+      else flush();
       return;
     }
     const name = fileName(typed);
     // A file of that name already in the folder is listed, not made again.
     if (!childOf(info, name)) {
       await createPageFile(info.folderId, name);
-      info.children.push({ name, directory: false });
+      addChild(info, { name, directory: false });
       info.version++;
       filesChanged();
     }
@@ -638,12 +854,14 @@ export function createIndexView({
     const info = found && folderOf(found.doc);
     if (!info?.folderId || !found.entry.name) return;
     const name = found.entry.name;
+    // A folder for a link ending in "/" or a name without an extension;
+    // otherwise a note (attachments are never shown missing).
     const folder =
-      /\/\s*$/.test(target(found.entry.href)) ||
-      !/\.(md|markdown|txt)$/i.test(name);
+      /\/\s*$/.test(target(found.entry.href)) || !EXTENSION.test(name);
+    if (!folder && !NOTE_NAME.test(name)) return;
     if (folder) await api.createEntry(info.folderId, name, "folder", "");
     else await createPageFile(info.folderId, name);
-    info.children.push({ name, directory: folder });
+    addChild(info, { name, directory: folder });
     info.version++;
     filesChanged();
     rerender(found.doc);
@@ -703,7 +921,7 @@ export function createIndexView({
         )
       )
         return;
-      focusItem(item);
+      closed(item);
     };
     select.addEventListener("change", finish);
     select.addEventListener("blur", finish);
@@ -764,25 +982,57 @@ export function createIndexView({
     if (!block?.parentElement || !host.contains(block)) return;
     if (
       block.matches(
-        ".ix-list, .ix-footer, .note-section, .section-rail, .section-body, .front-matter",
+        ".ix-list, .ix-footer, .note-section, .section-rail, .section-body",
       )
     )
       return;
+    // The properties: their YAML, `---` lines included.
+    if (block.matches(".front-matter, .fm-none")) return editFront(block);
     const positions = [block, ...block.querySelectorAll("[data-from]")]
       .filter((el) => el.hasAttribute?.("data-from"))
       .map((el) => [Number(el.dataset.from), Number(el.dataset.to)]);
     if (!positions.length) return;
-    const from = Math.min(...positions.map(([a]) => a)),
-      to = Math.max(...positions.map(([, b]) => b));
+    editSource(
+      doc,
+      block,
+      Math.min(...positions.map(([a]) => a)),
+      Math.max(...positions.map(([, b]) => b)),
+    );
+  }
+  // The front matter's text in place (Edit mode), at the top when the note
+  // shows none (no properties yet: made by the caller).
+  function editFront(block = null) {
+    const doc = getDocument();
+    if (!applies(doc) || !editing(doc)) return false;
+    const { lines, skip } = scanIndex(doc.text);
+    if (!(lines.length > 1 && skip[0] && /^---[ \t]*$/.test(lines[0].text)))
+      return false;
+    let end = 1;
+    while (end < lines.length && !/^(---|\.\.\.)[ \t]*$/.test(lines[end].text))
+      end++;
+    block ||= host.querySelector(".front-matter, .fm-none");
+    editSource(
+      doc,
+      block,
+      lines[0].start,
+      lines[end].start + lines[end].text.length,
+    );
+    return true;
+  }
+  function editSource(doc, block, from, to) {
     if (!(from >= 0 && to > from && to <= doc.text.length)) return;
+    if (host.querySelector(".ix-block-editor")) return;
     const original = doc.text.slice(from, to);
     const shown = original.replace(/(\r?\n)+$/, "");
     const area = element("textarea", "ix-block-editor");
     area.value = shown;
     area.spellcheck = false;
     area.setAttribute("aria-label", t("编辑这段 Markdown"));
-    block.hidden = true;
-    block.after(area);
+    const wasHidden = Boolean(block?.hidden);
+    if (block) {
+      block.hidden = true;
+      block.after(area);
+    } else host.prepend(area);
     const fit = () => {
       area.style.height = "auto";
       area.style.height = area.scrollHeight + 2 + "px";
@@ -796,11 +1046,11 @@ export function createIndexView({
       done = true;
       const value = area.value;
       area.remove();
-      block.hidden = false;
-      if (!keep || value === shown || getDocument() !== doc) return;
+      if (block) block.hidden = wasHidden;
+      if (!keep || value === shown || getDocument() !== doc) return flush();
       if (doc.text.slice(from, to) !== original) {
         report(t("这段文字已在别处改动，这次修改未写入"));
-        return;
+        return flush();
       }
       apply(doc, {
         change: { from, to: from + shown.length, insert: value },
@@ -832,16 +1082,71 @@ export function createIndexView({
     const doc = getDocument();
     return applies(doc) ? doc : null;
   };
+  // An entry's page opened; a folder: its own index file, if it has one
+  // (a folder is no note to open).
+  async function openTarget(name, href, directory) {
+    if (!directory) return open(href);
+    const doc = getDocument();
+    const child = childOf(doc && folders.get(doc.fileId), name);
+    let index = null;
+    if (child?.id && api?.list) {
+      const inside = (await api.list(child.id).catch(() => null)) || [];
+      index = inside.find(
+        (c) => !c.directory && (c.index || isIndexName(c.name)),
+      );
+    }
+    if (index) return open(hrefFor(name, true) + hrefFor(index.name));
+    report(t("文件夹“{name}”里没有目录文件", { name }));
+  }
+  function openEntry(item) {
+    if (!item || item.classList.contains("missing")) return;
+    const found = entryAt(item);
+    if (!found) return;
+    const href = item
+      .querySelector(":scope > .ix-row > .ix-title")
+      ?.getAttribute("href");
+    run(() =>
+      openTarget(found.entry.name, href, item.dataset.kind === "folder"),
+    )();
+  }
   host.addEventListener("click", (event) => {
     const doc = managed();
     if (!doc) return;
     const control = event.target.closest?.("[data-ix]");
     const item = event.target.closest?.(".ix-item");
+    // A title: Read mode opens it; Edit mode picks the entry (a double
+    // click edits the title), Ctrl+click opens it. Not the note's own
+    // link handling (a folder is opened by its index here).
+    const title = event.target.closest?.(".ix-row > a.ix-title");
+    if (title && item && !control) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (editing(doc) && !event.ctrlKey && !event.metaKey) focusItem(item);
+      else openEntry(item);
+      return;
+    }
+    const unlisted = event.target.closest?.(".ix-unlisted-item > a.ix-title");
+    if (unlisted && !control) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const row = unlisted.parentElement;
+      run(() =>
+        openTarget(
+          row.dataset.name,
+          unlisted.getAttribute("href"),
+          row.dataset.directory === "true",
+        ),
+      )();
+      return;
+    }
     if (control) {
       event.preventDefault();
       const action = control.dataset.ix;
-      if (action === "fold")
-        return fold(item, !item.classList.contains("closed"));
+      if (action === "fold") {
+        fold(item, !item.classList.contains("closed"));
+        // The keys stay on the entry folded.
+        return focusItem(item);
+      }
       if (action === "tray") {
         const tray = control.closest(".ix-unlisted");
         const state = stateOf(doc);
@@ -867,12 +1172,7 @@ export function createIndexView({
     // A click on the row beside its title: the page opens (Read mode), or
     // the entry is picked for the keys (Edit mode).
     if (editing(doc)) focusItem(item);
-    else if (!item.classList.contains("missing"))
-      open(
-        item
-          .querySelector(":scope > .ix-row > .ix-title")
-          ?.getAttribute("href"),
-      );
+    else openEntry(item);
   });
   host.addEventListener(
     "dblclick",
@@ -915,13 +1215,27 @@ export function createIndexView({
   host.addEventListener("keydown", (event) => {
     const doc = managed();
     if (!doc) return;
-    const item = event.target.closest?.(".ix-item");
-    if (!item || event.target !== item) return;
     const key = event.key;
     const handled = () => {
       event.preventDefault();
       event.stopPropagation();
     };
+    // Undo and redo: in Edit mode anywhere in the view, in Read mode in its
+    // list (where repairs are made), not in a box being typed in.
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      ["z", "y"].includes(key.toLowerCase()) &&
+      !doc.preview &&
+      !event.target.closest?.("input, textarea, select") &&
+      (editing(doc) || event.target.closest?.(".ix-list, .ix-footer"))
+    ) {
+      handled();
+      history(key.toLowerCase() === "y" || event.shiftKey ? "redo" : "undo");
+      return;
+    }
+    const item = event.target.closest?.(".ix-item");
+    if (!item || event.target !== item) return;
     const items = visibleItems();
     const at = items.indexOf(item);
     if (!event.altKey && !event.ctrlKey && !event.metaKey) {
@@ -948,12 +1262,7 @@ export function createIndexView({
       }
       if (key === "Enter") {
         handled();
-        if (!item.classList.contains("missing"))
-          open(
-            item
-              .querySelector(":scope > .ix-row > .ix-title")
-              ?.getAttribute("href"),
-          );
+        openEntry(item);
         return;
       }
     }
@@ -995,6 +1304,11 @@ export function createIndexView({
   host.addEventListener("dragstart", (event) => {
     const doc = managed();
     if (!doc || !editing(doc)) return;
+    // Selecting text in a box being typed in drags nothing.
+    if (event.target.closest?.("input, textarea, select")) {
+      event.preventDefault();
+      return;
+    }
     const row = event.target.closest?.(".ix-row, .ix-unlisted-item");
     if (!row) return;
     dragging = row.matches(".ix-row")
@@ -1043,5 +1357,5 @@ export function createIndexView({
     apply(from.doc, moveEntry(from.doc.text, from.index, to.index, place));
   });
 
-  return { applies, key, render, invalidate };
+  return { applies, key, render, invalidate, shown, history, editFront };
 }

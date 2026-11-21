@@ -106,7 +106,8 @@ export const unescapeLabel = (label) =>
 export const escapeLabel = (title) =>
   String(title).replace(/[\\[\]]/g, (c) => "\\" + c);
 // The title a new entry for a file gets: its name without the extension.
-export const titleFor = (name) => name.replace(/\.(md|markdown|txt)$/i, "");
+export const titleFor = (name) =>
+  name.replace(/\.(md|markdown|mdown|mkd|txt)$/i, "");
 export { hrefFor };
 
 // The last entry under entry i (i itself when it has none).

@@ -502,6 +502,8 @@ editingKeys = wireEditing({
     api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
   rich: { target: richTarget },
   addProperty: () => addProperty(),
+  // An index file's undo and redo keep the keys on its entries.
+  history: (action) => indexView.applies(active) && indexView.history(action),
 });
 imageInsertion = createImageInsertion({
   view,
@@ -935,6 +937,8 @@ function editNewNote(doc) {
 function render(preserve) {
   editsPendingSince = null;
   if (!active) return;
+  // Which note is shown (an index shown again reads its pages anew).
+  indexView.shown(active);
   if (richActive(active)) return showRich(active);
   $("#panes").dataset.rich = "off";
   const doc = active,
@@ -1848,6 +1852,15 @@ function propertyActions(doc) {
 function addProperty(doc = active) {
   if (!doc || doc !== active || !propertyActions(doc).length) return;
   if (doc.mode !== "edit") setMode("edit");
+  // An index file: its front matter's YAML opens in place (made first
+  // when it has none), not in the hidden source pane.
+  if (indexView.applies(doc)) {
+    if (!splitFront(doc.text)) changeFront(doc, "");
+    clearTimeout(renderingTimer);
+    render(true);
+    indexView.editFront();
+    return;
+  }
   let tries = 0;
   const ask = () => {
     if (active !== doc) return;

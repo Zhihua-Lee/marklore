@@ -366,6 +366,25 @@
 .ix-prose:hover {
   background: color-mix(in srgb, var(--hover) 55%, transparent);
 }
+/* An HTML comment (Edit mode only; it renders as nothing): its source,
+   quiet, edited like prose. */
+#content pre.ix-comment {
+  margin: 0.4em 0;
+  padding: 2px 6px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--ix-muted);
+  font: 400 0.8em/1.6 var(--font-code);
+  /* `<!--` as typed, not drawn as an arrow. */
+  font-variant-ligatures: none;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .ix-block-editor {
   display: block;
   box-sizing: border-box;

@@ -56,11 +56,11 @@ export async function setup(
   page,
   settings = {},
   text = indexText,
-  { roots = [], wait = true } = {},
+  { roots = [], wait = true, noText = [] } = {},
 ) {
   await installFolio(page);
   await page.addInitScript(
-    ({ text, pages, settings, roots }) => {
+    ({ text, pages, settings, roots, noText }) => {
       const folder = "C:/kb/数学分析/";
       window.mock = {
         handlers: {},
@@ -68,6 +68,15 @@ export async function setup(
         created: [],
         opened: [],
         pages: { ...pages },
+        // Pages main already knows (opened before): preview hands back
+        // only their id, their text comes from read.
+        noText,
+        // Other folders' listings, by folder id.
+        lists: {},
+        // The number of links asked about in each linkStatus call.
+        statusCalls: [],
+        // Hrefs linkStatus reports as missing files.
+        brokenHrefs: [],
       };
       const listing = () => [
         {
@@ -106,7 +115,19 @@ export async function setup(
             ...settings,
           },
         }),
-        read: async () => ({ unchanged: true }),
+        read: async (id) => {
+          const name = String(id).replace(/^p:/, "");
+          return window.mock.noText.includes(name)
+            ? { text: window.mock.pages[name], version: "v1" }
+            : { unchanged: true };
+        },
+        linkStatus: async (_id, hrefs) => {
+          window.mock.statusCalls.push(hrefs.length);
+          if (hrefs.length > 2000) throw Error("无效链接");
+          return hrefs.map((href) =>
+            window.mock.brokenHrefs.includes(href) ? "missing-file" : "ok",
+          );
+        },
         save: async (id, body, version) => {
           window.mock.saved.push({ id, text: body });
           return { version: version + "s" };
@@ -116,10 +137,13 @@ export async function setup(
           name: "数学分析",
           path: "C:/kb/数学分析",
         }),
-        list: async (id) => (id === "nb" ? listing() : []),
+        list: async (id) =>
+          id === "nb" ? listing() : (window.mock.lists[id] ?? []),
         preview: async (_id, href) => {
           const name = nameOf(href);
           if (!(name in window.mock.pages)) throw Error("missing");
+          if (window.mock.noText.includes(name))
+            return { id: "p:" + name, path: folder + name, name };
           return doc("p:" + name, name, window.mock.pages[name]);
         },
         link: async (_id, href) => {
@@ -142,7 +166,7 @@ export async function setup(
         },
       });
     },
-    { text, pages, settings, roots },
+    { text, pages, settings, roots, noText },
   );
   await page.goto("/");
   if (!wait) return;

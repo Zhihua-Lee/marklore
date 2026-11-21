@@ -8,8 +8,12 @@ import { insertDerivedTab } from "./tab-groups.js";
 import { watchTableLayout } from "./table-layout.js";
 import { defaultSettings, normalizeSettings } from "./settings.js";
 import { createLibrary } from "./library.js";
-import { rewriteLinks, movedPathOf } from "../desktop/link-rewrite.mjs";
-import { applyIndexOp } from "../desktop/folder-index.mjs";
+import {
+  rewriteLinks,
+  movedPathOf,
+  unlinkTarget,
+} from "../desktop/link-rewrite.mjs";
+import { applyIndexOp, removeEntriesTo } from "../desktop/folder-index.mjs";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
 import { createMenus } from "./menus.js";
@@ -1660,6 +1664,7 @@ const {
   researchText,
   showExcluded,
   menuFor: treeMenu,
+  repairLink,
 } = createLibrary({
   api,
   roots,
@@ -1711,7 +1716,33 @@ const {
       });
       return count ? [{ path: doc.path, name: doc.name, links: count }] : [];
     }),
-  patchDrafts: ({ moves = [], links = false, drafts: edits = [] }) => {
+  // A repair for a note open with unsaved changes: applied to its draft as
+  // the reader's own edit (Ctrl+Z takes it back).
+  repaired: (draft) => {
+    const doc = tabs.find((d) => d.path && samePath(d.path, draft.path));
+    if (!doc) return;
+    let text = doc.text;
+    if (draft.kind === "relocate")
+      text = rewriteLinks(text, { file: doc.path, moves: draft.moves }).text;
+    else if (draft.kind === "rename")
+      text =
+        applyIndexOp(text, {
+          kind: "rename",
+          from: draft.from,
+          to: draft.to,
+        }) ?? text;
+    else if (draft.kind === "remove")
+      text = draft.index
+        ? (removeEntriesTo(text, doc.path, draft.target) ?? text)
+        : unlinkTarget(text, { file: doc.path, target: draft.target }).text;
+    if (text !== doc.text) replaceDraft(doc, text, { history: true });
+  },
+  patchDrafts: ({
+    moves = [],
+    links = false,
+    drafts: edits = [],
+    reread = false,
+  }) => {
     let patched = 0;
     for (const doc of tabs) {
       if (!doc.path || !dirty(doc)) continue;
@@ -1735,8 +1766,9 @@ const {
       patched++;
     }
     // Saved notes in every tab may have been rewritten on disk (links, a
-    // moved note's own links, an index): read again now, not when shown.
-    if (moves.length || edits.length)
+    // moved note's own links, an index, a repair): read again now, not
+    // when shown.
+    if (moves.length || edits.length || reread)
       for (const doc of tabs)
         if (doc.fileId && !dirty(doc)) run(() => checkDisk(doc))();
     return patched;
@@ -1821,7 +1853,21 @@ $("#content").addEventListener("contextmenu", (event) => {
     selection &&
     !selection.isCollapsed &&
     $("#content").contains(selection.anchorNode);
+  // A link whose target is gone (marked by backlinks.js): repaired on the
+  // reader's word.
+  const broken = event.target.closest(
+    'a.link-broken[data-broken="missing-file"]',
+  );
   showContext(event, [
+    ...(broken && active.path
+      ? [
+          [
+            t("修复链接…"),
+            () => repairLink(active.path, broken.getAttribute("href")),
+          ],
+          null,
+        ]
+      : []),
     ...(selected ? [[t("复制"), () => document.execCommand("copy")]] : []),
     [t("复制指向这里的链接"), () => linkHere.copy(event.target), !active.path],
     ...(selected && marks

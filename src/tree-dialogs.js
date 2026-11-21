@@ -209,12 +209,19 @@ export function askLinks({
 // "Move to…": the library's folders ([{ path, name, rel }]) to pick from,
 // filtered as one types; ↑/↓ choose, Enter or a double click moves.
 // exclude(path): folders it cannot go to. Resolves a path or null.
-export function pickFolder({ title, folders, exclude = () => false }) {
+export function pickFolder({
+  title,
+  folders,
+  exclude = () => false,
+  filterLabel = t("筛选文件夹"),
+  emptyText = t("没有可移动到的文件夹"),
+  actionLabel = t("移到这里"),
+}) {
   return modal("folder-picker", title, (form, finish) => {
     const filter = element("input", "folder-filter");
     filter.type = "search";
-    filter.placeholder = t("筛选文件夹");
-    filter.setAttribute("aria-label", t("筛选文件夹"));
+    filter.placeholder = filterLabel;
+    filter.setAttribute("aria-label", filterLabel);
     filter.spellcheck = false;
     filter.autofocus = true;
     const list = element("div", "folder-options");
@@ -259,8 +266,7 @@ export function pickFolder({ title, folders, exclude = () => false }) {
           return option;
         }),
       );
-      if (!shown.length)
-        list.append(element("p", "folder-none", t("没有可移动到的文件夹")));
+      if (!shown.length) list.append(element("p", "folder-none", emptyText));
       mark(shown.length ? 0 : -1);
     };
     filter.addEventListener("input", render);
@@ -275,7 +281,7 @@ export function pickFolder({ title, folders, exclude = () => false }) {
     });
     const row = element("div", "dialog-actions");
     const cancel = element("button", "", t("取消"));
-    const move = element("button", "primary", t("移到这里"));
+    const move = element("button", "primary", actionLabel);
     for (const b of [cancel, move]) b.type = "button";
     row.append(cancel, move);
     form.append(row);
@@ -286,5 +292,98 @@ export function pickFolder({ title, folders, exclude = () => false }) {
       move.click();
     };
     render();
+  });
+}
+
+// A link or index entry whose target is gone: where it may lead instead
+// (candidates: [{ path, name, rel, reason }]), or take it away, or create
+// the missing note. Resolves { kind: "relocate", to } | { kind: "remove" }
+// | { kind: "create" } | null. index: an index entry (its wording).
+export function askRepair({ name, rel, candidates, creatable, index = false }) {
+  const title = t("“{name}”不存在", { name });
+  return modal("repair-question", title, (form, finish) => {
+    form.append(
+      element("h2", "", title),
+      element(
+        "p",
+        "",
+        index
+          ? t("目录中的这一项指向 {rel}，那里没有文件。", { rel })
+          : t("这个链接指向 {rel}，那里没有文件。", { rel }),
+      ),
+    );
+    const reasons = {
+      renamed: t("刚被改名或移动到这里"),
+      "same-name": t("同名的文件"),
+      unlisted: t("这个文件夹中未列入目录的笔记"),
+    };
+    let chosen = candidates.length ? 0 : -1;
+    const list = element("div", "folder-options repair-options");
+    list.setAttribute("role", "listbox");
+    list.setAttribute("aria-label", t("可以改为指向"));
+    list.tabIndex = 0;
+    const options = candidates.map((candidate, i) => {
+      const option = element("div", "folder-option");
+      option.setAttribute("role", "option");
+      option.title = candidate.path;
+      option.append(
+        element("span", "folder-option-name", candidate.rel),
+        element("span", "folder-option-path", reasons[candidate.reason] || ""),
+      );
+      option.onclick = () => mark(i);
+      option.ondblclick = () =>
+        finish({ kind: "relocate", to: candidate.path });
+      return option;
+    });
+    const mark = (i) => {
+      chosen = Math.max(0, Math.min(candidates.length - 1, i));
+      options.forEach((el, k) => {
+        el.classList.toggle("active", k === chosen);
+        el.setAttribute("aria-selected", String(k === chosen));
+      });
+      options[chosen]?.scrollIntoView({ block: "nearest" });
+    };
+    if (candidates.length) {
+      form.append(element("p", "tree-dialog-lead", t("可以改为指向：")), list);
+      list.append(...options);
+      list.addEventListener("keydown", (event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+        event.preventDefault();
+        mark(chosen + (event.key === "ArrowDown" ? 1 : -1));
+      });
+      mark(0);
+    } else
+      form.append(
+        element(
+          "p",
+          "tree-dialog-hint",
+          t("笔记库中没有找到同名或刚改名的文件。"),
+        ),
+      );
+    const row = element("div", "dialog-actions");
+    const cancel = element("button", "", t("取消"));
+    const remove = element(
+      "button",
+      "",
+      index ? t("从目录中移除") : t("移除链接"),
+    );
+    const create = element("button", "", t("新建这篇笔记"));
+    const relocate = element("button", "primary", t("改为指向所选"));
+    for (const b of [cancel, remove, create, relocate]) b.type = "button";
+    create.hidden = !creatable;
+    relocate.hidden = !candidates.length;
+    row.append(cancel, remove, create, relocate);
+    form.append(row);
+    cancel.onclick = () => finish(null);
+    remove.onclick = () => finish({ kind: "remove" });
+    create.onclick = () => finish({ kind: "create" });
+    relocate.onclick = () =>
+      chosen >= 0 && finish({ kind: "relocate", to: candidates[chosen].path });
+    (candidates.length ? relocate : creatable ? create : remove).autofocus =
+      true;
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      if (candidates.length) relocate.click();
+    };
   });
 }

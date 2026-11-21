@@ -154,6 +154,16 @@
   margin-left: var(--tree-step);
 }
 
+/* An index with entries whose note is gone: how many, quietly in the
+   danger tint beside its name. */
+#tree .file[data-missing]::after {
+  content: attr(data-missing);
+  margin-left: 6px;
+  color: color-mix(in srgb, var(--danger) 75%, var(--muted));
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
 /* Entries on disk that the folder's index does not list: after a quiet
    line, in name order. */
 #tree .tree-unlisted {

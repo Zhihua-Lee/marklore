@@ -3,7 +3,12 @@ import { MATH } from "../desktop/snippet.mjs";
 import { excludedBy } from "../desktop/excluded.mjs";
 import { renderMarkdown, loadMath, mayContainMath } from "./markdown.js";
 import { movedPathOf } from "../desktop/link-rewrite.mjs";
-import { askCreateIndex, askLinks, pickFolder } from "./tree-dialogs.js";
+import {
+  askCreateIndex,
+  askLinks,
+  askRepair,
+  pickFolder,
+} from "./tree-dialogs.js";
 // Folder browser: lazily loaded tree, current-folder following and search
 // (file names in the folders shown, and the text of the library's notes).
 
@@ -82,6 +87,8 @@ export function createLibrary({
   // Open notes with unsaved changes whose links these moves would change:
   // [{ path, name, links }].
   draftLinks = () => [],
+  // A repair to apply to an open draft ({ path, kind, ... }, note-repair).
+  repaired = () => {},
   // A note or folder went to the Recycle Bin: close its tabs.
   trashed = () => {},
   copyLink = () => {},
@@ -239,6 +246,10 @@ export function createLibrary({
       b.className = "file";
       b.textContent = child.name;
       b.title = child.path;
+      // An index with entries whose note is gone says how many (repaired
+      // from its menu).
+      if (child.missing)
+        b.dataset.missing = t("{count} 项不存在", { count: child.missing });
       b.onclick = run(async () =>
         add(await api.openChild(entry.id, child.name)),
       );
@@ -1211,8 +1222,70 @@ export function createLibrary({
       ? undefined
       : label.kind === "rename"
         ? t("“{name}”改名为“{to}”", { name: label.name, to: label.to })
-        : t("“{name}”移到“{to}”", { name: label.name, to: label.to });
+        : label.kind === "repair"
+          ? t("修复了“{name}”中指向“{to}”的链接", label)
+          : t("“{name}”移到“{to}”", { name: label.name, to: label.to });
     return [t("撤销上次改名/移动"), run(undoMove), !lastMove, detail];
+  }
+  // ── Repair after changes made elsewhere (desktop/note-repair.mjs) ──
+  // One link of a note (its path; href as written) whose target is gone:
+  // the reader chooses, nothing is guessed. index: an index entry.
+  async function repairLink(note, href, { index = false } = {}) {
+    const options = await api.repairOptions(note, href);
+    if (!options.missing) {
+      report(t("链接的目标存在，不需要修复"));
+      return;
+    }
+    const action = await askRepair({
+      name: options.name,
+      rel: href.replace(/[#?].*$/, ""),
+      candidates: options.candidates,
+      creatable: options.creatable,
+      index,
+    });
+    if (!action) return;
+    const result = await api.repairLink(note, href, action, drafts());
+    if (result.draft) repaired(result.draft);
+    else patchDrafts({ moves: [], drafts: [], reread: true });
+    await refresh();
+    await refreshLastMove();
+    if (result.unchanged) return;
+    const message =
+      action.kind === "create"
+        ? t("已新建“{name}”", { name: options.name })
+        : action.kind === "remove"
+          ? t("已移除指向“{name}”的链接", { name: options.name })
+          : t("链接已改为指向“{name}”", {
+              name: action.to.split(/[\\/]/).pop(),
+            });
+    // A draft patched in memory is undone in its editor.
+    report(message, result.draft ? null : [t("撤销"), run(undoMove)]);
+  }
+  // The index's entries whose note is gone: one is chosen (when there are
+  // several), then repaired like a link.
+  async function repairIndex(details) {
+    const issues = await api.indexIssues(details.dataset.id);
+    if (!issues.missing?.length) {
+      report(t("目录中的条目都存在"));
+      return;
+    }
+    let entry = issues.missing[0];
+    if (issues.missing.length > 1) {
+      const chosen = await pickFolder({
+        title: t("修复目录中不存在的条目"),
+        folders: issues.missing.map((m) => ({
+          path: String(m.line),
+          name: m.title || m.name,
+          rel: m.name,
+        })),
+        filterLabel: t("筛选条目"),
+        emptyText: t("没有匹配的条目"),
+        actionLabel: t("修复这一项"),
+      });
+      if (chosen === null) return;
+      entry = issues.missing.find((m) => String(m.line) === chosen);
+    }
+    await repairLink(issues.index, entry.href, { index: true });
   }
   async function trash(target) {
     const isFolder = target.matches("summary");
@@ -1290,6 +1363,16 @@ export function createLibrary({
         ],
         [t("重命名…"), run(() => rename(file)), !folder],
         [t("移动到…"), run(() => moveEntry(movingOf(file))), !own],
+        // The folder's index: its entries whose note is gone.
+        ...(folder && file.dataset.indexFile !== undefined
+          ? [
+              [
+                t("修复不存在的条目…"),
+                run(() => repairIndex(folder)),
+                !file.dataset.missing,
+              ],
+            ]
+          : []),
         [
           t("在资源管理器中显示"),
           run(() => api.revealEntry(folder.dataset.id, file.textContent)),
@@ -1380,5 +1463,6 @@ export function createLibrary({
     researchText,
     showExcluded,
     menuFor,
+    repairLink,
   };
 }

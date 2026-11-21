@@ -58,6 +58,8 @@ export default {
   不能移动到另一个磁盘上的文件夹: "Cannot move to a folder on another drive",
   "{name} 有未保存的修改，请先保存，再改名或移动":
     "{name} has unsaved changes. Save it first, then rename or move.",
+  "笔记库仍在读取，可能还有链接没有列出。":
+    "The library is still being read; some links may not be listed yet.",
   没有可撤销的改名或移动: "There is no rename or move to undo",
   "无法撤销：“{name}”已被移动、改名或占用":
     "Cannot undo: “{name}” has been moved, renamed or taken since",

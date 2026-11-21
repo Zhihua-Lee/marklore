@@ -1185,6 +1185,8 @@ else {
         const moves = target === source ? [] : [[source, target]];
         return {
           moves,
+          // The library still being read: some links may not be listed.
+          indexing: linkIndex.indexing,
           affected: moves.length
             ? await noteMoves.plan(moves, {
                 skip: await ownIndexes(path.dirname(source)),
@@ -1220,6 +1222,7 @@ else {
         const skip = await ownIndexes(alone.from, alone.to);
         return {
           directory: alone.directory,
+          indexing: linkIndex.indexing,
           to: alone.to,
           children: along ? alone.children : [],
           moves: alone.moves,

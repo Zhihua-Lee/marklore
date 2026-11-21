@@ -648,3 +648,76 @@ test("undo after 'rename only' says so, so drafts are not rewritten back", async
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+// Review finding 4: links the link index does not record (reference
+// definitions, HTML, images, attachments, folders) and notes it does not
+// read (.txt, or not read yet) are still found.
+test("every kind of link into a renamed or moved folder is found", async () => {
+  const lib = await library();
+  const { kb, store, moves, root, read } = lib;
+  try {
+    await fs.writeFile(
+      path.join(kb, "Home.md"),
+      [
+        '[ref][r] <a href="Topics/T.md">t</a> ![img](Topics/a.png)',
+        "[doc](Topics/spec.pdf) [folder](Topics/)",
+        "",
+        "[r]: Topics/T.md",
+        "",
+      ].join("\n"),
+    );
+    await fs.writeFile(
+      path.join(kb, "Topics", "Old.txt"),
+      "[up](../Plan.md)\n",
+    );
+    await fs.mkdir(path.join(kb, "Box"));
+    await lib.index.rescan();
+    const topics = path.join(kb, "Topics");
+    const skip = { skip: [path.join(kb, "_目录.md")] };
+    const renamed = await moves.plan(
+      [[topics, path.join(kb, "Subjects")]],
+      skip,
+    );
+    assert.deepEqual(
+      renamed.map((a) => [a.name, a.links]),
+      [["Home.md", 5]],
+    );
+    const box = await store.directory(path.join(kb, "Box"));
+    const moved = await moves.plan(
+      [[topics, path.join(kb, "Box", "Topics")]],
+      skip,
+    );
+    assert.deepEqual(
+      moved.map((a) => [a.name, a.links]),
+      [
+        ["Home.md", 5],
+        ["Old.txt", 1],
+        ["T.md", 1],
+      ],
+    );
+    await moves.run({
+      label: "move",
+      moves: [[topics, path.join(kb, "Box", "Topics")]],
+      perform: () => store.moveEntry(root.id, "Topics", path.join(kb, "Box")),
+    });
+    assert.equal(await read("Box/Topics/Old.txt"), "[up](../../Plan.md)\n");
+    assert.match(await read("Home.md"), /\[r\]: Box\/Topics\/T\.md/);
+    assert.match(await read("Home.md"), /<a href="Box\/Topics\/T\.md">/);
+    assert.ok(box);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("a plan says when the library is still being read", async () => {
+  const lib = await library();
+  const { kb, moves } = lib;
+  try {
+    const plan = await moves.plan([
+      [path.join(kb, "Plan.md"), path.join(kb, "P.md")],
+    ]);
+    assert.equal(plan.indexing, false);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

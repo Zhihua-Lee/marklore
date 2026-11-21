@@ -7,7 +7,8 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { decode, markdownPath } from "./files.mjs";
-import { rewriteLinks, isUnder } from "./link-rewrite.mjs";
+import { rewriteLinks } from "./link-rewrite.mjs";
+import { skippedName } from "./scan-rules.mjs";
 import { movedPath } from "./moved-path.mjs";
 import { t } from "./i18n.mjs";
 
@@ -23,26 +24,55 @@ export function createNoteMoves({
   undoFile,
   synced = async () => {},
 }) {
-  // The notes at or under these paths: those the link index knows, and the
-  // paths themselves when they are notes.
+  // The notes at or under these paths: a note itself, and every note in a
+  // folder (.txt too, and those the link index has not read), walked on
+  // disk by the library's rules, at most 5000.
   async function notesUnder(paths) {
-    const known = (await linkIndex.notes()).map((note) => note.path);
     const out = new Map();
+    const queue = [];
     for (const p of paths) {
       if (markdownPath(p)) out.set(key(p), p);
-      for (const note of known) if (isUnder(note, p)) out.set(key(note), note);
+      else queue.push(p);
+    }
+    let visited = 0;
+    while (queue.length && out.size < 5000 && visited++ < 20000) {
+      const folder = queue.shift();
+      let entries;
+      try {
+        entries = await fs.readdir(folder, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        if (skippedName(entry.name) || entry.isSymbolicLink()) continue;
+        const full = path.join(folder, entry.name);
+        if (entry.isDirectory()) queue.push(full);
+        else if (markdownPath(entry.name)) out.set(key(full), full);
+      }
     }
     return [...out.values()];
   }
-  // The notes whose links may change: those that link to a note moved, and
-  // the notes moved (their own relative links). Asked before the move,
-  // while the index still has the old paths.
+  // The words a link to these entries holds: their names, as written plain
+  // or percent-encoded.
+  const wordsFor = (moves) =>
+    moves.flatMap(([from]) => {
+      const name = path.basename(from);
+      return [...new Set([name, encodeURIComponent(name), encodeURI(name)])];
+    });
+  // The notes whose links may change: the notes moved (their own relative
+  // links), those the link index has linking to one of them, and any other
+  // note whose text names an entry moved (a reference definition, HTML, an
+  // image, an attachment, a folder: links the index does not record).
+  // Asked before the move, while the index still has the old paths; the
+  // rewrite itself decides which links really change.
   async function candidates(moves) {
     const moved = await notesUnder(moves.map(([from]) => from));
     const out = new Map(moved.map((p) => [key(p), p]));
     for (const note of moved)
       for (const link of await linkIndex.backlinks(note).catch(() => []))
         out.set(key(link.source), link.source);
+    for (const file of await linkIndex.containing(wordsFor(moves)))
+      out.set(key(file), file);
     return [...out.values()];
   }
   async function readText(file) {
@@ -69,9 +99,12 @@ export function createNoteMoves({
       if (count)
         affected.push({ path: file, name: path.basename(file), links: count });
     }
-    return affected.sort((a, b) =>
+    affected.sort((a, b) =>
       a.name.localeCompare(b.name, "zh-CN", { numeric: true }),
     );
+    // Some notes may not be read yet: the question says so.
+    affected.indexing = Boolean(linkIndex.indexing);
+    return affected;
   }
 
   let last; // the batch to undo, once read

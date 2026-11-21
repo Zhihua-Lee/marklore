@@ -1034,6 +1034,7 @@ export function createLibrary({
         kind: "rename",
         title: t("把“{name}”改名为“{to}”", { name: old, to: full }),
         affected,
+        indexing: plan.indexing,
       });
       if (!choice) return;
       links = choice.links;
@@ -1090,6 +1091,7 @@ export function createLibrary({
         title: t("把“{name}”移到“{to}”", { name: moved.name, to }),
         affected,
         with: along,
+        indexing: plan.indexing,
       });
       if (!choice) return;
     }

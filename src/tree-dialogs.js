@@ -113,7 +113,13 @@ function affectedList(list) {
 // kind: "rename" | "move"; affected: [{ path, name, links }];
 // with: { children: [names], affected } when the note has child pages.
 // Resolves { links, children } or null (cancelled).
-export function askLinks({ kind, title, affected, with: along = null }) {
+export function askLinks({
+  kind,
+  title,
+  affected,
+  with: along = null,
+  indexing = false,
+}) {
   return modal("links-question", title, (form, finish) => {
     form.append(element("h2", "", title));
     const check = along
@@ -143,6 +149,15 @@ export function askLinks({ kind, title, affected, with: along = null }) {
       t("改写前每个文件都会备份，可用“撤销上次改名/移动”一并恢复。"),
     );
     form.append(lead, slot, hint);
+    // The library still being read: some links may not be listed yet.
+    if (indexing)
+      form.append(
+        element(
+          "p",
+          "tree-dialog-hint",
+          t("笔记库仍在读取，可能还有链接没有列出。"),
+        ),
+      );
     const row = element("div", "dialog-actions");
     const cancel = element("button", "", t("取消"));
     const only = element(

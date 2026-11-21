@@ -275,6 +275,8 @@ export function createNoteStore({ read = fs.readFile, stat = fs.stat } = {}) {
       return result;
     },
     anchors: (file) => notes.get(pathKey(file))?.anchors ?? null,
+    // A note's text in lower case, as read (null when not indexed).
+    lowerOf: (file) => notes.get(pathKey(file))?.lower ?? null,
     notes: () =>
       [...notes.values()].map((note) => ({
         path: note.path,
@@ -417,6 +419,30 @@ export function createLinkIndex({
       }
       for (const file of written) await this.changed(file);
       if (folders.length) await this.rescan();
+    },
+    // The indexed notes whose text holds any of these words (any case):
+    // the notes that may link to an entry renamed or moved, whatever the
+    // kind of link. From memory, or read from disk for a store that keeps
+    // no text.
+    async containing(words) {
+      const wanted = words.map((w) => String(w).toLowerCase()).filter(Boolean);
+      const out = [];
+      if (!wanted.length) return out;
+      for (const file of store.paths()) {
+        let lower = store.lowerOf?.(file) ?? null;
+        if (lower === null)
+          try {
+            lower = (await read(file, "utf8")).toLowerCase();
+          } catch {
+            continue;
+          }
+        if (wanted.some((w) => lower.includes(w))) out.push(file);
+      }
+      return out;
+    },
+    // Whether the library is still being read (some notes not yet known).
+    get indexing() {
+      return indexing;
     },
     // Notes (or folders of them) gone: dropped from the index now.
     forget(paths) {

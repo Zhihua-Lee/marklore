@@ -1127,7 +1127,8 @@ export function createLibrary({
   // The last rename or move taken back: names, index entries and links.
   async function undoMove() {
     const result = await api.undoMove(drafts());
-    followMoves(result, true);
+    // Links are written back only where the move rewrote them.
+    followMoves(result, result.links !== false);
     await refresh();
     await refreshLastMove();
     const skipped = (result.skipped || []).map((p) => p.split(/[\\/]/).pop());

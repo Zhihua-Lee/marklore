@@ -423,6 +423,17 @@ export class FileStore {
       ops.reduce((current, op) => applyIndexOp(current, op) ?? current, text),
     );
   }
+  // A rename, move or trash changes the folder's index: not while that
+  // index is open with unsaved changes (its edits could not be undone).
+  async checkIndexSaved(folder, drafts = []) {
+    const file = await this.indexFile(folder).catch(() => null);
+    if (file && draftList(drafts).some((p) => samePath(p, file)))
+      throw Error(
+        t("{name} 有未保存的修改，请先保存，再改名或移动", {
+          name: path.basename(file),
+        }),
+      );
+  }
   // One operation on an authorized folder's index from the tree (or the
   // index's own view): children are named as entries of the folder.
   async editIndex(id, op = {}) {
@@ -623,6 +634,8 @@ export class FileStore {
     if (target === source)
       return { path: source, files: [], moves: [], indexes: [] };
     this.checkUnlocked(source);
+    if (!isIndexName(name))
+      await this.checkIndexSaved(path.dirname(source), drafts);
     const files = await this.relocate(source, target);
     let index = null;
     if (!isIndexName(name) && !isIndexName(newName))
@@ -707,6 +720,8 @@ export class FileStore {
   async moveEntry(id, name, dest, { children = false, drafts = [] } = {}) {
     const plan = await this.movePlan(id, name, dest, { children });
     for (const [source] of plan.moves) this.checkUnlocked(source);
+    await this.checkIndexSaved(plan.from, drafts);
+    await this.checkIndexSaved(plan.to, drafts);
     const files = [];
     const moves = [];
     try {

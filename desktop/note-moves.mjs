@@ -110,9 +110,15 @@ export function createNoteMoves({
       else if (!index.draft) writes.push(index);
     }
     let rewritten = 0;
+    // Drafts the page patches: remembered, so that undo can put back one
+    // saved in the meantime.
+    const patched = [];
     for (const file of list) {
-      if (draft.has(key(file))) continue;
       const now = movedPath(file, done.moves);
+      if (draft.has(key(file))) {
+        patched.push({ path: now, from: file });
+        continue;
+      }
       try {
         const write = await files.rewrite(
           now,
@@ -134,6 +140,8 @@ export function createNoteMoves({
         at: new Date().toISOString(),
         moves: done.moves,
         writes,
+        links: Boolean(links),
+        patched,
       });
     await synced(
       done.moves,
@@ -203,6 +211,21 @@ export function createNoteMoves({
         !draft.has(key(now)) &&
         (await files.restore(now, write).catch(() => false));
       (ok ? restored : skipped).push(now);
+    }
+    // Drafts patched by the page and saved since: their links written back
+    // (one still unsaved is the page's to patch back).
+    for (const note of batch.patched || []) {
+      const now = movedPath(note.path, back);
+      if (draft.has(key(note.path)) || draft.has(key(now))) continue;
+      const write = await files
+        .rewrite(
+          now,
+          (text) =>
+            rewriteLinks(text, { from: note.path, file: now, moves: back })
+              .text,
+        )
+        .catch(() => null);
+      if (write) restored.push(now);
     }
     await remember(null);
     await synced(back, restored);

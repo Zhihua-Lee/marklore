@@ -190,22 +190,16 @@ test("open drafts are left to the page; undo skips what changed since", async ()
     const done = await moves.run({
       label: "rename",
       moves: [[source, target]],
-      drafts: [other, path.join(kb, "_目录.md")],
+      drafts: [other],
       perform: () =>
         store.renameEntry(root.id, "Plan.md", "Roadmap.md", {
-          drafts: [path.join(kb, "_目录.md")],
+          drafts: [other],
         }),
     });
-    // Not written: the page applies them to its drafts.
+    // Not written: the page applies it to its draft.
     assert.match(await read("Other.md"), /\(Plan\.md#goals\)/);
-    assert.deepEqual(done.drafts, [
-      {
-        path: path.join(kb, "_目录.md"),
-        ops: [{ kind: "rename", from: "Plan.md", to: "Roadmap.md" }],
-        draft: true,
-      },
-    ]);
-    assert.match(await read("_目录.md"), /\[Plan\]\(Plan\.md\)/);
+    assert.deepEqual(done.drafts, []);
+    assert.match(await read("_目录.md"), /\[Roadmap\]\(Roadmap\.md\)/);
     // Edited after the rename: undo leaves it and says so.
     await fs.writeFile(path.join(kb, "Child.md"), "edited\n");
     const undone = await moves.undo({
@@ -571,6 +565,85 @@ test("an undo whose second rename fails changes nothing and can be tried again",
     store.locks.clear();
     await moves.undo({ relocate: (a, b) => store.relocate(a, b) });
     assert.deepEqual(await lib.snapshot(), before);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+// Review finding 3: undo after drafts were saved, with a dirty index, and
+// after "rename only".
+test("a draft patched in memory and saved before undo is put back too", async () => {
+  const lib = await library();
+  const { kb, store, moves, root, read } = lib;
+  try {
+    const other = path.join(kb, "Other.md");
+    const original = await read("Other.md");
+    const { source, target } = await store.renameTarget(
+      root.id,
+      "Plan.md",
+      "Roadmap.md",
+    );
+    await moves.run({
+      label: "rename",
+      moves: [[source, target]],
+      drafts: [other],
+      perform: () => store.renameEntry(root.id, "Plan.md", "Roadmap.md"),
+    });
+    // The page patched its draft and the reader saved it.
+    await fs.writeFile(
+      other,
+      original.replace("(Plan.md#goals)", "(Roadmap.md#goals)"),
+    );
+    const undone = await moves.undo({
+      relocate: (a, b) => store.relocate(a, b),
+    });
+    assert.equal(await read("Other.md"), original);
+    assert.ok(undone.restored.includes(other));
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("an index open with unsaved changes stops a rename or move before it starts", async () => {
+  const lib = await library();
+  const { kb, store, root } = lib;
+  try {
+    const before = await lib.snapshot();
+    const drafts = [path.join(kb, "_目录.md")];
+    await assert.rejects(
+      store.renameEntry(root.id, "Plan.md", "Roadmap.md", { drafts }),
+      /_目录\.md 有未保存的修改/,
+    );
+    await assert.rejects(
+      store.moveEntry(root.id, "Plan.md", path.join(kb, "Topics"), { drafts }),
+      /_目录\.md 有未保存的修改/,
+    );
+    await assert.rejects(store.checkIndexSaved(kb, drafts), /有未保存的修改/);
+    assert.deepEqual(await lib.snapshot(), before);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("undo after 'rename only' says so, so drafts are not rewritten back", async () => {
+  const lib = await library();
+  const { store, moves, root } = lib;
+  try {
+    const { source, target } = await store.renameTarget(
+      root.id,
+      "Plan.md",
+      "Roadmap.md",
+    );
+    await moves.run({
+      label: "rename",
+      moves: [[source, target]],
+      links: false,
+      perform: () => store.renameEntry(root.id, "Plan.md", "Roadmap.md"),
+    });
+    const undone = await moves.undo({
+      relocate: (a, b) => store.relocate(a, b),
+    });
+    assert.equal(undone.links, false);
   } finally {
     await fs.rm(lib.dir, { recursive: true, force: true });
   }

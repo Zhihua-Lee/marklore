@@ -149,8 +149,9 @@ async function setup(page) {
         const { name, to } = state.last.label;
         const row = state.order.find(([n]) => n === to);
         if (row) row[0] = name;
+        const { links = true, files = [] } = state.last;
         state.last = null;
-        return { moves, files: [], restored: [], skipped: [] };
+        return { moves, files, links, restored: [], skipped: [] };
       },
       libraryFolders: async () => [
         { path: KB, name: "kb", rel: "kb" },
@@ -178,10 +179,18 @@ async function setup(page) {
         );
         state.box.push(name);
         const moves = [[at(folderOf(id), name), at(dest, name)]];
-        state.last = { label: { kind: "move", name, to: "Box" }, moves };
+        // An open note moved keeps its tab (its handle follows).
+        const files =
+          name === "Other.md" ? [{ id: name, path: at(dest, name), name }] : [];
+        state.last = {
+          label: { kind: "move", name, to: "Box" },
+          moves,
+          links: options.links,
+          files: files.map((f) => ({ ...f, path: moves[0][0] })),
+        };
         return {
           path: at(dest, name),
-          files: [],
+          files,
           moves,
           rewritten: options.links ? 2 : 0,
           drafts: [],
@@ -574,4 +583,31 @@ test("typing while a note is read again shows the conflict, not a stale version"
   await page.locator("#editor .cm-content").click();
   await page.keyboard.type("x");
   await expect(page.locator("#conflict")).toBeVisible({ timeout: 4000 });
+});
+
+// Review finding 3: an undo after "Move only" leaves a moved draft's own
+// links as they are (they were never rewritten).
+test("undo after 'move only' does not rewrite the moved draft's links", async ({
+  page,
+}) => {
+  await setup(page);
+  await row(page, "Other.md").click();
+  await page.keyboard.press("Control+3");
+  await page.locator("#editor .cm-content").click();
+  await page.keyboard.press("Control+End");
+  await page.keyboard.type("More.");
+  await menu(page, row(page, "Other.md"), "移动到…");
+  await page.keyboard.press("Enter");
+  await page
+    .getByRole("dialog", { name: "把“Other.md”移到“Box”" })
+    .getByRole("button", { name: "只移动" })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => window.calls.at(-1)[0]))
+    .toBe("move");
+  await page.locator("#toast").getByRole("button", { name: "撤销" }).click();
+  await expect.poll(() => calls(page, "undo")).toHaveLength(1);
+  await expect(page.locator("#editor .cm-content")).toContainText(
+    "See [the plan](Plan.md#goals).More.",
+  );
 });

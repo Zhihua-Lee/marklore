@@ -1270,6 +1270,8 @@ else {
         const target = await files.childPath(id, name);
         // Not while a note at or under it is being saved.
         files.checkUnlocked(target);
+        if (!isIndexName(name))
+          await files.checkIndexSaved(path.dirname(target), draftsOf(drafts));
         await withoutWatchersUnder(target, () => shell.trashItem(target));
         // Its folder's index no longer lists it; its marks, pending
         // proposals, recent entry and links go with it.

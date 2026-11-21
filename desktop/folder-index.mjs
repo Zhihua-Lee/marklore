@@ -19,9 +19,9 @@ export function findIndexName(names) {
 }
 
 // One list item holding a link: `- [text](href)`, `1. [text](href)`.
-const ITEM =
+export const ITEM =
   /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\[((?:\\.|[^\]\\])*)\]\(([^)]*)\)/;
-const columns = (indent) => {
+export const columns = (indent) => {
   let width = 0;
   for (const c of indent)
     width = c === "\t" ? width + 4 - (width % 4) : width + 1;

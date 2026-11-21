@@ -107,7 +107,8 @@
 #tree .drop-target[data-drop="after"] {
   box-shadow: inset 0 -2px 0 var(--accent);
 }
-#tree .drop-target[data-drop="into"] {
+#tree .drop-target[data-drop="into"],
+#tree .drop-target[data-drop="move"] {
   box-shadow: inset 0 0 0 1px var(--accent);
   background: var(--hover);
 }

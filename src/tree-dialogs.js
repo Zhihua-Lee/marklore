@@ -226,7 +226,8 @@ export function pickFolder({ title, folders, exclude = () => false }) {
     let shown = [],
       at = -1;
     const mark = (next) => {
-      at = Math.max(-1, Math.min(shown.length - 1, next));
+      // Only among the options shown (at most 300).
+      at = Math.max(-1, Math.min(Math.min(shown.length, 300) - 1, next));
       list.querySelectorAll(".folder-option").forEach((el, i) => {
         el.classList.toggle("active", i === at);
         el.setAttribute("aria-selected", String(i === at));

@@ -445,6 +445,32 @@ export function createLibrary({
     await focusRow(path);
     return Boolean(done);
   }
+  // The rows at an entry's level (its row and its siblings'), only those
+  // the index lists when it has one.
+  function levelOf(item, listedOnly) {
+    const own =
+      item.matches("summary") || item.parentElement.matches(".page-row")
+        ? item.parentElement.closest("details, .page")
+        : item;
+    return [...own.parentElement.children]
+      .map((el) =>
+        el.matches(".page")
+          ? el.querySelector(".file")
+          : el.matches("details")
+            ? el.firstChild
+            : // The folder's own name is not one of its entries.
+              el.matches("summary")
+              ? null
+              : el,
+      )
+      .filter(
+        (el) =>
+          el?.dataset.indexName &&
+          (!listedOnly || el.dataset.listed === "true"),
+      );
+  }
+  const unlistedMessage = (name) =>
+    t("“{name}”未列入目录，请先把它拖进目录", { name });
   // Alt+↑/↓ on a listed entry: the same move by keyboard, past the entry
   // before or after it at its level.
   $("#tree").addEventListener("keydown", (event) => {
@@ -457,9 +483,20 @@ export function createLibrary({
       item.matches("summary") ? item.parentElement.parentElement : item,
     );
     if (!folderEl) return;
-    // A folder without an index: start one, then move.
-    if (!folderEl.dataset.index) {
+    const indexed = Boolean(folderEl.dataset.index);
+    if (indexed && item.dataset.listed !== "true") {
       event.preventDefault();
+      report(unlistedMessage(item.dataset.indexName));
+      return;
+    }
+    const level = levelOf(item, indexed);
+    const at = level.indexOf(item);
+    const other = level[at + (up ? -1 : 1)];
+    // Nothing to pass: nothing is asked or written.
+    if (at < 0 || !other) return;
+    event.preventDefault();
+    // A folder without an index: start one, then move.
+    if (!indexed) {
       run(() =>
         changeIndex(
           folderInfo(folderEl),
@@ -469,23 +506,6 @@ export function createLibrary({
       )();
       return;
     }
-    const own =
-      item.matches("summary") || item.parentElement.matches(".page-row")
-        ? item.parentElement.closest("details, .page")
-        : item;
-    const level = [...own.parentElement.children]
-      .map((el) =>
-        el.matches(".page")
-          ? el.querySelector(".file")
-          : el.matches("details")
-            ? el.firstChild
-            : el,
-      )
-      .filter((el) => el?.dataset.listed === "true");
-    const at = level.indexOf(item);
-    const other = level[at + (up ? -1 : 1)];
-    if (at < 0 || !other) return;
-    event.preventDefault();
     run(async () => {
       await reorder(
         folderInfo(folderEl),
@@ -509,6 +529,18 @@ export function createLibrary({
     if (!item) return;
     event.preventDefault();
     const indent = event.key === "ArrowRight";
+    const folderEl = folderOf(item);
+    if (folderEl.dataset.index && item.dataset.listed !== "true")
+      return report(unlistedMessage(item.dataset.indexName));
+    // Without an index every entry is at the top: a move that cannot
+    // happen is said at once, without asking to start an index.
+    if (!folderEl.dataset.index) {
+      if (!indent) return report(t("已在最上一层"));
+      const level = levelOf(item, false);
+      const above = level[level.indexOf(item) - 1];
+      if (!above?.matches("button.file"))
+        return report(t("上面没有可作为上级的笔记"));
+    }
     run(async () => {
       const changed = await changeIndex(
         folderInfo(folderOf(item)),
@@ -593,8 +625,10 @@ export function createLibrary({
     for (const root of displayedRoots) {
       const el = await branch(root, open);
       el.classList.add("root");
-      // A library folder takes notes and folders dropped on its name.
-      dropZone(el.firstChild, null, { ...root, directory: true }, false);
+      // A library folder takes notes and folders dropped on its name (the
+      // open note's folder outside the library does not).
+      if (root !== outsideFolder())
+        dropZone(el.firstChild, null, { ...root, directory: true }, false);
       // The open note's folder outside the library: said so beside its name.
       if (root === outsideFolder()) {
         el.classList.add("outside");

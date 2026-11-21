@@ -162,6 +162,12 @@ async function setup(page, { settings = {} } = {}) {
       libraryFolders: async () => [
         { path: KB, name: "kb", rel: "kb" },
         { path: BOX, name: "Box", rel: "kb\\Box" },
+        // A large library, when a test asks.
+        ...Array.from({ length: window.manyFolders || 0 }, (_, i) => ({
+          path: at(KB, "F" + i),
+          name: "F" + i,
+          rel: "kb\\F" + i,
+        })),
       ],
       planMove: async (id, name, dest) => ({
         directory: false,
@@ -693,4 +699,52 @@ test("the AI's view of the open note follows its rename", async ({ page }) => {
   await expect
     .poll(() => page.evaluate(() => window.contexts.length))
     .toBeGreaterThan(before);
+});
+
+// Review finding 7: the folder list past its first 300, the drop on a
+// folder shown, keyboard moves that change nothing, unlisted entries.
+test("the folder list never chooses a folder it does not show", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => (window.manyFolders = 320));
+  await menu(page, row(page, "Plan.md"), "移动到…");
+  const picker = page.getByRole("dialog", { name: "把“Plan.md”移动到…" });
+  await expect(picker.locator(".folder-option")).toHaveCount(300);
+  for (let i = 0; i < 310; i++) await page.keyboard.press("ArrowDown");
+  await expect(picker.locator(".folder-option.active")).toHaveCount(1);
+  await expect(picker.locator(".folder-option.active")).toContainText("F298");
+});
+
+test("a drop into a folder is shown like the others", async ({ page }) => {
+  await setup(page);
+  const shadow = await tree(page)
+    .getByText("Box", { exact: true })
+    .evaluate((el) => {
+      el.classList.add("drop-target");
+      el.dataset.drop = "move";
+      return getComputedStyle(el).boxShadow;
+    });
+  expect(shadow).not.toBe("none");
+});
+
+test("keyboard moves that change nothing ask nothing; unlisted entries say why", async ({
+  page,
+}) => {
+  await setup(page);
+  await tree(page).getByText("Box", { exact: true }).click();
+  await row(page, "a.md").focus();
+  await page.keyboard.press("Alt+ArrowUp");
+  await page.keyboard.press("Alt+Shift+ArrowRight");
+  await row(page, "b.md").focus();
+  await page.keyboard.press("Alt+Shift+ArrowLeft");
+  await page.keyboard.press("Alt+ArrowDown");
+  await page.waitForTimeout(300);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  expect(await calls(page)).toEqual([]);
+  // In a folder with an index, an entry it does not list.
+  await row(page, "Loose.md").focus();
+  await page.keyboard.press("Alt+Shift+ArrowRight");
+  await expect(page.locator("#toast")).toContainText("“Loose.md”未列入目录");
+  expect(await calls(page)).toEqual([]);
 });

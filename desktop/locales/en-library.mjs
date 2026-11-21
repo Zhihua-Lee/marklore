@@ -59,6 +59,8 @@ export default {
   "{name} 有未保存的修改，请先保存，再改名或移动":
     "{name} has unsaved changes. Save it first, then rename or move.",
   "子页不能一起移动：{reason}": "Child pages cannot go along: {reason}",
+  "“{name}”未列入目录，请先把它拖进目录":
+    "“{name}” is not in the index; drag it into the index first",
   "笔记库仍在读取，可能还有链接没有列出。":
     "The library is still being read; some links may not be listed yet.",
   没有可撤销的改名或移动: "There is no rename or move to undo",

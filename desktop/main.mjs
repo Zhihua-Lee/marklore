@@ -357,6 +357,7 @@ function followLibrary(folders, excluded = []) {
   libraryExcluded = excludedBy(list);
   libraryExcludedKey = list.join("\n");
   libraryRoots = folders.filter((p) => typeof p === "string");
+  files.roots = libraryRoots;
   libraryWatch.follow(folders);
   linkIndex.follow(folders, excluded).then(
     () => send("links", null),

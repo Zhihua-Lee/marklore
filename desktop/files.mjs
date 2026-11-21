@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
 import { createNameWalks } from "./name-walk.mjs";
+import { skippedName } from "./scan-rules.mjs";
 import {
   INDEX_NAMES,
   findIndexName,
@@ -131,6 +132,8 @@ export class FileStore {
   // the first pause before a busy rename is tried again.
   renameFile = (from, to) => fs.rename(from, to);
   retryWait = 50;
+  // The library's folders, where entries may be moved to (main sets them).
+  roots = [];
   // onNames: a background walk of a folder outside the library found more.
   constructor({ backups, onNames = null } = {}) {
     this.backups = backups;
@@ -246,6 +249,8 @@ export class FileStore {
   // it, after a backup and a last check that it still holds `before`.
   async replace(file, before, bytes) {
     if (this.locks.has(file)) throw Error(t("正在保存，请稍候"));
+    // Never through a link to somewhere else (as saves check).
+    await unchangedPath(file);
     this.locks.add(file);
     const temp = path.join(path.dirname(file), `.folio-${randomUUID()}.tmp`);
     try {
@@ -661,7 +666,16 @@ export class FileStore {
       throw Error(t("未授权的文件夹"));
     const real = await realPath(dest);
     if (!(await fs.stat(real)).isDirectory()) throw Error(t("未授权的文件夹"));
-    if (![...this.directories.values()].some((root) => within(root, real)))
+    // Inside a folder of the library as it is now (one removed from it no
+    // longer counts), and not in a hidden or software folder of it.
+    const root = this.roots.find((r) => within(r, real));
+    if (
+      !root ||
+      path
+        .relative(root, real)
+        .split(path.sep)
+        .some((part) => part && skippedName(part))
+    )
       throw Error(t("未授权的文件夹"));
     return real;
   }

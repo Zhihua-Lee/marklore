@@ -42,6 +42,7 @@ async function library() {
     synced: async (m, written) => synced.push([m, written]),
   });
   const root = await store.directory(kb);
+  store.roots = [kb];
   const read = (name) => fs.readFile(path.join(kb, name), "utf8");
   const snapshot = async () => {
     const out = {};
@@ -796,6 +797,86 @@ test("the file-name search of folders outside the library walks again after a mo
     await fs.rename(path.join(dir, "Alpha.md"), path.join(dir, "Beta.md"));
     store.names.reset();
     assert.equal((await store.search([folder.id], "beta")).items.length, 1);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+// Review finding 7: where an entry may move to, and links to outside the
+// library.
+test("moves go only into the library's folders, not hidden or software ones", async () => {
+  const lib = await library();
+  const { dir, kb, store, root } = lib;
+  try {
+    store.roots = [kb];
+    await fs.mkdir(path.join(kb, ".git"));
+    await fs.mkdir(path.join(kb, "node_modules"));
+    const outside = path.join(dir, "outside");
+    await fs.mkdir(outside);
+    await store.directory(outside);
+    for (const dest of [
+      path.join(kb, ".git"),
+      path.join(kb, "node_modules"),
+      outside,
+    ])
+      await assert.rejects(store.movePlan(root.id, "Other.md", dest), /未授权/);
+    // Removed from the library: no longer a place to move to.
+    store.roots = [path.join(kb, "Elsewhere")];
+    await assert.rejects(
+      store.movePlan(root.id, "Other.md", path.join(kb, "Topics")),
+      /未授权/,
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("a note reached through a link to outside is never rewritten", async () => {
+  const lib = await library();
+  const { dir, kb, store } = lib;
+  try {
+    const outside = path.join(dir, "outside");
+    await fs.mkdir(outside);
+    await fs.writeFile(path.join(outside, "Ext.md"), "[p](Plan.md)\n");
+    await fs.symlink(outside, path.join(kb, "J"), "junction");
+    await assert.rejects(
+      store.rewrite(path.join(kb, "J", "Ext.md"), () => "changed\n"),
+      /路径已改变/,
+    );
+    assert.equal(
+      await fs.readFile(path.join(outside, "Ext.md"), "utf8"),
+      "[p](Plan.md)\n",
+    );
+  } finally {
+    await fs.rm(path.join(lib.kb, "J"), { force: true }).catch(() => {});
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("the link index does not read a note through a symbolic link", async (t) => {
+  const dir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "marklore-moves-link-")),
+  );
+  try {
+    const kb = path.join(dir, "kb");
+    await fs.mkdir(kb);
+    await fs.mkdir(path.join(dir, "outside"));
+    await fs.writeFile(path.join(dir, "outside", "Ext.md"), "# Ext\n");
+    await fs.writeFile(path.join(kb, "Own.md"), "# Own\n");
+    try {
+      await fs.symlink(
+        path.join(dir, "outside", "Ext.md"),
+        path.join(kb, "Ext.md"),
+        "file",
+      );
+    } catch {
+      t.skip("symbolic links to files need a privilege here");
+      return;
+    }
+    const index = createLinkIndex();
+    await index.follow([kb]);
+    assert.equal(index.has(path.join(kb, "Own.md")), true);
+    assert.equal(index.has(path.join(kb, "Ext.md")), false);
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }

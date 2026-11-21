@@ -341,7 +341,8 @@ export function createLinkIndex({
       if (!root && isEnvironment(entries.map((e) => e.name))) continue;
       let batch = [];
       for (const entry of entries) {
-        if (skippedName(entry.name)) continue;
+        // Not through links to elsewhere (as the tree and name search).
+        if (skippedName(entry.name) || entry.isSymbolicLink?.()) continue;
         const full = path.join(folder, entry.name);
         if (isExcluded(full)) continue;
         if (entry.isDirectory()) queue.push({ folder: full, root: false });

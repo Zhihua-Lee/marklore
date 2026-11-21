@@ -617,7 +617,7 @@ test("undo after 'move only' does not rewrite the moved draft's links", async ({
     .getByRole("button", { name: "只移动" })
     .click();
   await expect
-    .poll(() => page.evaluate(() => window.calls.at(-1)[0]))
+    .poll(() => page.evaluate(() => window.calls.at(-1)?.[0]))
     .toBe("move");
   await page.locator("#toast").getByRole("button", { name: "撤销" }).click();
   await expect.poll(() => calls(page, "undo")).toHaveLength(1);

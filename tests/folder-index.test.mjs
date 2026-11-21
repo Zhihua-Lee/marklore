@@ -101,6 +101,32 @@ test("the order and nesting come from the list; missing links are skipped", () =
   );
 });
 
+test("the tree reads the entries the index view reads: none in front matter, comments or code, no nesting across prose", () => {
+  const text = [
+    "---",
+    "- [Front](front.md)",
+    "---",
+    "- [A](a.md)",
+    "",
+    "<!--",
+    "- [Hidden](hidden.md)",
+    "-->",
+    "```",
+    "- [Code](code.md)",
+    "```",
+    "Some prose.",
+    "  - [B](b.md)",
+    "",
+  ].join("\n");
+  assert.deepEqual(
+    indexOrder(text, (n) => n),
+    [
+      { name: "a.md", depth: 0 },
+      { name: "b.md", depth: 0 },
+    ],
+  );
+});
+
 test("moving an entry carries its sub-list and keeps the rest of the file", () => {
   const out = moveInIndex(index, "Intro.md", "Last.md", "after");
   assert.equal(

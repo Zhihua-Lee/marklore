@@ -22,29 +22,88 @@ export function findIndexName(names) {
   return null;
 }
 
-// One list item holding a link: `- [text](href)`, `1. [text](href)`.
-const ITEM =
-  /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\[((?:\\.|[^\]\\])*)\]\(([^)]*)\)/;
-const columns = (indent) => {
+// One list item holding a link: `- [text](href)`, `1. [text](href)`. The
+// destination may be in angle brackets (`<My page (1).md>`), hold balanced
+// parentheses (`a(b).md`) and a link title (`a.md "see (v2)"`).
+export const ITEM =
+  /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\[((?:\\.|[^\]\\])*)\]\((<[^>\n]*>(?:[^()\n]|\([^()\n]*\))*|(?:[^()\\\n]|\\.|\((?:[^()\\\n]|\\.)*\))*)\)/;
+export const columns = (indent) => {
   let width = 0;
   for (const c of indent)
     width = c === "\t" ? width + 4 - (width % 4) : width + 1;
   return width;
 };
 
+// Which lines hold no entries: front matter (from a first line `---` to the
+// next `---` or `...`), fenced code and HTML comments.
+const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+export function indexSkips(lines) {
+  const skip = lines.map(() => false);
+  let i = 0;
+  if (lines.length > 1 && /^---[ \t]*$/.test(lines[0])) {
+    let end = 1;
+    while (end < lines.length && !/^(---|\.\.\.)[ \t]*$/.test(lines[end]))
+      end++;
+    if (end < lines.length) {
+      for (let k = 0; k <= end; k++) skip[k] = true;
+      i = end + 1;
+    }
+  }
+  let fence = null,
+    comment = false;
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    if (fence) {
+      skip[i] = true;
+      const m = FENCE.exec(line);
+      if (
+        m &&
+        m[1][0] === fence[0] &&
+        m[1].length >= fence.length &&
+        !line.slice(m[0].length).trim()
+      )
+        fence = null;
+      continue;
+    }
+    if (comment) {
+      skip[i] = true;
+      if (line.includes("-->")) comment = false;
+      continue;
+    }
+    const open = FENCE.exec(line);
+    if (open) {
+      fence = open[1];
+      skip[i] = true;
+      continue;
+    }
+    const at = line.indexOf("<!--");
+    if (at >= 0) {
+      skip[i] = true;
+      if (!line.includes("-->", at + 4)) comment = true;
+    }
+  }
+  return skip;
+}
+
 // The index's lines and its linked items: indent (columns), where the item's
 // text starts (a child is indented at least that far), the link and its
-// nesting (parent: the entry it is under, or -1).
+// nesting (parent: the entry it is under, or -1). Entries are list items
+// outside front matter, code and comments; other text between them (not
+// blank lines) ends a list, so nothing nests across it.
 export function parseIndex(text) {
   const bom = text.startsWith("﻿") ? "﻿" : "";
   const body = bom ? text.slice(1) : text;
   const eol = /\r\n/.test(body) ? "\r\n" : "\n";
   const lines = body.split(/\r?\n/);
+  const skip = indexSkips(lines);
   const entries = [];
-  const stack = [];
+  let stack = [];
   lines.forEach((line, at) => {
-    const m = ITEM.exec(line);
-    if (!m) return;
+    const m = skip[at] ? null : ITEM.exec(line);
+    if (!m) {
+      if (skip[at] || line.trim()) stack = [];
+      return;
+    }
     const indent = columns(m[1]);
     const content = indent + m[2].length + columns(m[3]);
     while (stack.length && indent < entries[stack.at(-1)].content) stack.pop();

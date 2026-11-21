@@ -67,6 +67,8 @@ export function wireEditing({
   rich = { target: () => null },
   // The note's properties: the first asked for, or the card unfolded.
   addProperty = null,
+  // Undo and redo handled elsewhere (an index file's view): true when done.
+  history = () => false,
 }) {
   const host = document.createElement("div");
   host.className = "editing-tools";
@@ -128,6 +130,8 @@ export function wireEditing({
   const apply = (action, options = {}, expected = getDocument()) => {
     if (!expected || expected !== getDocument() || expected.mode === "read")
       return false;
+    if ((action === "undo" || action === "redo") && history(action))
+      return true;
     const target = rich.target();
     if (target) {
       richCommand(target, action, options);

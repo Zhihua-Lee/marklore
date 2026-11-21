@@ -30,6 +30,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { renderDocument } from "./document-render.js";
 import { createIncrementalRender } from "./incremental-render.js";
 import { isDiffDocument } from "./diff-view.js";
+import { createIndexView } from "./folder-index-view.js";
 import {
   splitFront,
   withFront,
@@ -155,6 +156,8 @@ configureColorTools(
 );
 let editingKeys = [];
 let imageInsertion, backlinks, linkHere, proposals, marks, paintAiSettings;
+// A folder's index file shown as its pages (src/folder-index-view.js).
+let indexView;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
@@ -518,6 +521,8 @@ editingKeys = wireEditing({
     api?.linkTargets && doc?.fileId ? api.linkTargets(doc.fileId) : [],
   rich: { target: richTarget },
   addProperty: () => addProperty(),
+  // An index file's undo and redo keep the keys on its entries.
+  history: (action) => indexView.applies(active) && indexView.history(action),
 });
 imageInsertion = createImageInsertion({
   view,
@@ -558,6 +563,30 @@ selectionTools = createSelectionTools({
     clearTimeout(renderingTimer);
     render(true);
   },
+});
+indexView = createIndexView({
+  api,
+  host: $("#content"),
+  view,
+  getDocument: () => active,
+  rerender: (doc) => {
+    if (doc !== active || !indexView.applies(doc)) return;
+    clearTimeout(renderingTimer);
+    render(true);
+  },
+  open: (href) => href && run(() => navigateLink(href))(),
+  report: toast,
+  run,
+  setMode: (mode) => setMode(mode),
+  openText: (id) => tabs.find((doc) => doc.fileId === id)?.text ?? null,
+  newNoteText: (name) =>
+    settings.newNoteProperties
+      ? templateNote(settings.propertyTemplate, {
+          title: name.replace(/\.[^.]+$/, ""),
+        })
+      : "",
+  filesChanged: () => run(refreshLibrary)(),
+  readingFormat: () => Boolean(settings.readingFormat),
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
 // Markdown back and hands it here as the note's new text, through the
@@ -626,7 +655,9 @@ function richActive(doc = active) {
     !isDiffDocument(doc) &&
     !doc.preview &&
     !doc.richBlocked &&
-    !proposals?.shown(doc),
+    !proposals?.shown(doc) &&
+    // An index file shows its pages, in Edit mode too.
+    !indexView?.applies(doc),
   );
 }
 // Edit mode shows the source pane when asked to (Settings → Editing), when
@@ -925,6 +956,8 @@ function editNewNote(doc) {
 function render(preserve) {
   editsPendingSince = null;
   if (!active) return;
+  // Which note is shown (an index shown again reads its pages anew).
+  indexView.shown(active);
   if (richActive(active)) return showRich(active);
   $("#panes").dataset.rich = "off";
   const doc = active,
@@ -952,10 +985,15 @@ function render(preserve) {
   const shown = proposals?.shown(doc),
     text = shown?.text ?? doc.text;
   const container = $("#content");
+  // An index file: its list shown as the folder's pages (not patched in
+  // place; rendered again when the text or what the view shows changes).
+  const managed = !shown && indexView.applies(doc);
+  $("#panes").dataset.indexView = managed ? "on" : "off";
   // The note shown, edited: only the blocks the edit touched, when that can
   // be done (incremental-render.js). A note changed in place no longer has
   // its whole HTML, so it is rendered again once the cache has let it go.
   const patch =
+    !managed &&
     doc.htmlText !== text &&
     !shown &&
     incremental.update(doc, text, container, {
@@ -972,13 +1010,18 @@ function render(preserve) {
     updateOutline(doc.headings);
   } else if (
     doc.htmlText !== text ||
-    (doc.htmlPatched && !previewCache.has(doc.id))
+    (doc.htmlPatched && !previewCache.has(doc.id)) ||
+    (managed &&
+      (doc.indexKey !== indexView.key(doc) || !previewCache.has(doc.id)))
   ) {
-    result = renderDocument(shown ? { ...doc, ...shown } : doc, {
-      deferMath: true,
-      interactiveTasks: true,
-      blocks: !shown,
-    });
+    doc.indexKey = managed ? indexView.key(doc) : null;
+    result = managed
+      ? indexView.render(doc)
+      : renderDocument(shown ? { ...doc, ...shown } : doc, {
+          deferMath: true,
+          interactiveTasks: true,
+          blocks: !shown,
+        });
     doc.html = result.html;
     doc.headings = result.headings;
     doc.htmlText = text;
@@ -993,8 +1036,14 @@ function render(preserve) {
     hydrate: doc.hydrate,
     bytes: doc.renderBytes,
   });
-  if (result) incremental.remember(doc, text, result, container, changed);
-  if ((patch || result) && !shown && globalThis.__folioIncremental?.verify)
+  if (result && !managed)
+    incremental.remember(doc, text, result, container, changed);
+  if (
+    (patch || result) &&
+    !shown &&
+    !managed &&
+    globalThis.__folioIncremental?.verify
+  )
     incremental.verify(
       doc,
       container,
@@ -1913,6 +1962,15 @@ function propertyActions(doc) {
 function addProperty(doc = active) {
   if (!doc || doc !== active || !propertyActions(doc).length) return;
   if (doc.mode !== "edit") setMode("edit");
+  // An index file: its front matter's YAML opens in place (made first
+  // when it has none), not in the hidden source pane.
+  if (indexView.applies(doc)) {
+    if (!splitFront(doc.text)) changeFront(doc, "");
+    clearTimeout(renderingTimer);
+    render(true);
+    indexView.editFront();
+    return;
+  }
   let tries = 0;
   const ask = () => {
     if (active !== doc) return;
@@ -2407,8 +2465,12 @@ onHighlighterReady(() => {
 if (api) {
   api.on("open", (docs) => docs.forEach((file) => add(file)));
   api.on("disk", () => run(() => checkDisk())());
-  api.on("library", () => run(refreshLibrary)());
+  api.on("library", () => {
+    indexView.invalidate("library");
+    run(refreshLibrary)();
+  });
   api.on("links", () => {
+    indexView.invalidate("links");
     backlinks?.invalidate();
     researchText();
   });

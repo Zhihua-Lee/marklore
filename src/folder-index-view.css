@@ -1,0 +1,409 @@
+/* The index view (folder-index-view.js): the folder's pages as the library
+   tree shows them, laid on the page. Compact rows, the tree's fold arrow
+   and faint guide lines, titles in the note's ink, the first sentence of
+   each page muted beside it. Editing controls show on the row pointed at or
+   focused; the accent marks only where something will happen. */
+.ix-list,
+.ix-footer {
+  --ix-arrow: 18px;
+  --ix-step: 9px;
+  --ix-guide: color-mix(in srgb, var(--reading-ink) 13%, transparent);
+  --ix-muted: color-mix(in srgb, var(--reading-ink) 58%, var(--reading-paper));
+  margin: 0.6em 0 1em;
+  font-size: 0.95em;
+  line-height: 1.5;
+}
+.ix-item {
+  outline: none;
+}
+.ix-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 30px;
+  padding: 3px 6px 3px 2px;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+.ix-row:hover {
+  background: var(--hover);
+}
+.ix-item:focus-visible > .ix-row {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
+}
+/* The fold arrow: the library tree's chevron, in its own column. */
+.ix-twisty,
+.ix-twisty-space {
+  flex: none;
+  align-self: center;
+  width: var(--ix-arrow);
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ix-muted);
+  font-size: 0;
+  cursor: pointer;
+}
+.ix-twisty-space {
+  cursor: inherit;
+}
+.ix-twisty::before {
+  content: "";
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  transform: rotate(90deg);
+}
+.ix-item.closed > .ix-row > .ix-twisty::before {
+  transform: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ix-twisty::before {
+    transition: transform 120ms ease;
+  }
+}
+.ix-twisty:hover {
+  color: var(--reading-ink);
+}
+/* One step in per level, on a guide line down from the parent's arrow. */
+.ix-children {
+  margin-left: var(--ix-step);
+  padding-left: 0;
+  border-left: 1px solid var(--ix-guide);
+}
+.ix-children > .ix-item > .ix-row,
+.ix-children > .ix-new-row {
+  margin-left: 4px;
+}
+.ix-item.closed > .ix-children {
+  display: none;
+}
+
+.ix-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--reading-ink);
+  font-weight: 500;
+}
+.prose a.ix-title,
+#content a.ix-title.link-broken {
+  color: var(--reading-ink);
+  text-decoration: none;
+}
+.prose a.ix-title:hover {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.ix-item[aria-level="1"] > .ix-row > .ix-title {
+  font-weight: 600;
+}
+/* The file name, when it is not the title. */
+.ix-file {
+  flex: none;
+  max-width: 34%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--reading-ink) 6%, transparent);
+  color: var(--ix-muted);
+  font: 400 0.74em/1.6 var(--font-code);
+}
+.ix-row[data-kind="folder"] .ix-file,
+.ix-item[data-kind="folder"] > .ix-row > .ix-title::before {
+  color: var(--ix-muted);
+}
+.ix-item[data-kind="folder"] > .ix-row > .ix-title::after {
+  content: "/";
+  margin-left: 1px;
+  color: var(--ix-muted);
+  font-weight: 400;
+}
+/* The page's first sentence, and text written after the link. */
+.ix-excerpt,
+.ix-rest {
+  flex: 1 1 0;
+  min-width: 4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ix-muted);
+  font-size: 0.84em;
+}
+.ix-rest {
+  color: color-mix(in srgb, var(--reading-ink) 75%, var(--reading-paper));
+}
+
+/* A missing page: muted red title, a quiet tag, its repairs. */
+.ix-item.missing > .ix-row > .ix-title {
+  color: color-mix(in srgb, var(--danger) 72%, var(--reading-ink));
+}
+.ix-missing {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  color: color-mix(in srgb, var(--danger) 85%, var(--reading-ink));
+  font: 500 0.72em/1.7 var(--font-ui);
+}
+.ix-repair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-left: auto;
+}
+.ix-text-button {
+  min-height: 0;
+  padding: 1px 7px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ix-muted);
+  font: 400 0.78em/1.6 var(--font-ui);
+  cursor: pointer;
+}
+.ix-text-button:hover,
+.ix-text-button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.ix-relocate {
+  margin-left: auto;
+  max-width: 50%;
+  font: 400 0.8em var(--font-ui);
+}
+
+/* Edit mode: the row's own tools, shown where the pointer or focus is. */
+.ix-tools {
+  display: inline-flex;
+  flex: none;
+  gap: 1px;
+  margin-left: auto;
+  align-self: center;
+  opacity: 0;
+}
+.ix-row:hover > .ix-tools,
+.ix-item:focus-visible > .ix-row > .ix-tools,
+.ix-row:focus-within > .ix-tools {
+  opacity: 1;
+}
+.ix-excerpt + .ix-tools,
+.ix-rest + .ix-tools {
+  margin-left: 0;
+}
+.ix-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ix-muted);
+  cursor: pointer;
+}
+.ix-tool .ui-icon {
+  width: 15px;
+  height: 15px;
+}
+.ix-tool:hover,
+.ix-tool:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
+.ix-row[draggable="true"] {
+  cursor: grab;
+}
+.ix-row.dragging {
+  opacity: 0.45;
+}
+/* Dropping: a line before or after the entry, a frame onto it. */
+.ix-row[data-drop="before"] {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+.ix-row[data-drop="after"] {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.ix-row[data-drop="into"] {
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+.ix-title-input {
+  flex: 1 1 auto;
+  min-width: 8em;
+  box-sizing: border-box;
+  margin: -2px 0;
+  padding: 2px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+.ix-new-row {
+  display: flex;
+  padding: 3px 6px 3px calc(var(--ix-arrow) + 10px);
+}
+
+/* Below the list: a new page, and the folder's files not listed. */
+.ix-footer {
+  margin-top: 0.2em;
+}
+.ix-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 10px 2px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ix-muted);
+  font: 400 0.86em/1.5 var(--font-ui);
+  cursor: pointer;
+}
+.ix-new .ui-icon {
+  width: var(--ix-arrow);
+  height: 15px;
+}
+.ix-new:hover,
+.ix-new:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--accent);
+}
+.ix-unlisted {
+  margin-top: 0.8em;
+}
+.ix-unlisted-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 26px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  color: var(--ix-muted);
+  font: 500 0.8em/1.5 var(--font-ui);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.ix-unlisted-toggle::before {
+  content: "";
+  flex: none;
+  width: var(--ix-arrow);
+  height: 16px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
+    center / 12px no-repeat;
+  transform: rotate(90deg);
+}
+.ix-unlisted.closed .ix-unlisted-toggle::before {
+  transform: none;
+}
+/* A quiet rule after the label: a separator, not a heading. */
+.ix-unlisted-toggle::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--ix-guide);
+}
+.ix-unlisted-toggle:hover,
+.ix-unlisted-toggle:focus-visible {
+  color: var(--reading-ink);
+}
+.ix-unlisted.closed > .ix-unlisted-items {
+  display: none;
+}
+.ix-unlisted-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 28px;
+  padding: 2px 6px 2px calc(var(--ix-arrow) + 10px);
+  border-radius: 6px;
+}
+.ix-unlisted-item:hover {
+  background: var(--hover);
+}
+.ix-unlisted-item > .ix-title,
+.prose .ix-unlisted-item > a.ix-title {
+  color: var(--ix-muted);
+  font-size: 0.92em;
+  font-weight: 400;
+}
+.ix-unlisted-item > .ix-text-button {
+  margin-left: auto;
+}
+.ix-unlisted-item[draggable="true"] {
+  cursor: grab;
+}
+
+/* Edit mode: prose is edited as Markdown in place, on a double click. */
+.ix-prose {
+  cursor: text;
+  border-radius: 4px;
+}
+.ix-prose:hover {
+  background: color-mix(in srgb, var(--hover) 55%, transparent);
+}
+/* An HTML comment (Edit mode only; it renders as nothing): its source,
+   quiet, edited like prose. */
+#content pre.ix-comment {
+  margin: 0.4em 0;
+  padding: 2px 6px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  box-shadow: none;
+  color: var(--ix-muted);
+  font: 400 0.8em/1.6 var(--font-code);
+  /* `<!--` as typed, not drawn as an arrow. */
+  font-variant-ligatures: none;
+  font-feature-settings:
+    "liga" 0,
+    "calt" 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.ix-block-editor {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 3em;
+  margin: 0.4em 0;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 0.88em/1.6 var(--font-code);
+  resize: vertical;
+  outline: none;
+}
+/* The toolbar's formatting acts on the source pane: without it, only undo
+   and redo are kept. */
+#panes[data-index-view="on"][data-split="off"]
+  .editing-tools
+  > .edit-tool-group:not(:has(.edit-history)) {
+  display: none;
+}

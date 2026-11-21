@@ -352,13 +352,17 @@ export function createBacklinks({
     const unknown = remote.filter((a) => !statuses.has(key(a)));
     if (!unknown.length) return;
     const mine = epoch;
-    const results = await api
-      .linkStatus(
-        doc.fileId,
-        unknown.map((a) => a.getAttribute("href")),
-      )
-      .catch(() => null);
-    if (!results) return;
+    // In parts main accepts (at most 2000 links a call), as a long index
+    // file has more.
+    const hrefs = unknown.map((a) => a.getAttribute("href"));
+    const results = [];
+    for (let i = 0; i < hrefs.length; i += 2000) {
+      const part = await api
+        .linkStatus(doc.fileId, hrefs.slice(i, i + 2000))
+        .catch(() => null);
+      if (!part) return;
+      results.push(...part);
+    }
     unknown.forEach((a, i) => statuses.set(key(a), results[i] || "ok"));
     if (mine !== epoch || doc !== getActive()) return;
     unknown.forEach((a, i) => mark(a, results[i] || "ok"));

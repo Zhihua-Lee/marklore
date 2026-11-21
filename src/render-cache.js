@@ -312,11 +312,11 @@ export function createPreviewCache({
     // The new block in its place: after as many kept blocks as preceded it
     // (the text between blocks aside).
     const old = new Set(previous),
-      kept = new Set(nodes),
+      staying = new Set(nodes),
       elements = (list) => list.filter((node) => node.nodeType === 1);
     const before = elements(
       previous.slice(0, previous.indexOf(focused)),
-    ).filter((node) => kept.has(node)).length;
+    ).filter((node) => staying.has(node)).length;
     let seen = 0,
       next = null;
     for (const node of elements(nodes))
@@ -332,7 +332,7 @@ export function createPreviewCache({
       const list = [...nodes],
         prior = previous
           .slice(0, previous.indexOf(focused))
-          .findLast((node) => kept.has(node));
+          .findLast((node) => staying.has(node));
       list.splice(prior ? list.indexOf(prior) + 1 : 0, 0, focused);
       return list;
     }

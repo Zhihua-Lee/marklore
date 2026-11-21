@@ -470,3 +470,23 @@ test("a folder entry without an index of its own is shown in the library tree", 
   await expect(page.locator("#sidebar")).toBeVisible();
   await expect(page.locator("#toast")).toBeHidden();
 });
+
+for (const theme of ["light", "dark"])
+  test(`a comment in Edit mode is quiet grey source text (${theme})`, async ({
+    page,
+  }) => {
+    await setup(page, { theme });
+    await page.keyboard.press("Control+2");
+    const comment = page.locator("#content .ix-comment");
+    await expect(comment).toBeVisible();
+    const style = await comment.evaluate((el) => {
+      const own = getComputedStyle(el);
+      const text = getComputedStyle(
+        document.querySelector("#content .ix-prose:not(.ix-comment)") ||
+          document.querySelector("#content p"),
+      );
+      return { color: own.color, ink: text.color, weight: own.fontWeight };
+    });
+    expect(style.weight).toBe("400");
+    expect(style.color).not.toBe(style.ink);
+  });

@@ -375,7 +375,8 @@
   border: 0;
   border-radius: 4px;
   box-shadow: none;
-  color: var(--ix-muted);
+  /* Outside the list, where --ix-muted is not defined: the same grey. */
+  color: color-mix(in srgb, var(--reading-ink) 58%, var(--reading-paper));
   font: 400 0.8em/1.6 var(--font-code);
   /* `<!--` as typed, not drawn as an arrow. */
   font-variant-ligatures: none;

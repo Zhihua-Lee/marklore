@@ -451,3 +451,12 @@ test("a note's subtree: its child pages in order, with their titles", () => {
   ]);
   assert.deepEqual(subtreeOf(text, "zzz.md"), []);
 });
+
+test("a child listed twice in a subtree is moved once", () => {
+  assert.deepEqual(
+    subtreeOf("- [a](a.md)\n  - [b](b.md)\n  - [b again](B.md)\n", "a.md").map(
+      (e) => e.name,
+    ),
+    ["a.md", "b.md"],
+  );
+});

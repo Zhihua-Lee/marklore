@@ -175,25 +175,44 @@ export function createNoteMoves({
           }),
         );
     }
+    // Nothing being saved under the entries or the files to put back.
+    for (const [, to] of batch.moves) files.checkUnlocked(to);
+    for (const write of batch.writes) files.checkUnlocked(write.path);
+    // The entries first, all or none: a failure halfway moves back what
+    // had moved, and the batch stays to be tried again.
+    const back = [...batch.moves].reverse().map(([from, to]) => [to, from]);
+    const moved = [];
+    const done = [];
+    try {
+      for (const [from, to] of back) {
+        moved.push(...(await relocate(from, to)));
+        done.push([from, to]);
+      }
+    } catch (error) {
+      for (const [from, to] of done.reverse())
+        await relocate(to, from).catch(() => {});
+      throw error;
+    }
+    // Then each file rewritten, where it is now.
     const restored = [];
     const skipped = [];
     for (const write of [...batch.writes].reverse()) {
+      const now = movedPath(write.path, back);
       const ok =
         !draft.has(key(write.path)) &&
-        (await files.restore(write.path, write).catch(() => false));
-      (ok ? restored : skipped).push(write.path);
+        !draft.has(key(now)) &&
+        (await files.restore(now, write).catch(() => false));
+      (ok ? restored : skipped).push(now);
     }
-    const back = [...batch.moves].reverse().map(([from, to]) => [to, from]);
-    const moved = [];
-    for (const [from, to] of back) moved.push(...(await relocate(from, to)));
     await remember(null);
     await synced(back, restored);
     return {
       label: batch.label,
+      links: batch.links !== false,
       moves: back,
       files: moved,
-      restored: [...new Set(restored)].map((p) => movedPath(p, back)),
-      skipped: [...new Set(skipped)].map((p) => movedPath(p, back)),
+      restored: [...new Set(restored)],
+      skipped: [...new Set(skipped)],
     };
   }
 

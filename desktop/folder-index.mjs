@@ -408,9 +408,12 @@ export function subtreeOf(text, ref) {
   const out = [];
   const nameOf = new Map();
   const end = lastLine(parsed, i);
+  const seen = new Set();
   for (let k = i; k < entries.length && entries[k].line <= end; k++) {
     const name = childName(entries[k].href);
-    if (!name) continue;
+    // A child listed twice counts once (its first entry).
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
     // The nearest entry above it that names a child.
     let up = entries[k].parent;
     while (up >= 0 && !nameOf.has(up)) up = entries[up].parent;

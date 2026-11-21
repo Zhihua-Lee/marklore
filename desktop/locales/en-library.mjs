@@ -55,6 +55,7 @@ export default {
   已在这个文件夹中: "It is already in this folder",
   不能把文件夹移到它自己里面: "A folder cannot move into itself",
   "目标文件夹中已有“{name}”": "The destination already has “{name}”",
+  不能移动到另一个磁盘上的文件夹: "Cannot move to a folder on another drive",
   没有可撤销的改名或移动: "There is no rename or move to undo",
   "无法撤销：“{name}”已被移动、改名或占用":
     "Cannot undo: “{name}” has been moved, renamed or taken since",

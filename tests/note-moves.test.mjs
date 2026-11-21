@@ -458,3 +458,120 @@ test("the link index follows a move at once, and forgets what went", async () =>
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+// Review finding 1: a move or undo that fails halfway leaves nothing split.
+const failing = (store, fail) => {
+  const real = store.renameFile;
+  let count = 0;
+  store.renameFile = async (from, to) => {
+    count++;
+    const error = fail(count, from, to);
+    if (error) throw Object.assign(Error(error), { code: error });
+    return real(from, to);
+  };
+  return () => (store.renameFile = real);
+};
+
+test("a move whose second rename fails is rolled back, with no batch to undo", async () => {
+  const lib = await library();
+  const { kb, store, moves, root } = lib;
+  try {
+    const before = await lib.snapshot();
+    const plan = await store.movePlan(
+      root.id,
+      "Plan.md",
+      path.join(kb, "Topics"),
+      { children: true },
+    );
+    const restore = failing(store, (n, from) =>
+      from.endsWith("Child.md") ? "EACCES" : null,
+    );
+    // Retried, then given up: the note already moved comes back.
+    store.retryWait = 1;
+    await assert.rejects(
+      moves.run({
+        label: "move",
+        moves: plan.moves,
+        perform: () =>
+          store.moveEntry(root.id, "Plan.md", path.join(kb, "Topics"), {
+            children: true,
+          }),
+      }),
+    );
+    restore();
+    assert.deepEqual(await lib.snapshot(), before);
+    assert.equal(await moves.last(), null);
+    // Another drive: said plainly, nothing moved.
+    const back = failing(store, () => "EXDEV");
+    await assert.rejects(
+      store.moveEntry(root.id, "Other.md", path.join(kb, "Topics")),
+      /另一个磁盘/,
+    );
+    back();
+    assert.deepEqual(await lib.snapshot(), before);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("a short lock is waited out: a rename is retried on EBUSY", async () => {
+  const lib = await library();
+  const { store, root, read } = lib;
+  try {
+    store.retryWait = 1;
+    const restore = failing(store, (n) => (n < 3 ? "EBUSY" : null));
+    await store.renameEntry(root.id, "Other.md", "Else.md");
+    restore();
+    assert.equal(
+      await read("Else.md"),
+      "[p](Plan.md#goals) [c](<Child.md>)\n\n```\n[p](Plan.md)\n```\n",
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("an undo whose second rename fails changes nothing and can be tried again", async () => {
+  const lib = await library();
+  const { kb, store, moves, root } = lib;
+  try {
+    const before = await lib.snapshot();
+    const plan = await store.movePlan(
+      root.id,
+      "Plan.md",
+      path.join(kb, "Topics"),
+      { children: true },
+    );
+    await moves.run({
+      label: "move",
+      moves: plan.moves,
+      perform: () =>
+        store.moveEntry(root.id, "Plan.md", path.join(kb, "Topics"), {
+          children: true,
+        }),
+    });
+    const after = await lib.snapshot();
+    store.retryWait = 1;
+    // The second entry moved back (Plan.md, after its child page) stays locked.
+    const restore = failing(store, (n, from) =>
+      from.endsWith(path.join("Topics", "Plan.md")) ? "EPERM" : null,
+    );
+    await assert.rejects(
+      moves.undo({ relocate: (a, b) => store.relocate(a, b) }),
+    );
+    restore();
+    assert.deepEqual(await lib.snapshot(), after);
+    assert.notEqual(await moves.last(), null);
+    // A note being saved: undo waits for it.
+    store.locks.add(path.join(kb, "Other.md"));
+    await assert.rejects(
+      moves.undo({ relocate: (a, b) => store.relocate(a, b) }),
+      /正在保存/,
+    );
+    store.locks.clear();
+    await moves.undo({ relocate: (a, b) => store.relocate(a, b) });
+    assert.deepEqual(await lib.snapshot(), before);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

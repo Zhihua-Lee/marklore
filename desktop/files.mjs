@@ -44,6 +44,25 @@ export function within(root, file) {
   );
 }
 const samePath = (a, b) => a.toLowerCase() === b.toLowerCase();
+// A rename that waits out a short lock (an antivirus scanner, a sync client
+// or the search indexer holding the file on Windows): retried a few times
+// with a growing pause before the error is given.
+const BUSY = new Set(["EBUSY", "EPERM", "EACCES"]);
+export async function renameRetry(
+  from,
+  to,
+  { rename = fs.rename, tries = 5, wait = 50 } = {},
+) {
+  for (let attempt = 0; ; attempt++)
+    try {
+      return await (rename || fs.rename)(from, to);
+    } catch (error) {
+      if (attempt + 1 >= tries || !BUSY.has(error.code)) throw error;
+      await new Promise((resolve) =>
+        setTimeout(resolve, (wait ?? 50) * 2 ** attempt),
+      );
+    }
+}
 // Paths of open notes with unsaved changes, as the page gives them.
 const draftList = (drafts) =>
   Array.isArray(drafts)
@@ -108,6 +127,10 @@ export class FileStore {
   locks = new Set();
   // Index files read for the tree's order: path → { key, text }.
   indexes = new Map();
+  // How entries are renamed and moved (tests stand in a failing one), and
+  // the first pause before a busy rename is tried again.
+  renameFile = (from, to) => fs.rename(from, to);
+  retryWait = 50;
   // onNames: a background walk of a folder outside the library found more.
   constructor({ backups, onNames = null } = {}) {
     this.backups = backups;
@@ -233,7 +256,7 @@ export class FileStore {
         throw Error(
           t("{name} 刚被其他程序修改，请重试", { name: path.basename(file) }),
         );
-      await fs.rename(temp, file);
+      await renameRetry(temp, file, { wait: this.retryWait });
       this.indexes.delete(file);
       return { path: file, before: hash(before), after: hash(bytes), backup };
     } finally {
@@ -539,7 +562,16 @@ export class FileStore {
   // it keep their handles, now at the new path. Returns those notes.
   async relocate(source, target) {
     const stat = await fs.stat(source);
-    await fs.rename(source, target);
+    try {
+      await renameRetry(source, target, {
+        rename: this.renameFile,
+        wait: this.retryWait,
+      });
+    } catch (error) {
+      if (error.code === "EXDEV")
+        throw Error(t("不能移动到另一个磁盘上的文件夹"));
+      throw error;
+    }
     const moved = (p) =>
       samePath(p, source)
         ? target
@@ -677,9 +709,16 @@ export class FileStore {
     for (const [source] of plan.moves) this.checkUnlocked(source);
     const files = [];
     const moves = [];
-    for (const [source, target] of plan.moves) {
-      files.push(...(await this.relocate(source, target)));
-      moves.push([source, target]);
+    try {
+      for (const [source, target] of plan.moves) {
+        files.push(...(await this.relocate(source, target)));
+        moves.push([source, target]);
+      }
+    } catch (error) {
+      // Not left halfway: what moved goes back before the error is told.
+      for (const [source, target] of moves.reverse())
+        await this.relocate(target, source).catch(() => {});
+      throw error;
     }
     const options = { drafts: draftList(drafts) };
     const moved = new Set(plan.moving.map((item) => item.name.toLowerCase()));

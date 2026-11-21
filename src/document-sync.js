@@ -99,13 +99,16 @@ export function createDocumentSync({
       text = doc.text;
     try {
       const result = await api.read(doc.fileId, doc.version);
-      if (
-        !tabs.includes(doc) ||
-        doc.epoch !== epoch ||
-        doc.text !== text ||
-        doc.saving
-      )
+      if (!tabs.includes(doc) || doc.saving) return;
+      if (doc.epoch !== epoch || doc.text !== text) {
+        // Typed into while the disk was read: the newer disk version is not
+        // dropped but offered as a conflict, as for any unsaved note.
+        if (!result.unchanged && dirty(doc)) {
+          doc.conflict = result;
+          if (doc === getActive()) showConflict();
+        }
         return;
+      }
       if (result.unchanged) {
         if (manual) report(t("已是磁盘最新版本"));
         return;

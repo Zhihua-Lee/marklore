@@ -1734,6 +1734,11 @@ const {
       replaceDraft(doc, text);
       patched++;
     }
+    // Saved notes in every tab may have been rewritten on disk (links, a
+    // moved note's own links, an index): read again now, not when shown.
+    if (moves.length || edits.length)
+      for (const doc of tabs)
+        if (doc.fileId && !dirty(doc)) run(() => checkDisk(doc))();
     return patched;
   },
   copyLink: (path) => linkHere.copyNote(path),

@@ -72,6 +72,14 @@ async function setup(page) {
         text: texts[name] || "# " + name + "\n",
         version: "1",
       }),
+      // What a note holds on disk now (window.disk, by name), slow if asked.
+      read: async (id, version) => {
+        (window.reads ??= []).push(id);
+        const disk = window.disk?.[id];
+        if (!disk || disk.version === version) return { unchanged: true };
+        if (disk.delay) await new Promise((r) => setTimeout(r, disk.delay));
+        return { text: disk.text, version: disk.version };
+      },
       save: async (...args) => {
         window.calls.push(["save", args[0]]);
         return { version: "2" };
@@ -507,4 +515,63 @@ test("a draft with unsaved changes is patched in memory, not written", async ({
   await expect(page.locator("#editor .cm-content")).toContainText(
     "See [the plan](Plan.md#goals).More.",
   );
+});
+
+// Review finding 2: saved notes in other tabs follow a rename or move at
+// once, and typing while a note is being read again raises the conflict
+// bar instead of losing the newer disk version.
+test("saved notes in background tabs are read again after a rename", async ({
+  page,
+}) => {
+  await setup(page);
+  await row(page, "Other.md").click();
+  await row(page, "Child.md").click();
+  await expect(page.locator(".tab.active")).toContainText("Child.md");
+  await page.evaluate(() => {
+    window.reads = [];
+    window.disk = {
+      "Other.md": {
+        text: "# Other\n\nSee [the plan](Roadmap.md#goals).\n",
+        version: "2",
+      },
+    };
+  });
+  await menu(page, row(page, "Plan.md"), "重命名…");
+  const input = tree(page).getByRole("textbox", { name: "新名称" });
+  await input.fill("Roadmap");
+  await input.press("Enter");
+  await page.getByRole("dialog").getByRole("button", { name: /^更新/ }).click();
+  // Read while still in the background, not only when shown.
+  await expect
+    .poll(() => page.evaluate(() => window.reads.includes("Other.md")))
+    .toBe(true);
+  await page.evaluate(() => (window.disk["Other.md"].delay = 2000));
+  await page.getByRole("tab", { name: /Other\.md/ }).click();
+  await expect(page.locator("#content")).toContainText("See the plan");
+  await page.keyboard.press("Control+3");
+  await expect(page.locator("#editor .cm-content")).toContainText(
+    "Roadmap.md#goals",
+  );
+});
+
+test("typing while a note is read again shows the conflict, not a stale version", async ({
+  page,
+}) => {
+  await setup(page);
+  await row(page, "Other.md").click();
+  await page.keyboard.press("Control+3");
+  await row(page, "Child.md").click();
+  await page.evaluate(() => {
+    window.disk = {
+      "Other.md": {
+        text: "# Other\n\nChanged elsewhere.\n",
+        version: "2",
+        delay: 600,
+      },
+    };
+  });
+  await page.getByRole("tab", { name: /Other\.md/ }).click();
+  await page.locator("#editor .cm-content").click();
+  await page.keyboard.type("x");
+  await expect(page.locator("#conflict")).toBeVisible({ timeout: 4000 });
 });

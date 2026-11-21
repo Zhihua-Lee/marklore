@@ -587,6 +587,11 @@ indexView = createIndexView({
       : "",
   filesChanged: () => run(refreshLibrary)(),
   readingFormat: () => Boolean(settings.readingFormat),
+  // The library tree shown, opened down to the folder.
+  revealFolder: async (path) => {
+    if (!settings.sidebar) changeSettings({ sidebar: true });
+    return revealPath(path);
+  },
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
 // Markdown back and hands it here as the note's new text, through the
@@ -1714,6 +1719,7 @@ const {
   showExcluded,
   menuFor: treeMenu,
   repairLink,
+  revealPath,
 } = createLibrary({
   api,
   roots,

@@ -178,6 +178,23 @@ export function createLibrary({
     }
     current?.scrollIntoView({ block: "nearest" });
   }
+  // A folder shown and focused in the tree, opened down to it (a folder
+  // entry of an index with no index of its own). False when the library
+  // does not hold it.
+  async function revealPath(target) {
+    const filter = $("#file-filter");
+    if (filter.value.trim()) {
+      filter.value = "";
+      ++searchEpoch;
+      await renderTree();
+    }
+    const details = await revealFolder(target);
+    if (!details) return false;
+    const summary = details.querySelector(":scope > summary");
+    summary.scrollIntoView({ block: "nearest" });
+    summary.focus();
+    return true;
+  }
   // Open the folders down to this one (each loads its entries first).
   async function revealFolder(target) {
     const tops = [...$("#tree").children].filter(
@@ -1464,5 +1481,6 @@ export function createLibrary({
     showExcluded,
     menuFor,
     repairLink,
+    revealPath,
   };
 }

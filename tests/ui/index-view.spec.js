@@ -452,3 +452,21 @@ test("'point elsewhere' offers the same choices as the tree's repair", async ({
     "  - [2.2 单调有界定理](../其他/单调有界%202.md)\n",
   );
 });
+
+test("a folder entry without an index of its own is shown in the library tree", async ({
+  page,
+}) => {
+  await setup(
+    page,
+    { sidebar: false },
+    indexText.replace("## 附录\n", "## 附录\n\n- [图片](图片/)\n"),
+    { roots: [{ id: "nb", name: "数学分析", path: "C:/kb/数学分析" }] },
+  );
+  await row(page, "图片").locator(".ix-title").click();
+  const folder = page.locator(
+    '#tree details.folder[data-path="C:/kb/数学分析/图片"] > summary',
+  );
+  await expect(folder).toBeFocused();
+  await expect(page.locator("#sidebar")).toBeVisible();
+  await expect(page.locator("#toast")).toBeHidden();
+});

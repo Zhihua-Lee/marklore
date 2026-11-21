@@ -73,6 +73,8 @@ export function createIndexView({
   filesChanged = () => {},
   // Read mode's format bar is on (a double click selects words for it).
   readingFormat = () => false,
+  // A folder shown in the library tree (by path): whether it could be.
+  revealFolder = async () => false,
 }) {
   const states = new WeakMap();
   // Per index file: its folder's entries, and the pages' first sentences.
@@ -1117,6 +1119,8 @@ export function createIndexView({
       );
     }
     if (index) return open(hrefFor(name, true) + hrefFor(index.name));
+    // No index of its own: the folder shown in the library tree.
+    if (child?.path && (await revealFolder(child.path))) return;
     report(t("文件夹“{name}”里没有目录文件", { name }));
   }
   function openEntry(item) {

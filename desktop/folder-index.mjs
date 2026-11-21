@@ -397,6 +397,33 @@ export function retitleEntry(text, ref, title) {
   return finish(parsed, lines, text);
 }
 
+// A child's entry and the entries under it that name children, in order:
+// [{ name, title, parent }] (title unescaped; parent: the name of the entry
+// it is under, null for the first). [] when it is not listed.
+export function subtreeOf(text, ref) {
+  const parsed = parseIndex(text);
+  const i = find(parsed, ref);
+  if (i < 0) return [];
+  const { entries } = parsed;
+  const out = [];
+  const nameOf = new Map();
+  const end = lastLine(parsed, i);
+  for (let k = i; k < entries.length && entries[k].line <= end; k++) {
+    const name = childName(entries[k].href);
+    if (!name) continue;
+    // The nearest entry above it that names a child.
+    let up = entries[k].parent;
+    while (up >= 0 && !nameOf.has(up)) up = entries[up].parent;
+    nameOf.set(k, name);
+    out.push({
+      name,
+      title: entries[k].text.replace(/\\(.)/g, "$1"),
+      parent: k === i || up < 0 ? null : nameOf.get(up),
+    });
+  }
+  return out;
+}
+
 // One operation on an index's text, as the tree and the index's own view
 // ask for it (the same through the preload bridge). Returns the new text,
 // or null when nothing changes or it is not possible. ref: a child's name

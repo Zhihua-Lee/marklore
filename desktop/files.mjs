@@ -5,7 +5,16 @@ import { promisify } from "node:util";
 import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
 import { createNameWalks } from "./name-walk.mjs";
-import { findIndexName, indexOrder, moveInIndex } from "./folder-index.mjs";
+import {
+  INDEX_NAMES,
+  findIndexName,
+  isIndexName,
+  indexOrder,
+  applyIndexOp,
+  newIndexText,
+  subtreeOf,
+  titleFor,
+} from "./folder-index.mjs";
 
 const walk = promisify(walkRealpath);
 // The canonical path (links resolved). Drives that cannot report a final
@@ -33,6 +42,24 @@ export function within(root, file) {
     rel === "" ||
     (!rel.startsWith(".." + path.sep) && rel !== ".." && !path.isAbsolute(rel))
   );
+}
+const samePath = (a, b) => a.toLowerCase() === b.toLowerCase();
+// Paths of open notes with unsaved changes, as the page gives them.
+const draftList = (drafts) =>
+  Array.isArray(drafts)
+    ? drafts.filter((p) => typeof p === "string").slice(0, 500)
+    : [];
+// A child's name as an operation gives it: one segment, not "." or "..".
+function plainName(name) {
+  if (
+    typeof name !== "string" ||
+    !name ||
+    name === "." ||
+    name === ".." ||
+    path.basename(name) !== name
+  )
+    throw Error(t("未授权的文件"));
+  return name;
 }
 async function unchangedPath(file) {
   if ((await realPath(file)) !== file)
@@ -161,22 +188,7 @@ export class FileStore {
       } finally {
         await handle.close();
       }
-      if (this.backups) {
-        await fs.mkdir(this.backups, { recursive: true });
-        // Preserve each distinct disk version; never silently overwrite a recovery copy.
-        await fs
-          .writeFile(
-            path.join(
-              this.backups,
-              hash(file.path) + "-" + hash(current) + ".bak",
-            ),
-            current,
-            { flag: "wx" },
-          )
-          .catch((e) => {
-            if (e.code !== "EEXIST") throw e;
-          });
-      }
+      await this.backup(file.path, current);
       if (hash(await this.readBytes(file.path)) !== version)
         return { conflict: true };
       await fs.rename(temp, file.path);
@@ -191,6 +203,72 @@ export class FileStore {
           console.warn("Folio: temporary file not removed", temp, e.code);
       });
     }
+  }
+  // A copy of a file's bytes before Marklore replaces them (a save, an index
+  // entry, links after a move), one per distinct version: a recovery copy is
+  // never overwritten. Returns its path (null without a backup folder).
+  async backup(file, bytes) {
+    if (!this.backups) return null;
+    await fs.mkdir(this.backups, { recursive: true });
+    const copy = path.join(
+      this.backups,
+      hash(file) + "-" + hash(bytes) + ".bak",
+    );
+    await fs.writeFile(copy, bytes, { flag: "wx" }).catch((e) => {
+      if (e.code !== "EEXIST") throw e;
+    });
+    return copy;
+  }
+  // Bytes written over a file as a save is: a temporary file renamed over
+  // it, after a backup and a last check that it still holds `before`.
+  async replace(file, before, bytes) {
+    if (this.locks.has(file)) throw Error(t("正在保存，请稍候"));
+    this.locks.add(file);
+    const temp = path.join(path.dirname(file), `.folio-${randomUUID()}.tmp`);
+    try {
+      const stat = await fs.stat(file);
+      await fs.writeFile(temp, bytes, { flag: "wx", mode: stat.mode });
+      const backup = await this.backup(file, before);
+      if (hash(await this.readBytes(file)) !== hash(before))
+        throw Error(
+          t("{name} 刚被其他程序修改，请重试", { name: path.basename(file) }),
+        );
+      await fs.rename(temp, file);
+      this.indexes.delete(file);
+      return { path: file, before: hash(before), after: hash(bytes), backup };
+    } finally {
+      this.locks.delete(file);
+      await fs.unlink(temp).catch(() => {});
+    }
+  }
+  // A note rewritten by Marklore itself (an index entry, links that follow
+  // a move): change(text) gives the new text, or null to leave it. Encoding,
+  // byte order mark and line endings stay. Returns { path, before, after,
+  // backup } (hashes of the bytes, the backup's path), or null.
+  async rewrite(file, change) {
+    const bytes = await this.readBytes(file);
+    const info = decode(bytes);
+    const text = change(info.text);
+    if (text == null || text === info.text) return null;
+    const out = encode(text, info);
+    if (out.length > MAX_BYTES)
+      throw Error(t("编码后的文件过大（上限 32 MB），未保存"));
+    return this.replace(file, bytes, out);
+  }
+  // A rewrite undone: the backup put back, unless the file changed since
+  // (its hash is no longer `after`). Returns whether it was put back.
+  async restore(file, { after, before, backup }) {
+    if (!backup) return false;
+    let current, saved;
+    try {
+      current = await this.readBytes(file);
+      saved = await fs.readFile(backup);
+    } catch {
+      return false;
+    }
+    if (hash(current) !== after || hash(saved) !== before) return false;
+    await this.replace(file, current, saved);
+    return true;
   }
   async currentFolder(id) {
     const file = this.file(id);
@@ -292,40 +370,88 @@ export class FileStore {
   // child not listed yet gets an entry). Returns the index's path, or null
   // when nothing changed.
   async reorderIndex(id, { name, target, place } = {}) {
-    const folder = this.directories.get(id);
-    if (!folder) throw Error(t("未授权的文件夹"));
-    await unchangedPath(folder);
-    for (const child of [name, target])
-      if (
-        typeof child !== "string" ||
-        !child ||
-        child === "." ||
-        child === ".." ||
-        path.basename(child) !== child
-      )
-        throw Error(t("未授权的文件"));
-    const indexName = findIndexName(await fs.readdir(folder));
-    if (!indexName) throw Error(t("这个文件夹没有目录文件"));
-    const file = path.join(folder, indexName);
-    if ((await realPath(file)) !== file) throw Error(t("未授权的文件"));
-    const moved = await fs.stat(path.join(folder, name));
-    const bytes = await this.readBytes(file);
-    const info = decode(bytes);
-    const text = moveInIndex(info.text, name, target, place, {
-      folder: moved.isDirectory(),
+    const done = await this.editIndex(id, {
+      kind: "move",
+      ref: name,
+      target,
+      place,
     });
-    if (text === null) return null;
-    const temp = path.join(folder, `.folio-${randomUUID()}.tmp`);
+    return done?.path ?? null;
+  }
+  // The folder's index file (folder-index.mjs), or null.
+  async indexFile(folder) {
+    const name = findIndexName(await fs.readdir(folder));
+    if (!name) return null;
+    const file = path.join(folder, name);
+    if ((await realPath(file)) !== file) throw Error(t("未授权的文件"));
+    return file;
+  }
+  // Operations on a folder's index (applyIndexOp), one after another, in
+  // one rewrite with a backup. An index open with unsaved changes (drafts:
+  // paths) is not written: { path, ops, draft: true } tells the page to
+  // apply them to its draft. Otherwise the rewrite (see rewrite), or null
+  // when there is no index or nothing changes.
+  async changeIndex(folder, ops, { drafts = [] } = {}) {
+    const file = await this.indexFile(folder);
+    if (!file || !ops.length) return null;
+    if (drafts.some((p) => samePath(p, file)))
+      return { path: file, ops, draft: true };
+    return this.rewrite(file, (text) =>
+      ops.reduce((current, op) => applyIndexOp(current, op) ?? current, text),
+    );
+  }
+  // One operation on an authorized folder's index from the tree (or the
+  // index's own view): children are named as entries of the folder.
+  async editIndex(id, op = {}) {
+    const folder = this.folderPath(id);
+    await unchangedPath(folder);
+    if (!op || typeof op !== "object") throw Error(t("无效操作"));
+    for (const key of ["ref", "target", "name", "from", "to", "under", "after"])
+      if (
+        op[key] != null &&
+        !(typeof op[key] === "object" && Number.isInteger(op[key].line))
+      )
+        plainName(op[key]);
+    const file = await this.indexFile(folder);
+    if (!file) throw Error(t("这个文件夹没有目录文件"));
+    const entries = await fs.readdir(folder, { withFileTypes: true });
+    const folders = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    const isFolder = (name) =>
+      folders.some((f) => f.toLowerCase() === String(name).toLowerCase());
+    const full = { ...op, folders };
+    // A child added must be there; whether it is a folder comes from disk.
+    if (op.kind === "insert" || op.kind === "move") {
+      const name = op.kind === "insert" ? op.name : op.ref;
+      if (typeof name === "string") {
+        await fs.stat(path.join(folder, name));
+        full.folder = isFolder(name);
+      }
+    }
+    return this.rewrite(file, (text) => applyIndexOp(text, full));
+  }
+  // An index for a folder that has none: _目录.md listing its folders and
+  // notes in the order the tree shows them (by name). Never replaces a file.
+  async createIndex(id) {
+    const folder = this.folderPath(id);
+    await unchangedPath(folder);
+    if (await this.indexFile(folder)) throw Error(t("这个文件夹已有目录文件"));
+    const children = [];
+    for (const item of await this.list(id)) {
+      let index = null;
+      if (item.directory)
+        index = findIndexName(await fs.readdir(item.path).catch(() => []));
+      children.push({ name: item.name, folder: item.directory, index });
+    }
+    const file = path.join(folder, INDEX_NAMES[0]);
+    const title = path.basename(folder) || folder;
     try {
-      await fs.writeFile(temp, encode(text, info), { flag: "wx" });
-      if (hash(await this.readBytes(file)) !== hash(bytes))
-        throw Error(t("目录文件刚被其他程序修改，请重试"));
-      await fs.rename(temp, file);
-    } finally {
-      await fs.unlink(temp).catch(() => {});
+      await fs.writeFile(file, newIndexText(title, children), { flag: "wx" });
+    } catch (e) {
+      if (e.code === "EEXIST") throw Error(t("已有同名的文件或文件夹"));
+      throw e;
     }
     this.indexes.delete(file);
-    return file;
+    return { path: file };
   }
   // A name the tree may give a new or renamed entry: one plain segment that
   // Windows accepts and the tree shows (no leading dot).
@@ -370,13 +496,20 @@ export class FileStore {
     return folder;
   }
   // A new note or folder in an authorized folder; never replaces one. A
-  // note is empty, or starts with `text` (its default properties).
-  async createEntry(id, name, kind, text = "") {
+  // note is empty, or starts with `text` (its default properties). In a
+  // folder with an index file it is listed there: under `place.under` (a
+  // new child page; that note listed first if it was not), otherwise at
+  // the end. place.drafts: open notes with unsaved changes (changeIndex).
+  async createEntry(id, name, kind, text = "", place = null) {
     const folder = this.folderPath(id);
     await unchangedPath(folder);
     FileStore.checkName(name);
     if (kind !== "folder" && !markdownPath(name))
       throw Error(t("笔记名称须以 .md 结尾"));
+    const under =
+      place && typeof place === "object" && place.under != null
+        ? plainName(place.under)
+        : null;
     const body =
       typeof text === "string" && text.length <= 64 * 1024 ? text : "";
     const target = path.join(folder, name);
@@ -387,33 +520,28 @@ export class FileStore {
       if (e.code === "EEXIST") throw Error(t("已有同名的文件或文件夹"));
       throw e;
     }
+    const entry = { kind: "insert", name, folder: kind === "folder" };
+    const ops = under
+      ? [
+          { kind: "insert", name: under },
+          { ...entry, under },
+        ]
+      : [entry];
+    // The entry exists either way; a failed index write is reported.
+    const index = await this.changeIndex(folder, ops, {
+      drafts: draftList(place?.drafts),
+    }).catch((e) => ({ error: e.message }));
     return kind === "folder"
-      ? { ...(await this.directory(target)), directory: true }
-      : { path: target };
+      ? { ...(await this.directory(target)), directory: true, index }
+      : { path: target, index };
   }
-  // Rename an entry in its folder. Open notes and listed folders inside it
-  // keep their handles, now at the new path. Returns the notes moved.
-  async renameEntry(id, name, newName) {
-    const source = await this.childPath(id, name);
-    FileStore.checkName(newName);
+  // An entry renamed or moved on disk: open notes and listed folders inside
+  // it keep their handles, now at the new path. Returns those notes.
+  async relocate(source, target) {
     const stat = await fs.stat(source);
-    if (!stat.isDirectory() && !this.openable(newName))
-      throw Error(t("笔记名称须以 .md 结尾"));
-    const target = path.join(path.dirname(source), newName);
-    if (target === source) return { path: source, files: [] };
-    // A change of case only is the same entry on Windows.
-    if (target.toLowerCase() !== source.toLowerCase()) {
-      const taken = await fs.lstat(target).then(
-        () => true,
-        (e) => e.code !== "ENOENT",
-      );
-      if (taken) throw Error(t("已有同名的文件或文件夹"));
-    }
-    if ([...this.locks].some((p) => p === source || within(source, p)))
-      throw Error(t("正在保存，请稍候"));
     await fs.rename(source, target);
     const moved = (p) =>
-      p === source
+      samePath(p, source)
         ? target
         : stat.isDirectory() && within(source, p)
           ? path.join(target, path.relative(source, p))
@@ -430,7 +558,163 @@ export class FileStore {
       if (next) this.directories.set(folderId, next);
     }
     this.indexes.clear();
-    return { path: target, files };
+    return files;
+  }
+  // Not while a note at or under it is being saved.
+  checkUnlocked(source) {
+    if ([...this.locks].some((p) => samePath(p, source) || within(source, p)))
+      throw Error(t("正在保存，请稍候"));
+  }
+  // Where a rename would put an entry: checked, nothing changed yet.
+  async renameTarget(id, name, newName) {
+    const source = await this.childPath(id, name);
+    FileStore.checkName(newName);
+    const stat = await fs.stat(source);
+    if (!stat.isDirectory() && !this.openable(newName))
+      throw Error(t("笔记名称须以 .md 结尾"));
+    const target = path.join(path.dirname(source), newName);
+    // A change of case only is the same entry on Windows.
+    if (target !== source && !samePath(target, source)) {
+      const taken = await fs.lstat(target).then(
+        () => true,
+        (e) => e.code !== "ENOENT",
+      );
+      if (taken) throw Error(t("已有同名的文件或文件夹"));
+    }
+    return { source, target, directory: stat.isDirectory() };
+  }
+  // Rename an entry in its folder; the folder's index follows (its links
+  // to the entry, and a title that was the old name). Returns { path,
+  // files, moves: [[old, new]], indexes: [index rewrite] }.
+  async renameEntry(id, name, newName, { drafts = [] } = {}) {
+    const { source, target } = await this.renameTarget(id, name, newName);
+    if (target === source)
+      return { path: source, files: [], moves: [], indexes: [] };
+    this.checkUnlocked(source);
+    const files = await this.relocate(source, target);
+    let index = null;
+    if (!isIndexName(name) && !isIndexName(newName))
+      index = await this.changeIndex(
+        path.dirname(source),
+        [{ kind: "rename", from: name, to: newName }],
+        { drafts: draftList(drafts) },
+      ).catch((e) => ({ error: e.message }));
+    return {
+      path: target,
+      files,
+      moves: [[source, target]],
+      indexes: index ? [index] : [],
+    };
+  }
+  // A folder an entry may move to: an existing folder inside one the tree
+  // lists (the library's folders).
+  async destination(dest) {
+    if (typeof dest !== "string" || !path.isAbsolute(dest))
+      throw Error(t("未授权的文件夹"));
+    const real = await realPath(dest);
+    if (!(await fs.stat(real)).isDirectory()) throw Error(t("未授权的文件夹"));
+    if (![...this.directories.values()].some((root) => within(root, real)))
+      throw Error(t("未授权的文件夹"));
+    return real;
+  }
+  // What moving an entry to another folder takes: the entries moved (with
+  // its child pages, from the folder's index, when children is set) and
+  // where each goes. Checked, nothing changed yet.
+  async movePlan(id, name, dest, { children = false } = {}) {
+    const source = await this.childPath(id, name);
+    const from = path.dirname(source);
+    const to = await this.destination(dest);
+    if (samePath(from, to)) throw Error(t("已在这个文件夹中"));
+    const stat = await fs.stat(source);
+    if (stat.isDirectory() && within(source, to))
+      throw Error(t("不能把文件夹移到它自己里面"));
+    const index = await this.indexFile(from);
+    const tree = index
+      ? subtreeOf(decode(await this.readBytes(index)).text, name)
+      : [];
+    // Child pages: the notes listed under it that are there.
+    const pages = [];
+    for (const item of tree.slice(1)) {
+      const p = path.join(from, item.name);
+      const isNote = await fs.lstat(p).then(
+        (s) => s.isFile() && this.openable(p),
+        () => false,
+      );
+      if (isNote) pages.push(item);
+    }
+    const moving = [
+      { name, title: tree[0]?.title ?? null, parent: null },
+      ...(children ? pages : []),
+    ];
+    for (const item of moving) {
+      const taken = await fs.lstat(path.join(to, item.name)).then(
+        () => true,
+        (e) => e.code !== "ENOENT",
+      );
+      if (taken)
+        throw Error(t("目标文件夹中已有“{name}”", { name: item.name }));
+    }
+    return {
+      source,
+      from,
+      to,
+      directory: stat.isDirectory(),
+      children: pages.map((item) => item.name),
+      moving,
+      moves: moving.map((item) => [
+        path.join(from, item.name),
+        path.join(to, item.name),
+      ]),
+    };
+  }
+  // Move an entry (and, with children, its child pages) to another folder.
+  // The source folder's index loses its entries (child pages left behind
+  // move up a level); the destination's index, if it has one, lists them
+  // at its end, nested and titled as they were. Returns { path, files,
+  // moves, indexes }.
+  async moveEntry(id, name, dest, { children = false, drafts = [] } = {}) {
+    const plan = await this.movePlan(id, name, dest, { children });
+    for (const [source] of plan.moves) this.checkUnlocked(source);
+    const files = [];
+    const moves = [];
+    for (const [source, target] of plan.moves) {
+      files.push(...(await this.relocate(source, target)));
+      moves.push([source, target]);
+    }
+    const options = { drafts: draftList(drafts) };
+    const moved = new Set(plan.moving.map((item) => item.name.toLowerCase()));
+    const indexes = [
+      await this.changeIndex(
+        plan.from,
+        [{ kind: "remove", ref: name, subtree: Boolean(children) }],
+        options,
+      ).catch((e) => ({ error: e.message })),
+      await this.changeIndex(
+        plan.to,
+        plan.moving.map((item) => ({
+          kind: "insert",
+          name: item.name,
+          folder: item === plan.moving[0] && plan.directory,
+          title:
+            item.title && item.title !== titleFor(item.name)
+              ? item.title
+              : undefined,
+          under:
+            item.parent && moved.has(item.parent.toLowerCase())
+              ? item.parent
+              : null,
+        })),
+        options,
+      ).catch((e) => ({ error: e.message })),
+    ].filter(Boolean);
+    return { path: path.join(plan.to, name), files, moves, indexes };
+  }
+  // An entry gone to the Recycle Bin: its folder's index no longer lists
+  // it (its child pages move up a level).
+  unlistEntry(folder, name, { drafts = [] } = {}) {
+    return this.changeIndex(folder, [{ kind: "remove", ref: name }], {
+      drafts: draftList(drafts),
+    });
   }
   async openChild(id, name) {
     const folder = this.directories.get(id);

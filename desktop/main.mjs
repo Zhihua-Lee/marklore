@@ -26,6 +26,9 @@ import { createLibraryWatch } from "./library-watch.mjs";
 import { createIndex, indexKind } from "./native-index.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
+import { createNoteMoves } from "./note-moves.mjs";
+import { isIndexName, applyIndexOp } from "./folder-index.mjs";
+import { skippedName, isEnvironment } from "./scan-rules.mjs";
 import {
   portableDir,
   isPortable,
@@ -283,8 +286,9 @@ let win,
 const watchers = new Map();
 // AI proposals through Marklore's MCP server (desktop/mcp.mjs), which the
 // assistant starts as this program in Node mode.
+const aiStore = createAiStore(path.join(app.getPath("userData"), AI_FOLDER));
 const ai = createAiBridge({
-  store: createAiStore(path.join(app.getPath("userData"), AI_FOLDER)),
+  store: aiStore,
   openFile: (p) => openFile(p),
   pathOf: (id) => files.file(id).path,
   notify: (kind) => send(kind, null),
@@ -346,16 +350,65 @@ const libraryWatch = createLibraryWatch({
 // excluded: folders left out of search and backlinks (in the settings).
 // The file-name search of folders outside the library skips them too.
 let libraryExcluded = () => false,
-  libraryExcludedKey = "";
+  libraryExcludedKey = "",
+  libraryRoots = [];
 function followLibrary(folders, excluded = []) {
   const list = normalizeExcluded(excluded);
   libraryExcluded = excludedBy(list);
   libraryExcludedKey = list.join("\n");
+  libraryRoots = folders.filter((p) => typeof p === "string");
   libraryWatch.follow(folders);
   linkIndex.follow(folders, excluded).then(
     () => send("links", null),
     () => {},
   );
+}
+// Renames and moves made in the tree, with the links that follow them and
+// the last one's undo (desktop/note-moves.mjs). Marks and proposals of the
+// AI, the recent list and the link index follow at once.
+const noteMoves = createNoteMoves({
+  files,
+  linkIndex,
+  undoFile: path.join(app.getPath("userData"), "last-move.json"),
+  synced: async (moves, written) => {
+    await Promise.allSettled([
+      aiStore.moveNotes(moves),
+      recent.rename(moves),
+      linkIndex.moved(moves, written),
+    ]);
+    send("links", null);
+  },
+});
+// The library's folders, for "Move to…": breadth first, as the library is
+// walked (no hidden, software or excluded folders), at most 3000.
+async function libraryFolderList() {
+  const out = [];
+  const queue = libraryRoots.map((root) => ({ folder: root, root }));
+  while (queue.length && out.length < 3000) {
+    const { folder, root } = queue.shift();
+    let entries;
+    try {
+      entries = await fs.readdir(folder, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    if (folder !== root && isEnvironment(entries.map((e) => e.name))) continue;
+    out.push({
+      path: folder,
+      name: path.basename(folder) || folder,
+      rel: [path.basename(root) || root, path.relative(root, folder)]
+        .filter(Boolean)
+        .join(path.sep),
+    });
+    for (const entry of entries)
+      if (
+        entry.isDirectory() &&
+        !skippedName(entry.name) &&
+        !libraryExcluded(path.join(folder, entry.name))
+      )
+        queue.push({ folder: path.join(folder, entry.name), root });
+  }
+  return out;
 }
 // One watcher per folder, reacting only to the open notes it contains. Unrelated
 // files (Downloads, our own .folio-*.tmp saves) no longer trigger disk re-reads.
@@ -1085,41 +1138,150 @@ else {
       });
       api("list", (id) => files.list(id));
       api("reorderIndex", (id, move) => files.reorderIndex(id, move));
-      api("currentFolder", (id) => files.currentFolder(id));
-      // The tree's own file operations, inside folders it lists.
-      api("createEntry", async (id, name, kind, text) => {
-        const created = await files.createEntry(id, name, kind, text);
-        return created.directory ? created : openFile(created.path);
+      // A folder's index from the tree: one operation (folder-index.mjs
+      // applyIndexOp), backed up; a new index for a folder without one.
+      api("editIndex", (id, op) => files.editIndex(id, op));
+      api("createIndex", (id) => files.createIndex(id));
+      // The same operations on an index's text (a draft), nothing written.
+      api("applyIndexOp", (text, op) => {
+        if (typeof text !== "string" || text.length > 4 * 1024 * 1024)
+          throw Error(t("目录文件过大"));
+        return applyIndexOp(text, op);
       });
-      api("renameEntry", async (id, name, newName) => {
-        const source = await files.childPath(id, name);
-        // Links elsewhere in the library that still name the old note.
-        let links = 0;
-        if (files.openable(source))
-          links = await linkIndex
-            .backlinks(source)
-            .then(
-              (list) =>
-                new Set(
-                  list
-                    .filter(
-                      (link) =>
-                        link.source.toLowerCase() !== source.toLowerCase(),
-                    )
-                    .map((link) => link.source.toLowerCase()),
-                ).size,
-            )
-            .catch(() => 0);
+      api("currentFolder", (id) => files.currentFolder(id));
+      // Open notes with unsaved changes, as the page names them: never
+      // written under it (it applies the same changes to their drafts).
+      const draftsOf = (value) =>
+        Array.isArray(value)
+          ? value.filter((p) => typeof p === "string").slice(0, 500)
+          : [];
+      // The index files a rename or move updates anyway (not asked about).
+      const ownIndexes = async (...folders) =>
+        (
+          await Promise.all(
+            folders.map((folder) => files.indexFile(folder).catch(() => null)),
+          )
+        ).filter(Boolean);
+      // Windows does not rename or move a folder that has watched folders
+      // below it: release the watchers under each entry moved.
+      const withoutWatchersUnderAll = (paths, run) =>
+        paths.reduceRight(
+          (inner, p) => () => withoutWatchersUnder(p, inner),
+          run,
+        )();
+      // The tree's own file operations, inside folders it lists.
+      api("createEntry", async (id, name, kind, text, place) => {
+        const created = await files.createEntry(id, name, kind, text, {
+          under: place?.under ?? null,
+          drafts: draftsOf(place?.drafts),
+        });
+        return created.directory
+          ? created
+          : { ...(await openFile(created.path)), index: created.index };
+      });
+      // Before a rename: the notes whose links would change.
+      api("planRename", async (id, name, newName) => {
+        const { source, target } = await files.renameTarget(id, name, newName);
+        const moves = target === source ? [] : [[source, target]];
+        return {
+          moves,
+          affected: moves.length
+            ? await noteMoves.plan(moves, {
+                skip: await ownIndexes(path.dirname(source)),
+              })
+            : [],
+        };
+      });
+      // options: { links: rewrite the notes that link to it, drafts }.
+      api("renameEntry", async (id, name, newName, options = {}) => {
+        const { source, target } = await files.renameTarget(id, name, newName);
+        const drafts = draftsOf(options?.drafts);
         const result = await withoutWatchersUnder(source, () =>
-          files.renameEntry(id, name, newName),
+          noteMoves.run({
+            label: { kind: "rename", name, to: newName },
+            moves: target === source ? [] : [[source, target]],
+            links: Boolean(options?.links),
+            drafts,
+            perform: () => files.renameEntry(id, name, newName, { drafts }),
+          }),
         );
         for (const file of result.files) watchFile(file.id);
-        return { ...result, links };
+        return result;
       });
-      api("trashEntry", async (id, name) => {
+      // Before a move to another folder: its child pages, and the notes
+      // whose links would change without them and with them.
+      api("planMove", async (id, name, dest) => {
+        const alone = await files.movePlan(id, name, dest);
+        const along = alone.children.length
+          ? await files
+              .movePlan(id, name, dest, { children: true })
+              .catch(() => null)
+          : null;
+        const skip = await ownIndexes(alone.from, alone.to);
+        return {
+          directory: alone.directory,
+          to: alone.to,
+          children: along ? alone.children : [],
+          moves: alone.moves,
+          movesWith: along?.moves ?? null,
+          affected: await noteMoves.plan(alone.moves, { skip }),
+          affectedWith: along
+            ? await noteMoves.plan(along.moves, { skip })
+            : null,
+        };
+      });
+      // options: { children: its child pages too, links, drafts }.
+      api("moveEntry", async (id, name, dest, options = {}) => {
+        const children = Boolean(options?.children);
+        const plan = await files.movePlan(id, name, dest, { children });
+        const drafts = draftsOf(options?.drafts);
+        const result = await withoutWatchersUnderAll(
+          plan.moves.map(([source]) => source),
+          () =>
+            noteMoves.run({
+              label: {
+                kind: "move",
+                name,
+                to: path.basename(plan.to) || plan.to,
+              },
+              moves: plan.moves,
+              links: Boolean(options?.links),
+              drafts,
+              perform: () =>
+                files.moveEntry(id, name, dest, { children, drafts }),
+            }),
+        );
+        for (const file of result.files) watchFile(file.id);
+        return result;
+      });
+      api("lastMove", () => noteMoves.last());
+      api("undoMove", async (drafts) => {
+        const result = await noteMoves.undo({
+          drafts: draftsOf(drafts),
+          relocate: (from, to) =>
+            withoutWatchersUnder(from, () => files.relocate(from, to)),
+        });
+        for (const file of result.files) watchFile(file.id);
+        return result;
+      });
+      // The folders a note or folder may move to ("Move to…").
+      api("libraryFolders", () => libraryFolderList());
+      api("trashEntry", async (id, name, drafts) => {
         const target = await files.childPath(id, name);
         await withoutWatchersUnder(target, () => shell.trashItem(target));
-        return { path: target };
+        // Its folder's index no longer lists it; its marks, pending
+        // proposals, recent entry and links go with it.
+        const index = await files
+          .unlistEntry(path.dirname(target), name, {
+            drafts: draftsOf(drafts),
+          })
+          .catch((e) => ({ error: e.message }));
+        await Promise.allSettled([
+          aiStore.trashNotes([target]),
+          recent.remove([target]),
+        ]);
+        if (linkIndex.forget([target])) send("links", null);
+        return { path: target, index };
       });
       api("revealEntry", async (id, name = null) =>
         shell.showItemInFolder(
@@ -1164,18 +1326,22 @@ else {
       api("backlinks", async (id) => {
         const file = files.file(id).path,
           base = path.dirname(file);
-        return (await linkIndex.backlinks(file)).map((link) => ({
-          source: link.source,
-          name: path.basename(link.source),
-          href:
-            encodeURI(
-              path.relative(base, link.source).split(path.sep).join("/"),
-            ).replace(/[#?]/g, (c) => (c === "#" ? "%23" : "%3F")) +
-            `#L${link.line}C${link.column}`,
-          fragment: link.fragment,
-          section: link.section,
-          snippet: link.snippet,
-        }));
+        // A folder's index lists every note in it: not counted as a link
+        // to the note (its broken links are still shown in it).
+        return (await linkIndex.backlinks(file))
+          .filter((link) => !isIndexName(path.basename(link.source)))
+          .map((link) => ({
+            source: link.source,
+            name: path.basename(link.source),
+            href:
+              encodeURI(
+                path.relative(base, link.source).split(path.sep).join("/"),
+              ).replace(/[#?]/g, (c) => (c === "#" ? "%23" : "%3F")) +
+              `#L${link.line}C${link.column}`,
+            fragment: link.fragment,
+            section: link.section,
+            snippet: link.snippet,
+          }));
       });
       // Notes in the library and their anchors, with paths relative to this
       // note, for picking a link target ("" is this note itself).

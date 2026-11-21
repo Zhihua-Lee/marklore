@@ -404,6 +404,30 @@ export function createLinkIndex({
       await store.load([file], true);
       return true;
     },
+    // Marklore itself renamed or moved notes or folders ([[old, new]]) and
+    // rewrote notes (written): the index follows at once, without waiting
+    // for the watcher. A folder moved is read again.
+    async moved(moves, written = []) {
+      const folders = [];
+      for (const [from, to] of moves) {
+        if (NOTE.test(from) && NOTE.test(to)) {
+          store.remove([from]);
+          if (inLibrary(to) && !isExcluded(to)) await store.load([to], true);
+        } else folders.push(to);
+      }
+      for (const file of written) await this.changed(file);
+      if (folders.length) await this.rescan();
+    },
+    // Notes (or folders of them) gone: dropped from the index now.
+    forget(paths) {
+      const gone = store.paths().filter((file) =>
+        paths.some((p) => {
+          const rel = path.relative(p, file);
+          return !rel || (!rel.startsWith("..") && !path.isAbsolute(rel));
+        }),
+      );
+      return store.remove(gone);
+    },
     // Links from other notes into this one, with where they come from.
     // Answered from the notes read so far while a large library is read.
     async backlinks(file) {

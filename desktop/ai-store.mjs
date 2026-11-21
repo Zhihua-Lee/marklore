@@ -24,6 +24,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { randomBytes, createHash } from "node:crypto";
+import { movedTo, within } from "./moved-path.mjs";
 
 export const AI_FOLDER = "ai";
 // A proposal nobody decided within two weeks is no longer offered; decided
@@ -84,6 +85,27 @@ async function withLock(file, change) {
   } finally {
     await fs.rm(lock, { recursive: true, force: true });
   }
+}
+
+// A note's marks file, by name.
+const MARKS = /^[a-f0-9]{16}\.json$/;
+// A proposal's "<library>/<path inside it>" for the note's new path: the
+// same library, the path inside it from where the library is. Kept as it
+// was when the new path is not in that library.
+export function renamedNote(note, file, next) {
+  if (typeof note !== "string" || typeof file !== "string") return note;
+  const [library, ...rest] = note.split("/");
+  const parts = path.resolve(file).split(path.sep);
+  const inside = parts.slice(-rest.length);
+  if (
+    !rest.length ||
+    inside.join("/").toLowerCase() !== rest.join("/").toLowerCase()
+  )
+    return note;
+  const root = parts.slice(0, -rest.length).join(path.sep) || path.sep;
+  const rel = path.relative(root, path.resolve(next));
+  if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return note;
+  return [library, ...rel.split(path.sep)].join("/");
 }
 
 async function readJson(file) {
@@ -150,7 +172,7 @@ export function createAiStore(folder) {
     marksOf: readMarks,
     // Every note's marks.
     async allMarks() {
-      return (await readAll(marks, /^[a-f0-9]{16}\.json$/))
+      return (await readAll(marks, MARKS))
         .map((x) => x.value)
         .filter((v) => v.marks?.length);
     },
@@ -165,6 +187,71 @@ export function createAiStore(folder) {
         await writeJson(target, value);
         return result;
       });
+    },
+    // Notes renamed or moved in Marklore ([[old, new]] of notes or
+    // folders): their marks, and the proposals waiting for them, follow.
+    async moveNotes(moves) {
+      for (const { name, value } of await readAll(marks, MARKS)) {
+        const next =
+          typeof value.file === "string" && movedTo(value.file, moves);
+        if (!next) continue;
+        const from = path.join(marks, name),
+          to = marksFile(next);
+        await withLock(from, async () => {
+          const old = (await readJson(from)) || value;
+          if (to === from) {
+            old.file = next;
+            return writeJson(from, old);
+          }
+          await withLock(to, async () => {
+            const there = (await readJson(to)) || { marks: [] };
+            const ids = new Set(there.marks.map((m) => m.id));
+            await writeJson(to, {
+              ...there,
+              file: next,
+              marks: [
+                ...there.marks,
+                ...(old.marks || []).filter((m) => !ids.has(m.id)),
+              ],
+            });
+          });
+          await fs.rm(from, { force: true });
+        });
+      }
+      for (const p of await store.list()) {
+        if (p.status !== "pending" || typeof p.file !== "string") continue;
+        const next = movedTo(p.file, moves);
+        if (!next) continue;
+        await store
+          .update(p.id, (v) => ({
+            file: next,
+            note: renamedNote(v.note, v.file, next),
+          }))
+          .catch(() => {});
+      }
+    },
+    // Notes (or folders) moved to the Recycle Bin: their marks are put
+    // aside (marks/trashed, for a note restored by hand) and proposals
+    // waiting for them fail, with the reason for the AI.
+    async trashNotes(paths) {
+      const gone = (file) =>
+        typeof file === "string" && paths.some((p) => within(file, p));
+      for (const { name, value } of await readAll(marks, MARKS)) {
+        if (!gone(value.file)) continue;
+        const from = path.join(marks, name);
+        await withLock(from, async () => {
+          await fs.mkdir(path.join(marks, "trashed"), { recursive: true });
+          await fs.rename(from, path.join(marks, "trashed", name));
+        });
+      }
+      for (const p of await store.list())
+        if (p.status === "pending" && gone(p.file))
+          await store
+            .decide(p.id, () => ({
+              status: "failed",
+              error: "The owner moved this note to the Recycle Bin.",
+            }))
+            .catch(() => {});
     },
     // What the owner is looking at: { file, selection: { text, from, to } }.
     writeContext: (value) => writeJson(contextFile, value),

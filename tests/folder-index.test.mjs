@@ -18,6 +18,7 @@ import {
   retitleEntry,
   applyIndexOp,
   newIndexText,
+  subtreeOf,
 } from "../desktop/folder-index.mjs";
 import { FileStore } from "../desktop/files.mjs";
 
@@ -434,4 +435,19 @@ test("a new index lists the folder's children in the order given", () => {
       { name: "a.md", depth: 0 },
     ],
   );
+});
+
+test("a note's subtree: its child pages in order, with their titles", () => {
+  const text =
+    "- [a](a.md)\n  - [Own \\[1\\]](b.md)\n    - [gone](deep/x.md)\n      - [c](c.md)\n  - [d](d.md)\n- [e](e.md)\n";
+  assert.deepEqual(subtreeOf(text, "a.md"), [
+    { name: "a.md", title: "a", parent: null },
+    { name: "b.md", title: "Own [1]", parent: "a.md" },
+    { name: "c.md", title: "c", parent: "b.md" },
+    { name: "d.md", title: "d", parent: "a.md" },
+  ]);
+  assert.deepEqual(subtreeOf(text, "e.md"), [
+    { name: "e.md", title: "e", parent: null },
+  ]);
+  assert.deepEqual(subtreeOf(text, "zzz.md"), []);
 });

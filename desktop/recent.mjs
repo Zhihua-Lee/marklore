@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { movedPath, within } from "./moved-path.mjs";
 
 // Recently opened notes for the start page and the Windows jump list. Only
 // paths the main process itself opened are recorded, and the renderer can
@@ -71,6 +72,29 @@ export function createRecentFiles({ file, limit = 12, jumpList = null }) {
     async has(p) {
       await load();
       return entries.some((e) => same(e, p));
+    },
+    // Notes renamed or moved in Marklore ([[old, new]] of notes or folders)
+    // keep their place in the list, under the new path.
+    async rename(moves) {
+      await load();
+      const next = [];
+      for (const p of entries) {
+        const moved = movedPath(p, moves);
+        if (!next.some((e) => same(e, moved))) next.push(moved);
+      }
+      if (next.join("\n") === entries.join("\n")) return;
+      entries = next;
+      return persist();
+    },
+    // Notes (or folders of them) gone to the Recycle Bin.
+    async remove(paths) {
+      await load();
+      const next = entries.filter(
+        (p) => !paths.some((gone) => within(p, gone)),
+      );
+      if (next.length === entries.length) return;
+      entries = next;
+      return persist();
     },
     async clear() {
       await load();

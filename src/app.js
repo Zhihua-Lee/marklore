@@ -1697,10 +1697,10 @@ const {
     // Checked unsaved first; closing asks nothing.
     for (const doc of tabsUnder(path)) run(() => closeTab(doc))();
   },
+  // A note being saved but otherwise unchanged is not one: main finds it
+  // locked and says it could not be updated.
   drafts: () =>
-    tabs
-      .filter((doc) => doc.path && (dirty(doc) || doc.saving))
-      .map((doc) => doc.path),
+    tabs.filter((doc) => doc.path && dirty(doc)).map((doc) => doc.path),
   draftLinks: (moves) =>
     tabs.flatMap((doc) => {
       if (!doc.path || !dirty(doc) || !moves.length) return [];

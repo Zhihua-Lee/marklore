@@ -867,34 +867,62 @@ export function createIndexView({
     rerender(found.doc);
     focusLine(found.entry.line);
   }
-  // Point a missing entry at a file of the folder, picked from a list.
-  function relocate(item) {
-    const found = entryAt(item);
-    const info = found && folderOf(found.doc);
-    if (!info || info.status !== "ready") return;
+  // Where a missing entry may point instead: the same choices as the
+  // tree's repair (main's repairOptions: seen renamed, the same name in
+  // the library, notes of the folder the index does not list), as
+  // [{ href, label }]; the folder's files when main cannot say.
+  const REASONS = {
+    renamed: () => t("刚被改名或移动到这里"),
+    "same-name": () => t("同名的文件"),
+    unlisted: () => t("这个文件夹中未列入目录的笔记"),
+  };
+  async function relocateChoices(found, info) {
+    if (api?.repairOptions && found.doc.path)
+      try {
+        const options = await api.repairOptions(
+          found.doc.path,
+          found.entry.href,
+        );
+        return options.candidates.map((c) => ({
+          href: c.rel
+            .split("/")
+            .map((part) => hrefFor(part))
+            .join("/"),
+          label: c.rel + "（" + (REASONS[c.reason]?.() ?? "") + "）",
+        }));
+      } catch {
+        /* As before: the folder's own files. */
+      }
     const listed = new Set(
       found.scan.entries.map((e) => e.name?.toLowerCase()).filter(Boolean),
     );
-    const choices = info.children
+    return info.children
       .filter((child) => !child.index && !isIndexName(child.name))
       .sort(
         (a, b) =>
           Number(listed.has(a.name.toLowerCase())) -
           Number(listed.has(b.name.toLowerCase())),
-      );
+      )
+      .map((child) => ({
+        href: hrefFor(child.name, child.directory),
+        label: child.name + (child.directory ? "/" : ""),
+      }));
+  }
+  // Point a missing entry elsewhere, picked from a list.
+  async function relocate(item) {
+    const found = entryAt(item);
+    const info = found && folderOf(found.doc);
+    if (!info || info.status !== "ready") return;
+    const choices = await relocateChoices(found, info);
+    if (!item.isConnected) return;
     if (!choices.length) return report(t("这个文件夹里没有可指向的笔记"));
     const select = element("select", "ix-relocate");
     select.setAttribute("aria-label", t("改为指向"));
     select.append(element("option", "", t("选择文件…")));
     select.firstChild.value = "";
-    for (const child of choices) {
-      const option = element(
-        "option",
-        "",
-        child.name + (child.directory ? "/" : ""),
-      );
-      option.value = child.name;
-      option.dataset.directory = String(Boolean(child.directory));
+    for (const choice of choices) {
+      const option = element("option", "", choice.label);
+      option.value = choice.href;
       select.append(option);
     }
     const repair = item.querySelector(":scope > .ix-row > .ix-repair");
@@ -911,14 +939,7 @@ export function createIndexView({
       const again = option?.value && entryAt(item);
       if (
         again &&
-        apply(
-          again.doc,
-          relinkEntry(
-            again.doc.text,
-            again.index,
-            hrefFor(option.value, option.dataset.directory === "true"),
-          ),
-        )
+        apply(again.doc, relinkEntry(again.doc.text, again.index, option.value))
       )
         return;
       closed(item);
@@ -1162,7 +1183,7 @@ export function createIndexView({
       if (action === "child") return run(() => newPage(item))();
       if (action === "rename") return editTitle(item);
       if (action === "create") return run(() => createMissing(item))();
-      if (action === "relocate") return relocate(item);
+      if (action === "relocate") return run(() => relocate(item))();
       if (action === "remove") return act("remove", item);
       return;
     }

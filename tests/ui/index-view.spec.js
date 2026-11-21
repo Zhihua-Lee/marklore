@@ -408,3 +408,47 @@ test("the source pane beside it, and dark theme", async ({ page }) => {
     "  - [第三章 函数极限](第三章%20函数极限.md)",
   );
 });
+
+test("'point elsewhere' offers the same choices as the tree's repair", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() => {
+    window.mock.repair = {
+      target: "C:/kb/数学分析/单调有界.md",
+      name: "单调有界.md",
+      missing: true,
+      creatable: true,
+      candidates: [
+        {
+          path: "C:/kb/其他/单调有界 2.md",
+          name: "单调有界 2.md",
+          rel: "../其他/单调有界 2.md",
+          reason: "renamed",
+        },
+        {
+          path: "C:/kb/数学分析/期中复习.md",
+          name: "期中复习.md",
+          rel: "期中复习.md",
+          reason: "unlisted",
+        },
+      ],
+    };
+  });
+  const missing = () => item(page, "2.2 单调有界定理");
+  await missing().getByRole("button", { name: "改为指向…" }).click();
+  const select = missing().locator("select.ix-relocate");
+  await expect(select.locator("option")).toHaveText([
+    "选择文件…",
+    "../其他/单调有界 2.md（刚被改名或移动到这里）",
+    "期中复习.md（这个文件夹中未列入目录的笔记）",
+  ]);
+  expect(await page.evaluate(() => window.mock.repairAsked)).toEqual([
+    ["C:/kb/数学分析/_目录.md", "单调有界.md"],
+  ]);
+  await select.selectOption({ index: 1 });
+  await page.keyboard.press("Control+2");
+  expect(await saved(page)).toContain(
+    "  - [2.2 单调有界定理](../其他/单调有界%202.md)\n",
+  );
+});

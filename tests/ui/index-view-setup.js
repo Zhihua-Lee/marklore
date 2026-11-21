@@ -152,6 +152,13 @@ export async function setup(
           if (!(name in window.mock.pages)) throw Error("找不到目标文件");
           return doc("p:" + name, name, window.mock.pages[name]);
         },
+        // The tree's repair candidates (window.mock.repair), when a spec
+        // sets them; otherwise main cannot say.
+        repairOptions: async (file, href) => {
+          if (!window.mock.repair) throw Error("no repair");
+          (window.mock.repairAsked ??= []).push([file, href]);
+          return window.mock.repair;
+        },
         createEntry: async (id, name, kind, body) => {
           window.mock.created.push({ id, name, kind, text: body });
           if (kind === "folder")

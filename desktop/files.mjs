@@ -12,10 +12,9 @@ import {
   isIndexName,
   indexOrder,
   applyIndexOp,
-  parseIndex,
-  childName,
   newIndexText,
   subtreeOf,
+  checkableEntries,
   titleFor,
 } from "./folder-index.mjs";
 
@@ -76,15 +75,6 @@ const exists = (p) =>
     () => true,
     () => false,
   );
-// The children an index names that the folder's listing does not hold.
-function missingNames(text, byName) {
-  const out = new Set();
-  for (const entry of parseIndex(text).entries) {
-    const name = childName(entry.href);
-    if (name && !byName.has(name.toLowerCase())) out.add(name);
-  }
-  return [...out];
-}
 // A child's name as an operation gives it: one segment, not "." or "..".
 function plainName(name) {
   if (
@@ -390,41 +380,44 @@ export class FileStore {
     });
     // Entries whose note or folder is not there (renamed or deleted by
     // another program): counted, for the index's row to say so.
-    let missing = 0;
-    for (const name of missingNames(text, byName))
-      if (!(await exists(path.join(folder, name)))) missing++;
+    // The same entries the index's own view shows missing.
+    const missing = (
+      await this.missingEntries(folder, path.join(folder, name), text)
+    ).length;
     return [
       { ...index, index: true, ...(missing ? { missing } : {}) },
       ...listed,
       ...items.filter((item) => !taken.has(item)),
     ];
   }
-  // The index's entries whose child is not there: [{ line, title, href,
-  // name, target }], target the path it names in the folder.
+  // The index's entries whose note or folder is not there, as the index
+  // view shows them missing (checkableEntries): [{ line, title, href,
+  // name, target }].
+  async missingEntries(folder, file, text) {
+    const out = [];
+    for (const { entry, name, target } of checkableEntries(text, file)) {
+      const where = name ? path.join(folder, name) : path.resolve(target);
+      if (await exists(where)) continue;
+      out.push({
+        line: entry.line,
+        title: entry.text.replace(/\\(.)/g, (m, c) => c),
+        href: entry.href,
+        name: name || path.basename(where),
+        target: where,
+      });
+    }
+    return out;
+  }
   async indexIssues(id) {
     const folder = this.folderPath(id);
     await unchangedPath(folder);
     const file = await this.indexFile(folder);
     if (!file) return { index: null, missing: [] };
     const text = decode(await this.readBytes(file)).text;
-    const byName = new Map(
-      (await fs.readdir(folder)).map((name) => [name.toLowerCase(), name]),
-    );
-    const missing = [];
-    for (const entry of parseIndex(text).entries) {
-      const name = childName(entry.href);
-      if (!name || byName.has(name.toLowerCase())) continue;
-      if (missing.some((m) => m.name.toLowerCase() === name.toLowerCase()))
-        continue;
-      missing.push({
-        line: entry.line,
-        title: entry.text.replace(/\\(.)/g, (m, c) => c),
-        href: entry.href,
-        name,
-        target: path.join(folder, name),
-      });
-    }
-    return { index: file, missing };
+    return {
+      index: file,
+      missing: await this.missingEntries(folder, file, text),
+    };
   }
   // An index file's text, kept while its size and time are unchanged (the
   // tree is listed again on every change on disk).

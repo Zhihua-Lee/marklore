@@ -193,3 +193,33 @@ test("a draft is left to the page; notes outside the library are not repaired", 
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+test("the tree's count of missing entries is what the index view shows missing", async () => {
+  const lib = await library();
+  const { kb, store } = lib;
+  try {
+    await fs.mkdir(path.join(kb, "deep"));
+    await fs.writeFile(
+      path.join(kb, "_目录.md"),
+      [
+        "- [Here](Other.md)",
+        "- [Gone](Gone.md)",
+        "- [Gone folder](GoneDir/)",
+        "- [Old file](old.pdf)",
+        "- [Deep](deep/Gone.md)",
+        "- [Deep image](deep/x.png)",
+        "",
+      ].join("\n"),
+    );
+    const root = await store.directory(kb);
+    // Notes and folders named in the folder, and notes deeper: as the view
+    // (which never shows an attachment missing).
+    assert.equal((await store.list(root.id))[0].missing, 3);
+    assert.deepEqual(
+      (await store.indexIssues(root.id)).missing.map((m) => m.href),
+      ["Gone.md", "GoneDir/", "deep/Gone.md"],
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

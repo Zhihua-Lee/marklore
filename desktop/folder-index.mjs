@@ -466,6 +466,33 @@ export function retitleEntry(text, ref, title) {
   return finish(parsed, lines, text);
 }
 
+// The entries that can be missing, as the index view shows them: a note
+// or folder named in the index's folder (an attachment is never shown
+// missing), or a note linked deeper or outside. [{ entry, name, target }]:
+// name the child's name (or null), target the path it leads to ("/"-joined
+// from `file`, the index). The caller checks which are there.
+const NOTE_NAME = /\.(md|markdown|mdown|mkd|txt)$/i;
+const EXTENSION = /\.[a-z][a-z0-9]{0,7}$/i;
+export function checkableEntries(text, file) {
+  const out = [];
+  const seen = new Set();
+  for (const entry of parseIndex(text).entries) {
+    let href = String(entry.href).trim();
+    const angle = /^<([^>]*)>/.exec(href);
+    href = angle ? `<${angle[1]}>` : href.split(/\s+/)[0];
+    const name = childName(entry.href);
+    const target = linkTarget(href, file);
+    if (!target) continue;
+    const isFolder = /[\\/]$/.test(href.replace(/^<|>$/g, "").split(/[#?]/)[0]);
+    const kept = name
+      ? NOTE_NAME.test(name) || isFolder || !EXTENSION.test(name)
+      : NOTE_NAME.test(target);
+    if (!kept || seen.has(pathKey(target))) continue;
+    seen.add(pathKey(target));
+    out.push({ entry, name, target });
+  }
+  return out;
+}
 // The entries linking to `target` (an absolute path; the index is `file`)
 // taken out, their sub-items moving up a level; null when there are none.
 export function removeEntriesTo(text, file, target) {

@@ -117,7 +117,7 @@ Remember a sentence but not the note? `Ctrl+Shift+F` (or the search box above th
 
 ### The library tree
 
-The library lists the folders you opened, and the open note's folder opens where it sits in them. Right-click to create a note or folder (named in place), rename (`F2`), show it in File Explorer or move it to the Recycle Bin (`Delete`); an open note's tab follows a rename. A library folder can move up or down, or leave the library without touching its files. A folder with an index file (`_目录.md` from a OneNote export, or `SUMMARY.md`) lists its notes in the index's order, with sub-pages; drag to reorder.
+The library lists the folders you opened, and the open note's folder opens where it sits in them. Right-click to create a note or folder (named in place), rename (`F2`), show it in File Explorer or move it to the Recycle Bin (`Delete`); an open note's tab follows a rename. A library folder can move up or down, or leave the library without touching its files. A folder with an index file (`_目录.md` from a OneNote export, or `SUMMARY.md`) lists its notes in the index's order, with sub-pages; drag to reorder, make a child page, or indent with `Alt+Shift+→`/`←` (a folder without one is asked before an index is started). "Move to…" or a drop on a folder moves a note there. A rename or move that changes links in other notes lists them first and updates them on request (anchors and link style kept, each file backed up), and one undo puts it all back; notes open with unsaved changes are patched in their drafts, never written.
 
 ### More
 

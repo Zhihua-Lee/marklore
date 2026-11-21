@@ -134,13 +134,19 @@ async function setup(page, { settings = {} } = {}) {
         };
         return {
           path: moves[0][1],
-          files: [],
+          // An open note renamed keeps its tab.
+          files:
+            name === "Other.md"
+              ? [{ id: name, path: moves[0][1], name: newName }]
+              : [],
           moves,
           rewritten: options.links ? 1 : 0,
           drafts: [],
           failed: [],
         };
       },
+      marks: async () => ({ marks: [], run: null }),
+      setContext: async (value) => (window.contexts ??= []).push(value),
       lastMove: async () =>
         state.last ? { label: state.last.label, at: "now" } : null,
       undoMove: async (drafts) => {
@@ -160,7 +166,9 @@ async function setup(page, { settings = {} } = {}) {
       planMove: async (id, name, dest) => ({
         directory: false,
         to: dest,
-        children: name === "Plan.md" ? ["Child.md"] : [],
+        children:
+          name === "Plan.md" && !window.childrenError ? ["Child.md"] : [],
+        childrenError: window.childrenError || null,
         moves: [[at(folderOf(id), name), at(dest, name)]],
         movesWith: [
           [at(folderOf(id), name), at(dest, name)],
@@ -635,4 +643,54 @@ test("a draft in the Edit mode editor is patched and keeps its editor", async ({
   await expect(editor).toBeVisible();
   await expect(editor).toContainText("See the plan. More.");
   await expect(editor.locator('a[href="Road%20map.md#goals"]')).toHaveCount(1);
+});
+
+// Review finding 6: what follows a move in the page.
+test("child pages that cannot go along are said so in the question", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(
+    () => (window.childrenError = "目标文件夹中已有“Child.md”"),
+  );
+  await menu(page, row(page, "Plan.md"), "移动到…");
+  await page.keyboard.press("Enter");
+  const ask = page.getByRole("dialog", { name: "把“Plan.md”移到“Box”" });
+  await expect(ask).toContainText(
+    "子页不能一起移动：目标文件夹中已有“Child.md”",
+  );
+  await expect(ask.getByRole("checkbox")).toHaveCount(0);
+});
+
+test("a folder left out of search stays left out after a rename", async ({
+  page,
+}) => {
+  await setup(page, { settings: { searchExclude: ["C:\\kb\\Box"] } });
+  await tree(page).getByText("Box", { exact: true }).focus();
+  await page.keyboard.press("F2");
+  const input = tree(page).getByRole("textbox", { name: "新名称" });
+  await input.fill("Crate");
+  await input.press("Enter");
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.mock.session?.settings?.searchExclude),
+    )
+    .toEqual(["C:\\kb\\Crate"]);
+});
+
+test("the AI's view of the open note follows its rename", async ({ page }) => {
+  await setup(page);
+  await row(page, "Other.md").click();
+  await expect
+    .poll(() => page.evaluate(() => (window.contexts || []).length))
+    .toBeGreaterThan(0);
+  const before = await page.evaluate(() => window.contexts.length);
+  await menu(page, row(page, "Other.md"), "重命名…");
+  const input = tree(page).getByRole("textbox", { name: "新名称" });
+  await input.fill("Else");
+  await input.press("Enter");
+  await expect(page.getByRole("tab", { name: /Else\.md/ })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => window.contexts.length))
+    .toBeGreaterThan(before);
 });

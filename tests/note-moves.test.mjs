@@ -721,3 +721,82 @@ test("a plan says when the library is still being read", async () => {
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+// Review finding 6: index integrity on moves and renames; AI runs and the
+// file-name search follow.
+test("a move takes only the child pages: not the index, not a folder listed under it", async () => {
+  const lib = await library();
+  const { kb, store, root, read } = lib;
+  try {
+    await fs.writeFile(
+      path.join(kb, "_目录.md"),
+      "- [Plan](Plan.md)\n  - [Child](Child.md)\n  - [Index](_目录.md)\n  - [Topics](Topics/)\n- [Other](Other.md)\n",
+    );
+    await fs.mkdir(path.join(kb, "Box"));
+    const plan = await store.movePlan(
+      root.id,
+      "Plan.md",
+      path.join(kb, "Box"),
+      {
+        children: true,
+      },
+    );
+    assert.deepEqual(plan.children, ["Child.md"]);
+    await store.moveEntry(root.id, "Plan.md", path.join(kb, "Box"), {
+      children: true,
+    });
+    // The folder listed under it stays listed, a level up.
+    assert.equal(
+      await read("_目录.md"),
+      "- [Index](_目录.md)\n- [Topics](Topics/)\n- [Other](Other.md)\n",
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("a note renamed to SUMMARY.md beside _目录.md keeps its entry", async () => {
+  const lib = await library();
+  const { store, root, read } = lib;
+  try {
+    await store.renameEntry(root.id, "Other.md", "SUMMARY.md");
+    assert.match(await read("_目录.md"), /- \[SUMMARY\]\(SUMMARY\.md\)/);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("a background AI run's marks follow a move, so they are released there", async () => {
+  const dir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "marklore-moves-run-")),
+  );
+  try {
+    const store = createAiStore(path.join(dir, "ai"));
+    const plan = path.join(dir, "kb", "Plan.md");
+    const moved = path.join(dir, "kb", "Archive", "Plan.md");
+    const run = await store.createRun({ marks: [{ id: "m1", file: plan }] });
+    await store.moveNotes([[plan, moved]]);
+    assert.deepEqual((await store.getRun(run.id)).marks, [
+      { id: "m1", file: moved },
+    ]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("the file-name search of folders outside the library walks again after a move", async () => {
+  const dir = await fs.realpath(
+    await fs.mkdtemp(path.join(os.tmpdir(), "marklore-moves-names-")),
+  );
+  try {
+    await fs.writeFile(path.join(dir, "Alpha.md"), "");
+    const store = new FileStore({});
+    const folder = await store.directory(dir);
+    assert.equal((await store.search([folder.id], "alpha")).items.length, 1);
+    await fs.rename(path.join(dir, "Alpha.md"), path.join(dir, "Beta.md"));
+    store.names.reset();
+    assert.equal((await store.search([folder.id], "beta")).items.length, 1);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});

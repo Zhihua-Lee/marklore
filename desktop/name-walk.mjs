@@ -62,6 +62,12 @@ export function createNameWalks({
     return walk;
   }
   return {
+    // Notes were renamed or moved: every folder is walked again when next
+    // searched.
+    reset() {
+      for (const walk of walks.values()) walk.cancelled = true;
+      walks.clear();
+    },
     // Notes whose names hold every word of the query. Waits a moment so a
     // small folder answers in full; a large one answers with what it has.
     async search(

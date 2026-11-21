@@ -976,12 +976,35 @@ export function createLibrary({
       drafts: result.drafts || [],
     });
     renamed(result.files || []);
+    const moves = result.moves || [];
     for (const page of [...closedPages]) {
-      const next = movedPathOf(page, result.moves || []);
+      const next = movedPathOf(page, moves);
       if (next !== page) {
         closedPages.delete(page);
         closedPages.add(next);
       }
+    }
+    // Folders kept in the settings by path (left out of search, open to
+    // AI) and library folders inside what moved follow it.
+    if (moves.length) {
+      const settings = getSettings();
+      const patch = {};
+      for (const key of ["searchExclude", "aiLibraries"]) {
+        const list = settings[key];
+        if (!Array.isArray(list)) continue;
+        const next = list.map((p) => movedPathOf(p, moves));
+        if (next.some((p, i) => p !== list[i])) patch[key] = next;
+      }
+      if (Object.keys(patch).length) changeSettings(patch);
+      let rooted = false;
+      for (const root of roots) {
+        const next = movedPathOf(root.path, moves);
+        if (next === root.path) continue;
+        root.path = next;
+        root.name = next.split(/[\\/]/).filter(Boolean).pop() || next;
+        rooted = true;
+      }
+      if (rooted) changed();
     }
     return patched || 0;
   }
@@ -1085,13 +1108,14 @@ export function createLibrary({
         }
       : null;
     let choice = { links: true, children: false };
-    if (affected.length || along) {
+    if (affected.length || along || plan.childrenError) {
       choice = await askLinks({
         kind: "move",
         title: t("把“{name}”移到“{to}”", { name: moved.name, to }),
         affected,
         with: along,
         indexing: plan.indexing,
+        childrenError: plan.childrenError,
       });
       if (!choice) return;
     }

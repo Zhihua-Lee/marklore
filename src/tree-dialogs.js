@@ -119,6 +119,7 @@ export function askLinks({
   affected,
   with: along = null,
   indexing = false,
+  childrenError = null,
 }) {
   return modal("links-question", title, (form, finish) => {
     form.append(element("h2", "", title));
@@ -150,6 +151,14 @@ export function askLinks({
     );
     form.append(lead, slot, hint);
     // The library still being read: some links may not be listed yet.
+    if (childrenError)
+      form.append(
+        element(
+          "p",
+          "tree-dialog-hint",
+          t("子页不能一起移动：{reason}", { reason: childrenError }),
+        ),
+      );
     if (indexing)
       form.append(
         element(

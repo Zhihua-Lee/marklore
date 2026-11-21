@@ -218,6 +218,22 @@ export function createAiStore(folder) {
           await fs.rm(from, { force: true });
         });
       }
+      // A background run still working on marks of a moved note releases
+      // them where they now are.
+      for (const run of await store.listRuns())
+        if (
+          run.status === "running" &&
+          run.marks?.some(
+            (m) => typeof m.file === "string" && movedTo(m.file, moves),
+          )
+        )
+          await store
+            .changeRun(run.id, (r) => {
+              for (const m of r.marks || [])
+                if (typeof m.file === "string")
+                  m.file = movedTo(m.file, moves) ?? m.file;
+            })
+            .catch(() => {});
       for (const p of await store.list()) {
         if (p.status !== "pending" || typeof p.file !== "string") continue;
         const next = movedTo(p.file, moves);

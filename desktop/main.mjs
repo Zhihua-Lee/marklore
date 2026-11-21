@@ -371,6 +371,8 @@ const noteMoves = createNoteMoves({
   linkIndex,
   undoFile: path.join(app.getPath("userData"), "last-move.json"),
   synced: async (moves, written) => {
+    // Names found in folders outside the library are looked for again.
+    files.names.reset();
     await Promise.allSettled([
       aiStore.moveNotes(moves),
       recent.rename(moves),
@@ -1214,10 +1216,16 @@ else {
       // whose links would change without them and with them.
       api("planMove", async (id, name, dest) => {
         const alone = await files.movePlan(id, name, dest);
+        // Child pages that cannot go along (a name taken there) are said
+        // so, not hidden.
+        let childrenError = null;
         const along = alone.children.length
           ? await files
               .movePlan(id, name, dest, { children: true })
-              .catch(() => null)
+              .catch((error) => {
+                childrenError = error.message;
+                return null;
+              })
           : null;
         const skip = await ownIndexes(alone.from, alone.to);
         return {
@@ -1225,6 +1233,7 @@ else {
           indexing: linkIndex.indexing,
           to: alone.to,
           children: along ? alone.children : [],
+          childrenError,
           moves: alone.moves,
           movesWith: along?.moves ?? null,
           affected: await noteMoves.plan(alone.moves, { skip }),

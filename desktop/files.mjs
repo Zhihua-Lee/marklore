@@ -634,11 +634,14 @@ export class FileStore {
     if (target === source)
       return { path: source, files: [], moves: [], indexes: [] };
     this.checkUnlocked(source);
-    if (!isIndexName(name))
-      await this.checkIndexSaved(path.dirname(source), drafts);
+    // The folder's own index renamed is no entry of itself; any other note
+    // (even one named SUMMARY.md beside a _目录.md) keeps its entry.
+    const own = await this.indexFile(path.dirname(source)).catch(() => null);
+    const isOwnIndex = Boolean(own && samePath(own, source));
+    if (!isOwnIndex) await this.checkIndexSaved(path.dirname(source), drafts);
     const files = await this.relocate(source, target);
     let index = null;
-    if (!isIndexName(name) && !isIndexName(newName))
+    if (!isOwnIndex)
       index = await this.changeIndex(
         path.dirname(source),
         [{ kind: "rename", from: name, to: newName }],
@@ -685,7 +688,8 @@ export class FileStore {
         (s) => s.isFile() && this.openable(p),
         () => false,
       );
-      if (isNote) pages.push(item);
+      // An index listed in itself is not a child page.
+      if (isNote && !isIndexName(item.name)) pages.push(item);
     }
     const moving = [
       { name, title: tree[0]?.title ?? null, parent: null },
@@ -740,7 +744,12 @@ export class FileStore {
     const indexes = [
       await this.changeIndex(
         plan.from,
-        [{ kind: "remove", ref: name, subtree: Boolean(children) }],
+        // Only the entries that moved, the deepest first: anything else
+        // listed under them (a folder, a missing note) moves up a level.
+        [...plan.moving].reverse().map((item) => ({
+          kind: "remove",
+          ref: item.name,
+        })),
         options,
       ).catch((e) => ({ error: e.message })),
       await this.changeIndex(

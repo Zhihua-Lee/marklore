@@ -9,6 +9,15 @@ import {
   indexOrder,
   moveInIndex,
   hrefFor,
+  insertEntry,
+  removeEntry,
+  indentEntry,
+  outdentEntry,
+  shiftEntry,
+  renameInIndex,
+  retitleEntry,
+  applyIndexOp,
+  newIndexText,
 } from "../desktop/folder-index.mjs";
 import { FileStore } from "../desktop/files.mjs";
 
@@ -220,4 +229,209 @@ test("the library lists a folder in its index's order and rewrites it", async ()
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
+});
+
+test("insert: under a note, after one, at the end, or as a new list", () => {
+  const text =
+    "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n\nAfter.\n";
+  assert.equal(
+    insertEntry(text, "New.md", { under: "a.md" }),
+    "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n  - [New](New.md)\n- [b](b.md)\n\nAfter.\n",
+  );
+  assert.equal(
+    insertEntry(text, "New.md", { after: "a.md" }),
+    "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [New](New.md)\n- [b](b.md)\n\nAfter.\n",
+  );
+  assert.equal(
+    insertEntry(text, "Sub dir", { folder: true }),
+    "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n- [Sub dir](Sub%20dir/)\n\nAfter.\n",
+  );
+  // Listed already, or the parent is not: nothing.
+  assert.equal(insertEntry(text, "a1.md"), null);
+  assert.equal(insertEntry(text, "x.md", { under: "nope.md" }), null);
+  // A file without a list gets one at its end; CRLF and BOM are kept.
+  assert.equal(
+    insertEntry("﻿# T\r\n\r\nNotes.\r\n", "计划.md"),
+    "﻿# T\r\n\r\nNotes.\r\n\r\n- [计划](计划.md)\r\n",
+  );
+  assert.equal(insertEntry("", "a.md"), "- [a](a.md)\n");
+  // Numbered lists stay numbered; tab-indented lists keep tabs.
+  assert.equal(
+    insertEntry("1. [a](a.md)\n2. [b](b.md)\n", "c.md"),
+    "1. [a](a.md)\n2. [b](b.md)\n3. [c](c.md)\n",
+  );
+  assert.equal(
+    insertEntry("* [a](a.md)\n\t* [x](x.md)\n", "y.md", { under: "a.md" }),
+    "* [a](a.md)\n\t* [x](x.md)\n\t* [y](y.md)\n",
+  );
+  // A title of its own, escaped.
+  assert.equal(
+    insertEntry("- [a](a.md)\n", "n.md", { title: "Notes [draft]" }),
+    "- [a](a.md)\n- [Notes \\[draft\\]](n.md)\n",
+  );
+});
+
+test("remove: the entry's line only; its sub-items move up or go along", () => {
+  const text =
+    "- [a](a.md)\n    - [b](b.md)\n        - [c](c.md)\n    - [d](d.md)\n- [e](e.md)\n";
+  assert.equal(
+    removeEntry(text, "a.md"),
+    "- [b](b.md)\n    - [c](c.md)\n- [d](d.md)\n- [e](e.md)\n",
+  );
+  assert.equal(removeEntry(text, "a.md", { subtree: true }), "- [e](e.md)\n");
+  assert.equal(
+    removeEntry(text, "c.md"),
+    "- [a](a.md)\n    - [b](b.md)\n    - [d](d.md)\n- [e](e.md)\n",
+  );
+  assert.equal(removeEntry(text, "zzz.md"), null);
+  // By line: an entry whose link names no child (a missing or deeper one).
+  assert.equal(
+    removeEntry("- [x](deep/x.md)\n- [a](a.md)\n", { line: 0 }),
+    "- [a](a.md)\n",
+  );
+});
+
+test("indent and outdent move an entry with its sub-items a level", () => {
+  const text =
+    "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n";
+  // Indent: under the entry before it at its level, as its last sub-item.
+  assert.equal(
+    indentEntry(text, "b.md"),
+    "- [a](a.md)\n  - [a1](a1.md)\n  - [b](b.md)\n    - [b1](b1.md)\n- [c](c.md)\n",
+  );
+  // The first at its level has nothing to go under.
+  assert.equal(indentEntry(text, "a.md"), null);
+  assert.equal(indentEntry(text, "a1.md"), null);
+  // Outdent: right after its parent's sub-list.
+  assert.equal(
+    outdentEntry(text, "a1.md"),
+    "- [a](a.md)\n- [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+  );
+  assert.equal(outdentEntry(text, "c.md"), null);
+  // Only notes nest: not a folder, nor under one.
+  const folders = "- [Sub](Sub/)\n- [n](n.md)\n- [Box](Box)\n- [m](m.md)\n";
+  assert.equal(indentEntry(folders, "n.md"), null);
+  assert.equal(
+    indentEntry(folders, "Box", {}),
+    "- [Sub](Sub/)\n- [n](n.md)\n  - [Box](Box)\n- [m](m.md)\n",
+  );
+  assert.equal(
+    indentEntry(folders, "Box", { isFolder: (n) => n === "Box" }),
+    null,
+  );
+  assert.equal(
+    applyIndexOp(folders, { kind: "indent", ref: "m.md", folders: ["Box"] }),
+    null,
+  );
+  // Up and down past a sibling.
+  assert.equal(
+    shiftEntry(text, "b.md", -1),
+    "- [b](b.md)\n  - [b1](b1.md)\n- [a](a.md)\n  - [a1](a1.md)\n- [c](c.md)\n",
+  );
+  assert.equal(shiftEntry(text, "c.md", 1), null);
+});
+
+test("rename: links to the child follow and an unchanged title with them", () => {
+  const text = [
+    "# Index",
+    "",
+    "See [plan](Old%20plan.md#goals) above.",
+    "",
+    "- [Old plan](Old%20plan.md)",
+    "  - [My own title](<Old plan.md>)",
+    "- [Topics](Topics/_目录.md)",
+    "- [Other](Other.md)",
+    "",
+  ].join("\r\n");
+  assert.equal(
+    renameInIndex(text, "Old plan.md", "新计划 (2).md"),
+    [
+      "# Index",
+      "",
+      "See [plan](新计划%20%282%29.md#goals) above.",
+      "",
+      "- [新计划 (2)](新计划%20%282%29.md)",
+      "  - [My own title](<新计划 (2).md>)",
+      "- [Topics](Topics/_目录.md)",
+      "- [Other](Other.md)",
+      "",
+    ].join("\r\n"),
+  );
+  assert.equal(
+    renameInIndex(text, "Topics", "Subjects"),
+    text.replace("[Topics](Topics/_目录.md)", "[Subjects](Subjects/_目录.md)"),
+  );
+  assert.equal(renameInIndex(text, "Nope.md", "X.md"), null);
+  // A change of letter case.
+  assert.equal(
+    renameInIndex("- [other](other.md)\n", "other.md", "Other.md"),
+    "- [Other](Other.md)\n",
+  );
+});
+
+test("retitle and the operation dispatcher", () => {
+  const text = "- [a](a.md)\n- [b](b.md)\n";
+  assert.equal(
+    retitleEntry(text, "b.md", "B [1]"),
+    "- [a](a.md)\n- [B \\[1\\]](b.md)\n",
+  );
+  assert.equal(retitleEntry(text, "b.md", "  "), null);
+  assert.equal(
+    applyIndexOp(text, {
+      kind: "move",
+      ref: "b.md",
+      target: "a.md",
+      place: "before",
+    }),
+    "- [b](b.md)\n- [a](a.md)\n",
+  );
+  assert.equal(
+    applyIndexOp(text, { kind: "insert", name: "c.md", under: "a.md" }),
+    "- [a](a.md)\n  - [c](c.md)\n- [b](b.md)\n",
+  );
+  assert.equal(
+    applyIndexOp(text, { kind: "remove", ref: "a.md" }),
+    "- [b](b.md)\n",
+  );
+  assert.equal(
+    applyIndexOp(text, { kind: "indent", ref: { line: 1 } }),
+    "- [a](a.md)\n  - [b](b.md)\n",
+  );
+  assert.equal(applyIndexOp(text, { kind: "outdent", ref: "a.md" }), null);
+  assert.equal(
+    applyIndexOp(text, { kind: "shift", ref: "a.md", step: 1 }),
+    "- [b](b.md)\n- [a](a.md)\n",
+  );
+  assert.equal(
+    applyIndexOp(text, { kind: "rename", from: "a.md", to: "z.md" }),
+    "- [z](z.md)\n- [b](b.md)\n",
+  );
+  assert.equal(
+    applyIndexOp(text, { kind: "retitle", ref: "a.md", title: "A" }),
+    "- [A](a.md)\n- [b](b.md)\n",
+  );
+  assert.equal(applyIndexOp(text, { kind: "nope" }), null);
+  assert.equal(applyIndexOp(null, { kind: "remove", ref: "a.md" }), null);
+});
+
+test("a new index lists the folder's children in the order given", () => {
+  assert.equal(
+    newIndexText("Notes", [
+      { name: "Sub", folder: true, index: "_目录.md" },
+      { name: "Box", folder: true },
+      { name: "A plan.md" },
+      { name: "计划.md" },
+    ]),
+    "# Notes\n\n- [Sub](Sub/_目录.md)\n- [Box](Box/)\n- [A plan](A%20plan.md)\n- [计划](计划.md)\n",
+  );
+  assert.deepEqual(
+    indexOrder(
+      newIndexText("N", [{ name: "Box", folder: true }, { name: "a.md" }]),
+      (n) => n,
+    ),
+    [
+      { name: "Box", depth: 0 },
+      { name: "a.md", depth: 0 },
+    ],
+  );
 });

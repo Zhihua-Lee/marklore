@@ -2,7 +2,11 @@
 // notes (and subfolders), in the order to show them, indentation being the
 // nesting (like mdBook's SUMMARY.md; OneNote exports write `_目录.md`). The
 // library tree lists such a folder in the index's order, and dragging in the
-// tree rewrites the list. Pure functions: files.mjs reads and writes.
+// tree rewrites the list. Pure functions: files.mjs reads and writes, and
+// the index's own view edits its draft with the same operations
+// (applyIndexOp). Edits touch only the lines they move or change, keeping
+// bullets, indentation, line endings and a byte order mark.
+import { rewriteLinks } from "./link-rewrite.mjs";
 
 // Names of index files, the first preferred when a folder has both.
 export const INDEX_NAMES = ["_目录.md", "SUMMARY.md"]; // i18n-ignore
@@ -110,6 +114,14 @@ export function entryOf(parsed, name) {
     (entry) => childName(entry.href)?.toLowerCase() === lower,
   );
 }
+// An entry named by its child's name ("Page.md", "Folder") or by its line
+// ({ line }, from 0: for entries whose link names no child, such as a
+// missing note), or -1.
+function find(parsed, ref) {
+  if (ref && typeof ref === "object" && Number.isInteger(ref.line))
+    return parsed.entries.findIndex((entry) => entry.line === ref.line);
+  return typeof ref === "string" && ref ? entryOf(parsed, ref) : -1;
+}
 // The last line of an entry's sub-list (its own line when it has none).
 function lastLine(parsed, i) {
   const { entries } = parsed;
@@ -130,19 +142,66 @@ export const hrefFor = (name, folder = false) =>
       .map((b) => "%" + b.toString(16).toUpperCase().padStart(2, "0"))
       .join(""),
   ) + (folder ? "/" : "");
-const titleOf = (name) =>
-  name.replace(/\.(md|markdown|txt)$/i, "").replace(/[[\]\\]/g, "\\$&");
+const escapeTitle = (title) => title.replace(/[[\]\\]/g, "\\$&");
+// The title a new entry gets: the note's name without its extension.
+export const titleFor = (name) => name.replace(/\.(md|markdown|txt)$/i, "");
+const titleOf = (name) => escapeTitle(titleFor(name));
+// Whether an entry is a folder's: its link ends in "/" or names the
+// folder's own index; otherwise as isFolder(child name) says.
+function folderEntry(entry, isFolder) {
+  const href = String(entry.href).trim().replace(/^<|>$/g, "");
+  const target = href.split(/[\s#?]/)[0];
+  if (/[\\/]$/.test(target)) return true;
+  const parts = target.split(/[\\/]/).filter((p) => p && p !== ".");
+  if (parts.length === 2 && isIndexName(decodeSafe(parts[1]))) return true;
+  const name = childName(entry.href);
+  return Boolean(name && isFolder?.(name));
+}
+function decodeSafe(text) {
+  try {
+    return decodeURIComponent(text);
+  } catch {
+    return text;
+  }
+}
+// The entries under the same parent as entry i, in order.
+const siblings = (parsed, i) =>
+  parsed.entries
+    .map((entry, k) => k)
+    .filter((k) => parsed.entries[k].parent === parsed.entries[i].parent);
+// Lines moved to another level: the block's own indentation (`from`
+// columns) becomes `lead`; blank lines stay blank.
+function reindent(block, from, lead) {
+  return block.map((line) => {
+    if (!line.trim()) return line;
+    let i = 0;
+    let width = 0;
+    while (i < line.length && width < from && /[ \t]/.test(line[i])) {
+      width = line[i] === "\t" ? width + 4 - (width % 4) : width + 1;
+      i++;
+    }
+    return lead + line.slice(i);
+  });
+}
+// The marker a new entry gets next to `entry`: the same bullet, or the
+// next number of a numbered list (step 0: the same number).
+function markerBeside(entry, step = 1) {
+  const number = /^(\d+)([.)])$/.exec(entry.marker);
+  return number ? Number(number[1]) + step + number[2] : entry.marker;
+}
+const newEntry = (marker, name, { folder = false, title } = {}) =>
+  `${marker} [${title != null ? escapeTitle(title) : titleOf(name)}](${hrefFor(name, folder)})`;
+const finish = (parsed, out, text) => {
+  const result = parsed.bom + out.join(parsed.eol);
+  return result === text ? null : result;
+};
 
-// The index with one child's entry (and the entries under it) moved before,
-// after or into (as its last sub-item) another child's entry. A child not
-// listed yet gets a new entry (insert: { folder }). Returns the new text, or
-// null when nothing changes or the move is not possible.
-export function moveInIndex(text, name, target, place, insert = null) {
-  const parsed = parseIndex(text);
+// The core of the moves: entry `from` (with its sub-list) or a new line
+// (from = -1) put before, after or into (as the last sub-item of) entry
+// `to`. Returns the new text, or null.
+function moveBlock(text, parsed, from, to, place, line = null) {
   const { lines, entries } = parsed;
-  const to = entryOf(parsed, target);
   if (to < 0 || !["before", "after", "into"].includes(place)) return null;
-  const from = entryOf(parsed, name);
   let block;
   let fromIndent = 0;
   let start = -1;
@@ -155,30 +214,21 @@ export function moveInIndex(text, name, target, place, insert = null) {
     start = entries[from].line;
     block = lines.slice(start, lastLine(parsed, from) + 1);
     fromIndent = entries[from].indent;
-  } else {
-    if (!insert) return null;
-    const marker = /^\d/.test(entries[to].marker) ? "-" : entries[to].marker;
-    block = [`${marker} [${titleOf(name)}](${hrefFor(name, insert.folder)})`];
-  }
+  } else if (line !== null) block = [line];
+  else return null;
   const goal = entries[to];
-  const indent = place === "into" ? goal.content : goal.indent;
-  const lead =
-    place === "into"
-      ? goal.lead.includes("\t")
-        ? goal.lead + "\t"
-        : " ".repeat(indent)
-      : goal.lead;
-  // Re-indent: the block's own indentation becomes the target's.
-  const moved = block.map((line) => {
-    if (!line.trim()) return line;
-    let i = 0;
-    let width = 0;
-    while (i < line.length && width < fromIndent && /[ \t]/.test(line[i])) {
-      width = line[i] === "\t" ? width + 4 - (width % 4) : width + 1;
-      i++;
-    }
-    return lead + line.slice(i);
-  });
+  let lead = goal.lead;
+  if (place === "into") {
+    // As the entry's sub-items are indented, or under its text.
+    const child = entries.findIndex((entry) => entry.parent === to);
+    lead =
+      child >= 0
+        ? entries[child].lead
+        : goal.lead.includes("\t")
+          ? goal.lead + "\t"
+          : " ".repeat(goal.content);
+  }
+  const moved = reindent(block, fromIndent, lead);
   let at = place === "before" ? goal.line : lastLine(parsed, to) + 1;
   const out = lines.slice();
   if (start >= 0) {
@@ -186,6 +236,229 @@ export function moveInIndex(text, name, target, place, insert = null) {
     if (at > start) at -= block.length;
   }
   out.splice(at, 0, ...moved);
-  const result = parsed.bom + out.join(parsed.eol);
-  return result === text ? null : result;
+  return finish(parsed, out, text);
+}
+
+// The index with one child's entry (and the entries under it) moved before,
+// after or into (as its last sub-item) another child's entry. A child not
+// listed yet gets a new entry (insert: { folder }). Returns the new text, or
+// null when nothing changes or the move is not possible.
+export function moveInIndex(text, name, target, place, insert = null) {
+  const parsed = parseIndex(text);
+  const to = find(parsed, target);
+  if (to < 0) return null;
+  const from = find(parsed, name);
+  if (from >= 0) return moveBlock(text, parsed, from, to, place);
+  if (!insert || typeof name !== "string") return null;
+  const goal = parsed.entries[to];
+  // A numbered list stays one list: the new entry is numbered too.
+  const marker =
+    place === "into"
+      ? (() => {
+          const kids = parsed.entries.filter((entry) => entry.parent === to);
+          return kids.length
+            ? markerBeside(kids.at(-1))
+            : goal.marker.replace(/^\d+/, "1");
+        })()
+      : markerBeside(goal, place === "before" ? 0 : 1);
+  return moveBlock(text, parsed, -1, to, place, newEntry(marker, name, insert));
+}
+
+// A new entry for a child: under another child's entry (as its last
+// sub-item), right after one (and its sub-items), or at the end of the
+// list (a list started at the end of the file when there is none).
+// options: { folder, title, under, after }. null when it is listed already
+// or the entry to go under or after is not.
+export function insertEntry(text, name, options = {}) {
+  const parsed = parseIndex(text);
+  if (find(parsed, name) >= 0) return null;
+  const { under, after } = options;
+  if (under != null) return moveInIndex(text, name, under, "into", options);
+  if (after != null) return moveInIndex(text, name, after, "after", options);
+  const { lines, entries } = parsed;
+  const tops = entries.map((e, k) => k).filter((k) => entries[k].parent < 0);
+  if (tops.length) {
+    const last = tops.at(-1);
+    return moveBlock(
+      text,
+      parsed,
+      -1,
+      last,
+      "after",
+      newEntry(markerBeside(entries[last]), name, options),
+    );
+  }
+  // No list yet: one at the end, after a blank line.
+  const out = lines.slice();
+  while (out.length && !out.at(-1).trim()) out.pop();
+  if (out.length) out.push("");
+  out.push(newEntry("-", name, options), "");
+  return finish(parsed, out, text);
+}
+
+// The index without a child's entry. Its sub-items move up a level in its
+// place, or go with it (subtree). null when it is not listed.
+export function removeEntry(text, ref, { subtree = false } = {}) {
+  const parsed = parseIndex(text);
+  const i = find(parsed, ref);
+  if (i < 0) return null;
+  const { lines, entries } = parsed;
+  const start = entries[i].line,
+    end = lastLine(parsed, i);
+  const out = lines.slice();
+  if (subtree || end === start) out.splice(start, end - start + 1);
+  else {
+    const child = entries.findIndex((entry) => entry.parent === i);
+    const rest = reindent(
+      lines.slice(start + 1, end + 1),
+      entries[child].indent,
+      entries[i].lead,
+    );
+    out.splice(start, end - start + 1, ...rest);
+  }
+  return finish(parsed, out, text);
+}
+
+// Indent: the entry (with its sub-items) becomes the last sub-item of the
+// entry before it at its level. Only notes nest: neither a folder's entry
+// nor anything under one. isFolder(child name) tells folders from notes
+// where the link alone does not.
+export function indentEntry(text, ref, { isFolder } = {}) {
+  const parsed = parseIndex(text);
+  const i = find(parsed, ref);
+  if (i < 0) return null;
+  const level = siblings(parsed, i);
+  const before = level[level.indexOf(i) - 1];
+  if (before === undefined) return null;
+  const { entries } = parsed;
+  if (
+    folderEntry(entries[i], isFolder) ||
+    folderEntry(entries[before], isFolder)
+  )
+    return null;
+  return moveBlock(text, parsed, i, before, "into");
+}
+// Outdent: the entry (with its sub-items) goes right after its parent's
+// sub-list, at the parent's level.
+export function outdentEntry(text, ref) {
+  const parsed = parseIndex(text);
+  const i = find(parsed, ref);
+  if (i < 0 || parsed.entries[i].parent < 0) return null;
+  return moveBlock(text, parsed, i, parsed.entries[i].parent, "after");
+}
+// Up (step -1) or down (step 1) past the entry before or after it at its
+// level, sub-items going along.
+export function shiftEntry(text, ref, step) {
+  const parsed = parseIndex(text);
+  const i = find(parsed, ref);
+  if (i < 0) return null;
+  const level = siblings(parsed, i);
+  const other = level[level.indexOf(i) + (step < 0 ? -1 : 1)];
+  if (other === undefined) return null;
+  return moveBlock(text, parsed, i, other, step < 0 ? "before" : "after");
+}
+// A child renamed: links to it follow (entries and any other link in the
+// file: anchor, angle brackets and encoding kept), and an entry whose title
+// was the old name gets the new one; a title of its own stays.
+export function renameInIndex(text, from, to) {
+  // The index's folder stands for any: only names matter here.
+  const folder = "/index-folder";
+  let next = rewriteLinks(text, {
+    file: folder + "/_index.md",
+    moves: [[folder + "/" + from, folder + "/" + to]],
+  }).text;
+  const parsed = parseIndex(next);
+  const old = titleOf(from);
+  const lines = parsed.lines.slice();
+  for (const entry of parsed.entries) {
+    if (childName(entry.href)?.toLowerCase() !== to.toLowerCase()) continue;
+    if (entry.text !== old) continue;
+    const line = lines[entry.line];
+    const open = line.indexOf("[", entry.lead.length + entry.marker.length);
+    lines[entry.line] =
+      line.slice(0, open + 1) + titleOf(to) + line.slice(open + 1 + old.length);
+  }
+  next = parsed.bom + lines.join(parsed.eol);
+  return next === text ? null : next;
+}
+// An entry's title (the link's text) set; the link stays.
+export function retitleEntry(text, ref, title) {
+  const parsed = parseIndex(text);
+  const i = find(parsed, ref);
+  if (i < 0 || typeof title !== "string" || !title.trim()) return null;
+  const entry = parsed.entries[i];
+  const lines = parsed.lines.slice();
+  const line = lines[entry.line];
+  const open = line.indexOf("[", entry.lead.length + entry.marker.length);
+  lines[entry.line] =
+    line.slice(0, open + 1) +
+    escapeTitle(title.trim().replace(/\s+/g, " ")) +
+    line.slice(open + 1 + entry.text.length);
+  return finish(parsed, lines, text);
+}
+
+// One operation on an index's text, as the tree and the index's own view
+// ask for it (the same through the preload bridge). Returns the new text,
+// or null when nothing changes or it is not possible. ref: a child's name
+// or { line }.
+// - { kind: "move", ref, target, place: "before" | "after" | "into", folder }
+// - { kind: "insert", name, folder, title, under, after }
+// - { kind: "remove", ref, subtree }
+// - { kind: "indent", ref, folders: [names of folders] }
+// - { kind: "outdent", ref }
+// - { kind: "shift", ref, step: -1 | 1 }
+// - { kind: "rename", from, to }
+// - { kind: "retitle", ref, title }
+export function applyIndexOp(text, op = {}) {
+  if (typeof text !== "string" || !op || typeof op !== "object") return null;
+  const folders = new Set(
+    (Array.isArray(op.folders) ? op.folders : []).map((n) =>
+      String(n).toLowerCase(),
+    ),
+  );
+  const isFolder = (name) => folders.has(name.toLowerCase());
+  switch (op.kind) {
+    case "move":
+      return moveInIndex(text, op.ref, op.target, op.place, {
+        folder: Boolean(op.folder),
+      });
+    case "insert":
+      if (typeof op.name !== "string" || !op.name) return null;
+      return insertEntry(text, op.name, {
+        folder: Boolean(op.folder),
+        title: typeof op.title === "string" ? op.title : undefined,
+        under: op.under ?? null,
+        after: op.after ?? null,
+      });
+    case "remove":
+      return removeEntry(text, op.ref, { subtree: Boolean(op.subtree) });
+    case "indent":
+      return indentEntry(text, op.ref, { isFolder });
+    case "outdent":
+      return outdentEntry(text, op.ref);
+    case "shift":
+      return shiftEntry(text, op.ref, op.step);
+    case "rename":
+      if (typeof op.from !== "string" || typeof op.to !== "string") return null;
+      return renameInIndex(text, op.from, op.to);
+    case "retitle":
+      return retitleEntry(text, op.ref, op.title);
+    default:
+      return null;
+  }
+}
+
+// A new index for a folder: its name as the title, then its children in
+// the order given ([{ name, folder, index }]; a folder with its own index
+// is linked to it, as OneNote exports do).
+export function newIndexText(title, children, eol = "\n") {
+  const lines = [`# ${title}`, ""];
+  for (const child of children) {
+    const href = child.folder
+      ? hrefFor(child.name) + "/" + (child.index ? hrefFor(child.index) : "")
+      : hrefFor(child.name);
+    lines.push(`- [${titleOf(child.name)}](${href})`);
+  }
+  lines.push("");
+  return lines.join(eol);
 }

@@ -177,15 +177,20 @@ function reindent(text, width, lead) {
     w = text[i] === "\t" ? w + 4 - (w % 4) : w + 1;
     i++;
   }
-  return lead + text.slice(i);
+  // A tab reaching past the width: the columns beyond it stay, as spaces.
+  return lead + " ".repeat(w - Math.min(w, width)) + text.slice(i);
 }
+const leadOf = (text) => /^[ \t]*/.exec(text)[0];
 // The indentation a first sub-item of `goal` gets: tabs where the index
 // nests with tabs, else as many spaces as its nesting steps (at least to
 // where the goal's text starts, as Markdown needs).
 function childLead(scan, goal) {
   const nested = scan.entries.filter((entry) => entry.parent >= 0);
-  if (goal.lead.includes("\t") || nested.some((e) => e.lead.includes("\t")))
-    return goal.lead + "\t";
+  if (goal.lead.includes("\t") || nested.some((e) => e.lead.includes("\t"))) {
+    // A tab, and spaces after it when the goal's text starts further in.
+    const lead = goal.lead + "\t";
+    return lead + " ".repeat(Math.max(0, goal.content - columns(lead)));
+  }
   const pair = nested[0];
   const step = pair ? pair.indent - scan.entries[pair.parent].indent : 0;
   return goal.lead + " ".repeat(Math.max(step, goal.content - goal.indent));
@@ -283,6 +288,22 @@ export function moveEntry(text, i, target, place) {
       moved = spot.lead + spot.marker + moved.slice(spot.lead.length + 1);
     return { ...line, text: moved };
   });
+  // The lines under it stay under it when its text now starts further in
+  // (a wider marker): each keeps its distance from where that text starts.
+  const head = ITEM.exec(block[0].text);
+  const content = columns(head[1]) + head[2].length + columns(head[3]);
+  for (let k = 1; k < block.length; k++) {
+    const own = lines[start + k].text;
+    if (!own.trim()) continue;
+    const need = columns(leadOf(own)) - from.content + content,
+      lead = leadOf(block[k].text),
+      have = columns(lead);
+    if (have < need)
+      block[k] = {
+        ...block[k],
+        text: lead + " ".repeat(need - have) + block[k].text.slice(lead.length),
+      };
+  }
   let at = spot.at;
   lines.splice(start, block.length);
   if (at > start) at -= block.length;

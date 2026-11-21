@@ -286,3 +286,46 @@ test("an excerpt is the note's first sentence, in plain text", () => {
     "求集合 {1-1/n} 的上确界。",
   );
 });
+
+// Nesting survives a marker of another width and tab indentation; link
+// destinations with angle brackets, parentheses and titles stay whole.
+const nesting = (text) =>
+  scanIndex(text).entries.map((e) => [e.title, e.depth]);
+
+test("sub-pages stay under an entry whose marker gets wider", () => {
+  const text = "1. [B](b.md)\n- [A](a.md)\n  - [A1](a1.md)\n";
+  // Into B: A becomes a numbered sub-item; A1 stays under A.
+  assert.deepEqual(nesting(indentEntry(text, 1).text), [
+    ["B", 0],
+    ["A", 1],
+    ["A1", 2],
+  ]);
+  // After B as "2.": A1 still under A, and only the moved lines change.
+  const after = moveEntry(text, 1, 0, "after");
+  assert.deepEqual(nesting(after.text), [
+    ["B", 0],
+    ["A", 0],
+    ["A1", 1],
+  ]);
+  assert.equal(after.text, "1. [B](b.md)\n2. [A](a.md)\n   - [A1](a1.md)\n");
+});
+
+test("a tab stepping past the width taken away keeps the rest as spaces", () => {
+  const text = "- [P](p.md)\n  - [C](c.md)\n\t- [G](g.md)\n";
+  assert.deepEqual(nesting(removeEntry(text, 0).text), [
+    ["C", 0],
+    ["G", 1],
+  ]);
+  assert.deepEqual(nesting(outdentEntry(text, 1).text), [
+    ["P", 0],
+    ["C", 0],
+    ["G", 1],
+  ]);
+});
+
+test("a first sub-item in a tab-nested index reaches the entry's text", () => {
+  const text = "- [A](a.md)\n\t- [A1](a1.md)\n100. [X](x.md)\n";
+  const result = insertEntry(text, { title: "Y", href: "y.md" }, 2, "into");
+  assert.deepEqual(nesting(result.text).at(-1), ["Y", 1]);
+});
+

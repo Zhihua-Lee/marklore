@@ -18,9 +18,11 @@ export function findIndexName(names) {
   return null;
 }
 
-// One list item holding a link: `- [text](href)`, `1. [text](href)`.
+// One list item holding a link: `- [text](href)`, `1. [text](href)`. The
+// destination may be in angle brackets (`<My page (1).md>`), hold balanced
+// parentheses (`a(b).md`) and a link title (`a.md "see (v2)"`).
 export const ITEM =
-  /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\[((?:\\.|[^\]\\])*)\]\(([^)]*)\)/;
+  /^([ \t]*)([-*+]|\d{1,9}[.)])([ \t]+)\[((?:\\.|[^\]\\])*)\]\((<[^>\n]*>(?:[^()\n]|\([^()\n]*\))*|(?:[^()\\\n]|\\.|\((?:[^()\\\n]|\\.)*\))*)\)/;
 export const columns = (indent) => {
   let width = 0;
   for (const c of indent)

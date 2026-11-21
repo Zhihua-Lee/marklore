@@ -329,3 +329,30 @@ test("a first sub-item in a tab-nested index reaches the entry's text", () => {
   assert.deepEqual(nesting(result.text).at(-1), ["Y", 1]);
 });
 
+test("link destinations in angle brackets, with parentheses or a title", () => {
+  const text = [
+    "- [Lecture](<Lecture (1).md>)",
+    '- [Notes](notes.md "see (v2)")',
+    "- [Paren](a(b).md)",
+    "",
+  ].join("\n");
+  assert.deepEqual(
+    scanIndex(text).entries.map((e) => [e.href, e.name]),
+    [
+      ["<Lecture (1).md>", "Lecture (1).md"],
+      ['notes.md "see (v2)"', "notes.md"],
+      ["a(b).md", "a(b).md"],
+    ],
+  );
+  // Text after an unbalanced parenthesis is not part of the link.
+  assert.equal(scanIndex("- [A](a.md) (draft)\n").entries[0].rest, " (draft)");
+  // Pointed elsewhere: the brackets and the link title stay, the line whole.
+  assert.equal(
+    relinkEntry(text, 0, "Other.md").text.split("\n")[0],
+    "- [Lecture](<Other.md>)",
+  );
+  assert.equal(
+    relinkEntry(text, 1, "Other.md").text.split("\n")[1],
+    '- [Notes](Other.md "see (v2)")',
+  );
+});

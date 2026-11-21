@@ -27,6 +27,8 @@ import { createIndex, indexKind } from "./native-index.mjs";
 import { createLinkOpener } from "./links.mjs";
 import { createRecentFiles } from "./recent.mjs";
 import { createNoteMoves } from "./note-moves.mjs";
+import { createNoteRepair } from "./note-repair.mjs";
+import { createRenameMemory } from "./rename-memory.mjs";
 import { isIndexName, applyIndexOp } from "./folder-index.mjs";
 import { skippedName, isEnvironment } from "./scan-rules.mjs";
 import {
@@ -333,8 +335,12 @@ const linkIndex = createIndex({
   onProgress: () => send("links", null),
 });
 let linksTimer;
+// Renames seen recently (other programs' through the watcher, and the
+// tree's own), offered when a link is repaired (desktop/rename-memory.mjs).
+const renames = createRenameMemory();
 const libraryWatch = createLibraryWatch({
   notify: () => send("library", null),
+  entryRenamed: (entry) => renames.observe(entry).catch(() => {}),
   noteChanged: (file) =>
     linkIndex.changed(file).then((indexed) => {
       if (!indexed) return;
@@ -374,6 +380,7 @@ const noteMoves = createNoteMoves({
   synced: async (moves, written) => {
     // Names found in folders outside the library are looked for again.
     files.names.reset();
+    renames.record(moves);
     await Promise.allSettled([
       aiStore.moveNotes(moves),
       recent.rename(moves),
@@ -381,6 +388,15 @@ const noteMoves = createNoteMoves({
     ]);
     send("links", null);
   },
+});
+// A link or index entry left pointing at a note that is gone, repaired on
+// the reader's word (desktop/note-repair.mjs).
+const repair = createNoteRepair({
+  files,
+  renames,
+  linkIndex,
+  noteMoves,
+  roots: () => libraryRoots,
 });
 // The library's folders, for "Move to…": breadth first, as the library is
 // walked (no hidden, software or excluded folders), at most 3000.
@@ -1279,6 +1295,33 @@ else {
       });
       // The folders a note or folder may move to ("Move to…").
       api("libraryFolders", () => libraryFolderList());
+      // Repair after outside changes (note-repair.mjs). A note is named by
+      // its path; a link by its href as written in the note's file.
+      // What can be done about a link: { target, name, missing,
+      // candidates: [{ path, name, rel, reason }], creatable }.
+      api("repairOptions", (file, href) => repair.options(file, href));
+      // action: { kind: "relocate", to } | { kind: "remove" } |
+      // { kind: "create" }; a note open with unsaved changes (drafts) gets
+      // { draft } back instead of being written.
+      api("repairLink", (file, href, action, drafts) =>
+        repair.apply(file, href, action, { drafts: draftsOf(drafts) }),
+      );
+      // A folder's index entries whose note or folder is gone, each with
+      // what it may point at instead.
+      api("indexIssues", async (id) => {
+        const issues = await files.indexIssues(id);
+        if (!issues.index) return issues;
+        return {
+          index: issues.index,
+          missing: await Promise.all(
+            issues.missing.map(async (entry) => ({
+              ...entry,
+              candidates: (await repair.options(issues.index, entry.href))
+                .candidates,
+            })),
+          ),
+        };
+      });
       api("trashEntry", async (id, name, drafts) => {
         const target = await files.childPath(id, name);
         // Not while a note at or under it is being saved.

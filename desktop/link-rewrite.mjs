@@ -294,7 +294,7 @@ function inlineDestination(text, k) {
     while (/[ \t]/.test(text[j] || "")) j++;
   }
   if (text[j] !== ")") return null;
-  return from === to ? null : { from, to };
+  return from === to ? null : { from, to, end: j + 1 };
 }
 // Every link destination in the note: { from, to, kind } in the text.
 export function findDestinations(text) {
@@ -320,7 +320,18 @@ export function findDestinations(text) {
     const dest = inlineDestination(masked, j + 2);
     if (!dest || seen.has(dest.from)) continue;
     seen.add(dest.from);
-    found.push({ ...dest, kind: "inline" });
+    // The whole link too, for taking it away: [label](…) or ![alt](…).
+    const image = i > 0 && masked[i - 1] === "!" && !escaped(masked, i - 1);
+    found.push({
+      ...dest,
+      kind: "inline",
+      link: {
+        from: image ? i - 1 : i,
+        to: dest.end,
+        label: text.slice(i + 1, j),
+        image,
+      },
+    });
   }
   // Reference definitions: [label]: dest "title" (the destination may be
   // on the next line).
@@ -405,13 +416,64 @@ export function linkedPaths(text, file) {
   const dir = dirOf(file);
   const out = [];
   for (const dest of findDestinations(text)) {
-    const { target } = parseDestination(text.slice(dest.from, dest.to));
-    if (!target || SCHEME.test(target) || /^[\\/]/.test(target)) continue;
-    try {
-      out.push(join(split(join(dir) + "/" + decodeURIComponent(target))));
-    } catch {
-      /* Not a path. */
-    }
+    const resolved = resolveDestination(
+      text.slice(dest.from, dest.to),
+      dest.kind,
+      dir,
+    );
+    if (resolved) out.push(resolved);
   }
   return out;
+}
+// Where a destination as written leads from a folder ("/"-joined), or
+// null for a web address, an absolute path or an anchor in the note.
+function resolveDestination(raw, kind, dir) {
+  const { target } = parseDestination(raw);
+  if (!target || SCHEME.test(target) || /^[\\/]/.test(target)) return null;
+  try {
+    const plain =
+      kind === "html"
+        ? target
+        : target.replace(/\\([!-/:-@[-`{-~])/g, (m, c) => c);
+    return join(split(join(dir) + "/" + decodeURIComponent(plain)));
+  } catch {
+    return null;
+  }
+}
+// Where a link written in a note leads: an absolute path ("/"-joined), or
+// null when it is no relative path (a web address, an anchor).
+export function linkTarget(href, file) {
+  return resolveDestination(String(href).trim(), "inline", dirOf(file));
+}
+
+// The note's inline links and images to `target` taken away: a link keeps
+// its text, an image goes. Reference definitions and HTML stay (removing
+// them would leave their uses showing as plain brackets). Returns { text,
+// edits, count } like rewriteLinks.
+export function unlinkTarget(text, { file, target }) {
+  const dir = dirOf(file),
+    want = pathKey(target);
+  const edits = [];
+  for (const dest of findDestinations(text)) {
+    if (dest.kind !== "inline") continue;
+    const resolved = resolveDestination(
+      text.slice(dest.from, dest.to),
+      dest.kind,
+      dir,
+    );
+    if (!resolved || pathKey(resolved) !== want) continue;
+    const { from, to, label, image } = dest.link;
+    // A link inside another one already taken away goes with it.
+    if (edits.some((e) => from < e.to && to > e.from)) continue;
+    edits.push({ from, to, insert: image ? "" : label });
+  }
+  edits.sort((a, b) => a.from - b.from);
+  let out = "",
+    at = 0;
+  for (const edit of edits) {
+    out += text.slice(at, edit.from) + edit.insert;
+    at = edit.to;
+  }
+  out += text.slice(at);
+  return { text: out, edits, count: edits.length };
 }

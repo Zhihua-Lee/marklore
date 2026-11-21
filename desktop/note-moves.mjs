@@ -6,7 +6,7 @@
 // the same rewrite (desktop/link-rewrite.mjs) to their drafts.
 import fs from "node:fs/promises";
 import path from "node:path";
-import { decode, markdownPath } from "./files.mjs";
+import { decode, markdownPath, hash } from "./files.mjs";
 import { rewriteLinks } from "./link-rewrite.mjs";
 import { skippedName } from "./scan-rules.mjs";
 import { movedPath } from "./moved-path.mjs";
@@ -245,6 +245,16 @@ export function createNoteMoves({
         (await files.restore(now, write).catch(() => false));
       (ok ? restored : skipped).push(now);
     }
+    // Notes the batch created (a repair): taken away again while they are
+    // as it left them; one written to since stays, and is named.
+    for (const made of batch.creates || []) {
+      const bytes = await files.readBytes(made.path).catch(() => null);
+      if (bytes && hash(bytes) === made.after) {
+        files.checkUnlocked(made.path);
+        await fs.rm(made.path, { force: true });
+        restored.push(made.path);
+      } else if (bytes) skipped.push(made.path);
+    }
     // Drafts patched by the page and saved since: their links written back
     // (one still unsaved is the page's to patch back).
     for (const note of batch.patched || []) {
@@ -276,6 +286,24 @@ export function createNoteMoves({
     plan,
     run,
     undo,
+    // A change made elsewhere (a repair: links rewritten, a note created)
+    // remembered as the batch undo takes back; synced like a move.
+    async record({ label, writes = [], creates = [] }) {
+      if (!writes.length && !creates.length) return;
+      await remember({
+        label,
+        at: new Date().toISOString(),
+        moves: [],
+        writes,
+        creates,
+        links: true,
+        patched: [],
+      });
+      await synced(
+        [],
+        [...writes, ...creates].map((w) => w.path),
+      );
+    },
     // What undo would take back: { label, at } or null.
     async last() {
       const batch = await readLast();

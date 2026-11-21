@@ -29,6 +29,9 @@ export function createLibraryWatch({
   notify,
   noteChanged = () => {},
   foldersChanged = () => {},
+  // entryRenamed(path): a note or folder there was renamed, created or
+  // deleted (the rename memory pairs them).
+  entryRenamed = () => {},
   delay = 400,
   watch = fsWatch,
 }) {
@@ -49,6 +52,8 @@ export function createLibraryWatch({
           // "change" events are edits to existing files: the tree is
           // unchanged, unless the file is a folder's index (its order).
           const watcher = watch(folder, { recursive: true }, (type, name) => {
+            if (type === "rename" && name && treeChange(name))
+              entryRenamed(path.join(folder, String(name)));
             if (name && treeChange(name) && markdownPath(String(name)))
               noteChanged(path.join(folder, String(name)));
             const order =

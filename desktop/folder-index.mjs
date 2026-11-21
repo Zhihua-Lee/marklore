@@ -6,7 +6,7 @@
 // the index's own view edits its draft with the same operations
 // (applyIndexOp). Edits touch only the lines they move or change, keeping
 // bullets, indentation, line endings and a byte order mark.
-import { rewriteLinks } from "./link-rewrite.mjs";
+import { rewriteLinks, linkTarget, pathKey } from "./link-rewrite.mjs";
 
 // Names of index files, the first preferred when a folder has both.
 export const INDEX_NAMES = ["_目录.md", "SUMMARY.md"]; // i18n-ignore
@@ -397,6 +397,24 @@ export function retitleEntry(text, ref, title) {
   return finish(parsed, lines, text);
 }
 
+// The entries linking to `target` (an absolute path; the index is `file`)
+// taken out, their sub-items moving up a level; null when there are none.
+export function removeEntriesTo(text, file, target) {
+  const want = pathKey(target);
+  const lines = parseIndex(text)
+    .entries.filter((entry) => {
+      let href = String(entry.href).trim();
+      const angle = /^<([^>]*)>/.exec(href);
+      href = angle ? `<${angle[1]}>` : href.split(/\s+/)[0];
+      const to = linkTarget(href, file);
+      return to && pathKey(to) === want;
+    })
+    .map((entry) => entry.line)
+    .reverse();
+  let out = text;
+  for (const line of lines) out = removeEntry(out, { line }) ?? out;
+  return out === text ? null : out;
+}
 // A child's entry and the entries under it that name children, in order:
 // [{ name, title, parent }] (title unescaped; parent: the name of the entry
 // it is under, null for the first). [] when it is not listed.

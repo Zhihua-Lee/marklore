@@ -48,6 +48,41 @@ export default {
   没有可移动到的文件夹: "No folder to move to",
   移到这里: "Move here",
 
+  // Repair after changes made elsewhere (src/library.js, tree-dialogs.js)
+  "修复链接…": "Repair link…",
+  "{count} 项不存在": "{count} missing",
+  "修复了“{name}”中指向“{to}”的链接": "Repaired links to “{to}” in “{name}”",
+  "链接的目标存在，不需要修复": "The link's target exists; nothing to repair",
+  "已新建“{name}”": "Created “{name}”",
+  "已移除指向“{name}”的链接": "Removed the links to “{name}”",
+  "链接已改为指向“{name}”": "The link now points to “{name}”",
+  目录中的条目都存在: "Every entry in the index exists",
+  修复目录中不存在的条目: "Repair missing index entries",
+  筛选条目: "Filter entries",
+  没有匹配的条目: "No matching entry",
+  修复这一项: "Repair this one",
+  "修复不存在的条目…": "Repair missing entries…",
+  "“{name}”不存在": "“{name}” is missing",
+  "目录中的这一项指向 {rel}，那里没有文件。":
+    "This index entry points to {rel}, where there is no file.",
+  "这个链接指向 {rel}，那里没有文件。":
+    "This link points to {rel}, where there is no file.",
+  刚被改名或移动到这里: "Just renamed or moved here",
+  同名的文件: "Same name",
+  这个文件夹中未列入目录的笔记: "Not in this folder's index",
+  可以改为指向: "Point it to",
+  "可以改为指向：": "Point it to:",
+  "笔记库中没有找到同名或刚改名的文件。":
+    "No file of the same name, or just renamed, was found in the library.",
+  从目录中移除: "Remove from index",
+  移除链接: "Remove link",
+  新建这篇笔记: "Create this note",
+  改为指向所选: "Point to selected",
+  只能在笔记库中新建笔记: "Notes can be created only in the library",
+  所在的文件夹不存在: "Its folder does not exist",
+  "目标不在笔记库中，或已不存在":
+    "The target is not in the library, or no longer exists",
+
   // Main process (desktop/files.mjs, desktop/note-moves.mjs)
   "{name} 刚被其他程序修改，请重试":
     "{name} was just changed by another program. Please try again.",

@@ -6,6 +6,8 @@ import {
   linkedPaths,
   isUnder,
   movedPathOf,
+  unlinkTarget,
+  linkTarget,
 } from "../desktop/link-rewrite.mjs";
 import MarkdownIt from "markdown-it";
 
@@ -341,4 +343,24 @@ test("escapes, definitions over two lines and '>' inside HTML attributes", () =>
     rename('<img alt="a > b" src="Plan.md">').text,
     '<img alt="a > b" src="Roadmap.md">',
   );
+});
+
+test("links to a missing note are taken away, keeping their text", () => {
+  const text =
+    "See [the plan](Plan.md#goals), ![chart](Plan.md) and [other](Other.md).\n`[x](Plan.md)`\n[r]: Plan.md\n";
+  const out = unlinkTarget(text, {
+    file: "C:/kb/notes/A.md",
+    target: "c:\\KB\\notes\\plan.md",
+  });
+  assert.equal(
+    out.text,
+    "See the plan,  and [other](Other.md).\n`[x](Plan.md)`\n[r]: Plan.md\n",
+  );
+  assert.equal(out.count, 2);
+  assert.equal(
+    linkTarget("../Topics/a%20b.md#x", "C:/kb/notes/A.md"),
+    "C:/kb/Topics/a b.md",
+  );
+  assert.equal(linkTarget("https://example.com", "C:/kb/A.md"), null);
+  assert.equal(linkTarget("#top", "C:/kb/A.md"), null);
 });

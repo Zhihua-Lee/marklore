@@ -110,3 +110,28 @@ test("a renamed folder tells the index to look again, a renamed note does not", 
   assert.equal(folders.length, 1);
   library.close();
 });
+
+test("renames of notes and folders are passed on for pairing; edits are not", () => {
+  const seen = [];
+  let listener;
+  const library = createLibraryWatch({
+    notify: () => {},
+    entryRenamed: (entry) => seen.push(entry),
+    delay: 1,
+    watch: (folder, options, fn) => {
+      listener = fn;
+      return Object.assign(new EventEmitter(), { close() {} });
+    },
+  });
+  library.follow(["K"]);
+  listener("rename", "Plan.md");
+  listener("rename", "Topic");
+  listener("change", "Other.md");
+  listener("rename", ".git\\HEAD");
+  listener("rename", "assets\\a.png");
+  assert.deepEqual(seen, [
+    path.join(path.resolve("K"), "Plan.md"),
+    path.join(path.resolve("K"), "Topic"),
+  ]);
+  library.close();
+});

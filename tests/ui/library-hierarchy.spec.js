@@ -5,9 +5,9 @@ import { installFolio } from "./fixtures.js";
 // drag), a folder asked to start an index, renames and moves that update
 // the links to them (asked first, undone in one step), and drafts open
 // with unsaved changes patched in memory, never written.
-async function setup(page) {
+async function setup(page, { settings = {} } = {}) {
   await installFolio(page);
-  await page.addInitScript(() => {
+  await page.addInitScript((settings) => {
     const KB = "C:\\kb",
       BOX = "C:\\kb\\Box";
     const at = (folder, name) => folder + "\\" + name;
@@ -62,7 +62,7 @@ async function setup(page) {
         incoming: [],
         restored: [],
         roots: [{ id: "kb", name: "kb", path: KB }],
-        settings: { sidebar: true },
+        settings: { sidebar: true, ...settings },
       }),
       list: async (id) => listing(id),
       openChild: async (id, name) => ({
@@ -198,7 +198,7 @@ async function setup(page) {
         };
       },
     });
-  });
+  }, settings);
   await page.goto("/");
   await expect(
     page.locator("#tree").getByRole("button", { name: "Plan.md", exact: true }),
@@ -610,4 +610,29 @@ test("undo after 'move only' does not rewrite the moved draft's links", async ({
   await expect(page.locator("#editor .cm-content")).toContainText(
     "See [the plan](Plan.md#goals).More.",
   );
+});
+
+// Review finding 5: a draft in the editor of Edit mode takes an encoded
+// link from a rename and stays in that editor.
+test("a draft in the Edit mode editor is patched and keeps its editor", async ({
+  page,
+}) => {
+  await setup(page, { settings: { richEdit: true, editSplit: false } });
+  await row(page, "Other.md").click();
+  await page.keyboard.press("Control+2");
+  const editor = page.locator("#rich .ProseMirror");
+  await expect(editor).toContainText("See the plan.");
+  await editor.getByText("See the plan.").click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" More.");
+  await menu(page, row(page, "Plan.md"), "重命名…");
+  const input = tree(page).getByRole("textbox", { name: "新名称" });
+  await input.fill("Road map");
+  await input.press("Enter");
+  await page.getByRole("dialog").getByRole("button", { name: /^更新/ }).click();
+  await expect(page.locator("#toast")).toContainText("已改名");
+  await expect(page.locator("#toast")).not.toContainText("源码栏");
+  await expect(editor).toBeVisible();
+  await expect(editor).toContainText("See the plan. More.");
+  await expect(editor.locator('a[href="Road%20map.md#goals"]')).toHaveCount(1);
 });

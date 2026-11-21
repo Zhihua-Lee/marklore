@@ -123,7 +123,12 @@ function rewriteDestination(raw, kind, oldDir, newDir, map) {
   if (!target || SCHEME.test(target) || /^[\\/]/.test(target)) return null;
   let decoded;
   try {
-    decoded = decodeURIComponent(target);
+    // As Markdown reads it: a backslash before punctuation only escapes it.
+    decoded = decodeURIComponent(
+      kind === "html"
+        ? target
+        : target.replace(/\\([!-/:-@[-`{-~])/g, (m, c) => c),
+    );
   } catch {
     return null; // Not a path anyone could open: left as written.
   }
@@ -156,46 +161,75 @@ function rewriteDestination(raw, kind, oldDir, newDir, map) {
 
 // ── Finding destinations in Markdown ──
 // The text with what holds no links blanked (same length, line breaks
-// kept): fenced code blocks, HTML comments and code spans.
+// kept): fenced code blocks (also inside block quotes and list items),
+// indented code blocks, HTML comments and code spans (over the lines of
+// one paragraph, a run of backticks closed by a run as long).
+const QUOTE = /^(?:[ \t]{0,3}>[ \t]?)*/;
+const LIST_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])(?:[ \t]|$)/;
+const indentOf = (line) => {
+  let width = 0;
+  for (const c of line) {
+    if (c === " ") width++;
+    else if (c === "\t") width += 4 - (width % 4);
+    else break;
+  }
+  return width;
+};
 function maskCode(text) {
   const chars = text.split("");
   const blank = (from, to) => {
     for (let i = from; i < to; i++) if (chars[i] !== "\n") chars[i] = " ";
   };
   let fence = null,
-    at = 0;
+    at = 0,
+    inList = false,
+    indented = false,
+    prevBlank = true;
   for (const line of text.split("\n")) {
     const end = at + line.length;
-    const open = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    const rest = line.slice(QUOTE.exec(line)[0].length);
+    const open = /^[ \t]*(`{3,}|~{3,})/.exec(rest);
+    const isBlank = !rest.trim();
     if (fence) {
       blank(at, end);
       if (
         open &&
         open[1][0] === fence[0] &&
         open[1].length >= fence.length &&
-        !line.slice(open[0].length).trim()
+        !rest.slice(open[0].length).trim()
       )
         fence = null;
     } else if (
       open &&
-      !(open[1][0] === "`" && line.slice(open[0].length).includes("`"))
+      !(open[1][0] === "`" && rest.slice(open[0].length).includes("`"))
     ) {
       fence = open[1];
+      indented = false;
       blank(at, end);
+    } else if (isBlank) {
+      // Blank lines neither start nor end an indented block.
+    } else if (indentOf(rest) >= 4 && !inList && (prevBlank || indented)) {
+      indented = true;
+      blank(at, end);
+    } else {
+      indented = false;
+      if (LIST_ITEM.test(rest)) inList = true;
+      else if (prevBlank && indentOf(rest) === 0) inList = false;
     }
+    prevBlank = isBlank;
     at = end + 1;
   }
   let masked = chars.join("");
   masked = masked.replace(/<!--[\s\S]*?-->/g, (m) => m.replace(/[^\n]/g, " "));
-  // Code spans, line by line (a run of backticks closed by the same run).
+  // Code spans, paragraph by paragraph.
   return masked
-    .split("\n")
-    .map((line) =>
-      line.replace(/(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g, (m) =>
-        " ".repeat(m.length),
+    .split(/(\n[ \t>]*\n)/)
+    .map((part) =>
+      part.replace(/(?<!`)(`+)(?!`)([\s\S]*?[^`])\1(?!`)/g, (m) =>
+        m.replace(/[^\n]/g, " "),
       ),
     )
-    .join("\n");
+    .join("");
 }
 const escaped = (text, i) => {
   let n = 0;
@@ -288,9 +322,10 @@ export function findDestinations(text) {
     seen.add(dest.from);
     found.push({ ...dest, kind: "inline" });
   }
-  // Reference definitions: [label]: dest "title".
+  // Reference definitions: [label]: dest "title" (the destination may be
+  // on the next line).
   const DEF =
-    /^( {0,3}(?:>[ \t]?)*[ \t]*\[(?:\\.|[^\]\\\n])+\]:[ \t]*)(<[^>\n]*>|[^\s<]+)/gm;
+    /^( {0,3}(?:>[ \t]?)*[ \t]*\[(?:\\.|[^\]\\\n])+\]:[ \t]*(?:\n[ \t>]*)?)(<[^>\n]*>|[^\s<]+)/gm;
   for (const m of masked.matchAll(DEF)) {
     const from = m.index + m[1].length;
     if (/^\s*\[\^/.test(m[1])) continue; // a footnote
@@ -300,7 +335,9 @@ export function findDestinations(text) {
     }
   }
   // HTML: <a href="…">, <img src="…"> and the like.
-  const TAG = /<(?:a|img|source|video|audio|iframe|embed)\b[^>]*>/gi;
+  // A ">" inside a quoted attribute does not end the tag.
+  const TAG =
+    /<(?:a|img|source|video|audio|iframe|embed)\b(?:[^>"']|"[^"]*"|'[^']*')*>/gi;
   const ATTR = /\s(?:href|src)\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
   for (const tag of masked.matchAll(TAG))
     for (const m of tag[0].matchAll(ATTR)) {

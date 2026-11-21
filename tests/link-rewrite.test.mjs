@@ -7,6 +7,7 @@ import {
   isUnder,
   movedPathOf,
 } from "../desktop/link-rewrite.mjs";
+import MarkdownIt from "markdown-it";
 
 // A note in C:/kb/notes linking to Plan.md, renamed to Roadmap.md.
 const rename = (text, opts = {}) =>
@@ -294,5 +295,50 @@ test("a path after moves keeps the new path's separators", () => {
   assert.equal(
     movedPathOf("/home/u/kb/a.md", [["/home/u/kb/a.md", "/home/u/kb/b.md"]]),
     "/home/u/kb/b.md",
+  );
+});
+
+// Review finding 5: code in quotes and lists, indented code, code spans
+// over lines, escapes, definitions over lines, ">" in HTML attributes.
+test("code in block quotes, list items and indented blocks is left alone", () => {
+  const quoted = "> ```\n> [x](Plan.md)\n> ```\n> [y](Plan.md)\n";
+  assert.equal(
+    rename(quoted).text,
+    "> ```\n> [x](Plan.md)\n> ```\n> [y](Roadmap.md)\n",
+  );
+  const listed = "- item\n\n    ```\n    [x](Plan.md)\n    ```\n";
+  assert.equal(rename(listed).count, 0);
+  // An indented code block after a paragraph: code; a list item's own
+  // indented paragraph: text.
+  assert.equal(rename("Text.\n\n    [x](Plan.md)\n").count, 0);
+  assert.equal(
+    rename("- a\n\n    [x](Plan.md)\n").text,
+    "- a\n\n    [x](Roadmap.md)\n",
+  );
+  // A code span over two lines of one paragraph.
+  assert.equal(rename("`a\n[x](Plan.md)` b\n").count, 0);
+});
+
+test("a stray backtick is read as Markdown reads it", () => {
+  const text = "x`y `[z](Plan.md)`\n";
+  const html = new MarkdownIt().render(text);
+  assert.equal(rename(text).count, html.includes('href="Plan.md"') ? 1 : 0);
+});
+
+test("escapes, definitions over two lines and '>' inside HTML attributes", () => {
+  assert.equal(
+    rewriteLinks("[p](a\\(1\\).md)", {
+      file: "C:/kb/A.md",
+      moves: [["C:/kb/a(1).md", "C:/kb/b.md"]],
+    }).text,
+    "[p](b.md)",
+  );
+  assert.equal(
+    rename("[p]:\n  Plan.md 'T'\n").text,
+    "[p]:\n  Roadmap.md 'T'\n",
+  );
+  assert.equal(
+    rename('<img alt="a > b" src="Plan.md">').text,
+    '<img alt="a > b" src="Roadmap.md">',
   );
 });

@@ -10,9 +10,13 @@
 // fences and HTML comments. Consecutive entries (blank lines may sit between
 // them) form a run; within a run indentation is nesting, as the library tree
 // reads it (desktop/folder-index.mjs).
-import { ITEM, columns, childName, hrefFor } from "../desktop/folder-index.mjs";
-
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+import {
+  ITEM,
+  columns,
+  childName,
+  hrefFor,
+  indexSkips,
+} from "../desktop/folder-index.mjs";
 
 // The text's lines, entries and runs.
 export function scanIndex(text) {
@@ -31,51 +35,8 @@ export function scanIndex(text) {
   for (const line of lines)
     if (line.eol === "\r\n") crlf++;
     else if (line.eol === "\n") lf++;
-  const skip = lines.map(() => false);
-  let i = 0;
-  // Front matter: from a first line `---` to the next `---` or `...`.
-  if (lines.length > 1 && /^---[ \t]*$/.test(lines[0].text)) {
-    let end = 1;
-    while (end < lines.length && !/^(---|\.\.\.)[ \t]*$/.test(lines[end].text))
-      end++;
-    if (end < lines.length) {
-      for (let k = 0; k <= end; k++) skip[k] = true;
-      i = end + 1;
-    }
-  }
-  let fence = null,
-    comment = false;
-  for (; i < lines.length; i++) {
-    const line = lines[i].text;
-    if (fence) {
-      skip[i] = true;
-      const m = FENCE.exec(line);
-      if (
-        m &&
-        m[1][0] === fence[0] &&
-        m[1].length >= fence.length &&
-        !line.slice(m[0].length).trim()
-      )
-        fence = null;
-      continue;
-    }
-    if (comment) {
-      skip[i] = true;
-      if (line.includes("-->")) comment = false;
-      continue;
-    }
-    const open = FENCE.exec(line);
-    if (open) {
-      fence = open[1];
-      skip[i] = true;
-      continue;
-    }
-    const at = line.indexOf("<!--");
-    if (at >= 0) {
-      skip[i] = true;
-      if (!line.includes("-->", at + 4)) comment = true;
-    }
-  }
+  // Front matter, code and comments hold no entries.
+  const skip = indexSkips(lines.map((line) => line.text));
   const entries = [],
     runs = [];
   let run = null,

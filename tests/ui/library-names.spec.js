@@ -379,6 +379,21 @@ test("dragging near the tree's edge scrolls it to a target that was off screen",
       return now.y + now.height <= box.y + box.height;
     })
     .toBe(true);
+  // The pointer back in the middle: the scrolling stops (the list may
+  // still have moved a little), then the target is found where it is.
+  await page.evaluate(
+    ([x, y]) => window.rest(x, y),
+    [x, box.y + box.height / 2],
+  );
+  await expect
+    .poll(() =>
+      tree(page).evaluate(async (el) => {
+        const a = el.scrollTop;
+        await new Promise((r) => setTimeout(r, 150));
+        return el.scrollTop - a;
+      }),
+    )
+    .toBe(0);
   const now = await far.boundingBox();
   const centre = [now.x + 40, now.y + now.height / 2];
   await page.evaluate(([x, y]) => window.rest(x, y), centre);

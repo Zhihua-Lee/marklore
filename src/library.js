@@ -755,11 +755,15 @@ export function createLibrary({
   const shown = (el) =>
     [...el.children]
       .map((c) =>
-        c.matches("input")
+        // The folder's "open index" button comes when its row is first
+        // pointed at: not a change of the tree.
+        c.matches("input, .folder-index-open")
           ? ""
-          : c.matches("details:not([open])")
-            ? `[${c.className}|${c.dataset.path}|${c.firstChild?.textContent}]`
-            : `<${c.tagName}|${c.className}|${c.title}|${c.dataset.path || ""}|${c.dataset.note || ""}|${c.dataset.listed || ""}|${c.children.length ? shown(c) : c.textContent}>`,
+          : c.matches("summary")
+            ? `<summary|${c.title}|${c.dataset.note || ""}|${c.textContent}>`
+            : c.matches("details:not([open])")
+              ? `[${c.className}|${c.dataset.path}|${c.firstChild?.textContent}]`
+              : `<${c.tagName}|${c.className}|${c.title}|${c.dataset.path || ""}|${c.dataset.note || ""}|${c.dataset.listed || ""}|${c.children.length ? shown(c) : c.textContent}>`,
       )
       .join("");
   const restored = new WeakSet();

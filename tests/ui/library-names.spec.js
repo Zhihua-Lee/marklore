@@ -742,3 +742,47 @@ test("a save renames after the heading it saved, even while the next edits come 
   await page.waitForTimeout(2000);
   expect(await page.evaluate(() => window.mock.renames)).toEqual(["B", "C"]);
 });
+
+// A rename that keeps the file name (only the heading, the entry and links
+// change in place) still has open notes read again.
+test("a rename that rewrites notes in place has their clean tabs read again", async ({
+  page,
+}) => {
+  await library(page);
+  await folderRow(page, "章节").click();
+  await tree(page).locator('button.file[data-name="1.1 集合.md"]').click();
+  await expect(page.getByRole("tab", { name: /1\.1 集合\.md/ })).toBeVisible();
+  await page.evaluate(() => {
+    const folio = window.folio;
+    window.mock.reads = [];
+    const read = folio.read;
+    folio.read = async (id, version) => {
+      window.mock.reads.push(id);
+      return read(id, version);
+    };
+    folio.planRename = async (id, name, newName) => ({
+      moves: [],
+      newName: name,
+      anchors: [],
+      affected: [],
+    });
+    folio.renameEntry = async (id, name) => ({
+      path: "C:\\kb\\章节\\" + name,
+      files: [],
+      moves: [],
+      rewritten: 1,
+      updated: 1,
+      failed: [],
+      drafts: [],
+      anchors: [],
+    });
+  });
+  await tree(page).locator('button.file[data-name="1.2 映射.md"]').focus();
+  await page.keyboard.press("F2");
+  const input = tree(page).getByRole("textbox", { name: "新名称" });
+  await input.fill("1.2 映射?");
+  await input.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.mock.reads))
+    .toContain("ch:1.1 集合.md");
+});

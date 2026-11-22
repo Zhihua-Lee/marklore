@@ -1222,6 +1222,10 @@ export function createLibrary({
       links,
       drafts: result.drafts || [],
       anchors: result.anchors || [],
+      // Notes rewritten in place (no file moved): open ones read again.
+      reread: Boolean(
+        result.rewritten || result.updated || result.restored?.length,
+      ),
     });
     renamed(result.files || []);
     const moves = result.moves || [];

@@ -206,6 +206,7 @@ export function createNoteMoves({
         moves: done.moves,
         writes,
         links: Boolean(links),
+        anchors: after,
         patched,
       });
     await synced(
@@ -257,6 +258,14 @@ export function createNoteMoves({
     // The entries first, all or none: a failure halfway moves back what
     // had moved, and the batch stays to be tried again.
     const back = [...batch.moves].reverse().map(([from, to]) => [to, from]);
+    // Headings renamed: their anchors go back too (where the notes are
+    // after the undo).
+    const backAnchors = (batch.anchors || []).map((a) => ({
+      file: a.source || a.file,
+      source: a.file,
+      from: a.to,
+      to: a.from,
+    }));
     const moved = [];
     const done = [];
     try {
@@ -299,8 +308,12 @@ export function createNoteMoves({
         .rewrite(
           now,
           (text) =>
-            rewriteLinks(text, { from: note.path, file: now, moves: back })
-              .text,
+            rewriteLinks(text, {
+              from: note.path,
+              file: now,
+              moves: back,
+              anchors: backAnchors,
+            }).text,
         )
         .catch(() => null);
       if (write) restored.push(now);
@@ -310,6 +323,7 @@ export function createNoteMoves({
     return {
       label: batch.label,
       links: batch.links !== false,
+      anchors: backAnchors,
       moves: back,
       files: moved,
       restored: [...new Set(restored)],

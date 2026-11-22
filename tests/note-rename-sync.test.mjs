@@ -173,6 +173,39 @@ test("a rename with the index or the note open with unsaved changes leaves them 
   }
 });
 
+test("undo takes back a heading's anchor in a draft too, saved since or not", async () => {
+  const lib = await library();
+  const { kb, read } = lib;
+  try {
+    const draft = path.join(kb, "第一章_集合与映射.md");
+    await lib.rename("1.2 映射.md", "1.2 映射：函数", {
+      drafts: [draft],
+    });
+    // The page patched its draft and the reader saved it.
+    await fs.writeFile(
+      draft,
+      FILES["第一章_集合与映射.md"].replace(
+        "1.2%20映射.md#12-映射",
+        "1.2%20映射：函数.md#12-映射函数",
+      ),
+    );
+    const back = await lib.moves.undo({
+      relocate: (from, to) => lib.store.relocate(from, to),
+    });
+    assert.equal(
+      await read("第一章_集合与映射.md"),
+      FILES["第一章_集合与映射.md"],
+    );
+    // A draft still unsaved is the page's: undo says which anchors go back.
+    assert.deepEqual(
+      back.anchors.map((a) => [path.basename(a.file), a.from, a.to]),
+      [["1.2 映射.md", "12-映射函数", "12-映射"]],
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
 test("a save that changed the heading renames the note after it, the anchors following", async () => {
   const lib = await library();
   const { kb, read } = lib;

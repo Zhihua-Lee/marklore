@@ -655,6 +655,8 @@ export default {
   "移出目录（不删除文件）": "Remove from index (keeps the file)",
   新建页面: "New page",
   "未列入目录（{count}）": "Not in the index ({count})",
+  "1 页": "1 page",
+  "{count} 页": "{count} pages",
   加入目录: "Add to index",
   "目录正在更新，请稍后再试。": "The index is updating; try again in a moment.",
   新页面名称: "New page name",

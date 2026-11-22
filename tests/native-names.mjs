@@ -108,8 +108,9 @@ try {
   const input = view.locator("input.ix-title-input");
   await input.fill("1.2 映射：函数");
   await input.press("Enter");
+  // Asked by the name the row shows: the heading.
   const ask = page.getByRole("dialog", {
-    name: "把“映射”改名为“1.2 映射：函数”",
+    name: "把“1.2 映射”改名为“1.2 映射：函数”",
   });
   await ask.waitFor();
   assert.deepEqual(

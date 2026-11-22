@@ -278,6 +278,17 @@ test("unify names: one batch, links followed, one undo", async () => {
   }
 });
 
+test("an index file renamed keeps its heading (the folder's title, not a name)", async () => {
+  const lib = await library();
+  try {
+    const { plan } = await lib.rename("_目录.md", "SUMMARY");
+    assert.equal(plan.newName, "SUMMARY.md");
+    assert.equal(await lib.read("SUMMARY.md"), FILES["_目录.md"]);
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
 test("the tree lists notes with their name (the leading heading)", async () => {
   const lib = await library();
   try {

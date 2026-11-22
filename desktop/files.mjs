@@ -788,7 +788,12 @@ export class FileStore {
     let entryTitle = null;
     let anchors = [];
     if (typeof title === "string" && plan.directory) entryTitle = plan.newName;
-    else if (typeof title === "string") {
+    // An index file is named by its file name only (its heading is the
+    // folder's title, not a name).
+    else if (
+      typeof title === "string" &&
+      !isIndexName(path.basename(plan.source))
+    ) {
       const text = await this.readBytes(plan.source)
         .then((bytes) => decode(bytes).text)
         .catch(() => null);

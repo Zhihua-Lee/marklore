@@ -394,3 +394,29 @@ test("a unify plan changed after it was shown is told apart from the one shown",
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+test("a rename keeps the note's own extension, or takes the one typed", async () => {
+  const lib = await library();
+  const { kb, store, root } = lib;
+  try {
+    store.otherFormats = true;
+    await fs.writeFile(path.join(kb, "change.diff"), "--- a\n+++ b\n");
+    const diff = await store.renameTarget(root.id, "change.diff", null, {
+      title: "修改",
+    });
+    assert.equal(diff.newName, "修改.diff");
+    const txt = await store.renameTarget(root.id, "无标题.md", null, {
+      title: "纯文本",
+      ext: ".txt",
+    });
+    assert.equal(txt.newName, "纯文本.txt");
+    await assert.rejects(
+      store.renameTarget(root.id, "无标题.md", null, {
+        title: "x",
+        ext: ".exe",
+      }),
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

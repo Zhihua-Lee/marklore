@@ -1208,6 +1208,7 @@ else {
         title: typeof options?.title === "string" ? options.title : null,
         previous:
           typeof options?.previous === "string" ? options.previous : null,
+        ext: typeof options?.ext === "string" ? options.ext : null,
       });
       api("planRename", async (id, name, newName, options = {}) => {
         const plan = await files.renameDetails(

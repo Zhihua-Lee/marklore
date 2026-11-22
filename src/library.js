@@ -1322,13 +1322,24 @@ export function createLibrary({
       },
     });
     if (!typed || typed === value) return;
-    const title = isFolder || heading ? typed : baseName(typed);
+    // A file name typed with an extension the library opens takes it.
+    const typedExt =
+      isFolder || heading
+        ? null
+        : (/\.(md|markdown|mdown|mkd|txt|diff|patch)$/i.exec(typed) || [
+            null,
+          ])[0];
+    const title = typedExt ? typed.slice(0, -typedExt.length) : typed;
+    // Its own extension again is no change of extension.
+    const sameExt =
+      typedExt && old.toLowerCase().endsWith(typedExt.toLowerCase());
     await renameTo({
       folderId: folder.dataset.id,
       name: old,
       title,
       shown: isFolder ? old : target.dataset.title || old,
       directory: isFolder,
+      ext: sameExt ? null : typedExt,
     });
   }
   // Rename a note or folder by its new name (title: a note's heading as
@@ -1342,15 +1353,22 @@ export function createLibrary({
     title,
     shown = name,
     directory = false,
+    // An extension typed with the name (".txt"): the file takes it.
+    ext: typedExt = null,
   }) {
     if (!api?.renameEntry) return null;
     // The name on disk as it will most likely be (main makes the real one
     // from the title, numbering it when it is taken).
-    const ext = directory ? "" : (/\.[^.]+$/.exec(name) || [".md"])[0];
+    const ext = directory
+      ? ""
+      : typedExt || (/\.[^.]+$/.exec(name) || [".md"])[0];
     const guess =
       safeFileName(directory ? title : plainTitle(title), ext) || name;
     const plan = api.planRename
-      ? await api.planRename(folderId, name, guess, { title })
+      ? await api.planRename(folderId, name, guess, {
+          title,
+          ...(typedExt ? { ext: typedExt } : {}),
+        })
       : { moves: [], affected: [], newName: guess };
     const affected = withDrafts(plan.affected, plan.moves, plan.anchors);
     const newName = plan.newName || guess;
@@ -1371,6 +1389,7 @@ export function createLibrary({
       links,
       drafts: drafts(),
       title,
+      ...(typedExt ? { ext: typedExt } : {}),
     });
     const patched = followMoves(result, links);
     await refresh();

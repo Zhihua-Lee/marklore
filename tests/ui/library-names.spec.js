@@ -850,3 +850,24 @@ test("a rename from the index view that fails gives the keys back to the entry",
   await expect(page.locator("#toast")).toContainText("磁盘已满");
   await expect(item(page, "符号表")).toBeFocused();
 });
+
+test("F2 on a note without a heading takes a new extension typed with its name", async ({
+  page,
+}) => {
+  await library(page);
+  await page.evaluate(() => {
+    window.mock.renames = [];
+    window.folio.renameEntry = async (id, name, newName, options) => {
+      window.mock.renames.push([name, newName, options.title, options.ext]);
+      return { path: "C:\\kb\\" + newName, files: [], moves: [], failed: [] };
+    };
+  });
+  await tree(page).locator('button.file[data-name="说明.md"]').focus();
+  await page.keyboard.press("F2");
+  const input = tree(page).getByRole("textbox", { name: "新名称" });
+  await input.fill("说明.txt");
+  await input.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.mock.renames))
+    .toEqual([["说明.md", "说明.txt", "说明", ".txt"]]);
+});

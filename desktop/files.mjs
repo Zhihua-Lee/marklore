@@ -731,14 +731,25 @@ export class FileStore {
   // `title` (the entry's new name as typed: a note's heading in Markdown,
   // a folder's name) the name on disk is made from it (note-names.mjs): a
   // name Windows accepts, " (2)" when it is taken, and newName is unused.
-  async renameTarget(id, name, newName, { title = null } = {}) {
+  async renameTarget(
+    id,
+    name,
+    newName,
+    { title = null, ext: wantedExt = null } = {},
+  ) {
     const source = await this.childPath(id, name);
     const stat = await fs.stat(source);
     const directory = stat.isDirectory();
     if (typeof title === "string") {
       const plain = directory ? title.trim() : plainTitle(title);
       const folder = path.dirname(source);
-      const ext = directory ? "" : (NOTE_EXTENSION.exec(name) || [".md"])[0];
+      // The note's own extension (a .diff stays one), or one typed that
+      // the library opens.
+      const ext = directory
+        ? ""
+        : typeof wantedExt === "string" && /^\.[a-z0-9]{1,8}$/i.test(wantedExt)
+          ? wantedExt
+          : (/\.[a-z0-9]{1,8}$/i.exec(name) || [".md"])[0];
       // The whole path stays within what Windows takes.
       const max = Math.max(
         MIN_NAME,
@@ -784,9 +795,9 @@ export class FileStore {
     id,
     name,
     newName,
-    { title = null, previous = null } = {},
+    { title = null, previous = null, ext = null } = {},
   ) {
-    const plan = await this.renameTarget(id, name, newName, { title });
+    const plan = await this.renameTarget(id, name, newName, { title, ext });
     let heading = null;
     let entryTitle = null;
     let anchors = [];
@@ -825,11 +836,12 @@ export class FileStore {
     id,
     name,
     newName,
-    { drafts = [], title = null, previous = null } = {},
+    { drafts = [], title = null, previous = null, ext = null } = {},
   ) {
     const plan = await this.renameDetails(id, name, newName, {
       title,
       previous,
+      ext,
     });
     const { source, target } = plan;
     const moved = target !== source;

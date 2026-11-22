@@ -1284,7 +1284,7 @@ const { save, checkDisk, showConflict } = createDocumentSync({
       changeFront(doc, splitFront(text).yaml, { history: false });
   },
   // A note saved with a new leading heading is renamed after it.
-  saved: (doc, before) => nameSaved(doc, before),
+  saved: (doc, before, text) => nameSaved(doc, before, text),
 });
 function jump(from, { record = true } = {}) {
   if (!active) return;

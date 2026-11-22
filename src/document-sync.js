@@ -17,7 +17,9 @@ export function createDocumentSync({
   // Changes made to a note just before it is written (its modified time);
   // they become part of the note, as any edit.
   beforeSave = () => {},
-  // After a note is saved in place: (doc, the text it had on disk before).
+  // After a note is saved in place: (doc, the text it had on disk before,
+  // the text saved).
+
   saved = () => {},
 }) {
   async function save(as = false, doc = getActive()) {
@@ -30,6 +32,7 @@ export function createDocumentSync({
     doc.saving = true;
     let conflict = false;
     let before = null;
+    let savedText = null;
     try {
       beforeSave(doc);
       const text = doc.text;
@@ -63,6 +66,7 @@ export function createDocumentSync({
         }
         doc.version = result.version;
         before = doc.base;
+        savedText = text;
       }
       doc.base = text;
       doc.conflict = null;
@@ -78,7 +82,7 @@ export function createDocumentSync({
     } finally {
       doc.saving = false;
       // Once the save is through (the note no longer locked).
-      if (before !== null) run(() => saved(doc, before))();
+      if (before !== null) run(() => saved(doc, before, savedText))();
       if (conflict) {
         // checkDisk deliberately ignores saves in flight; release that guard first.
         await checkDisk(doc, true);

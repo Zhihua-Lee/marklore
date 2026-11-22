@@ -681,3 +681,64 @@ test("the index view shows a note's heading as its name, the file name only when
     "books.md",
   );
 });
+
+// The rename after a save follows what was saved, not what was typed since.
+test("a save renames after the heading it saved, even while the next edits come in", async ({
+  page,
+}) => {
+  await installFolio(page);
+  await page.addInitScript(() => {
+    window.mock = { handlers: {}, renames: [] };
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: [
+          {
+            id: "n",
+            path: "C:\\kb\\A.md",
+            name: "A.md",
+            text: "# A\n\n正文\n",
+            version: "v1",
+          },
+        ],
+        restored: [],
+        roots: [],
+        settings: { sidebar: false },
+      }),
+      save: async (id, text, version) => ({ version: version + "s" }),
+      currentFolder: async () => ({ id: "kb", name: "kb", path: "C:\\kb" }),
+      // A rename that takes a while (a large library).
+      renameEntry: async (id, name, newName, options) => {
+        window.mock.renames.push(options.title);
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        const path = "C:\\kb\\" + options.title + ".md";
+        return {
+          path,
+          files: [{ id: "n", path, name: options.title + ".md" }],
+          moves: [["C:\\kb\\" + name, path]],
+          rewritten: 0,
+          updated: 0,
+          failed: [],
+          drafts: [],
+          anchors: [],
+        };
+      },
+    });
+  });
+  await page.goto("/");
+  await page.keyboard.press("Control+3");
+  await page.locator("#editor .cm-content").click();
+  const retitle = async (name) => {
+    await page.keyboard.press("Control+Home");
+    await page.keyboard.press("End");
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(name);
+  };
+  await retitle("B");
+  await page.keyboard.press("Control+s");
+  await retitle("C");
+  await page.keyboard.press("Control+s");
+  // Typed, not saved, while the renames are still running.
+  await retitle("D");
+  await page.waitForTimeout(2000);
+  expect(await page.evaluate(() => window.mock.renames)).toEqual(["B", "C"]);
+});

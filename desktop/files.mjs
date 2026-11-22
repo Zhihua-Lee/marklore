@@ -804,7 +804,8 @@ export class FileStore {
       if (found) {
         heading = title.trim().replace(/\s+/g, " ");
         entryTitle = plainTitle(heading);
-        const old = typeof previous === "string" ? previous : found.raw;
+        const old =
+          typeof previous === "string" && previous ? previous : found.raw;
         const from = headingAnchor(old);
         const to = headingAnchor(heading);
         if (from !== to)
@@ -861,7 +862,9 @@ export class FileStore {
     if (plan.heading !== null) {
       const op = {
         kind: "note-name",
-        heading: plan.heading,
+        // After a save the heading is the saved one already: the reader may
+        // have typed another since, which stays theirs.
+        heading: typeof previous === "string" ? null : plan.heading,
         title: plan.entryTitle,
       };
       if (draftList(drafts).some((p) => samePath(p, source)))

@@ -1380,16 +1380,17 @@ export function createLibrary({
   // following, with nothing asked; one toast with its undo. Saves come one
   // after another, each renaming at most once.
   let naming = Promise.resolve();
-  function nameSaved(doc, before) {
+  function nameSaved(doc, before, text = doc.text) {
     naming = naming
-      .then(() => syncName(doc, before))
+      .then(() => syncName(doc, before, text))
       .catch((error) => report(error.message));
     return naming;
   }
-  async function syncName(doc, before) {
+  async function syncName(doc, before, text) {
     if (!api?.renameEntry || !doc?.fileId || !doc.path) return;
     if (isIndexName(doc.name || "")) return;
-    const now = leadingHeading(doc.text);
+    // What was saved (the reader may have typed on since).
+    const now = leadingHeading(text);
     const was = leadingHeading(before ?? "");
     if (!now || now.raw === was?.raw) return;
     const folder = await api.currentFolder(doc.fileId);
@@ -1397,7 +1398,9 @@ export function createLibrary({
       links: true,
       drafts: drafts(),
       title: now.raw,
-      ...(was ? { previous: was.raw } : {}),
+      // The heading before the save ("" when it had none): main then knows
+      // the note holds the new one already.
+      previous: was?.raw ?? "",
     });
     const patched = followMoves(result, true);
     await refresh();

@@ -358,3 +358,24 @@ test("a note rewritten in place is listed with its new heading, even with the sa
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+test("a rename after a save leaves a heading typed since in the draft alone", async () => {
+  const lib = await library();
+  const { kb } = lib;
+  try {
+    const note = path.join(kb, "1.2 映射.md");
+    await fs.writeFile(
+      note,
+      FILES["1.2 映射.md"].replace("# 1.2 映射", "# 映射"),
+    );
+    const { done } = await lib.rename("1.2 映射.md", "映射", {
+      drafts: [note],
+      previous: "1.2 映射",
+    });
+    const op = done.drafts.find((d) => d.ops[0].kind === "note-name").ops[0];
+    assert.equal(op.heading, null);
+    assert.equal(op.title, "映射");
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

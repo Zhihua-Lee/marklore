@@ -87,6 +87,7 @@ test("a note's name set: its heading, and its front-matter title when it has one
   );
   assert.deepEqual(frontTitle('---\ntitle: "a \\"b\\""\n---\n'), {
     line: 1,
+    end: 1,
     value: 'a "b"',
   });
   // No front-matter title is ever added; a setext heading keeps its form.
@@ -155,4 +156,75 @@ test("an index entry follows a rename: its link and its text, the note's name", 
     renameInIndex(index, "1.2 映射.md", "映射2.md"),
     "- [第一章：集合与映射](第一章_集合与映射.md)\n  - [映射](映射2.md#定义)\n",
   );
+});
+
+test("a long name is cut in UTF-16 units, never through a character, and still counts as the same name", () => {
+  // Astral characters (two UTF-16 units each): the cut keeps a whole one.
+  const emoji = "😀".repeat(110);
+  const cut = safeBase(emoji, 120);
+  assert.ok(cut.length <= 120, `${cut.length} units`);
+  assert.equal(cut, "😀".repeat(60));
+  assert.ok(numberedName(cut + ".md", 999).length <= 200);
+  // The file a long heading was given (cut to fit its folder) is its name.
+  const title = "很长的标题".repeat(40);
+  assert.ok(fileMatches(title, safeBase(title, 120) + ".md"));
+  assert.ok(fileMatches(title, safeBase(title, 37) + ".md"));
+  assert.ok(!fileMatches(title, "很长的标题.md"));
+  assert.ok(!fileMatches("短", "短短.md"));
+});
+
+test("a heading's name keeps a trailing # and other Markdown it cannot read back", () => {
+  // A closing "#" would be read as the end of the heading: escaped.
+  const issue = setNoteName("# 旧\n", { heading: "Issue #" });
+  assert.equal(leadingHeading(issue).title, "Issue #");
+  assert.equal(
+    leadingHeading(setNoteName("# 旧\n", { heading: "C ##" })).title,
+    "C ##",
+  );
+  // A setext heading given a name that would read as a list: an ATX one.
+  const listed = setNoteName("旧名\n===\n\n正文\n", { heading: "1. 概述" });
+  assert.equal(listed, "# 1. 概述\n\n正文\n");
+  assert.equal(leadingHeading(listed).title, "1. 概述");
+  assert.equal(
+    leadingHeading(setNoteName("旧名\n===\n", { heading: "- 笔记" })).title,
+    "- 笔记",
+  );
+  // Indented code followed by "===" is no heading.
+  assert.equal(leadingHeading("    code\n===\n"), null);
+  assert.equal(leadingHeading("\tcode\n===\n"), null);
+});
+
+test("code and formulas in a heading keep their text", () => {
+  assert.equal(plainTitle("用 `<div>` 和 `a*b*c`"), "用 <div> 和 a*b*c");
+  assert.equal(plainTitle("$a_1 * b_2$ 的**和**"), "a_1 * b_2 的和");
+  assert.equal(plainTitle("`__init__` 方法"), "__init__ 方法");
+});
+
+test("front matter: an empty block is none; quoted keys, comments and multi-line titles", () => {
+  assert.equal(leadingHeading("---\n---\n# 标题\n"), null);
+  assert.deepEqual(frontTitle('---\n"title": 甲 # 注释\n---\n'), {
+    line: 1,
+    end: 1,
+    value: "甲",
+  });
+  assert.deepEqual(
+    frontTitle("---\ntitle: >-\n  长的\n  标题\ntags: [a]\n---\n"),
+    {
+      line: 1,
+      end: 3,
+      value: "长的 标题",
+    },
+  );
+  assert.equal(
+    setNoteName("---\ntitle: |\n  旧\n  名\ntags: [a]\n---\n# 旧名\n", {
+      heading: "新名",
+      title: "新名",
+    }),
+    "---\ntitle: 新名\ntags: [a]\n---\n# 新名\n",
+  );
+  assert.equal(
+    setNoteName("---\ntitle: 旧 # 注释\n---\n# 旧\n", { title: "新" }),
+    "---\ntitle: 新\n---\n# 旧\n",
+  );
+  assert.equal(setNoteName("---\nTitle: 大写\n---\n", { title: "新" }), null);
 });

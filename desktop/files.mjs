@@ -29,6 +29,7 @@ import {
   baseName,
   NOTE_EXTENSION,
   frontTitle,
+  MIN_NAME,
 } from "./note-names.mjs";
 
 const walk = promisify(walkRealpath);
@@ -740,7 +741,7 @@ export class FileStore {
       const ext = directory ? "" : (NOTE_EXTENSION.exec(name) || [".md"])[0];
       // The whole path stays within what Windows takes.
       const max = Math.max(
-        20,
+        MIN_NAME,
         Math.min(120, 250 - folder.length - ext.length - 6),
       );
       const base = safeBase(plain, max);
@@ -966,7 +967,7 @@ export class FileStore {
           : plainTitle(entryText || "") || baseName(item.name);
         const ext = (NOTE_EXTENSION.exec(item.name) || [".md"])[0];
         const max = Math.max(
-          20,
+          MIN_NAME,
           Math.min(120, 250 - folder.length - ext.length - 6),
         );
         const base = safeBase(title, max) || baseName(item.name);

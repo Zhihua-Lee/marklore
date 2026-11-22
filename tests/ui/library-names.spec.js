@@ -825,3 +825,28 @@ test("a new note gets the name typed as its heading and a safe file name", async
     .poll(() => page.evaluate(() => window.mock.created))
     .toEqual([["v1.2： 草稿？.md", "note", "# v1.2: 草稿?\n"]]);
 });
+
+test("a rename from the index view that fails gives the keys back to the entry", async ({
+  page,
+}) => {
+  await setupIndex(page);
+  await page.evaluate(() => {
+    window.folio.planRename = async (id, name, newName) => ({
+      moves: [],
+      newName,
+      anchors: [],
+      affected: [],
+    });
+    window.folio.renameEntry = async () => {
+      throw Error("磁盘已满");
+    };
+  });
+  await page.keyboard.press("Control+2");
+  await item(page, "符号表").focus();
+  await page.keyboard.press("F2");
+  const input = row(page, "符号表").locator("input.ix-title-input");
+  await input.fill("记号");
+  await input.press("Enter");
+  await expect(page.locator("#toast")).toContainText("磁盘已满");
+  await expect(item(page, "符号表")).toBeFocused();
+});

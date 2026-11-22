@@ -644,10 +644,13 @@ export function createIndexView({
           const link = element(
             "a",
             "ix-title",
-            child.name + (child.directory ? "/" : ""),
+            // A note by its name (its heading), as everywhere.
+            child.title || child.name + (child.directory ? "/" : ""),
           );
           link.setAttribute("href", hrefFor(child.name, child.directory));
           row.append(link);
+          if (child.title && !fileMatches(child.title, child.name))
+            row.append(element("span", "ix-file", child.name));
           if (edit) {
             row.draggable = true;
             link.draggable = false;
@@ -784,17 +787,30 @@ export function createIndexView({
       title.hidden = false;
       row.draggable = true;
       const again = keep && entryAt(item);
+      // The folder still being read: whether this entry is a note of it is
+      // not known yet (renaming it could not follow it).
+      if (again && keep && info?.status === "loading" && found.entry.name) {
+        report(t("目录正在更新，请稍后再试。"));
+        return closed(item);
+      }
       if (again && child && info?.folderId && value.trim()) {
         if (value.trim() === start) return closed(item);
         // The index tab may be redrawn meanwhile (its entry rewritten).
         run(async () => {
-          const done = await renameNote({
-            folderId: info.folderId,
-            name: child.name,
-            title: value.trim(),
-            shown: again.entry.title,
-            directory: Boolean(child.directory),
-          });
+          let done = false;
+          try {
+            done = await renameNote({
+              folderId: info.folderId,
+              name: child.name,
+              title: value.trim(),
+              // Asked about by the name the row shows.
+              shown: child.title || again.entry.title,
+              directory: Boolean(child.directory),
+            });
+          } finally {
+            // Not renamed (cancelled, failed): the keys back on the entry.
+            if (!done && done !== null && item.isConnected) closed(item);
+          }
           // Renaming not available (no desktop): the entry's text only.
           const now = done === null && entryAt(item);
           if (
@@ -802,7 +818,7 @@ export function createIndexView({
             apply(now.doc, retitleEntry(now.doc.text, now.index, value))
           )
             return;
-          if (!done && item.isConnected) closed(item);
+          if (done === null && item.isConnected) closed(item);
         })();
         return;
       }

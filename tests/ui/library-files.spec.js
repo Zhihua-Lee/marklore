@@ -302,7 +302,8 @@ test("a note made in the tree starts with the default properties when asked", as
   await expect(page.getByRole("tab", { name: "Ideas #1.md" })).toBeVisible();
   // Written with the file, so the new note is not an unsaved change.
   expect(await page.evaluate(() => window.texts)).toEqual([
-    '---\ntitle: "Ideas #1"\ntags: []\n---\n\n',
+    // Named by its heading; the properties' title says the same.
+    '---\ntitle: "Ideas #1"\ntags: []\n---\n# Ideas #1\n',
   ]);
   await expect(
     page.getByRole("tab", { name: "Ideas #1.md" }),

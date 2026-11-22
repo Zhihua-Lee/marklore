@@ -12,6 +12,9 @@ import {
   plainTitle,
   leadingHeading,
   safeFileName,
+  safeBase,
+  setNoteName,
+  NOTE_EXTENSION,
 } from "../desktop/note-names.mjs";
 import {
   askCreateIndex,
@@ -1174,13 +1177,21 @@ export function createLibrary({
       },
     });
     if (!name) return;
-    const full =
-      kind === "folder" || /\.[a-z0-9]+$/i.test(name) ? name : name + ".md";
+    // One name per note: the name typed is its heading, and its file name
+    // is made from it ("v1.2" is a name, not an extension).
+    const ext = (NOTE_EXTENSION.exec(name) || [".md"])[0];
+    const title = kind === "folder" ? name : baseName(name);
+    const full = kind === "folder" ? safeBase(name) : safeFileName(title, ext);
+    if (!full) return report(t("名称不能为空"));
+    const start = kind === "folder" ? "" : newNoteText(full);
     const made = await api.createEntry(
       folder.id,
       full,
       kind,
-      kind === "folder" ? "" : newNoteText(full),
+      kind === "folder"
+        ? ""
+        : (setNoteName(start, { heading: title, insert: true, title }) ??
+            start),
       { under: under?.name ?? null, drafts: drafts() },
     );
     if (made.index?.draft) patchDrafts({ moves: [], drafts: [made.index] });

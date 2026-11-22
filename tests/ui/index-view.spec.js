@@ -224,7 +224,7 @@ test("Edit mode: new sub-page, title in place, remove from the index, undo", asy
   await name.press("Enter");
   await expect(item(page, "2.1.1 例题")).toHaveAttribute("aria-level", "3");
   expect(await page.evaluate(() => window.mock.created)).toEqual([
-    { id: "nb", name: "2.1.1 例题.md", kind: "note", text: "" },
+    { id: "nb", name: "2.1.1 例题.md", kind: "note", text: "# 2.1.1 例题\n" },
   ]);
   let text = await saved(page);
   expect(text).toContain(
@@ -291,7 +291,8 @@ test("missing page: create, point elsewhere, or remove", async ({ page }) => {
     id: "nb",
     name: "单调有界.md",
     kind: "note",
-    text: "",
+    // Named as its entry says.
+    text: "# 2.2 单调有界定理\n",
   });
   // The text is unchanged by creating.
   expect(await saved(page)).toBe(indexText);

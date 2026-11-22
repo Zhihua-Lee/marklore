@@ -18,7 +18,11 @@
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { t } from "../desktop/i18n.mjs";
 import { isIndexName } from "../desktop/folder-index.mjs";
-import { fileMatches } from "../desktop/note-names.mjs";
+import {
+  fileMatches,
+  safeFileName,
+  setNoteName,
+} from "../desktop/note-names.mjs";
 import { renderDocument } from "./document-render.js";
 import { isDiffDocument } from "./diff-view.js";
 import { icon } from "./icons.js";
@@ -823,13 +827,21 @@ export function createIndexView({
   }
   // The file of a new page. One place to change when the main process
   // offers creating index pages itself.
-  async function createPageFile(folderId, name) {
+  // A new page named `title`: that is its heading (desktop/note-names.mjs).
+  async function createPageFile(folderId, name, title = titleFor(name)) {
+    const start = newNoteText(name);
+    const text =
+      setNoteName(start, { heading: title, insert: true, title }) ?? start;
     // The view lists it itself (in its draft): main leaves the index alone.
-    return api.createEntry(folderId, name, "note", newNoteText(name), {
-      list: false,
-    });
+    return api.createEntry(folderId, name, "note", text, { list: false });
   }
-  const fileName = (name) => (NOTE_NAME.test(name) ? name : name + ".md");
+  // The file of a page named as typed: made from the name ("v1.2" is a
+  // name, not an extension); one typed with a note's extension keeps it.
+  const pageName = (typed) => {
+    const ext = (NOTE_NAME.exec(typed) || [".md"])[0];
+    const title = NOTE_NAME.test(typed) ? titleFor(typed) : typed.trim();
+    return { title, name: safeFileName(title, ext) };
+  };
   // A name typed for a new page, in a row where it will be listed.
   function askName(container, before = null) {
     return new Promise((resolve) => {
@@ -889,11 +901,17 @@ export function createIndexView({
       else flush();
       return;
     }
-    const name = fileName(typed);
+    const { name, title } = pageName(typed);
+    if (!name) {
+      report(t("名称不能为空"));
+      if (item) closed(item);
+      else flush();
+      return;
+    }
     // A file of that name already in the folder is listed, not made again.
     if (!childOf(info, name)) {
-      await createPageFile(info.folderId, name);
-      addChild(info, { name, directory: false });
+      await createPageFile(info.folderId, name, title);
+      addChild(info, { name, directory: false, title, heading: title });
       info.version++;
       filesChanged();
     }
@@ -905,7 +923,7 @@ export function createIndexView({
       doc,
       insertEntry(
         doc.text,
-        { title: titleFor(name), href: hrefFor(name) },
+        { title, href: hrefFor(name) },
         parent ? parent.index : -1,
         parent ? "into" : "after",
       ),
@@ -923,7 +941,8 @@ export function createIndexView({
     if (!folder && !NOTE_NAME.test(name)) return;
     if (folder)
       await api.createEntry(info.folderId, name, "folder", "", { list: false });
-    else await createPageFile(info.folderId, name);
+    // Named as its entry says.
+    else await createPageFile(info.folderId, name, found.entry.title);
     addChild(info, { name, directory: folder });
     info.version++;
     filesChanged();

@@ -162,7 +162,7 @@ try {
   await page.locator(".tab.active", { hasText: "Tree note.md" }).waitFor();
   assert.equal(
     await fs.readFile(path.join(library, "Topic", "Tree note.md"), "utf8"),
-    "",
+    "# Tree note\n",
   );
   await tree
     .locator(`button.file[data-name="Laplace.md"]`)

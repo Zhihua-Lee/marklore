@@ -786,3 +786,36 @@ test("a rename that rewrites notes in place has their clean tabs read again", as
     .poll(() => page.evaluate(() => window.mock.reads))
     .toContain("ch:1.1 集合.md");
 });
+
+// A new note is named by what was typed: its heading, and a file name made
+// from it.
+test("a new note gets the name typed as its heading and a safe file name", async ({
+  page,
+}) => {
+  await library(page);
+  await page.evaluate(() => {
+    window.mock.created = [];
+    window.folio.createEntry = async (id, name, kind, text) => {
+      window.mock.created.push([name, kind, text]);
+      return {
+        id: "new",
+        path: "C:\\kb\\" + name,
+        name,
+        text,
+        version: "v1",
+        index: null,
+      };
+    };
+  });
+  await folderRow(page, "kb").click({ button: "right" });
+  await page
+    .locator("#context")
+    .getByRole("menuitem", { name: "新建笔记" })
+    .click();
+  const input = tree(page).getByRole("textbox", { name: "新笔记名称" });
+  await input.fill("v1.2: 草稿?");
+  await input.press("Enter");
+  await expect
+    .poll(() => page.evaluate(() => window.mock.created))
+    .toEqual([["v1.2： 草稿？.md", "note", "# v1.2: 草稿?\n"]]);
+});

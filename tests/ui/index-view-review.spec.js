@@ -155,7 +155,7 @@ test("attachments are not missing; .mdown pages are created as notes; a deeper m
   await item(page, "旧笔记").getByRole("button", { name: "创建" }).click();
   await expect
     .poll(() => page.evaluate(() => window.mock.created.at(-1)))
-    .toEqual({ id: "nb", name: "old.mdown", kind: "note", text: "" });
+    .toEqual({ id: "nb", name: "old.mdown", kind: "note", text: "# 旧笔记\n" });
   // Shown again after a library change, the deeper link is missing too.
   await page.evaluate(() => window.mock.handlers.library?.());
   await expect(item(page, "深处")).toHaveClass(/missing/);

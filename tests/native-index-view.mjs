@@ -127,7 +127,10 @@ try {
   await name.fill("Example");
   await name.press("Enter");
   await item("Example").waitFor();
-  assert.equal(await fs.readFile(path.join(library, "Example.md"), "utf8"), "");
+  assert.equal(
+    await fs.readFile(path.join(library, "Example.md"), "utf8"),
+    "# Example\n",
+  );
   await page.keyboard.press("Control+s");
   for (let i = 0; i < 50; i++) {
     if ((await fs.readFile(indexFile, "utf8")).includes("Example")) break;

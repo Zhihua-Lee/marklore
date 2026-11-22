@@ -338,3 +338,23 @@ test("the tree lists notes with their name (the leading heading)", async () => {
     await fs.rm(lib.dir, { recursive: true, force: true });
   }
 });
+
+test("a note rewritten in place is listed with its new heading, even with the same size and time", async () => {
+  const lib = await library();
+  const { kb, store, root } = lib;
+  try {
+    const file = path.join(kb, "无标题.md");
+    await fs.writeFile(file, "# 甲乙\n");
+    const { mtime } = await fs.stat(file);
+    const titleOf = async () =>
+      (await store.list(root.id)).find((c) => c.name === "无标题.md").title;
+    assert.equal(await titleOf(), "甲乙");
+    await store.rewrite(file, () => "# 丙丁\n");
+    // Not kept from before (Windows can leave the same size and time).
+    assert.equal(store.headings.has(file), false);
+    await fs.utimes(file, mtime, mtime);
+    assert.equal(await titleOf(), "丙丁");
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});

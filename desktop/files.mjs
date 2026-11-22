@@ -240,6 +240,7 @@ export class FileStore {
         return { conflict: true };
       await fs.rename(temp, file.path);
       Object.assign(file, record(file.path, info));
+      this.headings.delete(file.path);
       return { version: hash(bytes) };
     } finally {
       this.locks.delete(file.path);
@@ -284,6 +285,7 @@ export class FileStore {
         );
       await renameRetry(temp, file, { wait: this.retryWait });
       this.indexes.delete(file);
+      this.headings.delete(file);
       return { path: file, before: hash(before), after: hash(bytes), backup };
     } finally {
       this.locks.delete(file);

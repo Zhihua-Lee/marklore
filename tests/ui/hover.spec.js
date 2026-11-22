@@ -1,10 +1,10 @@
 import { test, expect } from "@playwright/test";
 import { installFolio } from "./fixtures.js";
 
-async function boot(page, { opened = false } = {}) {
+async function boot(page, { opened = false, settings = {} } = {}) {
   await installFolio(page);
   await page.addInitScript(
-    ({ opened }) => {
+    ({ opened, settings }) => {
       const text =
         "# Links\n\n[Heading](Other%20%E4%B8%AD%E6%96%87.md#destination) · [Line](Other%20%E4%B8%AD%E6%96%87.md#L9C1) · [Missing](Other%20%E4%B8%AD%E6%96%87.md#absent) · [Denied](../private.md) · [External](https://example.com)\n\n[Slow](Slow.md) · [Fast](Fast.md)";
       const other = {
@@ -44,6 +44,7 @@ async function boot(page, { opened = false } = {}) {
               ]
             : [],
           roots: [],
+          settings,
         }),
         read: async (id, version) =>
           version
@@ -70,7 +71,7 @@ async function boot(page, { opened = false } = {}) {
         },
       });
     },
-    { opened },
+    { opened, settings },
   );
   await page.goto("/");
   await expect(page.locator("#content h1")).toContainText("Links");
@@ -203,7 +204,7 @@ test("permission errors stay local, external URLs do not trigger preview", async
   await expect(page.locator(".preview-status")).toContainText("授权文件夹之外");
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "External", exact: true }).hover();
-  await page.waitForTimeout(450);
+  await page.waitForTimeout(1100);
   await expect(page.locator("#link-preview")).toBeHidden();
   expect(await page.evaluate(() => window.mock.previews)).toEqual([
     "../private.md",
@@ -254,4 +255,171 @@ test("replacing the origin during an asynchronous hover cannot leave an orphan c
   });
   await expect(page.locator("#link-preview")).toBeHidden();
   await expect(page.getByRole("tab")).toHaveCount(1);
+});
+
+// Restrained previews (Settings → Navigation & scrolling → Link preview):
+// they open only once the pointer rests on a link, never while a mouse
+// button is held, shortly after a selection or beside selected text.
+const center = async (locator) => {
+  const box = await locator.boundingBox();
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+};
+// Whether the card opens within ms.
+const opens = (page, ms) =>
+  page
+    .locator("#link-preview")
+    .waitFor({ state: "visible", timeout: ms })
+    .then(
+      () => true,
+      () => false,
+    );
+
+test("a preview opens only once the pointer rests on the link", async ({
+  page,
+}) => {
+  await boot(page);
+  const card = page.locator("#link-preview");
+  const fast = page.getByRole("link", { name: "Fast", exact: true });
+  const started = Date.now();
+  await fast.hover();
+  await expect(card).toBeVisible();
+  expect(Date.now() - started).toBeGreaterThanOrEqual(650);
+  // Leaving it open: closed after a short grace.
+  await page.mouse.move(5, 500);
+  await expect(card).toBeHidden();
+  // Leaving the link before it opened: it does not open.
+  await fast.hover();
+  await page.waitForTimeout(350);
+  await page.mouse.move(5, 500);
+  expect(await opens(page, 1200)).toBe(false);
+  // Moving along the link starts the wait again.
+  const { x, y } = await center(fast);
+  await page.mouse.move(x - 8, y);
+  for (let i = 0; i < 6; i++) {
+    await page.waitForTimeout(150);
+    await page.mouse.move(x - 8 + (i % 2 ? 0 : 12), y);
+  }
+  await expect(card).toBeHidden();
+  await expect(card).toBeVisible();
+  // It does not move with the pointer or take the focus.
+  const placed = await card.boundingBox();
+  await page.mouse.move(x + 6, y);
+  expect(await card.boundingBox()).toEqual(placed);
+  expect(await card.evaluate((el) => el.contains(document.activeElement))).toBe(
+    false,
+  );
+});
+
+test("no preview while a mouse button is held or a selection is dragged", async ({
+  page,
+}) => {
+  await boot(page);
+  const fast = page.getByRole("link", { name: "Fast", exact: true });
+  // Pressed on the link and held there.
+  const at = await center(fast);
+  await page.mouse.move(at.x, at.y);
+  await page.mouse.down();
+  expect(await opens(page, 1300)).toBe(false);
+  await page.mouse.up();
+  await page.mouse.move(5, 500);
+  // A selection dragged from the heading across the link, let go on it.
+  const heading = await center(page.locator("#content h1"));
+  const from = { x: heading.x - 20, y: heading.y };
+  await page.mouse.move(from.x, from.y);
+  await page.mouse.down();
+  for (let i = 1; i <= 8; i++)
+    await page.mouse.move(
+      from.x + ((at.x - from.x) * i) / 8,
+      from.y + ((at.y - from.y) * i) / 8,
+    );
+  expect(await opens(page, 1300)).toBe(false);
+  await page.mouse.up();
+  expect(
+    await page.evaluate(() => getSelection().toString().length),
+  ).toBeGreaterThan(0);
+  // Resting there, the selection holding the link: still none.
+  await page.mouse.move(at.x + 2, at.y);
+  expect(await opens(page, 1800)).toBe(false);
+  expect(await page.evaluate(() => window.mock.previews)).toEqual([]);
+});
+
+test("no preview just after a selection, nor beside selected text", async ({
+  page,
+}) => {
+  await boot(page);
+  const card = page.locator("#link-preview");
+  const fast = page.getByRole("link", { name: "Fast", exact: true });
+  // Text selected far from the link: the preview waits until a moment
+  // after the selection was made, then opens.
+  const started = Date.now();
+  await page.evaluate(() => {
+    const range = document.createRange();
+    range.selectNodeContents(document.querySelector("#content h1"));
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+  await fast.hover();
+  await expect(card).toBeVisible();
+  expect(Date.now() - started).toBeGreaterThanOrEqual(950);
+  await page.mouse.move(5, 500);
+  await expect(card).toBeHidden();
+  // Text selected right beside the link: none while it stays selected.
+  await page.evaluate(() => {
+    const link = document.querySelector('#content a[href="Fast.md"]');
+    const range = document.createRange();
+    range.selectNodeContents(link.previousSibling);
+    getSelection().removeAllRanges();
+    getSelection().addRange(range);
+  });
+  await page.waitForTimeout(1100);
+  await fast.hover();
+  expect(await opens(page, 1600)).toBe(false);
+  // Cleared: the pointer resting again opens it.
+  await page.evaluate(() => getSelection().removeAllRanges());
+  const { x, y } = await center(fast);
+  await page.mouse.move(x + 6, y);
+  await expect(card).toBeVisible();
+});
+
+test("Ctrl mode opens a preview only while Ctrl is held; off never", async ({
+  page,
+}) => {
+  await boot(page, { settings: { linkPreview: "ctrl" } });
+  const card = page.locator("#link-preview");
+  const fast = page.getByRole("link", { name: "Fast", exact: true });
+  await fast.hover();
+  expect(await opens(page, 1300)).toBe(false);
+  // Ctrl pressed with the pointer on the link, let go once it opened.
+  await page.keyboard.down("Control");
+  await expect(card).toBeVisible();
+  await page.keyboard.up("Control");
+  await page.waitForTimeout(400);
+  await expect(card).toBeVisible();
+  await page.mouse.move(5, 500);
+  await expect(card).toBeHidden();
+  // Let go before it opened: it does not open.
+  await fast.hover();
+  await page.keyboard.down("Control");
+  await page.keyboard.up("Control");
+  expect(await opens(page, 1000)).toBe(false);
+  // Moved onto the link with Ctrl held: it opens.
+  await page.mouse.move(5, 500);
+  await page.keyboard.down("Control");
+  await fast.hover();
+  await expect(card).toBeVisible();
+  await page.keyboard.up("Control");
+  await page.mouse.move(5, 500);
+  await expect(card).toBeHidden();
+  // Off: neither the pointer, nor Ctrl, nor keyboard focus.
+  await page.locator("#weight").click();
+  await page.locator("#link-preview-mode").selectOption("off");
+  await page.getByRole("button", { name: "关闭设置" }).click();
+  await fast.hover();
+  await page.keyboard.down("Control");
+  expect(await opens(page, 1300)).toBe(false);
+  await page.keyboard.up("Control");
+  await page.mouse.move(5, 500);
+  await page.keyboard.press("Tab");
+  await fast.focus();
+  expect(await opens(page, 800)).toBe(false);
 });

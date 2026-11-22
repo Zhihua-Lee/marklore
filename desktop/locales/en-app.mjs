@@ -130,6 +130,10 @@ export default {
   平滑滚动: "Smooth scrolling",
   仅触控板: "Touchpad only",
   "触控板、滚轮与滚动条": "Touchpad, wheel and scrollbar",
+  "悬停（克制，默认）": "Hover (restrained, default)",
+  "按住 Ctrl 悬停": "Hover with Ctrl held",
+  "指针停留片刻才打开；按着鼠标或刚选过文字时不打开":
+    "Opens once the pointer rests; not while a button is held or just after selecting",
   "鼠标侧键或 Alt+← / → 返回阅读位置；隐藏按钮不影响快捷键。":
     "Mouse side buttons or Alt+← / → return to reading positions; hiding the buttons keeps the shortcuts.",
   侧栏位置: "Sidebar placement",

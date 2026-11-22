@@ -773,6 +773,16 @@ export function createLibrary({
       return;
     }
     const tree = $("#tree");
+    // A folder folded or opened a moment ago (its toggle event not in yet)
+    // counts as the reader left it.
+    for (const details of tree.querySelectorAll("details.folder")) {
+      const key = pathKey(details.dataset.path);
+      if (details.classList.contains("root")) {
+        if (details.open) foldedRoots.delete(key);
+        else foldedRoots.add(key);
+      } else if (details.open) expanded.add(key);
+      else expanded.delete(key);
+    }
     const fragment = document.createDocumentFragment(),
       epoch = ++treeEpoch;
     const displayedRoots = browsingRoots();

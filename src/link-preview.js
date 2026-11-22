@@ -30,8 +30,28 @@ function eligible(href) {
 }
 
 // Independent transient surface: never changes the active tab, editor or progress.
-// Long enough not to open while the pointer only passes over a link.
-const HOVER_DELAY = 220;
+//
+// Restrained by default (Settings → Navigation & scrolling → Link preview):
+// the pointer has to rest on a link for a while, and never while a mouse
+// button is held (a drag or a selection being made), shortly after a
+// selection was made or changed, or with selected text under or near the
+// pointer. "ctrl": only while Ctrl is held over the link; "off": never on
+// its own. Keyboard focus (Tab) opens it as before, unless off.
+export const PREVIEW_MODES = ["hover", "ctrl", "off"];
+// The pointer at rest on a link this long (moving more than REST_SLOP
+// pixels starts it again).
+const REST_DELAY = 700;
+const REST_SLOP = 4;
+// Ctrl held over a link: asked for, so sooner.
+const CTRL_DELAY = 250;
+// Keyboard focus on a link.
+const FOCUS_DELAY = 220;
+// After a selection was made or changed.
+const SELECTION_QUIET = 1000;
+// Selected text this close to the pointer keeps the preview away.
+const SELECTION_NEAR = 40;
+// Leaving the link and the card: time to move from one to the other.
+const LEAVE_GRACE = 240;
 
 export function createLinkPreview({
   host,
@@ -40,6 +60,7 @@ export function createLinkPreview({
   report,
   getZoom = () => 100,
   saveZoom = () => {},
+  getMode = () => "hover",
 }) {
   const card = document.createElement("section");
   card.id = "link-preview";
@@ -83,7 +104,10 @@ export function createLinkPreview({
     href = "",
     positioned = false,
     alignment = null;
-  function hide({ focus = false } = {}) {
+  // dismiss: closed by the reader (Esc, ×, a press): not opened again for
+  // the link under the pointer until the pointer leaves it.
+  function hide({ focus = false, dismiss = false } = {}) {
+    if (dismiss) dismissed = hovered;
     shown?.hydrate?.deactivate?.();
     shown = null;
     generation++;
@@ -246,19 +270,98 @@ export function createLinkPreview({
       });
     }
   }
-  function begin(link) {
+  // A link of the note that can be previewed.
+  const previewable = (link) =>
+    Boolean(link) &&
+    host.contains(link) &&
+    eligible(link.getAttribute("href") || "");
+  // What the pointer and the reader are doing, for the restrained rules.
+  let hovered = null, // the previewable link under the pointer
+    dismissed = null, // closed by the reader while the pointer is on it
+    pointer = { x: -1, y: -1 },
+    restFrom = null, // where the pointer came to rest on the link
+    held = false, // a mouse button is down
+    dragging = false,
+    ctrl = false,
+    hadRange = false,
+    selectedAt = -Infinity;
+  const mode = () => {
+    const value = getMode();
+    return PREVIEW_MODES.includes(value) ? value : "hover";
+  };
+  // Selected text under or near the pointer, or holding the link.
+  function selectionNear(link) {
+    const selection = getSelection();
+    if (!selection || selection.isCollapsed || !selection.rangeCount)
+      return false;
+    if (selection.containsNode(link, true)) return true;
+    for (let i = 0; i < selection.rangeCount; i++)
+      for (const r of selection.getRangeAt(i).getClientRects())
+        if (
+          pointer.x >= r.left - SELECTION_NEAR &&
+          pointer.x <= r.right + SELECTION_NEAR &&
+          pointer.y >= r.top - SELECTION_NEAR &&
+          pointer.y <= r.bottom + SELECTION_NEAR
+        )
+          return true;
+    return false;
+  }
+  // How long a preview by the pointer has to wait: 0 now, Infinity until
+  // the pointer moves again (or Ctrl is pressed).
+  function wait(link) {
+    const how = mode();
+    if (how === "off" || (how === "ctrl" && !ctrl)) return Infinity;
+    if (held || dragging || selectionNear(link)) return Infinity;
+    return Math.max(0, SELECTION_QUIET - (performance.now() - selectedAt));
+  }
+  // The preview of a link scheduled ("pointer" or "focus").
+  function arm(link, delay, via) {
+    clearTimeout(leaveTimer);
+    if (origin !== link) {
+      hide();
+      origin = link;
+    } else clearTimeout(timer);
+    const token = ++generation;
+    timer = setTimeout(() => fire(link, token, via), delay);
+  }
+  function fire(link, token, via) {
+    if (origin !== link || token !== generation) return;
+    if (via === "pointer") {
+      const ms = wait(link);
+      if (ms === Infinity) return;
+      if (ms > 0) {
+        timer = setTimeout(() => fire(link, token, via), ms);
+        return;
+      }
+    }
+    show(link, token);
+  }
+  // A preview waiting to open (none shown yet).
+  const pending = () => Boolean(origin) && card.hidden;
+  // The pointer over a link, moved or still: it rests from where it last
+  // moved more than a few pixels.
+  function rest(link, event) {
+    const how = mode();
+    const allowed =
+      how !== "off" &&
+      link !== dismissed &&
+      !event.buttons &&
+      !dragging &&
+      (how === "hover" || event.ctrlKey || event.metaKey);
+    if (!allowed) {
+      if (origin === link && pending()) hide();
+      return;
+    }
+    if (origin === link && !pending()) return; // shown: left as it is
     if (
-      !link ||
-      !host.contains(link) ||
-      !eligible(link.getAttribute("href") || "")
+      origin === link &&
+      restFrom &&
+      Math.hypot(event.clientX - restFrom.x, event.clientY - restFrom.y) <=
+        REST_SLOP
     )
       return;
-    clearTimeout(leaveTimer);
-    if (origin === link) return;
-    hide();
-    origin = link;
-    const token = ++generation;
-    timer = setTimeout(() => show(link, token), HOVER_DELAY);
+    restFrom = { x: event.clientX, y: event.clientY };
+    arm(link, how === "ctrl" ? CTRL_DELAY : REST_DELAY, "pointer");
   }
   function leave(event) {
     if (
@@ -276,18 +379,96 @@ export function createLinkPreview({
     )
       return;
     clearTimeout(leaveTimer);
-    leaveTimer = setTimeout(() => hide(), 240);
+    // Not open yet: nothing to move into.
+    if (pending()) return hide();
+    leaveTimer = setTimeout(() => hide(), LEAVE_GRACE);
   }
-  host.addEventListener("pointerover", (e) => begin(e.target.closest("a")));
-  host.addEventListener("focusin", (e) => begin(e.target.closest("a")));
-  host.addEventListener("pointerout", leave);
+  const track = (event) => {
+    pointer = { x: event.clientX, y: event.clientY };
+    ctrl = event.ctrlKey || event.metaKey;
+  };
+  host.addEventListener("pointerover", (event) => {
+    track(event);
+    const link = event.target.closest("a");
+    if (!previewable(link)) return;
+    hovered = link;
+    clearTimeout(leaveTimer);
+    rest(link, event);
+  });
+  host.addEventListener("pointermove", (event) => {
+    track(event);
+    const link = event.target.closest("a");
+    if (link && link === hovered) rest(link, event);
+  });
+  host.addEventListener("pointerout", (event) => {
+    if (hovered && !hovered.contains(event.relatedTarget))
+      hovered = dismissed = null;
+    leave(event);
+  });
+  // Keyboard focus (Tab), not the focus a click gives a link.
+  host.addEventListener("focusin", (event) => {
+    const link = event.target.closest("a");
+    if (!previewable(link) || mode() === "off") return;
+    if (!link.matches(":focus-visible")) return;
+    clearTimeout(leaveTimer);
+    if (origin !== link) arm(link, FOCUS_DELAY, "focus");
+  });
   host.addEventListener("focusout", leave);
+  // Buttons, drags, Ctrl and selections, wherever they happen.
+  document.addEventListener(
+    "pointerdown",
+    (event) => {
+      track(event);
+      held = true;
+    },
+    true,
+  );
+  for (const type of ["pointerup", "pointercancel"])
+    document.addEventListener(type, () => (held = false), true);
+  window.addEventListener("blur", () => {
+    held = dragging = ctrl = false;
+  });
+  document.addEventListener("dragstart", () => (dragging = true), true);
+  for (const type of ["dragend", "drop"])
+    document.addEventListener(type, () => (dragging = false), true);
+  document.addEventListener("selectionchange", () => {
+    const selection = getSelection();
+    const ranged = Boolean(selection && !selection.isCollapsed);
+    // Made, changed or cleared; a caret moving alone does not count.
+    if (ranged || hadRange) selectedAt = performance.now();
+    hadRange = ranged;
+  });
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key !== "Control" && event.key !== "Meta") return;
+      ctrl = true;
+      if (event.repeat) return;
+      // Ctrl pressed with the pointer already resting on a link.
+      if (mode() === "ctrl" && hovered?.isConnected && !held && !dragging)
+        if (origin !== hovered || pending()) {
+          dismissed = null;
+          arm(hovered, CTRL_DELAY, "pointer");
+        }
+    },
+    true,
+  );
+  document.addEventListener(
+    "keyup",
+    (event) => {
+      if (event.key !== "Control" && event.key !== "Meta") return;
+      ctrl = false;
+      // Let go before it opened: not asked for any more.
+      if (mode() === "ctrl" && pending()) hide();
+    },
+    true,
+  );
   card.addEventListener("pointerenter", () => clearTimeout(leaveTimer));
   card.addEventListener("focusin", () => clearTimeout(leaveTimer));
   card.addEventListener("pointerleave", leave);
   card.addEventListener("focusout", leave);
   card.querySelector(".preview-close").onclick = () =>
-    hide({ focus: card.contains(document.activeElement) });
+    hide({ focus: card.contains(document.activeElement), dismiss: true });
   async function open(targetHref, targetSource) {
     hide();
     try {
@@ -337,13 +518,15 @@ export function createLinkPreview({
     },
     { passive: true },
   );
+  // A press anywhere but on the card (its link too: a click, or a drag
+  // starting to select) closes it, or keeps it from opening.
   document.addEventListener("pointerdown", (e) => {
-    if (!card.contains(e.target) && !origin?.contains(e.target)) hide();
+    if (!card.contains(e.target)) hide({ dismiss: true });
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && !card.hidden) {
       e.preventDefault();
-      hide({ focus: card.contains(document.activeElement) });
+      hide({ focus: card.contains(document.activeElement), dismiss: true });
     } else if (e.key === "F2" && !card.hidden) {
       e.preventDefault();
       scroller.focus({ preventScroll: true });

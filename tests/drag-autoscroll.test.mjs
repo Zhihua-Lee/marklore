@@ -16,3 +16,10 @@ test("a drag near a list's edge scrolls it, faster nearer and past the edge", ()
   // A short list keeps a middle where nothing scrolls.
   assert.equal(scrollSpeed(130, 100, 160), 0);
 });
+
+test("the edge and the top speed can be chosen", () => {
+  assert.equal(scrollSpeed(170, 100, 700, 80), -2);
+  assert.equal(scrollSpeed(170, 100, 700), 0);
+  assert.equal(scrollSpeed(100, 100, 700, 48, 10), -10);
+  assert.equal(scrollSpeed(900, 100, 700, 48, 10), 10);
+});

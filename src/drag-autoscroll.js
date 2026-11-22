@@ -4,12 +4,14 @@
 // or out of the window while a drag started in the list goes on). Dropping,
 // ending the drag or coming back to the middle stops it.
 //
-//   attach(container)  start following drags over it (again: no change)
-//   detach(container)  stop
+//   attach(container, { edge, maxSpeed })  follow drags over it (again: no
+//                                           change); edge in px, maxSpeed
+//                                           in px per frame
+//   detach(container)                       stop (safe when not attached)
 //
-// Used by the library tree and the index view. The browser keeps sending
-// dragover while the pointer rests, so drop targets under a still pointer
-// follow the scrolled list.
+// The library tree attaches once; the index view attaches on dragstart and
+// detaches on dragend. The browser keeps sending dragover while the pointer
+// rests, so drop targets under a still pointer follow the scrolled list.
 
 // How near an edge (px) scrolling starts, and its speed (px per frame) at
 // the edge and once past it.
@@ -20,7 +22,7 @@ const MAX_SPEED = 22;
 const attached = new WeakMap();
 
 // Speed for a pointer at y (client px) over a box: negative scrolls up.
-export function scrollSpeed(y, top, bottom, edge = EDGE) {
+export function scrollSpeed(y, top, bottom, edge = EDGE, maxSpeed = MAX_SPEED) {
   const zone = Math.min(edge, (bottom - top) / 3);
   if (zone <= 0) return 0;
   const near = (distance) => {
@@ -28,19 +30,24 @@ export function scrollSpeed(y, top, bottom, edge = EDGE) {
     // more past the edge (counted up to one more zone).
     const t = Math.min(2, distance / zone);
     const ratio = t <= 1 ? t * t : 1;
-    return Math.round(MIN_SPEED + (MAX_SPEED - MIN_SPEED) * ratio);
+    const min = Math.min(MIN_SPEED, maxSpeed);
+    return Math.round(min + (maxSpeed - min) * ratio);
   };
   if (y < top + zone) return -near(top + zone - y);
   if (y > bottom - zone) return near(y - (bottom - zone));
   return 0;
 }
 
-export function attach(container) {
+export function attach(container, { edge = EDGE, maxSpeed = MAX_SPEED } = {}) {
   if (!container || attached.has(container)) return;
   let speed = 0;
   let frame = 0;
   // Whether the drag started in the list (its end then comes as dragend).
-  let own = false;
+  // Attached from that drag's own dragstart: it did.
+  const current = typeof window !== "undefined" ? window.event : null;
+  let own = Boolean(
+    current?.type === "dragstart" && container.contains(current.target),
+  );
   const step = () => {
     frame = 0;
     if (!speed || !container.isConnected) return;
@@ -59,11 +66,11 @@ export function attach(container) {
   const follow = (event) => {
     const box = container.getBoundingClientRect();
     // Beside the list (another panel): not this list's drag.
-    if (event.clientX < box.left - EDGE || event.clientX > box.right + EDGE) {
+    if (event.clientX < box.left - edge || event.clientX > box.right + edge) {
       speed = 0;
       return;
     }
-    speed = scrollSpeed(event.clientY, box.top, box.bottom);
+    speed = scrollSpeed(event.clientY, box.top, box.bottom, edge, maxSpeed);
     if (speed && !frame) frame = requestAnimationFrame(step);
   };
   const start = (event) => {

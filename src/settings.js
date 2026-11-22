@@ -20,6 +20,8 @@ export function defaultSettings() {
     navigationScope: "all",
     showHistoryButtons: false,
     smoothScroll: "off",
+    // Link previews on hover: "hover" (restrained), "ctrl" or "off".
+    linkPreview: "hover",
     readingFormat: false,
     editSplit: false,
     richEdit: true,
@@ -103,6 +105,9 @@ export function normalizeSettings(saved = {}) {
     ? settings.tableStyle
     : "soft";
   settings.tableWidth = settings.tableWidth === "full" ? "full" : "auto";
+  settings.linkPreview = ["ctrl", "off"].includes(settings.linkPreview)
+    ? settings.linkPreview
+    : "hover";
   settings.navigationSize = clamp(settings.navigationSize, 10, 14, 12);
   settings.tabSize = clamp(settings.tabSize, 10, 13, 11);
   settings.weight = [400, 450, 500, 600].includes(Number(settings.weight))

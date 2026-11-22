@@ -1,17 +1,32 @@
-/* The index view (folder-index-view.js): the folder's pages as the library
-   tree shows them, laid on the page. Compact rows, the tree's fold arrow
-   and faint guide lines, titles in the note's ink, the first sentence of
-   each page muted beside it. Editing controls show on the row pointed at or
+/* The index view (folder-index-view.js): the folder's pages set like a
+   book's contents on the notebook page. The structure is read by type and
+   space, not by colour: top-level entries are section heads (larger,
+   heavier, space above each group), the second level is the body, deeper
+   levels are smaller and quieter. Every level steps in by the same amount,
+   its arrow under its parent's title, on a guide line down from the
+   parent's arrow. One line per entry: the page's first sentence is muted
+   and cut to the line. Editing controls show on the row pointed at or
    focused; the accent marks only where something will happen. */
 .ix-list,
 .ix-footer {
   --ix-arrow: 18px;
-  --ix-step: 9px;
-  --ix-guide: color-mix(in srgb, var(--reading-ink) 13%, transparent);
+  /* Between the arrow and the title; a level steps in by arrow + gap. */
+  --ix-gap: 8px;
+  --ix-pad: 2px;
+  --ix-guide: color-mix(in srgb, var(--reading-ink) 17%, transparent);
   --ix-muted: color-mix(in srgb, var(--reading-ink) 58%, var(--reading-paper));
+  --ix-soft: color-mix(in srgb, var(--reading-ink) 88%, var(--reading-paper));
+  --ix-quiet: color-mix(in srgb, var(--reading-ink) 76%, var(--reading-paper));
   margin: 0.6em 0 1em;
   font-size: 0.95em;
-  line-height: 1.5;
+  line-height: 1.45;
+}
+/* Light text on a dark page reads heavier, which flattens the weights:
+   the deeper levels step down more in ink. */
+:root[data-theme="dark"] :is(.ix-list, .ix-footer) {
+  --ix-guide: color-mix(in srgb, var(--reading-ink) 15%, transparent);
+  --ix-soft: color-mix(in srgb, var(--reading-ink) 80%, var(--reading-paper));
+  --ix-quiet: color-mix(in srgb, var(--reading-ink) 66%, var(--reading-paper));
 }
 .ix-item {
   outline: none;
@@ -19,11 +34,21 @@
 .ix-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  min-height: 30px;
-  padding: 3px 6px 3px 2px;
+  gap: var(--ix-gap);
+  min-height: 28px;
+  padding: 2px 6px 2px var(--ix-pad);
   border-radius: 6px;
   box-sizing: border-box;
+}
+/* A section head: a top-level entry of a list that has levels. Space
+   above it (and above a top-level entry after a group) keeps the groups
+   apart. */
+.ix-list:has(.ix-children) > .ix-item > .ix-row {
+  min-height: 34px;
+}
+.ix-list > .ix-item[aria-expanded]:not(:first-child),
+.ix-list > .ix-item[aria-expanded] + .ix-item {
+  margin-top: 0.85em;
 }
 .ix-row:hover {
   background: var(--hover);
@@ -39,6 +64,7 @@
   align-self: center;
   width: var(--ix-arrow);
   height: 20px;
+  min-height: 0;
   margin: 0;
   padding: 0;
   border: 0;
@@ -73,20 +99,22 @@
 .ix-twisty:hover {
   color: var(--reading-ink);
 }
-/* One step in per level, on a guide line down from the parent's arrow. */
-.ix-children {
-  margin-left: var(--ix-step);
-  padding-left: 0;
-  border-left: 1px solid var(--ix-guide);
+.ix-twisty:hover {
+  background: none;
 }
-.ix-children > .ix-item > .ix-row,
-.ix-children > .ix-new-row {
-  margin-left: 4px;
+/* One step in per level (arrow + gap: the arrow under the parent's title),
+   on a guide line down from the parent's arrow. */
+.ix-children {
+  --ix-half: calc(var(--ix-pad) + var(--ix-arrow) / 2 - 0.5px);
+  margin-left: var(--ix-half);
+  padding-left: calc(var(--ix-arrow) + var(--ix-gap) - var(--ix-half) - 1px);
+  border-left: 1px solid var(--ix-guide);
 }
 .ix-item.closed > .ix-children {
   display: none;
 }
 
+/* Titles by level: section heads, the body, then smaller and quieter. */
 .ix-title {
   flex: 0 1 auto;
   min-width: 0;
@@ -95,6 +123,25 @@
   white-space: nowrap;
   color: var(--reading-ink);
   font-weight: 500;
+}
+.ix-list:has(.ix-children) > .ix-item > .ix-row > .ix-title {
+  font-size: 1.1em;
+  font-weight: var(--heading-weight, 600);
+  letter-spacing: 0.01em;
+}
+.ix-item[aria-level="3"] > .ix-row > .ix-title {
+  font-size: 0.96em;
+  font-weight: 400;
+}
+.ix-children .ix-children .ix-children .ix-title {
+  font-size: 0.92em;
+  font-weight: 400;
+}
+.prose .ix-children .ix-children a.ix-title:not(:hover) {
+  color: var(--ix-soft);
+}
+.prose .ix-children .ix-children .ix-children a.ix-title:not(:hover) {
+  color: var(--ix-quiet);
 }
 .prose a.ix-title,
 #content a.ix-title.link-broken {
@@ -132,19 +179,33 @@
   color: var(--ix-muted);
   font-weight: 400;
 }
-/* The page's first sentence, and text written after the link. */
+/* How many pages a folded entry holds: only while it is folded. */
+.ix-count {
+  display: none;
+  flex: none;
+  color: var(--ix-muted);
+  font: 400 0.76em/1.5 var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.ix-item.closed > .ix-row > .ix-count {
+  display: inline;
+}
+/* The page's first sentence, and text written after the link: a step
+   apart from the title, muted, cut to one line. */
 .ix-excerpt,
 .ix-rest {
   flex: 1 1 0;
   min-width: 4em;
+  margin-left: 6px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--ix-muted);
-  font-size: 0.84em;
+  font-size: 0.8em;
 }
 .ix-rest {
-  color: color-mix(in srgb, var(--reading-ink) 75%, var(--reading-paper));
+  color: color-mix(in srgb, var(--reading-ink) 70%, var(--reading-paper));
 }
 
 /* A missing page: muted red title, a quiet tag, its repairs. */
@@ -259,7 +320,7 @@
 }
 .ix-new-row {
   display: flex;
-  padding: 3px 6px 3px calc(var(--ix-arrow) + 10px);
+  padding: 3px 6px 3px calc(var(--ix-pad) + var(--ix-arrow) + var(--ix-gap));
 }
 
 /* Below the list: a new page, and the folder's files not listed. */
@@ -339,7 +400,7 @@
   align-items: baseline;
   gap: 8px;
   min-height: 28px;
-  padding: 2px 6px 2px calc(var(--ix-arrow) + 10px);
+  padding: 2px 6px 2px calc(var(--ix-pad) + var(--ix-arrow) + var(--ix-gap));
   border-radius: 6px;
 }
 .ix-unlisted-item:hover {

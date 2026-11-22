@@ -1416,6 +1416,8 @@ const linkPreview = createLinkPreview({
   host: $("#content"),
   report: toast,
   getZoom: () => settings.previewZoom,
+  // Settings → Navigation & scrolling → Link preview.
+  getMode: () => settings.linkPreview,
   saveZoom: (value) => {
     settings.previewZoom = value;
     scheduleSession();

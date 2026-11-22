@@ -22,6 +22,7 @@ import { fileMatches } from "../desktop/note-names.mjs";
 import { renderDocument } from "./document-render.js";
 import { isDiffDocument } from "./diff-view.js";
 import { icon } from "./icons.js";
+import * as autoscroll from "./drag-autoscroll.js";
 import {
   scanIndex,
   moveEntry,
@@ -481,6 +482,12 @@ export function createIndexView({
       ? lastLine(scan, entry.children.at(-1))
       : entry.line;
   }
+  // The entries under an entry, at any depth.
+  const pagesUnder = (scan, i) =>
+    scan.entries[i].children.reduce(
+      (sum, k) => sum + 1 + pagesUnder(scan, k),
+      0,
+    );
   function itemNode(context, i) {
     const { scan, info, edit, state, doc } = context;
     const entry = scan.entries[i];
@@ -529,6 +536,17 @@ export function createIndexView({
         ? t("{title}（Ctrl+单击打开，双击改标题）", { title: name })
         : name;
     row.append(title);
+    // How many pages a folded entry holds (shown only while folded).
+    if (entry.children.length) {
+      const count = pagesUnder(scan, i);
+      row.append(
+        element(
+          "span",
+          "ix-count",
+          count === 1 ? t("1 页") : t("{count} 页", { count }),
+        ),
+      );
+    }
     const written = entry.name
       ? entry.name + (child?.directory ? "/" : "")
       : target(entry.href);
@@ -1385,12 +1403,18 @@ export function createIndexView({
     event.dataTransfer.setData(DRAG_TYPE, "1");
     event.dataTransfer.effectAllowed = "move";
     row.classList.add("dragging");
+    // Near the reader's top or bottom edge it scrolls, to reach entries
+    // off screen.
+    autoscroll.attach(scroller());
   });
+  // The reading view's scrolling box.
+  const scroller = () => host.parentElement || host;
   host.addEventListener("dragend", () => {
     for (const el of host.querySelectorAll(".dragging"))
       el.classList.remove("dragging");
     dragging = null;
     clearDrop();
+    autoscroll.detach(scroller());
   });
   host.addEventListener("dragover", (event) => {
     if (!dragging) return;
@@ -1414,6 +1438,7 @@ export function createIndexView({
     const drag = dragging;
     dragging = null;
     clearDrop();
+    autoscroll.detach(scroller());
     if (!row) return;
     event.preventDefault();
     const place = placeOf(event, row);

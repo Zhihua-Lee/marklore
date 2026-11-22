@@ -11,6 +11,7 @@ import path from "node:path";
 import { FileStore } from "../desktop/files.mjs";
 import { createLinkIndex } from "../desktop/link-index.mjs";
 import { createNoteMoves } from "../desktop/note-moves.mjs";
+import { unifyKey } from "../desktop/note-names.mjs";
 
 const FILES = {
   "_目录.md":
@@ -375,6 +376,20 @@ test("a rename after a save leaves a heading typed since in the draft alone", as
     const op = done.drafts.find((d) => d.ops[0].kind === "note-name").ops[0];
     assert.equal(op.heading, null);
     assert.equal(op.title, "映射");
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
+test("a unify plan changed after it was shown is told apart from the one shown", async () => {
+  const lib = await library();
+  const { kb, store, root } = lib;
+  try {
+    const shown = unifyKey((await store.unifyPlan(root.id)).notes);
+    assert.equal(unifyKey((await store.unifyPlan(root.id)).notes), shown);
+    // Another program changes a heading while the question is open.
+    await fs.writeFile(path.join(kb, "第二章 极限.md"), "# 第二章：极限\n");
+    assert.notEqual(unifyKey((await store.unifyPlan(root.id)).notes), shown);
   } finally {
     await fs.rm(lib.dir, { recursive: true, force: true });
   }

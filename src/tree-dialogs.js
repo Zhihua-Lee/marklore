@@ -4,6 +4,7 @@
 // dialog look (style.css) and a few quiet additions (library-index.css).
 import { t } from "../desktop/i18n.mjs";
 import { INDEX_NAMES } from "../desktop/folder-index.mjs";
+import { unifyKey } from "../desktop/note-names.mjs";
 
 // A modal dialog built from `build(form)`; resolves with what `finish`
 // is called with, or null on Esc / Cancel.
@@ -428,6 +429,8 @@ export function askUnify({ folder, plan }) {
     row.append(cancel, apply);
     form.append(row);
     let epoch = 0;
+    // The plan on screen: the one applied.
+    let shown = [];
     const show = async () => {
       const mine = ++epoch;
       apply.disabled = true;
@@ -442,6 +445,7 @@ export function askUnify({ folder, plan }) {
       }
       if (mine !== epoch) return;
       const notes = found.notes || [];
+      shown = notes;
       lead.textContent = notes.length
         ? t("{count} 篇笔记会改变：", { count: notes.length })
         : t("名字都已统一，没有要改的。");
@@ -475,7 +479,8 @@ export function askUnify({ folder, plan }) {
     };
     deep.addEventListener("change", show);
     cancel.onclick = () => finish(null);
-    apply.onclick = () => finish({ deep: deep.checked });
+    apply.onclick = () =>
+      finish({ deep: deep.checked, expect: unifyKey(shown) });
     form.onsubmit = (event) => {
       event.preventDefault();
       if (!apply.disabled) apply.click();

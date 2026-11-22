@@ -132,7 +132,13 @@ async function library(page, { long = 0 } = {}) {
         };
       },
       unifyNames: async (id, options) => {
-        window.mock.calls.push(["unifyNames", id, options.deep]);
+        // The plan applied is the one shown: what it was, by its notes.
+        window.mock.calls.push([
+          "unifyNames",
+          id,
+          options.deep,
+          JSON.parse(options.expect).length,
+        ]);
         return {
           files: [],
           moves: [
@@ -473,7 +479,7 @@ test("unify names: the folder's notes listed first, then changed in one step", a
     await page.evaluate(() =>
       window.mock.calls.filter((c) => c[0] === "unifyNames"),
     ),
-  ).toEqual([["unifyNames", "ch", true]]);
+  ).toEqual([["unifyNames", "ch", true, 2]]);
 });
 
 // The index view: a title edited there renames the note through the one

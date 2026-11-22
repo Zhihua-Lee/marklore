@@ -30,6 +30,7 @@ import { createNoteMoves } from "./note-moves.mjs";
 import { createNoteRepair } from "./note-repair.mjs";
 import { createRenameMemory } from "./rename-memory.mjs";
 import { isIndexName, applyIndexOp } from "./folder-index.mjs";
+import { unifyKey } from "./note-names.mjs";
 import { skippedName, isEnvironment } from "./scan-rules.mjs";
 import {
   portableDir,
@@ -1319,6 +1320,12 @@ else {
       api("unifyNames", async (id, options = {}) => {
         const opts = unifyOptions(options);
         const plan = await files.unifyPlan(id, opts);
+        // Only what the reader was shown: anything changed since, they look again.
+        if (
+          typeof options?.expect === "string" &&
+          unifyKey(plan.notes) !== options.expect
+        )
+          throw Error(t("文件夹在检查后有变化，请重新统一名字"));
         const moves = plan.notes
           .filter((change) => change.to)
           .map((change) => [change.path, path.join(change.folder, change.to)]);

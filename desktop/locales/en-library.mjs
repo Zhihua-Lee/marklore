@@ -127,4 +127,6 @@ export default {
   "有未保存修改的笔记不改：{names}":
     "Notes with unsaved changes are left as they are: {names}",
   名称不能为空: "The name cannot be empty",
+  "文件夹在检查后有变化，请重新统一名字":
+    "The folder changed after it was checked; unify its names again",
 };

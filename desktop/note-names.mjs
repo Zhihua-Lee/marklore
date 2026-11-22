@@ -278,3 +278,10 @@ export function setNoteName(
   const out = bom + lines.join(eol);
   return out === source ? null : out;
 }
+
+// What a "unify names" plan would change, as one string: the plan applied
+// must be the one the reader saw.
+export const unifyKey = (notes = []) =>
+  JSON.stringify(
+    notes.map((n) => [n.path, n.to, n.heading, n.entry?.to, n.front?.to]),
+  );

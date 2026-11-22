@@ -1529,6 +1529,7 @@ export function createLibrary({
     if (!choice) return;
     const result = await api.unifyNames(id, {
       deep: choice.deep,
+      expect: choice.expect,
       drafts: drafts(),
     });
     const patched = followMoves(result, true);

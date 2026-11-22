@@ -49,22 +49,22 @@ try {
   });
   const page = await instance.firstWindow();
   const tree = page.locator("#tree");
-  await tree.getByText("Index.md", { exact: true }).waitFor();
+  await tree.locator(`button.file[data-name="Index.md"]`).waitFor();
   await tree.getByText("Topic", { exact: true }).click();
 
   // An agent writes a new note into an open folder, then renames it.
   const note = path.join(library, "Topic", "Agent note.md");
   await fs.writeFile(note, "# Agent note\n\nFirst draft.\n");
-  await tree.getByText("Agent note.md", { exact: true }).waitFor({
+  await tree.locator(`button.file[data-name="Agent note.md"]`).waitFor({
     timeout: 5000,
   });
   const renamed = path.join(library, "Topic", "Laplace.md");
   await fs.rename(note, renamed);
-  await tree.getByText("Laplace.md", { exact: true }).waitFor({
+  await tree.locator(`button.file[data-name="Laplace.md"]`).waitFor({
     timeout: 5000,
   });
   assert.equal(
-    await tree.getByText("Agent note.md", { exact: true }).count(),
+    await tree.locator(`button.file[data-name="Agent note.md"]`).count(),
     0,
   );
   // The folder the reader opened is still open.
@@ -80,7 +80,7 @@ try {
   );
 
   // Open it, then the agent keeps writing: the page follows.
-  await tree.getByText("Laplace.md", { exact: true }).click();
+  await tree.locator(`button.file[data-name="Laplace.md"]`).click();
   await page.locator("#content h1", { hasText: "Agent note" }).waitFor();
   await fs.appendFile(
     renamed,
@@ -165,7 +165,7 @@ try {
     "",
   );
   await tree
-    .getByText("Laplace.md", { exact: true })
+    .locator(`button.file[data-name="Laplace.md"]`)
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "重命名…" }).click();
   const rename = tree.getByRole("textbox", { name: "新名称" });
@@ -178,7 +178,8 @@ try {
   assert.match(await fs.readFile(moved, "utf8"), /## Definition/);
   await assert.rejects(fs.stat(renamed), { code: "ENOENT" });
   await page.locator(".tab", { hasText: "Laplace transform.md" }).click();
-  await page.locator("#content h1", { hasText: "Agent note" }).waitFor();
+  // The note's heading is its name: renamed with it.
+  await page.locator("#content h1", { hasText: "Laplace transform" }).waitFor();
   await fs.appendFile(moved, "\n## After the rename\n");
   await page.locator("#content h2", { hasText: "After the rename" }).waitFor({
     timeout: 5000,

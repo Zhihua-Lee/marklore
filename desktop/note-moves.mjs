@@ -54,10 +54,19 @@ export function createNoteMoves({
   }
   // The words a link to these entries holds: their names, as written plain
   // or percent-encoded.
+  // Spaces alone may be encoded (as OneNote exports and index files write
+  // links: "My%20page.md"), with other characters as they are.
   const wordsFor = (moves) =>
     moves.flatMap(([from]) => {
       const name = path.basename(from);
-      return [...new Set([name, encodeURIComponent(name), encodeURI(name)])];
+      return [
+        ...new Set([
+          name,
+          encodeURIComponent(name),
+          encodeURI(name),
+          name.replace(/ /g, "%20"),
+        ]),
+      ];
     });
   // The notes whose links may change: the notes moved (their own relative
   // links), those the link index has linking to one of them, and any other
@@ -65,16 +74,24 @@ export function createNoteMoves({
   // image, an attachment, a folder: links the index does not record).
   // Asked before the move, while the index still has the old paths; the
   // rewrite itself decides which links really change.
-  async function candidates(moves) {
+  // anchors: headings renamed ([{ source, ... }]): the note and the notes
+  // linking to it.
+  async function candidates(moves, anchors = []) {
     const moved = await notesUnder(moves.map(([from]) => from));
     const out = new Map(moved.map((p) => [key(p), p]));
-    for (const note of moved)
+    for (const anchor of anchors)
+      if (anchor.source) out.set(key(anchor.source), anchor.source);
+    for (const note of [...moved, ...anchors.map((a) => a.source)])
       for (const link of await linkIndex.backlinks(note).catch(() => []))
         out.set(key(link.source), link.source);
-    for (const file of await linkIndex.containing(wordsFor(moves)))
-      out.set(key(file), file);
+    if (moves.length)
+      for (const file of await linkIndex.containing(wordsFor(moves)))
+        out.set(key(file), file);
     return [...out.values()];
   }
+  // Anchors as the rewrite takes them: where the note is after the moves.
+  const anchorsAfter = (anchors, moves) =>
+    anchors.map((a) => ({ ...a, file: movedPath(a.source || a.file, moves) }));
   async function readText(file) {
     try {
       return decode(await files.readBytes(file)).text;
@@ -84,10 +101,11 @@ export function createNoteMoves({
   }
   // Before a rename or move: the notes whose links would change, and how
   // many links in each. skip: index files the move updates anyway.
-  async function plan(moves, { skip = [] } = {}) {
+  async function plan(moves, { skip = [], anchors = [] } = {}) {
     const skipped = new Set(skip.map(key));
     const affected = [];
-    for (const file of await candidates(moves)) {
+    const after = anchorsAfter(anchors, moves);
+    for (const file of await candidates(moves, anchors)) {
       if (skipped.has(key(file))) continue;
       const text = await readText(file);
       if (text === null) continue;
@@ -95,6 +113,7 @@ export function createNoteMoves({
         from: file,
         file: movedPath(file, moves),
         moves,
+        anchors: after,
       });
       if (count)
         affected.push({ path: file, name: path.basename(file), links: count });
@@ -132,10 +151,19 @@ export function createNoteMoves({
   // rewritten. drafts: paths of notes open with unsaved changes, left to
   // the page. Returns what perform() did, plus how many notes were
   // rewritten, the index edits left to drafts and what failed.
-  async function run({ label, moves, links = true, drafts = [], perform }) {
+  // anchors: headings renamed ([{ source, from, to }]), their links too.
+  async function run({
+    label,
+    moves,
+    links = true,
+    drafts = [],
+    anchors = [],
+    perform,
+  }) {
     const draft = new Set(drafts.map(key));
-    const list = links ? await candidates(moves) : [];
+    const list = links ? await candidates(moves, anchors) : [];
     const done = await perform();
+    const after = anchorsAfter(done.anchors || anchors, done.moves);
     const writes = [];
     const failed = [];
     for (const index of done.indexes) {
@@ -156,8 +184,12 @@ export function createNoteMoves({
         const write = await files.rewrite(
           now,
           (text) =>
-            rewriteLinks(text, { from: file, file: now, moves: done.moves })
-              .text,
+            rewriteLinks(text, {
+              from: file,
+              file: now,
+              moves: done.moves,
+              anchors: after,
+            }).text,
         );
         if (write) {
           writes.push(write);
@@ -167,7 +199,7 @@ export function createNoteMoves({
         failed.push({ path: now, error: error.message });
       }
     }
-    if (done.moves.length)
+    if (done.moves.length || writes.length)
       await remember({
         label,
         at: new Date().toISOString(),
@@ -182,6 +214,9 @@ export function createNoteMoves({
     );
     return {
       ...done,
+      anchors: after,
+      // Index files and the note's own name written (not counted above).
+      updated: done.indexes.filter((w) => !w.draft && !w.error).length,
       indexes: undefined,
       drafts: done.indexes.filter((index) => index.draft),
       rewritten,

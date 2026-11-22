@@ -387,3 +387,99 @@ export function askRepair({ name, rel, candidates, creatable, index = false }) {
     };
   });
 }
+
+// "Unify names…" on a folder: for each note, what would change (its file
+// name, its index entry, a heading added, its front-matter title), with
+// subfolders included on request. plan(deep) → main's planUnify. Resolves
+// { deep } when the reader applies it, or null.
+export function askUnify({ folder, plan }) {
+  const title = t("统一“{name}”中的名字", { name: folder });
+  return modal("unify-question", title, (form, finish) => {
+    form.append(element("h2", "", title));
+    form.append(
+      element(
+        "p",
+        "tree-dialog-hint",
+        t(
+          "笔记的名字是它开头的一级标题；没有标题的笔记取目录条目或文件名作为标题。文件名、目录条目和属性 title 都改为这个名字。",
+        ),
+      ),
+    );
+    const label = element("label", "tree-dialog-check");
+    const deep = element("input");
+    deep.type = "checkbox";
+    label.append(deep, element("span", "", t("包括子文件夹")));
+    form.append(label);
+    const lead = element("p", "tree-dialog-lead");
+    const slot = element("div", "tree-dialog-slot");
+    const skipped = element("p", "tree-dialog-hint");
+    const hint = element(
+      "p",
+      "tree-dialog-hint",
+      t(
+        "其他笔记中的链接随之更新；改写前每个文件都会备份，可用“撤销上次改名/移动”一并恢复。",
+      ),
+    );
+    form.append(lead, slot, skipped, hint);
+    const row = element("div", "dialog-actions");
+    const cancel = element("button", "", t("取消"));
+    const apply = element("button", "primary", t("统一名字"));
+    for (const b of [cancel, apply]) b.type = "button";
+    row.append(cancel, apply);
+    form.append(row);
+    let epoch = 0;
+    const show = async () => {
+      const mine = ++epoch;
+      apply.disabled = true;
+      lead.textContent = t("正在检查…");
+      slot.replaceChildren();
+      let found;
+      try {
+        found = await plan(deep.checked);
+      } catch (error) {
+        if (mine === epoch) lead.textContent = error.message;
+        return;
+      }
+      if (mine !== epoch) return;
+      const notes = found.notes || [];
+      lead.textContent = notes.length
+        ? t("{count} 篇笔记会改变：", { count: notes.length })
+        : t("名字都已统一，没有要改的。");
+      const list = element("ul", "tree-dialog-list unify-list");
+      for (const note of notes) {
+        const item = element("li", "unify-item");
+        item.title = note.path;
+        item.append(element("span", "unify-name", note.title));
+        const what = [];
+        if (note.to)
+          what.push(
+            t("文件名 {from} → {to}", { from: note.name, to: note.to }),
+          );
+        if (note.heading) what.push(t("加上标题"));
+        if (note.entry)
+          what.push(t("目录条目“{from}”", { from: note.entry.from || "" }));
+        if (note.front)
+          what.push(t("属性 title“{from}”", { from: note.front.from || "" }));
+        item.append(element("span", "unify-changes", what.join(t("；"))));
+        list.append(item);
+      }
+      if (notes.length) slot.append(list);
+      const left = found.skipped || [];
+      skipped.hidden = !left.length;
+      skipped.textContent = left.length
+        ? t("有未保存修改的笔记不改：{names}", {
+            names: left.map((n) => n.name).join(", "),
+          })
+        : "";
+      apply.disabled = !notes.length;
+    };
+    deep.addEventListener("change", show);
+    cancel.onclick = () => finish(null);
+    apply.onclick = () => finish({ deep: deep.checked });
+    form.onsubmit = (event) => {
+      event.preventDefault();
+      if (!apply.disabled) apply.click();
+    };
+    show();
+  });
+}

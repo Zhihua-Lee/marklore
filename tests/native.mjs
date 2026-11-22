@@ -49,7 +49,9 @@ try {
   assert.match(await page.locator("#content").innerText(), /Native test/);
   await page.locator('#tree .file[aria-current="page"]').waitFor();
   assert.equal(
-    await page.locator('#tree .file[aria-current="page"]').innerText(),
+    await page
+      .locator('#tree .file[aria-current="page"]')
+      .getAttribute("data-name"),
     "note.md",
   );
   assert.equal(await page.evaluate(() => typeof require), "undefined");

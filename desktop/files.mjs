@@ -16,7 +16,20 @@ import {
   subtreeOf,
   checkableEntries,
   titleFor,
+  parseIndex,
+  childName,
 } from "./folder-index.mjs";
+import {
+  leadingHeading,
+  plainTitle,
+  safeBase,
+  numberedName,
+  setNoteName,
+  headingAnchor,
+  baseName,
+  NOTE_EXTENSION,
+  frontTitle,
+} from "./note-names.mjs";
 
 const walk = promisify(walkRealpath);
 // The canonical path (links resolved). Drives that cannot report a final
@@ -134,6 +147,8 @@ export class FileStore {
   locks = new Set();
   // Index files read for the tree's order: path → { key, text }.
   indexes = new Map();
+  // Notes' leading headings for the tree: path → { key, head }.
+  headings = new Map();
   // How entries are renamed and moved (tests stand in a failing one), and
   // the first pause before a busy rename is tried again.
   renameFile = (from, to) => fs.rename(from, to);
@@ -341,8 +356,20 @@ export class FileStore {
       if (real !== p || !within(folder, real)) continue;
       if (item.isDirectory())
         result.push({ ...(await this.directory(p)), directory: true });
-      else
-        result.push({ name: item.name, path: p, parent: id, directory: false });
+      else {
+        // A note's name: its leading heading (note-names.mjs), when it has
+        // one; the tree and the index view show it.
+        const head = /\.(md|markdown|mdown|mkd)$/i.test(item.name)
+          ? await this.headingOf(p)
+          : null;
+        result.push({
+          name: item.name,
+          path: p,
+          parent: id,
+          directory: false,
+          ...(head ? { title: head.title, heading: head.raw } : {}),
+        });
+      }
     }
     result.sort(
       (a, b) =>
@@ -418,6 +445,45 @@ export class FileStore {
       index: file,
       missing: await this.missingEntries(folder, file, text),
     };
+  }
+  // A note's leading heading ({ raw, title }, or null), read from its first
+  // 16 KB and kept while its size and time are unchanged.
+  async headingOf(file) {
+    try {
+      const stat = await fs.stat(file);
+      const key = stat.size + ":" + stat.mtimeMs;
+      const cached = this.headings.get(file);
+      if (cached?.key === key) return cached.head;
+      const handle = await fs.open(file, "r");
+      let head = null;
+      try {
+        const buffer = Buffer.alloc(Math.min(stat.size, 16 * 1024));
+        const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+        let bytes = buffer.subarray(0, bytesRead);
+        // A cut through a character: up to its start.
+        if (bytesRead < stat.size)
+          while (bytes.length && (bytes[bytes.length - 1] & 0xc0) === 0x80)
+            bytes = bytes.subarray(0, bytes.length - 1);
+        if (
+          bytesRead < stat.size &&
+          bytes.length &&
+          bytes[bytes.length - 1] >= 0xc0
+        )
+          bytes = bytes.subarray(0, bytes.length - 1);
+        const found = leadingHeading(decode(bytes).text);
+        head = found ? { raw: found.raw, title: found.title } : null;
+      } catch {
+        head = null;
+      } finally {
+        await handle.close();
+      }
+      this.headings.set(file, { key, head });
+      if (this.headings.size > 20000)
+        this.headings.delete(this.headings.keys().next().value);
+      return head;
+    } catch {
+      return null;
+    }
   }
   // An index file's text, kept while its size and time are unchanged (the
   // tree is listed again on every change on disk).
@@ -658,12 +724,29 @@ export class FileStore {
     if ([...this.locks].some((p) => samePath(p, source) || within(source, p)))
       throw Error(t("正在保存，请稍候"));
   }
-  // Where a rename would put an entry: checked, nothing changed yet.
-  async renameTarget(id, name, newName) {
+  // Where a rename would put an entry: checked, nothing changed yet. With
+  // `title` (the entry's new name as typed: a note's heading in Markdown,
+  // a folder's name) the name on disk is made from it (note-names.mjs): a
+  // name Windows accepts, " (2)" when it is taken, and newName is unused.
+  async renameTarget(id, name, newName, { title = null } = {}) {
     const source = await this.childPath(id, name);
-    FileStore.checkName(newName);
     const stat = await fs.stat(source);
-    if (!stat.isDirectory() && !this.openable(newName))
+    const directory = stat.isDirectory();
+    if (typeof title === "string") {
+      const plain = directory ? title.trim() : plainTitle(title);
+      const folder = path.dirname(source);
+      const ext = directory ? "" : (NOTE_EXTENSION.exec(name) || [".md"])[0];
+      // The whole path stays within what Windows takes.
+      const max = Math.max(
+        20,
+        Math.min(120, 250 - folder.length - ext.length - 6),
+      );
+      const base = safeBase(plain, max);
+      if (!base) throw Error(t("名称不能为空"));
+      newName = await this.freeName(folder, base + ext, source);
+    }
+    FileStore.checkName(newName);
+    if (!directory && !this.openable(newName))
       throw Error(t("笔记名称须以 .md 结尾"));
     const target = path.join(path.dirname(source), newName);
     // A change of case only is the same entry on Windows.
@@ -674,35 +757,323 @@ export class FileStore {
       );
       if (taken) throw Error(t("已有同名的文件或文件夹"));
     }
-    return { source, target, directory: stat.isDirectory() };
+    return { source, target, directory, newName };
+  }
+  // A name in a folder not taken by another entry: the name itself, else
+  // "Name (2).md", "Name (3).md"... (`source`, the entry renamed, may keep
+  // its own).
+  async freeName(folder, wanted, source = null) {
+    for (let n = 1; n < 1000; n++) {
+      const candidate = n === 1 ? wanted : numberedName(wanted, n);
+      const p = path.join(folder, candidate);
+      if ((source && samePath(p, source)) || !(await exists(p)))
+        return candidate;
+    }
+    throw Error(t("已有同名的文件或文件夹"));
+  }
+  // What renaming an entry does besides its name on disk (renameTarget):
+  // the text its index entry gets (entryTitle: the note's name), the
+  // note's new leading heading (heading, when it has one) and the anchor
+  // of that heading changing ([{ file, source, from, to }]). previous: the
+  // heading as it was before a save that changed it (the note on disk has
+  // the new one already).
+  async renameDetails(
+    id,
+    name,
+    newName,
+    { title = null, previous = null } = {},
+  ) {
+    const plan = await this.renameTarget(id, name, newName, { title });
+    let heading = null;
+    let entryTitle = null;
+    let anchors = [];
+    if (typeof title === "string" && plan.directory) entryTitle = plan.newName;
+    else if (typeof title === "string") {
+      const text = await this.readBytes(plan.source)
+        .then((bytes) => decode(bytes).text)
+        .catch(() => null);
+      const found = text === null ? null : leadingHeading(text);
+      if (found) {
+        heading = title.trim().replace(/\s+/g, " ");
+        entryTitle = plainTitle(heading);
+        const old = typeof previous === "string" ? previous : found.raw;
+        const from = headingAnchor(old);
+        const to = headingAnchor(heading);
+        if (from !== to)
+          anchors = [{ file: plan.target, source: plan.source, from, to }];
+      } else entryTitle = baseName(plan.newName);
+    }
+    return { ...plan, heading, entryTitle, anchors };
   }
   // Rename an entry in its folder; the folder's index follows (its links
-  // to the entry, and a title that was the old name). Returns { path,
-  // files, moves: [[old, new]], indexes: [index rewrite] }.
-  async renameEntry(id, name, newName, { drafts = [] } = {}) {
-    const { source, target } = await this.renameTarget(id, name, newName);
-    if (target === source)
-      return { path: source, files: [], moves: [], indexes: [] };
+  // to the entry, and its text: the entry's name with `title`, otherwise a
+  // text that was the old name), and with `title` a note's own leading
+  // heading and front-matter title. An index or a note open with unsaved
+  // changes (drafts) is not written: { path, ops, draft: true } tells the
+  // page what to apply to it. Returns { path, files, moves: [[old, new]],
+  // indexes: [rewrites, drafts], anchors }.
+  async renameEntry(
+    id,
+    name,
+    newName,
+    { drafts = [], title = null, previous = null } = {},
+  ) {
+    const plan = await this.renameDetails(id, name, newName, {
+      title,
+      previous,
+    });
+    const { source, target } = plan;
+    const moved = target !== source;
+    if (!moved && plan.entryTitle === null)
+      return { path: source, files: [], moves: [], indexes: [], anchors: [] };
     this.checkUnlocked(source);
     // The folder's own index renamed is no entry of itself; any other note
     // (even one named SUMMARY.md beside a _目录.md) keeps its entry.
     const own = await this.indexFile(path.dirname(source)).catch(() => null);
     const isOwnIndex = Boolean(own && samePath(own, source));
-    if (!isOwnIndex) await this.checkIndexSaved(path.dirname(source), drafts);
-    const files = await this.relocate(source, target);
-    let index = null;
-    if (!isOwnIndex)
-      index = await this.changeIndex(
+    const files = moved ? await this.relocate(source, target) : [];
+    const indexes = [];
+    if (!isOwnIndex) {
+      const index = await this.changeIndex(
         path.dirname(source),
-        [{ kind: "rename", from: name, to: newName }],
+        [
+          {
+            kind: "rename",
+            from: name,
+            to: plan.newName,
+            ...(plan.entryTitle !== null ? { title: plan.entryTitle } : {}),
+          },
+        ],
         { drafts: draftList(drafts) },
       ).catch((e) => ({ error: e.message }));
+      if (index) indexes.push(index);
+    }
+    // The note's own name: its heading, and a front-matter title saying the
+    // same (never added).
+    if (plan.heading !== null) {
+      const op = {
+        kind: "note-name",
+        heading: plan.heading,
+        title: plan.entryTitle,
+      };
+      if (draftList(drafts).some((p) => samePath(p, source)))
+        indexes.push({ path: source, ops: [op], draft: true });
+      else {
+        const write = await this.rewrite(target, (text) =>
+          setNoteName(text, op),
+        ).catch((e) => ({ error: e.message }));
+        if (write) indexes.push(write);
+        this.headings.delete(target);
+      }
+    }
     return {
       path: target,
       files,
-      moves: [[source, target]],
-      indexes: index ? [index] : [],
+      moves: moved ? [[source, target]] : [],
+      indexes,
+      anchors: plan.anchors,
     };
+  }
+  // The folder's index file, for the tree's "open index" button: { path,
+  // name }, or null.
+  async folderIndex(id) {
+    const folder = this.folderPath(id);
+    await unchangedPath(folder);
+    const file = await this.indexFile(folder);
+    return file ? { path: file, name: path.basename(file) } : null;
+  }
+  // "Unify names" for a folder (and its subfolders with deep): for each
+  // note, what makes its file name, its index entry, its heading and its
+  // front-matter title one name (note-names.mjs): the leading heading, or
+  // for a note without one, its index entry's text or its file name (then
+  // written as its heading). Nothing changes here. Notes open with unsaved
+  // changes (drafts) are left out, and named. Returns { folder, notes:
+  // [{ path, folder, name, title, to, heading, entry, front }], skipped }.
+  async unifyPlan(id, { deep = false, drafts = [] } = {}) {
+    const root = this.folderPath(id);
+    await unchangedPath(root);
+    const unsaved = draftList(drafts);
+    const folders = [root];
+    for (let i = 0; deep && i < folders.length && folders.length < 2000; i++)
+      for (const item of await fs
+        .readdir(folders[i], { withFileTypes: true })
+        .catch(() => []))
+        if (
+          item.isDirectory() &&
+          !item.isSymbolicLink() &&
+          !item.name.startsWith(".") &&
+          !skippedName(item.name)
+        )
+          folders.push(path.join(folders[i], item.name));
+    const notes = [];
+    const skipped = [];
+    for (const folder of folders) {
+      const items = (
+        await fs.readdir(folder, { withFileTypes: true }).catch(() => [])
+      ).sort((a, b) =>
+        a.name.localeCompare(b.name, "zh-CN", { numeric: true }),
+      );
+      const names = items.map((item) => item.name);
+      const taken = new Set(names.map((n) => n.toLowerCase()));
+      const indexName = findIndexName(names);
+      let parsed = null;
+      if (indexName)
+        try {
+          parsed = parseIndex(
+            decode(await this.readBytes(path.join(folder, indexName))).text,
+          );
+        } catch {
+          parsed = null;
+        }
+      for (const item of items) {
+        if (
+          !item.isFile() ||
+          item.name.startsWith(".") ||
+          !/\.(md|markdown|mdown|mkd)$/i.test(item.name) ||
+          isIndexName(item.name)
+        )
+          continue;
+        const file = path.join(folder, item.name);
+        if (unsaved.some((p) => samePath(p, file))) {
+          skipped.push({ path: file, name: item.name });
+          continue;
+        }
+        let text;
+        try {
+          text = decode(await this.readBytes(file)).text;
+        } catch {
+          continue;
+        }
+        const head = leadingHeading(text);
+        const entry = parsed
+          ? parsed.entries.find(
+              (e) =>
+                childName(e.href)?.toLowerCase() === item.name.toLowerCase(),
+            )
+          : null;
+        const entryText = entry
+          ? entry.text.replace(/\\(.)/g, (m, c) => c).trim()
+          : null;
+        const title = head
+          ? head.title
+          : plainTitle(entryText || "") || baseName(item.name);
+        const ext = (NOTE_EXTENSION.exec(item.name) || [".md"])[0];
+        const max = Math.max(
+          20,
+          Math.min(120, 250 - folder.length - ext.length - 6),
+        );
+        const base = safeBase(title, max) || baseName(item.name);
+        let to = null;
+        const own = item.name.toLowerCase();
+        const fits = (candidate) => candidate.toLowerCase() === own;
+        // A name already made from the title (or its numbered form, when
+        // another note took the plain one) stays.
+        const numbered = new RegExp(
+          "^" +
+            base.replace(/[.*+?^${}()|[\]\\]/g, (c) => "\\" + c) +
+            " \\(\\d+\\)" +
+            ext.replace(/\./g, "\\.") +
+            "$",
+          "i",
+        );
+        if (!fits(base + ext) && !numbered.test(item.name)) {
+          for (let n = 1; n < 1000; n++) {
+            const candidate =
+              n === 1 ? base + ext : numberedName(base + ext, n);
+            if (!taken.has(candidate.toLowerCase())) {
+              to = candidate;
+              break;
+            }
+          }
+          if (to) {
+            taken.delete(own);
+            taken.add(to.toLowerCase());
+          }
+        }
+        const front = frontTitle(text);
+        const change = {
+          path: file,
+          folder,
+          name: item.name,
+          title,
+          to,
+          heading: head ? null : title,
+          entry:
+            entry && entryText !== title
+              ? { from: entryText, to: title }
+              : null,
+          front:
+            front && front.value !== title
+              ? { from: front.value, to: title }
+              : null,
+        };
+        if (change.to || change.heading || change.entry || change.front)
+          notes.push(change);
+      }
+    }
+    return { folder: root, notes, skipped };
+  }
+  // The changes of unifyPlan made: files renamed (all, or none when one
+  // fails), headings and front-matter titles written, each folder's index
+  // rewritten once; each file backed up. Returns { path, files, moves,
+  // indexes } as renameEntry does.
+  async unifyNames(plan, { drafts = [] } = {}) {
+    const moves = [];
+    const files = [];
+    try {
+      for (const change of plan.notes) {
+        if (!change.to) continue;
+        const target = path.join(change.folder, change.to);
+        if (!samePath(target, change.path) && (await exists(target)))
+          throw Error(t("已有同名的文件或文件夹"));
+        this.checkUnlocked(change.path);
+        files.push(...(await this.relocate(change.path, target)));
+        moves.push([change.path, target]);
+      }
+    } catch (error) {
+      for (const [from, to] of moves.reverse())
+        await this.relocate(to, from).catch(() => {});
+      throw error;
+    }
+    const indexes = [];
+    for (const change of plan.notes) {
+      if (!change.heading && !change.front) continue;
+      const target = change.to
+        ? path.join(change.folder, change.to)
+        : change.path;
+      const write = await this.rewrite(target, (text) =>
+        setNoteName(text, {
+          heading: change.heading,
+          insert: Boolean(change.heading),
+          title: change.title,
+        }),
+      ).catch((e) => ({ error: e.message }));
+      if (write) indexes.push(write);
+      this.headings.delete(target);
+    }
+    const byFolder = new Map();
+    for (const change of plan.notes) {
+      const op = change.to
+        ? {
+            kind: "rename",
+            from: change.name,
+            to: change.to,
+            title: change.title,
+          }
+        : change.entry
+          ? { kind: "retitle", ref: change.name, title: change.title }
+          : null;
+      if (!op) continue;
+      if (!byFolder.has(change.folder)) byFolder.set(change.folder, []);
+      byFolder.get(change.folder).push(op);
+    }
+    for (const [folder, ops] of byFolder) {
+      const index = await this.changeIndex(folder, ops, {
+        drafts: draftList(drafts),
+      }).catch((e) => ({ error: e.message }));
+      if (index) indexes.push(index);
+    }
+    return { path: plan.folder, files, moves, indexes, anchors: [] };
   }
   // A folder an entry may move to: an existing folder inside one the tree
   // lists (the library's folders).

@@ -101,4 +101,30 @@ export default {
   没有可撤销的改名或移动: "There is no rename or move to undo",
   "无法撤销：“{name}”已被移动、改名或占用":
     "Cannot undo: “{name}” has been moved, renamed or taken since",
+  // One name per note (note-names.mjs), the folder's index button and
+  // "Unify names".
+  "打开目录（{name}）": "Open index ({name})",
+  "已更新 {count} 篇笔记": "{count} notes updated",
+  "统一名字…": "Unify names…",
+  "文件名、目录条目和标题统一为笔记的标题":
+    "Make file names, index entries and titles the note's heading",
+  "已统一 {notes} 篇笔记的名字，更新了 {count} 个文件":
+    "Names of {notes} notes unified; {count} files updated",
+  "统一了“{name}”中的名字": "Unified names in “{name}”",
+  "统一“{name}”中的名字": "Unify names in “{name}”",
+  "笔记的名字是它开头的一级标题；没有标题的笔记取目录条目或文件名作为标题。文件名、目录条目和属性 title 都改为这个名字。":
+    "A note's name is its leading level-1 heading; a note without one gets its index entry or file name as its heading. File names, index entries and the title property all become that name.",
+  包括子文件夹: "Include subfolders",
+  "其他笔记中的链接随之更新；改写前每个文件都会备份，可用“撤销上次改名/移动”一并恢复。":
+    "Links in other notes follow. Every file is backed up before it is rewritten; “Undo last rename or move” restores them all.",
+  统一名字: "Unify names",
+  "{count} 篇笔记会改变：": "{count} notes will change:",
+  "名字都已统一，没有要改的。": "All names agree already; nothing to change.",
+  "文件名 {from} → {to}": "file name {from} → {to}",
+  加上标题: "heading added",
+  "目录条目“{from}”": "index entry “{from}”",
+  "属性 title“{from}”": "title property “{from}”",
+  "有未保存修改的笔记不改：{names}":
+    "Notes with unsaved changes are left as they are: {names}",
+  名称不能为空: "The name cannot be empty",
 };

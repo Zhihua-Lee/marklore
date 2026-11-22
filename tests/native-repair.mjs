@@ -61,7 +61,7 @@ try {
   });
   const page = await instance.firstWindow();
   const tree = page.locator("#tree");
-  const row = (name) => tree.getByRole("button", { name, exact: true });
+  const row = (name) => tree.locator(`button.file[data-name="${name}"]`);
   await row("Other.md").click();
   await page.locator("#content h1", { hasText: "Other" }).waitFor();
 

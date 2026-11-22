@@ -292,3 +292,80 @@
 #toast .toast-action:hover {
   background: color-mix(in srgb, var(--paper) 14%, transparent);
 }
+
+/* A note's name (its heading) and, when the file is named otherwise, the
+   file name quietly after it. */
+#tree .file .file-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#tree .file .file-name {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+/* A folder's row: for a folder with an index file, a quiet button at its
+   right end opening that index in a tab of its own, shown while the row is
+   pointed at or has the keyboard. */
+#tree details.folder > summary {
+  position: relative;
+}
+#tree .folder-index-open {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 4px;
+  background: var(--hover);
+  color: var(--muted);
+  opacity: 0;
+  transform: translateY(-50%);
+}
+#tree .folder-index-open .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+#tree details.folder > summary:hover > .folder-index-open,
+#tree details.folder > summary:focus-visible > .folder-index-open,
+#tree .folder-index-open:focus-visible {
+  opacity: 1;
+}
+#tree .folder-index-open:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 10%, var(--hover));
+}
+#tree details.folder > summary:has(> .folder-index-open):hover,
+#tree details.folder > summary:has(> .folder-index-open):focus-visible {
+  padding-right: 28px;
+}
+@media (hover: none) {
+  #tree .folder-index-open {
+    opacity: 1;
+  }
+}
+
+/* "Unify names": each note's name, and what changes, under it. */
+.tree-dialog-list.unify-list {
+  max-height: 260px;
+}
+.unify-list .unify-item {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1px;
+}
+.unify-list .unify-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.unify-list .unify-changes {
+  color: var(--muted);
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}

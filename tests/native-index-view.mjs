@@ -64,7 +64,7 @@ try {
   });
   const page = await instance.firstWindow();
   const tree = page.locator("#tree");
-  await tree.getByText("_目录.md", { exact: true }).click();
+  await tree.locator(`button.file[data-name="_目录.md"]`).click();
   const content = page.locator("#content");
   const item = (title) =>
     content
@@ -114,7 +114,7 @@ try {
   assert.equal(await fs.readFile(indexFile, "utf8"), expected);
   // The tree follows the saved index: Chapter 2 a sub-page of Chapter 1.
   await tree
-    .locator(".page .pages .file", { hasText: "Chapter 2.md" })
+    .locator('.page .pages .file[data-name="Chapter 2.md"]')
     .waitFor({ timeout: 5000 });
 
   // A new sub-page: created in the folder, listed under its parent.

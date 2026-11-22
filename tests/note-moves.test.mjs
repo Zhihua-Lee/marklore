@@ -605,22 +605,32 @@ test("a draft patched in memory and saved before undo is put back too", async ()
   }
 });
 
-test("an index open with unsaved changes stops a rename or move before it starts", async () => {
+test("an index open with unsaved changes: a rename goes on and leaves its entry to the draft; a move stops", async () => {
   const lib = await library();
-  const { kb, store, root } = lib;
+  const { kb, store, root, read } = lib;
   try {
     const before = await lib.snapshot();
     const drafts = [path.join(kb, "_目录.md")];
-    await assert.rejects(
-      store.renameEntry(root.id, "Plan.md", "Roadmap.md", { drafts }),
-      /_目录\.md 有未保存的修改/,
-    );
     await assert.rejects(
       store.moveEntry(root.id, "Plan.md", path.join(kb, "Topics"), { drafts }),
       /_目录\.md 有未保存的修改/,
     );
     await assert.rejects(store.checkIndexSaved(kb, drafts), /有未保存的修改/);
     assert.deepEqual(await lib.snapshot(), before);
+    // The index tab being edited (the index view's own changes) does not
+    // stop a rename: the page gets the index's change for its draft.
+    const done = await store.renameEntry(root.id, "Plan.md", "Roadmap.md", {
+      drafts,
+      title: "Roadmap",
+    });
+    assert.equal(path.basename(done.path), "Roadmap.md");
+    assert.equal(await read("_目录.md"), before["_目录.md"]);
+    const draft = done.indexes.find((w) => w.draft);
+    assert.equal(draft.path, path.join(kb, "_目录.md"));
+    assert.deepEqual(draft.ops, [
+      { kind: "rename", from: "Plan.md", to: "Roadmap.md", title: "Roadmap" },
+    ]);
+    assert.match(await read("Roadmap.md"), /^# Roadmap\n/);
   } finally {
     await fs.rm(lib.dir, { recursive: true, force: true });
   }

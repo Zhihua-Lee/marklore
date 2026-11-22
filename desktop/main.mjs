@@ -1200,31 +1200,54 @@ else {
           : { ...(await openFile(created.path)), index: created.index };
       });
       // Before a rename: the notes whose links would change.
-      api("planRename", async (id, name, newName) => {
-        const { source, target } = await files.renameTarget(id, name, newName);
+      // A rename by name (note-names.mjs): { title: the note's new heading
+      // as typed, or a folder's name; previous: the heading before a save
+      // that changed it }. The name on disk is made from the title.
+      const nameOptions = (options) => ({
+        title: typeof options?.title === "string" ? options.title : null,
+        previous:
+          typeof options?.previous === "string" ? options.previous : null,
+      });
+      api("planRename", async (id, name, newName, options = {}) => {
+        const plan = await files.renameDetails(
+          id,
+          name,
+          newName,
+          nameOptions(options),
+        );
+        const { source, target } = plan;
         const moves = target === source ? [] : [[source, target]];
         return {
           moves,
+          newName: plan.newName,
+          anchors: plan.anchors,
           // The library still being read: some links may not be listed.
           indexing: linkIndex.indexing,
-          affected: moves.length
-            ? await noteMoves.plan(moves, {
-                skip: await ownIndexes(path.dirname(source)),
-              })
-            : [],
+          affected:
+            moves.length || plan.anchors.length
+              ? await noteMoves.plan(moves, {
+                  skip: await ownIndexes(path.dirname(source)),
+                  anchors: plan.anchors,
+                })
+              : [],
         };
       });
-      // options: { links: rewrite the notes that link to it, drafts }.
+      // options: { links: rewrite the notes that link to it, drafts, title,
+      // previous }.
       api("renameEntry", async (id, name, newName, options = {}) => {
-        const { source, target } = await files.renameTarget(id, name, newName);
+        const named = nameOptions(options);
+        const plan = await files.renameDetails(id, name, newName, named);
+        const { source, target } = plan;
         const drafts = draftsOf(options?.drafts);
         const result = await withoutWatchersUnder(source, () =>
           noteMoves.run({
-            label: { kind: "rename", name, to: newName },
+            label: { kind: "rename", name, to: plan.newName },
             moves: target === source ? [] : [[source, target]],
             links: Boolean(options?.links),
             drafts,
-            perform: () => files.renameEntry(id, name, newName, { drafts }),
+            anchors: plan.anchors,
+            perform: () =>
+              files.renameEntry(id, name, plan.newName, { drafts, ...named }),
           }),
         );
         for (const file of result.files) watchFile(file.id);
@@ -1284,6 +1307,40 @@ else {
         for (const file of result.files) watchFile(file.id);
         return result;
       });
+      // "Unify names" of a folder (files.mjs unifyPlan): what would change,
+      // then the change as one batch, links followed, undone in one step.
+      const unifyOptions = (options) => ({
+        deep: Boolean(options?.deep),
+        drafts: draftsOf(options?.drafts),
+      });
+      api("planUnify", (id, options = {}) =>
+        files.unifyPlan(id, unifyOptions(options)),
+      );
+      api("unifyNames", async (id, options = {}) => {
+        const opts = unifyOptions(options);
+        const plan = await files.unifyPlan(id, opts);
+        const moves = plan.notes
+          .filter((change) => change.to)
+          .map((change) => [change.path, path.join(change.folder, change.to)]);
+        const result = await withoutWatchersUnderAll(
+          moves.map(([source]) => source),
+          () =>
+            noteMoves.run({
+              label: {
+                kind: "unify",
+                name: path.basename(plan.folder) || plan.folder,
+                to: "",
+              },
+              moves,
+              links: true,
+              drafts: opts.drafts,
+              perform: () => files.unifyNames(plan, opts),
+            }),
+        );
+        for (const file of result.files) watchFile(file.id);
+        return { ...result, changed: plan.notes.length };
+      });
+      api("folderIndex", (id) => files.folderIndex(id));
       api("lastMove", () => noteMoves.last());
       api("undoMove", async (drafts) => {
         const result = await noteMoves.undo({

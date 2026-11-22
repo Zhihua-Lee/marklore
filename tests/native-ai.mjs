@@ -112,7 +112,7 @@ try {
     timeout: 30000,
   });
   const page = await instance.firstWindow();
-  await page.locator("#tree").getByText("Plan.md", { exact: true }).waitFor();
+  await page.locator(`#tree button.file[data-name="Plan.md"]`).waitFor();
   // The app opened the ticked library to AI.
   const accessFile = path.join(profile, "ai", "access.json");
   let access;
@@ -220,7 +220,7 @@ try {
   );
 
   // Marks: the reader marks a passage, and asks the session about it.
-  await page.locator("#tree").getByText("Plan.md", { exact: true }).click();
+  await page.locator(`#tree button.file[data-name="Plan.md"]`).click();
   await page.locator("#content").getByText("Send it on Thursday.").waitFor();
   await page.evaluate(() => {
     const walker = document.createTreeWalker(

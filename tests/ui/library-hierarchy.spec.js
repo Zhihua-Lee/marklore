@@ -378,7 +378,13 @@ test("a rename asks about the notes linking to it; one undo takes it back", asyn
   await expect
     .poll(() => calls(page, "rename"))
     .toEqual([
-      ["rename", "kb", "Plan.md", "Roadmap.md", { links: true, drafts: [] }],
+      [
+        "rename",
+        "kb",
+        "Plan.md",
+        "Roadmap.md",
+        { links: true, drafts: [], title: "Roadmap" },
+      ],
     ]);
   const toast = page.locator("#toast");
   await expect(toast).toContainText("已改名，1 篇笔记中的链接已更新");
@@ -409,7 +415,7 @@ test("a rename asks about the notes linking to it; one undo takes it back", asyn
       "kb",
       "Plan.md",
       "Roadmap.md",
-      { links: false, drafts: [] },
+      { links: false, drafts: [], title: "Roadmap" },
     ]);
   await expect(toast).toContainText("1 篇笔记中的链接仍指向旧名称");
   // Esc in the question cancels: nothing renamed.
@@ -517,7 +523,7 @@ test("a draft with unsaved changes is patched in memory, not written", async ({
         "kb",
         "Plan.md",
         "Roadmap.md",
-        { links: true, drafts: ["C:\\kb\\Other.md"] },
+        { links: true, drafts: ["C:\\kb\\Other.md"], title: "Roadmap" },
       ],
     ]);
   // In the editor: the link follows; the tab is still unsaved; no save.

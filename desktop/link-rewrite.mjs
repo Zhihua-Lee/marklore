@@ -118,9 +118,36 @@ function parseDestination(raw) {
 }
 // The destination written again for the note's new folder, or null when it
 // stays as it is (or is not a relative path).
-function rewriteDestination(raw, kind, oldDir, newDir, map) {
+function rewriteDestination(raw, kind, oldDir, newDir, map, anchorOf, self) {
   const { angle, target, suffix } = parseDestination(raw);
-  if (!target || SCHEME.test(target) || /^[\\/]/.test(target)) return null;
+  // A heading renamed: links to its anchor follow ("#old" → "#new"), in
+  // the note itself too.
+  const newSuffix = (key) => {
+    const anchor = key && anchorOf(key);
+    if (!anchor || !suffix.startsWith("#")) return suffix;
+    let fragment;
+    try {
+      fragment = decodeURIComponent(suffix.slice(1));
+    } catch {
+      return suffix;
+    }
+    if (fragment.toLowerCase() !== anchor.from.toLowerCase()) return suffix;
+    return (
+      "#" +
+      encodeSegment(anchor.to, {
+        angle,
+        bare: !angle && kind !== "html",
+        space: true,
+        nonAscii: /%[89a-f][0-9a-f]/i.test(suffix),
+      })
+    );
+  };
+  if (!target) {
+    const next = newSuffix(self);
+    if (next === suffix) return null;
+    return angle ? "<" + next + ">" : next;
+  }
+  if (SCHEME.test(target) || /^[\\/]/.test(target)) return null;
   let decoded;
   try {
     // As Markdown reads it: a backslash before punctuation only escapes it.
@@ -135,7 +162,13 @@ function rewriteDestination(raw, kind, oldDir, newDir, map) {
   const resolved = split(join(oldDir) + "/" + decoded);
   const mapped = map(resolved);
   const moved = pathKey(join(oldDir)) !== pathKey(join(newDir));
-  if (!mapped && !moved) return null;
+  const after = newSuffix(pathKey(join(mapped || resolved)));
+  if (!mapped && !moved) {
+    // Only the anchor changes: the path stays exactly as written.
+    if (after === suffix) return null;
+    return angle ? "<" + target + after + ">" : target + after;
+  }
+  const suffixOut = after;
   let rel = relative(newDir, mapped || resolved);
   if (rel === null) return null;
   const folder = /[\\/]$/.test(target);
@@ -155,7 +188,7 @@ function rewriteDestination(raw, kind, oldDir, newDir, map) {
     )
     .join("/");
   if (folder) out += "/";
-  out = angle ? "<" + out + suffix + ">" : out + suffix;
+  out = angle ? "<" + out + suffixOut + ">" : out + suffixOut;
   return out === raw ? null : out;
 }
 
@@ -365,16 +398,32 @@ export function findDestinations(text) {
 // - file: where the note is after them; from: where it was (its links were
 //   written for there), the same when the note itself stays;
 // - moves: [[oldPath, newPath]] of the notes, folders and files moved.
+// - anchors: [{ file, from, to }] headings renamed: links to `file` (where
+//   it is after the moves) with the anchor `from` get `to`.
 // Returns { text, edits: [{ from, to, insert }], count }, edits in the
 // original text, in order.
-export function rewriteLinks(text, { file, from = file, moves = [] }) {
+export function rewriteLinks(
+  text,
+  { file, from = file, moves = [], anchors = [] },
+) {
   const oldDir = dirOf(from),
     newDir = dirOf(file),
     map = mapper(moves);
+  const byFile = new Map(anchors.map((a) => [pathKey(a.file), a]));
+  const anchorOf = (key) => byFile.get(key) || null;
+  const self = pathKey(file);
   const edits = [];
   for (const dest of findDestinations(text)) {
     const raw = text.slice(dest.from, dest.to);
-    const insert = rewriteDestination(raw, dest.kind, oldDir, newDir, map);
+    const insert = rewriteDestination(
+      raw,
+      dest.kind,
+      oldDir,
+      newDir,
+      map,
+      anchorOf,
+      self,
+    );
     if (insert !== null) edits.push({ from: dest.from, to: dest.to, insert });
   }
   let out = "",

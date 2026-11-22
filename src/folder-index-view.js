@@ -18,6 +18,7 @@
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { t } from "../desktop/i18n.mjs";
 import { isIndexName } from "../desktop/folder-index.mjs";
+import { fileMatches } from "../desktop/note-names.mjs";
 import { renderDocument } from "./document-render.js";
 import { isDiffDocument } from "./diff-view.js";
 import { icon } from "./icons.js";
@@ -75,6 +76,9 @@ export function createIndexView({
   readingFormat = () => false,
   // A folder shown in the library tree (by path): whether it could be.
   revealFolder = async () => false,
+  // An entry's note or folder renamed by its new name ({ folderId, name,
+  // title, shown }): resolves whether it was.
+  renameNote = async () => null,
 }) {
   const states = new WeakMap();
   // Per index file: its folder's entries, and the pages' first sentences.
@@ -508,10 +512,13 @@ export function createIndexView({
         ),
       );
     } else row.append(element("span", "ix-twisty-space"));
+    // A note's one name (its heading; desktop/note-names.mjs), else the
+    // entry's text; the file name beside it when it is named otherwise.
+    const name = child?.title || entry.title;
     let title;
     if (missing) title = element("span", "ix-title", entry.title);
     else {
-      title = element("a", "ix-title", entry.title);
+      title = element("a", "ix-title", name);
       title.setAttribute("href", target(entry.href));
       title.tabIndex = -1;
       if (edit) title.draggable = false;
@@ -519,15 +526,19 @@ export function createIndexView({
     // Edit mode: a click picks the entry, a double click edits the title.
     title.title =
       edit && !missing
-        ? t("{title}（Ctrl+单击打开，双击改标题）", { title: entry.title })
-        : entry.title;
+        ? t("{title}（Ctrl+单击打开，双击改标题）", { title: name })
+        : name;
     row.append(title);
     const written = entry.name
       ? entry.name + (child?.directory ? "/" : "")
       : target(entry.href);
     if (
       written &&
-      titleFor(entry.name || "").toLowerCase() !== entry.title.toLowerCase()
+      !(
+        child?.directory &&
+        titleFor(entry.name).toLowerCase() === name.toLowerCase()
+      ) &&
+      !(entry.name && !child?.directory && fileMatches(name, entry.name))
     )
       row.append(element("span", "ix-file", written));
     if (missing) {
@@ -721,12 +732,18 @@ export function createIndexView({
     item.setAttribute("aria-expanded", String(!closed));
   }
   // A title typed in place: Enter or leaving the box takes it, Esc cancels.
+  // An entry of a note or folder of this folder renames it (its heading,
+  // file name, entry and the links to it: renameNote); any other entry
+  // (a link deeper or outside, a missing file) only gets the new text.
   function editTitle(item) {
     const found = entryAt(item);
     if (!found || !editing(found.doc)) return;
+    const info = folderOf(found.doc);
+    const child = childOf(info, found.entry.name);
     const title = item.querySelector(":scope > .ix-row > .ix-title");
     const input = element("input", "ix-title-input");
-    input.value = found.entry.title;
+    const start = child?.heading || found.entry.title;
+    input.value = start;
     input.setAttribute("aria-label", t("页面标题"));
     input.spellcheck = false;
     title.hidden = true;
@@ -745,6 +762,28 @@ export function createIndexView({
       title.hidden = false;
       row.draggable = true;
       const again = keep && entryAt(item);
+      if (again && child && info?.folderId && value.trim()) {
+        if (value.trim() === start) return closed(item);
+        // The index tab may be redrawn meanwhile (its entry rewritten).
+        run(async () => {
+          const done = await renameNote({
+            folderId: info.folderId,
+            name: child.name,
+            title: value.trim(),
+            shown: again.entry.title,
+            directory: Boolean(child.directory),
+          });
+          // Renaming not available (no desktop): the entry's text only.
+          const now = done === null && entryAt(item);
+          if (
+            now &&
+            apply(now.doc, retitleEntry(now.doc.text, now.index, value))
+          )
+            return;
+          if (!done && item.isConnected) closed(item);
+        })();
+        return;
+      }
       if (
         again &&
         apply(again.doc, retitleEntry(again.doc.text, again.index, value))

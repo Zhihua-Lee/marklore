@@ -427,9 +427,30 @@ export function shiftEntry(text, ref, step) {
   return moveBlock(text, parsed, i, other, step < 0 ? "before" : "after");
 }
 // A child renamed: links to it follow (entries and any other link in the
-// file: anchor, angle brackets and encoding kept), and an entry whose title
-// was the old name gets the new one; a title of its own stays.
-export function renameInIndex(text, from, to) {
+// file: anchor, angle brackets and encoding kept), and its entries get
+// `title` (the note's name) when it is given; without it, an entry whose
+// title was the old name gets the new one and a title of its own stays.
+export function renameInIndex(text, from, to, title = null) {
+  if (typeof title === "string" && title.trim()) {
+    let next = from === to ? text : (renameInIndex(text, from, to) ?? text);
+    for (;;) {
+      // Each entry naming the child (the first is enough for most).
+      const parsed = parseIndex(next);
+      const lower = to.toLowerCase();
+      const wanted = escapeTitle(title.trim().replace(/\s+/g, " "));
+      const entry = parsed.entries.find(
+        (e) => childName(e.href)?.toLowerCase() === lower && e.text !== wanted,
+      );
+      if (!entry) break;
+      next = retitleEntry(next, { line: entry.line }, title) ?? next;
+      if (
+        parseIndex(next).entries.find((e) => e.line === entry.line)?.text !==
+        wanted
+      )
+        break;
+    }
+    return next === text ? null : next;
+  }
   // The index's folder stands for any: only names matter here.
   const folder = "/index-folder";
   let next = rewriteLinks(text, {
@@ -551,7 +572,7 @@ export function subtreeOf(text, ref) {
 // - { kind: "indent", ref, folders: [names of folders] }
 // - { kind: "outdent", ref }
 // - { kind: "shift", ref, step: -1 | 1 }
-// - { kind: "rename", from, to }
+// - { kind: "rename", from, to, title }
 // - { kind: "retitle", ref, title }
 export function applyIndexOp(text, op = {}) {
   if (typeof text !== "string" || !op || typeof op !== "object") return null;
@@ -584,7 +605,12 @@ export function applyIndexOp(text, op = {}) {
       return shiftEntry(text, op.ref, op.step);
     case "rename":
       if (typeof op.from !== "string" || typeof op.to !== "string") return null;
-      return renameInIndex(text, op.from, op.to);
+      return renameInIndex(
+        text,
+        op.from,
+        op.to,
+        typeof op.title === "string" ? op.title : null,
+      );
     case "retitle":
       return retitleEntry(text, op.ref, op.title);
     default:

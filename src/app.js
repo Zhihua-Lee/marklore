@@ -14,6 +14,7 @@ import {
   unlinkTarget,
 } from "../desktop/link-rewrite.mjs";
 import { applyIndexOp, removeEntriesTo } from "../desktop/folder-index.mjs";
+import { setNoteName } from "../desktop/note-names.mjs";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
 import { createMenus } from "./menus.js";
@@ -592,6 +593,8 @@ indexView = createIndexView({
     if (!settings.sidebar) changeSettings({ sidebar: true });
     return revealPath(path);
   },
+  // An entry's title edited in the view renames the note (src/library.js).
+  renameNote: (args) => renameTo(args),
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
 // Markdown back and hands it here as the note's new text, through the
@@ -1280,6 +1283,8 @@ const { save, checkDisk, showConflict } = createDocumentSync({
     if (text !== doc.text)
       changeFront(doc, splitFront(text).yaml, { history: false });
   },
+  // A note saved with a new leading heading is renamed after it.
+  saved: (doc, before) => nameSaved(doc, before),
 });
 function jump(from, { record = true } = {}) {
   if (!active) return;
@@ -1720,6 +1725,8 @@ const {
   menuFor: treeMenu,
   repairLink,
   revealPath,
+  renameTo,
+  nameSaved,
 } = createLibrary({
   api,
   roots,
@@ -1739,6 +1746,8 @@ const {
       .filter((doc) => dirty(doc) || doc.saving)
       .map((doc) => doc.name),
   renamed: (moved) => {
+    // Names and files in the shown index's folder may have changed.
+    indexView.invalidate("library");
     for (const file of moved)
       for (const doc of tabs)
         if (doc.fileId === file.id) {
@@ -1761,13 +1770,18 @@ const {
   // locked and says it could not be updated.
   drafts: () =>
     tabs.filter((doc) => doc.path && dirty(doc)).map((doc) => doc.path),
-  draftLinks: (moves) =>
+  draftLinks: (moves, anchors = []) =>
     tabs.flatMap((doc) => {
-      if (!doc.path || !dirty(doc) || !moves.length) return [];
+      if (!doc.path || !dirty(doc) || !(moves.length || anchors.length))
+        return [];
       const { count } = rewriteLinks(doc.text, {
         from: doc.path,
         file: movedPathOf(doc.path, moves),
         moves,
+        anchors: anchors.map((a) => ({
+          ...a,
+          file: movedPathOf(a.source || a.file, moves),
+        })),
       });
       return count ? [{ path: doc.path, name: doc.name, links: count }] : [];
     }),
@@ -1796,6 +1810,7 @@ const {
     moves = [],
     links = false,
     drafts: edits = [],
+    anchors = [],
     reread = false,
   }) => {
     let patched = 0;
@@ -1804,17 +1819,23 @@ const {
       let text = doc.text;
       // The index's own changes first (they name entries as they were),
       // then the links, both into the draft: nothing is written under it.
+      // A renamed note's own name (its heading) is one of these changes.
       for (const { path, ops } of edits)
         if (
           samePath(path, doc.path) ||
           samePath(movedPathOf(path, moves), doc.path)
         )
-          for (const op of ops) text = applyIndexOp(text, op) ?? text;
-      if (links && moves.length)
+          for (const op of ops)
+            text =
+              (op.kind === "note-name"
+                ? setNoteName(text, op)
+                : applyIndexOp(text, op)) ?? text;
+      if (links && (moves.length || anchors.length))
         text = rewriteLinks(text, {
           from: doc.path,
           file: movedPathOf(doc.path, moves),
           moves,
+          anchors,
         }).text;
       if (text === doc.text) continue;
       replaceDraft(doc, text);

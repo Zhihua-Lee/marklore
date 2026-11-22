@@ -69,7 +69,7 @@ try {
   });
   const page = await instance.firstWindow();
   const tree = page.locator("#tree");
-  const row = (name) => tree.getByRole("button", { name, exact: true });
+  const row = (name) => tree.locator(`button.file[data-name="${name}"]`);
   await row("Plan.md").waitFor();
   const before = await snapshot();
   // The link index has read the library (Other.md links to Plan.md).
@@ -85,7 +85,7 @@ try {
   await name.fill("Road map");
   await name.press("Enter");
   const ask = page.getByRole("dialog", {
-    name: "把“Plan.md”改名为“Road map.md”",
+    name: "把“Plan”改名为“Road map”",
   });
   await ask.waitFor();
   assert.deepEqual(await ask.locator(".tree-dialog-name").allTextContents(), [
@@ -93,18 +93,19 @@ try {
     "Other.md",
     "T.md",
   ]);
+  // The anchor of its heading follows the new heading.
   await ask.getByRole("button", { name: "更新 3 篇笔记的链接" }).click();
   await until(
-    async () => (await read("Other.md"))?.includes("Road%20map.md#plan"),
+    async () => (await read("Other.md"))?.includes("Road%20map.md#road-map"),
     "links rewritten",
   );
   assert.equal(
     await read("Other.md"),
-    "# Other\n\nThe [plan](Road%20map.md#plan) and [child](<Child.md>).\n",
+    "# Other\n\nThe [plan](Road%20map.md#road-map) and [child](<Child.md>).\n",
   );
   assert.equal(
     await read("Child.md"),
-    "# Child\n\nUp: [plan](Road%20map.md#plan).\n",
+    "# Child\n\nUp: [plan](Road%20map.md#road-map).\n",
   );
   assert.equal(
     await read("Topics/T.md"),
@@ -117,9 +118,13 @@ try {
       "- [Road map](Road%20map.md)",
     ),
   );
-  assert.equal(await read("Road map.md"), files["Plan.md"]);
+  // Its heading is its name: renamed with it.
+  assert.equal(
+    await read("Road map.md"),
+    files["Plan.md"].replace("# Plan", "# Road map"),
+  );
   // Each file was backed up before it was rewritten.
-  assert.equal((await fs.readdir(path.join(profile, "backups"))).length, 4);
+  assert.equal((await fs.readdir(path.join(profile, "backups"))).length, 5);
   await row("Road map.md").waitFor();
 
   // One undo, from the toast: every name and text as before.
@@ -189,12 +194,12 @@ try {
   await name.fill("Goals");
   await name.press("Enter");
   const ask2 = page.getByRole("dialog", {
-    name: "把“Plan.md”改名为“Goals.md”",
+    name: "把“Plan”改名为“Goals”",
   });
   await ask2.getByRole("button", { name: "更新 3 篇笔记的链接" }).click();
   await until(async () => (await read("Goals.md")) !== null, "renamed again");
   await page
-    .locator("#editor .cm-content", { hasText: "[plan](Goals.md#plan)" })
+    .locator("#editor .cm-content", { hasText: "[plan](Goals.md#goals)" })
     .waitFor();
   assert.match(
     await page.locator("#editor .cm-content").textContent(),
@@ -204,7 +209,7 @@ try {
   assert.equal(await page.locator("#conflict").isVisible(), false);
   assert.equal(
     await read("Child.md"),
-    "# Child\n\nUp: [plan](Goals.md#plan).\n",
+    "# Child\n\nUp: [plan](Goals.md#goals).\n",
   );
   console.log(
     "Native moves passed: a rename lists the notes linking to it, rewrites them and the folder's index (each backed up), and one undo restores every file byte for byte; a move to another folder carries the child page, rewrites incoming links and the note's own relative links, and is undone from the menu; a note open with unsaved changes is patched in its draft and not written.",

@@ -634,3 +634,50 @@ test("a save that changes the leading heading renames the note after it", async 
   await page.waitForTimeout(300);
   expect(await page.evaluate(() => window.mock.renames.length)).toBe(1);
 });
+
+// The index view shows each note by its one name: the heading main lists
+// (desktop/note-names.mjs), the file name muted beside it only when the
+// file is named otherwise.
+test("the index view shows a note's heading as its name, the file name only when it differs", async ({
+  page,
+}) => {
+  await setupIndex(page);
+  await page.evaluate(() => {
+    const folio = window.folio;
+    const list = folio.list;
+    folio.list = async (id) =>
+      (await list(id)).map((child) => {
+        const heading = /^(?:---[\s\S]*?---\n)?# (.+)$/m.exec(
+          window.mock.pages[child.name] || "",
+        );
+        return heading && !child.index
+          ? { ...child, title: heading[1], heading: heading[1] }
+          : child;
+      });
+    window.mock.handlers.library();
+  });
+  // "第二章 数列极限.md" begins "# 第二章": that is its name.
+  const chapter = page.locator("#content .ix-item", {
+    has: page.locator(
+      ':scope > .ix-row > a.ix-title[href="第二章%20数列极限.md"]',
+    ),
+  });
+  const title = chapter.locator(":scope > .ix-row > .ix-title");
+  const file = chapter.locator(":scope > .ix-row > .ix-file");
+  await expect(title).toHaveText("第二章");
+  await expect(file).toHaveText("第二章 数列极限.md");
+  // Quieter than the name.
+  const [nameColor, fileColor] = await Promise.all([
+    title.evaluate((el) => getComputedStyle(el).color),
+    file.evaluate((el) => getComputedStyle(el).color),
+  ]);
+  expect(fileColor).not.toBe(nameColor);
+  // A file named after its heading: the name alone.
+  await expect(row(page, "1.1 有理数的稠密性").locator(".ix-file")).toHaveCount(
+    0,
+  );
+  // "books.md" begins "# 参考书目": named so, its file name beside it.
+  await expect(row(page, "参考书目").locator(".ix-file")).toHaveText(
+    "books.md",
+  );
+});

@@ -18,6 +18,9 @@
 const EDGE = 48;
 const MIN_SPEED = 2;
 const MAX_SPEED = 22;
+// The browser sends dragover every few hundred ms at most while the
+// pointer rests: longer without one (in the window), the drag has gone.
+const STALE = 600;
 
 const attached = new WeakMap();
 
@@ -42,6 +45,10 @@ export function attach(container, { edge = EDGE, maxSpeed = MAX_SPEED } = {}) {
   if (!container || attached.has(container)) return;
   let speed = 0;
   let frame = 0;
+  // When the last dragover came, and whether the pointer has left the
+  // window since (a drag from the list, still going).
+  let seen = 0;
+  let outside = false;
   // Whether the drag started in the list (its end then comes as dragend).
   // Attached from that drag's own dragstart: it did.
   const current = typeof window !== "undefined" ? window.event : null;
@@ -51,6 +58,9 @@ export function attach(container, { edge = EDGE, maxSpeed = MAX_SPEED } = {}) {
   const step = () => {
     frame = 0;
     if (!speed || !container.isConnected) return;
+    // No dragover for a while with the pointer in the window: the drag
+    // ended somewhere without telling (Esc, a drop elsewhere).
+    if (!outside && performance.now() - seen > STALE) return (speed = 0);
     const before = container.scrollTop;
     container.scrollTop = before + speed;
     // At the end of the list: nothing more to do until the pointer moves.
@@ -60,6 +70,7 @@ export function attach(container, { edge = EDGE, maxSpeed = MAX_SPEED } = {}) {
   const stop = () => {
     speed = 0;
     own = false;
+    outside = false;
     if (frame) cancelAnimationFrame(frame);
     frame = 0;
   };
@@ -70,6 +81,8 @@ export function attach(container, { edge = EDGE, maxSpeed = MAX_SPEED } = {}) {
       speed = 0;
       return;
     }
+    seen = performance.now();
+    outside = false;
     speed = scrollSpeed(event.clientY, box.top, box.bottom, edge, maxSpeed);
     if (speed && !frame) frame = requestAnimationFrame(step);
   };
@@ -79,7 +92,9 @@ export function attach(container, { edge = EDGE, maxSpeed = MAX_SPEED } = {}) {
   // Leaving the window: a drag from the list goes on scrolling at the speed
   // it had; one from elsewhere (files from Explorer) stops.
   const leave = (event) => {
-    if (event.relatedTarget === null && !own) stop();
+    if (event.relatedTarget !== null) return;
+    if (own) outside = true;
+    else stop();
   };
   const handlers = [
     ["dragstart", start],

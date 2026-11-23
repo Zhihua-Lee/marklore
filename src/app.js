@@ -280,13 +280,13 @@ const outline = createOutline({
   content: $("#content"),
   reader: $("#reader"),
   renderLabel: renderHeadingLabel,
-  // Edit mode's editor and the source pane are read by their own place.
-  position: () => {
-    if (!active) return null;
-    if (richActive()) return richEditor.anchor().from;
-    if (active.mode === "source") return editorAnchor().from;
-    return null;
-  },
+  // Edit mode's editor: its headings, as the note's in order.
+  editor: () =>
+    active && richActive() && richEditor.doc === active
+      ? { root: $("#rich .ProseMirror"), scroller: $("#rich-reader") }
+      : null,
+  // The source pane is read by its own place.
+  position: () => (active?.mode === "source" ? editorAnchor().from : null),
   go: (item) => {
     // An index entry: its row shown (folded entries above it unfolded),
     // not its page opened.

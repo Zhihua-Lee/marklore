@@ -47,15 +47,16 @@ export function outlineItems(headings, entries = null) {
 }
 
 // The panel in `nav`. renderLabel(label): a heading's label as HTML.
-// position(): where the pane shown is read (a source offset) when that is
-// not the reading view (Edit mode's editor, the source pane), else null.
-// go(item, button): an entry clicked.
+// editor(): Edit mode's editor when it shows the note ({ root, scroller }),
+// else null. position(): where the source pane is read (a source offset)
+// when it is what is shown, else null. go(item, button): an entry clicked.
 export function createOutline({
   nav,
   content,
   reader,
   renderLabel,
-  position,
+  editor = () => null,
+  position = () => null,
   go,
 }) {
   let targets = null,
@@ -156,25 +157,44 @@ export function createOutline({
     let now = null;
     if (pinned?.isConnected) now = pinned;
     else if (buttons.length) {
-      const from = position();
+      const pane = editor();
+      const from = pane ? null : position();
       if (from != null) {
         for (const button of buttons)
           if (Number(button.dataset.from) <= from) now = button;
           else break;
-      } else if (reader.getClientRects().length) {
-        const pairs = resolve(buttons).filter(([, element]) => element);
-        const line = reader.getBoundingClientRect().top + 40;
-        let low = 0,
-          high = pairs.length;
-        while (low < high) {
-          const mid = (low + high) >> 1;
-          if (topOf(pairs[mid][1]) <= line) low = mid + 1;
-          else high = mid;
-        }
-        now = low ? pairs[low - 1][0] : null;
-      } else now = current?.isConnected ? current : null;
+      } else if (pane?.root) {
+        // The editor draws the note's headings in the same order.
+        const headings = pane.root.querySelectorAll("h1,h2,h3,h4,h5,h6");
+        now = passed(
+          buttons
+            .map((button) => [button, headings[Number(button.dataset.heading)]])
+            .filter(([, element]) => element),
+          pane.scroller,
+          (element) => element.getBoundingClientRect().top,
+        );
+      } else if (reader.getClientRects().length)
+        now = passed(
+          resolve(buttons).filter(([, element]) => element),
+          reader,
+          topOf,
+        );
+      else now = current?.isConnected ? current : null;
     }
     mark(now);
+  }
+  // The last entry whose place is above the reading line of `scroller`
+  // (pairs in the order of the page).
+  function passed(pairs, scroller, top) {
+    const line = scroller.getBoundingClientRect().top + 40;
+    let low = 0,
+      high = pairs.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (top(pairs[mid][1]) <= line) low = mid + 1;
+      else high = mid;
+    }
+    return low ? pairs[low - 1][0] : null;
   }
   function mark(now) {
     if (now === current) return;

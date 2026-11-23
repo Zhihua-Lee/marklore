@@ -179,6 +179,23 @@ test("the outline leaves out the title, indents from the shallowest level and ma
   ).not.toHaveText("Gamma");
 });
 
+test("in Edit mode the outline marks the section being edited", async ({
+  page,
+}) => {
+  await boot(page, long, { richEdit: true, editSplit: false });
+  await page.keyboard.press("Control+2");
+  const editor = page.locator("#rich .ProseMirror");
+  await expect(editor.locator("h2", { hasText: "Beta" })).toBeVisible();
+  await editor.locator("h2", { hasText: "Beta" }).evaluate((h) => {
+    const pane = document.querySelector("#rich-reader");
+    pane.scrollTop +=
+      h.getBoundingClientRect().top - pane.getBoundingClientRect().top - 10;
+  });
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Beta",
+  );
+});
+
 test("an anchor before the first section is listed at the top, at the top level", async ({
   page,
 }) => {

@@ -392,9 +392,13 @@ export function askRepair({ name, rel, candidates, creatable, index = false }) {
 // "Unify names…" on a folder: for each note, what would change (its file
 // name, its index entry, a heading added, its front-matter title), with
 // subfolders included on request. plan(deep) → main's planUnify. Resolves
-// { deep } when the reader applies it, or null.
-export function askUnify({ folder, plan }) {
-  const title = t("统一“{name}”中的名字", { name: folder });
+// { deep } when the reader applies it, or null. `note`: one note's name
+// (its plan holds that note only; no subfolders to include).
+export function askUnify({ folder, plan, note = null }) {
+  const title =
+    note != null
+      ? t("统一“{name}”的名字", { name: note })
+      : t("统一“{name}”中的名字", { name: folder });
   return modal("unify-question", title, (form, finish) => {
     form.append(element("h2", "", title));
     form.append(
@@ -410,7 +414,7 @@ export function askUnify({ folder, plan }) {
     const deep = element("input");
     deep.type = "checkbox";
     label.append(deep, element("span", "", t("包括子文件夹")));
-    form.append(label);
+    if (note == null) form.append(label);
     const lead = element("p", "tree-dialog-lead");
     const slot = element("div", "tree-dialog-slot");
     const skipped = element("p", "tree-dialog-hint");

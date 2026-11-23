@@ -293,16 +293,36 @@
   background: color-mix(in srgb, var(--paper) 14%, transparent);
 }
 
-/* A note's name (its heading) and, when the file is named otherwise, the
-   file name quietly after it. */
+/* A note's name (its heading); its file is in the tooltip. */
 #tree .file .file-title {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-#tree .file .file-name {
-  margin-left: 6px;
-  color: var(--muted);
-  font-size: 11px;
+/* A note whose file is named otherwise: one small ring after the name, a
+   click unifying them (shared with the index view). */
+.name-mark {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  vertical-align: middle;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.name-mark::before {
+  content: "";
+  position: absolute;
+  inset: 5px;
+  border: 1.5px solid color-mix(in srgb, var(--muted) 70%, transparent);
+  border-radius: 50%;
+}
+.name-mark:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+.name-mark:hover::before {
+  border-color: var(--accent);
 }
 
 /* A folder's row: for a folder with an index file, a quiet button at its

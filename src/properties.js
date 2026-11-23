@@ -1,8 +1,9 @@
 // A note's properties (the YAML front matter at its top), read and drawn as
 // a card: folded, one quiet line under the title (the date, the notebook and
-// section); unfolded, one row per property. A `title` property is the
-// page's title, shown above the card rather than as one of its rows, and
-// shown once when the note's first line is the same level-one heading. The editor
+// section); unfolded, one row per property. A note is named by its leading
+// level-one heading; a `title` property is then one of the rows. In a note
+// without such a heading, `title` is the page's title, shown above the card
+// rather than as one of its rows. The editor
 // (rich/properties.js) draws the same card and changes single values; a
 // value it cannot read here (nested YAML, a block of text) is edited as
 // source. Only simple YAML is read: `key: value` lines, `[a, b]` lists and
@@ -216,32 +217,33 @@ export const titleField = (fields) =>
       !["list", "bool", "complex"].includes(f.kind) &&
       f.text.trim(),
   );
-// The text of a body's first line when that is a level-one heading.
-export function firstHeading(body) {
-  const m = /^(?:[ \t]*\r?\n)*#[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*(?:\r?\n|$)/.exec(
-    body,
-  );
-  return m ? m[1].trim() : null;
-}
-
 // The card. In the reading view a <details> (its `attrs` carry the source
 // map); in the editor (`editable`) the same, with buttons to change it.
-// `heading`: the body's first level-one heading, if it starts with one.
+// `heading`: the note's leading level-one heading (its one name,
+// desktop/note-names.mjs), if it starts with one.
 export function propertiesCard(
   yaml,
   { attrs = "", editable = false, open = false, heading = null } = {},
 ) {
   const all = readProperties(yaml);
   const title = titleField(all);
-  const fields = title ? all.filter((f) => f !== title) : all;
+  // One name per note: a note that starts with a level-one heading is named
+  // by it, and its `title` is one of the rows (seen unfolded). Without one,
+  // `title` is the page's title, above the card.
+  const titled = heading != null;
+  const fields = title && !titled ? all.filter((f) => f !== title) : all;
   const page =
-    title && title.text.trim() !== heading
+    title && !titled
       ? editable
         ? `<div class="fm-title" data-key="${escape(title.key)}" tabindex="0" role="button" title="${escape(t("点击修改标题"))}">${escape(title.text)}</div>`
         : `<div class="fm-title" role="heading" aria-level="1">${escape(title.text)}</div>`
       : "";
-  // Nothing but the title: the reading view shows the title alone.
-  if (!fields.length && !editable)
+  // Nothing but the title: the reading view shows the title alone (or,
+  // under a heading that names the note, nothing).
+  if (
+    !editable &&
+    (!fields.length || (titled && fields.length === 1 && fields[0] === title))
+  )
     return page
       ? page.replace("<div ", () => `<div${attrs} `) + "\n"
       : `<div class="fm-none"${attrs} hidden></div>\n`;

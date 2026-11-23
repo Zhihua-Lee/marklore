@@ -912,7 +912,9 @@ export class FileStore {
   // written as its heading). Nothing changes here. Notes open with unsaved
   // changes (drafts) are left out, and named. Returns { folder, notes:
   // [{ path, folder, name, title, to, heading, entry, front }], skipped }.
-  async unifyPlan(id, { deep = false, drafts = [] } = {}) {
+  // `only`: that note of the folder alone (its file name, any letter case).
+  async unifyPlan(id, { deep = false, only = null, drafts = [] } = {}) {
+    if (only != null) deep = false;
     const root = this.folderPath(id);
     await unchangedPath(root);
     const unsaved = draftList(drafts);
@@ -953,7 +955,8 @@ export class FileStore {
           !item.isFile() ||
           item.name.startsWith(".") ||
           !/\.(md|markdown|mdown|mkd)$/i.test(item.name) ||
-          isIndexName(item.name)
+          isIndexName(item.name) ||
+          (only != null && item.name.toLowerCase() !== only.toLowerCase())
         )
           continue;
         const file = path.join(folder, item.name);

@@ -76,6 +76,7 @@ import { createPreviewCache } from "./render-cache.js";
 import { renderDiagrams } from "./diagrams.js";
 import { createLinkPreview, splitLink } from "./link-preview.js";
 import { createBacklinks } from "./backlinks.js";
+import { createOutline, outlineItems } from "./outline.js";
 import { createLinkHere, pastedLink } from "./link-here.js";
 import { wireDesktopSettings } from "./desktop-settings.js";
 import { wireCodeBlocks } from "./code-blocks.js";
@@ -161,7 +162,7 @@ let imageInsertion, backlinks, linkHere, proposals, marks, paintAiSettings;
 let indexView;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
-<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}"></nav></section></aside>
+<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}" data-empty="${t("暂无标题")}"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="marks-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
 <div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div><div id="rich-reader"><article id="rich" class="prose"></article></div></div>
@@ -273,6 +274,26 @@ createTabPreview({
 skipOffscreenBlocks($("#content"), $("#reader"));
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
 watchSections($("#content"));
+// The outline panel (outline.js).
+const outline = createOutline({
+  nav: $("#outline"),
+  content: $("#content"),
+  reader: $("#reader"),
+  renderLabel: renderHeadingLabel,
+  // Edit mode's editor and the source pane are read by their own place.
+  position: () => {
+    if (!active) return null;
+    if (richActive()) return richEditor.anchor().from;
+    if (active.mode === "source") return editorAnchor().from;
+    return null;
+  },
+  go: (item) => {
+    // An index entry: its row shown (folded entries above it unfolded),
+    // not its page opened.
+    if (item.kind === "entry") indexView.reveal(item.line);
+    jump(item.from);
+  },
+});
 const smoothScroll = createSmoothScroll($("#reader"));
 releaseWhenQuiet(api?.releaseMemory);
 wireSourceCopy({
@@ -595,6 +616,12 @@ indexView = createIndexView({
   },
   // An entry's title edited in the view renames the note (src/library.js).
   renameNote: (args) => renameTo(args),
+  unifyNote: (args) => unifyNote(args),
+  canUnify: () => Boolean(api?.planUnify),
+  foldsChanged: () => {
+    scheduleSession();
+    outline.schedule();
+  },
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
 // Markdown back and hands it here as the note's new text, through the
@@ -734,8 +761,11 @@ function capture() {
   // The editor of Edit mode shows no folds, and the reading view then
   // still holds the note read before: this note's folds stay as they were.
   if (richActive()) return;
+  // Sections folded, and an index file's entries (folder-index-view.js).
   active.folds = [
-    ...$("#content").querySelectorAll(".note-section.collapsed"),
+    ...$("#content").querySelectorAll(
+      ".note-section.collapsed, .ix-item.closed[data-fold-key]",
+    ),
   ].map((el) => el.dataset.foldKey);
   active.details = [...$("#content").querySelectorAll("details")]
     .map((el, i) => (el.open ? i : -1))
@@ -1088,30 +1118,28 @@ function render(preserve) {
 }
 let outlineSignature = "";
 function updateOutline(headings) {
+  // An index file shown as its pages: its first two levels of entries too.
+  const entries =
+    active && !proposals?.shown(active) && indexView.applies(active)
+      ? indexView.outlineEntries()
+      : null;
+  const items = outlineItems(headings, entries);
   const signature = JSON.stringify(
-    headings.map(({ label, id, level }) => ({ label, id, level })),
+    items.map(({ kind, label, id, line, depth }) => [
+      kind,
+      label,
+      id,
+      line,
+      depth,
+    ]),
   );
   if (outlineSignature === signature) {
-    // Heading entries only: anchored blocks may be listed between them.
-    [
-      ...$("#outline").querySelectorAll(":scope > button:not(.outline-anchor)"),
-    ].forEach((button, i) => {
-      button.dataset.from = String(headings[i].from);
-    });
+    // The same entries: their places in the text may have moved.
+    outline.move(items);
     return;
   }
   outlineSignature = signature;
-  $("#outline").replaceChildren(
-    ...headings.map((h) => {
-      const b = document.createElement("button");
-      b.innerHTML = renderHeadingLabel(h.label);
-      b.title = h.label;
-      b.style.paddingLeft = 12 + (h.level - 1) * 12 + "px";
-      b.dataset.from = String(h.from);
-      b.onclick = () => jump(Number(b.dataset.from));
-      return b;
-    }),
-  );
+  outline.build(items);
   backlinks?.decorateOutline();
   // Math in headings renders as TeX until KaTeX loads; then redraw this outline.
   if (!mathReady() && headings.some((h) => mayContainMath(h.label)))
@@ -1170,7 +1198,7 @@ function showHome() {
   setEditorState(stateFor(docFrom()));
   $("#content").replaceChildren();
   previewCache.clear();
-  $("#outline").replaceChildren();
+  outline.clear();
   outlineSignature = "";
   $("#conflict").hidden = true;
   $("main").dataset.empty = "true";
@@ -1599,6 +1627,7 @@ $("#content").addEventListener(
       setSectionCollapsed(section, collapsed);
       capture();
       scheduleSession();
+      outline.schedule();
       return;
     }
     const link = event.target.closest("a");
@@ -1634,6 +1663,7 @@ for (const name of ["wheel", "pointerdown", "keydown"])
 let scrollFrame = 0;
 function scrolled() {
   lastScrollAt = performance.now();
+  outline.schedule();
   if (scrollFrame) return;
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0;
@@ -1644,6 +1674,12 @@ function scrolled() {
 $("#reader").addEventListener("scroll", scrolled, { passive: true });
 $("#rich-reader").addEventListener("scroll", scrolled, { passive: true });
 view.scrollDOM.addEventListener("scroll", scrolled, { passive: true });
+// Scrolled by hand: an outline entry clicked is no longer kept marked.
+for (const scroller of [$("#reader"), $("#rich-reader"), view.scrollDOM])
+  for (const name of ["wheel", "pointerdown", "keydown"])
+    scroller.addEventListener(name, () => outline.release(), {
+      passive: true,
+    });
 // Chromium re-hit-tests the page after every scroll step to update hover. With
 // rendered formulas (KaTeX positions thousands of spans) each test took ~12 ms
 // and made wheel scrolling stutter. While the reader scrolls, a transparent
@@ -1728,6 +1764,7 @@ const {
   repairLink,
   revealPath,
   renameTo,
+  unifyNote,
   nameSaved,
 } = createLibrary({
   api,

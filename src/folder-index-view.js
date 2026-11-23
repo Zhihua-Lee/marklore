@@ -3,9 +3,12 @@
 // (front matter, headings, prose, comments) rendered as in any note. Source
 // mode shows the Markdown as written.
 //
-// Each list entry is a row: a fold arrow when pages sit under it, its title,
-// the file name when it differs, and the page's first sentence (read from
-// the page, shown only, never written). Clicking opens the page. Edit mode
+// Each list entry is a row: a fold arrow when pages sit under it (it and
+// the guide line down those pages fold them, as a note's sections fold),
+// its title (the file in its tooltip, and a quiet mark offering to unify
+// the names when the file is named otherwise), and the page's first
+// sentence (read from the page, shown only, never written). Clicking opens
+// the page. Edit mode
 // adds dragging, Tab/Shift+Tab (also Alt+Shift+←/→) to nest or un-nest,
 // Alt+↑/↓ to move, new sub-pages, removing an entry from the index (not
 // the file) and editing a title in place. An entry whose file is missing
@@ -84,6 +87,12 @@ export function createIndexView({
   // An entry's note or folder renamed by its new name ({ folderId, name,
   // title, shown }): resolves whether it was.
   renameNote = async () => null,
+  // One note's file name and name unified ({ folderId, name, title }), as
+  // the library's "统一名字…", where canUnify() says it is offered.
+  unifyNote = async () => {},
+  canUnify = () => false,
+  // An entry folded or unfolded (the note's folds are kept with its tab).
+  foldsChanged = () => {},
 }) {
   const states = new WeakMap();
   // Per index file: its folder's entries, and the pages' first sentences.
@@ -95,10 +104,13 @@ export function createIndexView({
   const editing = (doc) => doc.mode === "edit" && !doc.preview;
   const stateOf = (doc) => {
     let state = states.get(doc);
-    if (!state) states.set(doc, (state = { folds: new Set(), tray: false }));
+    if (!state) states.set(doc, (state = { tray: false }));
     return state;
   };
-  const foldKey = (entry) => (entry.name || entry.href).toLowerCase();
+  // An entry's fold, kept with the note's section folds (doc.folds, saved
+  // with the session), by the entry's file or link.
+  const foldKey = (entry) => "ix:" + (entry.name || entry.href).toLowerCase();
+  const isFolded = (doc, entry) => (doc.folds || []).includes(foldKey(entry));
   // The folder's entries by name (any letter case).
   const childOf = (info, name) =>
     name && info?.status === "ready"
@@ -346,12 +358,8 @@ export function createIndexView({
       state: stateOf(doc),
       first: true,
     };
-    let last = null;
-    for (const run of scan.runs) {
-      const node = runNode(context, run);
-      place(fragment, scan.lines[run.first].start, node);
-      last = node;
-    }
+    for (const run of scan.runs)
+      place(fragment, scan.lines[run.first].start, runNode(context, run));
     // Edit mode: HTML comments show as their source, to be edited in
     // place like any block (they render as nothing).
     if (context.edit)
@@ -361,11 +369,10 @@ export function createIndexView({
         node.dataset.to = String(block.to);
         place(fragment, block.from, node);
       }
+    // At the end of the note, outside any section: folding the last one
+    // never hides the new page button or the files not listed.
     const footer = footerNode(context);
-    if (footer) {
-      if (last) last.after(footer);
-      else fragment.append(footer);
-    }
+    if (footer) fragment.append(footer);
     if (context.edit)
       for (const block of proseBlocks(fragment)) {
         block.classList.add("ix-prose");
@@ -479,6 +486,18 @@ export function createIndexView({
     for (const i of run.roots) list.append(itemNode(context, i));
     return list;
   }
+  // The mark beside a note whose file is named otherwise than its name: a
+  // click unifies them (the library's "统一名字…" for that note).
+  function nameMark(fileName) {
+    const mark = button(
+      "name-mark",
+      t("文件名“{name}”与标题不同，点击统一名字", { name: fileName }),
+      " ",
+      "unify",
+    );
+    mark.dataset.name = fileName;
+    return mark;
+  }
   // The last line of an entry and the entries under it.
   function lastLine(scan, i) {
     const entry = scan.entries[i];
@@ -510,21 +529,24 @@ export function createIndexView({
     const missing = isMissing(info, entry);
     if (missing) item.classList.add("missing");
     if (child?.directory) item.dataset.kind = "folder";
+    // An entry with pages under it folds as a section does: by its arrow,
+    // or by the guide line down from it (the rail), drawn alike.
+    let rail = null;
     if (entry.children.length) {
-      const closed = state.folds.has(foldKey(entry));
+      const closed = isFolded(doc, entry);
+      const label = t("展开或折叠 {name} 的子页", { name: entry.title });
       item.setAttribute("aria-expanded", String(!closed));
+      item.dataset.foldKey = foldKey(entry);
       if (closed) item.classList.add("closed");
-      row.append(
-        button(
-          "ix-twisty",
-          t("展开或折叠 {name} 的子页", { name: entry.title }),
-          " ",
-          "fold",
-        ),
-      );
+      const arrow = button("ix-twisty", label, " ", "fold");
+      arrow.setAttribute("aria-expanded", String(!closed));
+      row.append(arrow);
+      rail = button("ix-rail", label, " ", "fold");
+      rail.setAttribute("aria-expanded", String(!closed));
     } else row.append(element("span", "ix-twisty-space"));
     // A note's one name (its heading; desktop/note-names.mjs), else the
-    // entry's text; the file name beside it when it is named otherwise.
+    // entry's text. Its file is in the tooltip; a note whose file is named
+    // otherwise gets a quiet mark offering to unify them.
     const name = child?.title || entry.title;
     let title;
     if (missing) title = element("span", "ix-title", entry.title);
@@ -534,12 +556,24 @@ export function createIndexView({
       title.tabIndex = -1;
       if (edit) title.draggable = false;
     }
+    const written = entry.name
+      ? entry.name + (child?.directory ? "/" : "")
+      : target(entry.href);
     // Edit mode: a click picks the entry, a double click edits the title.
     title.title =
-      edit && !missing
+      (edit && !missing
         ? t("{title}（Ctrl+单击打开，双击改标题）", { title: name })
-        : name;
+        : name) + (written ? "\n" + written : "");
     row.append(title);
+    if (
+      canUnify() &&
+      info?.folderId &&
+      child &&
+      !child.directory &&
+      child.title &&
+      !fileMatches(child.title, child.name)
+    )
+      row.append(nameMark(child.name));
     // How many pages a folded entry holds (shown only while folded).
     if (entry.children.length) {
       const count = pagesUnder(scan, i);
@@ -551,18 +585,6 @@ export function createIndexView({
         ),
       );
     }
-    const written = entry.name
-      ? entry.name + (child?.directory ? "/" : "")
-      : target(entry.href);
-    if (
-      written &&
-      !(
-        child?.directory &&
-        titleFor(entry.name).toLowerCase() === name.toLowerCase()
-      ) &&
-      !(entry.name && !child?.directory && fileMatches(name, entry.name))
-    )
-      row.append(element("span", "ix-file", written));
     if (missing) {
       row.append(element("span", "ix-missing", t("不存在")));
       if (!doc.preview) {
@@ -598,6 +620,8 @@ export function createIndexView({
     if (entry.children.length) {
       const group = element("div", "ix-children");
       group.setAttribute("role", "group");
+      // The guide line down the pages under it, a fold control itself.
+      group.append(rail);
       for (const k of entry.children) group.append(itemNode(context, k));
       item.append(group);
     }
@@ -648,9 +672,18 @@ export function createIndexView({
             child.title || child.name + (child.directory ? "/" : ""),
           );
           link.setAttribute("href", hrefFor(child.name, child.directory));
+          link.title = child.title
+            ? child.title + "\n" + child.name
+            : child.name;
           row.append(link);
-          if (child.title && !fileMatches(child.title, child.name))
-            row.append(element("span", "ix-file", child.name));
+          if (
+            canUnify() &&
+            info.folderId &&
+            !child.directory &&
+            child.title &&
+            !fileMatches(child.title, child.name)
+          )
+            row.append(nameMark(child.name));
           if (edit) {
             row.draggable = true;
             link.draggable = false;
@@ -736,11 +769,11 @@ export function createIndexView({
     }
     return true;
   }
-  function focusItem(item) {
+  function focusItem(item, visible = true) {
     for (const other of host.querySelectorAll('.ix-item[tabindex="0"]'))
       if (other !== item) other.tabIndex = -1;
     item.tabIndex = 0;
-    item.focus({ preventScroll: false });
+    item.focus({ preventScroll: false, focusVisible: visible });
   }
   const visibleItems = () =>
     [...host.querySelectorAll(".ix-item")].filter(
@@ -750,11 +783,41 @@ export function createIndexView({
     const found = entryAt(item);
     if (!found || !found.entry.children.length) return;
     const { doc, entry } = found;
-    const folds = stateOf(doc).folds;
-    if (closed) folds.add(foldKey(entry));
-    else folds.delete(foldKey(entry));
+    const key = foldKey(entry);
+    const folds = (doc.folds || []).filter((other) => other !== key);
+    doc.folds = closed ? [...folds, key] : folds;
     item.classList.toggle("closed", closed);
     item.setAttribute("aria-expanded", String(!closed));
+    for (const control of item.querySelectorAll(
+      ":scope > .ix-row > .ix-twisty, :scope > .ix-children > .ix-rail",
+    ))
+      control.setAttribute("aria-expanded", String(!closed));
+    foldsChanged(doc);
+  }
+  // The entry at a line shown: the entries folded above it unfolded.
+  function reveal(line) {
+    const item = host.querySelector(`.ix-item[data-line="${line}"]`);
+    for (
+      let parent = item?.parentElement.closest(".ix-item");
+      parent;
+      parent = parent.parentElement.closest(".ix-item")
+    )
+      if (parent.classList.contains("closed")) fold(parent, false);
+  }
+  // The outline's entries for the index shown: its first two levels, by
+  // the names the rows show ({ label, from, depth, line }).
+  function outlineEntries() {
+    return [
+      ...host.querySelectorAll(
+        '.ix-item:is([aria-level="1"], [aria-level="2"])',
+      ),
+    ].map((item) => ({
+      label:
+        item.querySelector(":scope > .ix-row > .ix-title")?.textContent ?? "",
+      from: Number(item.dataset.from),
+      depth: Number(item.getAttribute("aria-level")) - 1,
+      line: Number(item.dataset.line),
+    }));
   }
   // A title typed in place: Enter or leaving the box takes it, Esc cancels.
   // An entry of a note or folder of this folder renames it (its heading,
@@ -1265,8 +1328,21 @@ export function createIndexView({
       const action = control.dataset.ix;
       if (action === "fold") {
         fold(item, !item.classList.contains("closed"));
-        // The keys stay on the entry folded.
-        return focusItem(item);
+        // The keys stay on the entry folded (no ring for a click).
+        return focusItem(item, false);
+      }
+      if (action === "unify") {
+        const info = folders.get(doc.fileId);
+        const child = childOf(info, control.dataset.name);
+        if (canUnify() && info?.folderId && child)
+          run(() =>
+            unifyNote({
+              folderId: info.folderId,
+              name: child.name,
+              title: child.title || child.name,
+            }),
+          )();
+        return;
       }
       if (action === "tray") {
         const tray = control.closest(".ix-unlisted");
@@ -1485,5 +1561,15 @@ export function createIndexView({
     apply(from.doc, moveEntry(from.doc.text, from.index, to.index, place));
   });
 
-  return { applies, key, render, invalidate, shown, history, editFront };
+  return {
+    applies,
+    key,
+    render,
+    invalidate,
+    shown,
+    history,
+    editFront,
+    reveal,
+    outlineEntries,
+  };
 }

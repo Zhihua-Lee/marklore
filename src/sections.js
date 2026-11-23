@@ -1,5 +1,8 @@
 // Marks the section under the pointer (the innermost one) and the one whose
 // fold control has the keyboard focus, for the styles of its marker and rail.
+// An index file's entries with pages under them fold the same way
+// (folder-index-view.js) and are marked alike.
+const FOLDING = ".note-section, .ix-item[aria-expanded]";
 export function watchSections(host) {
   let over = null,
     focused = null;
@@ -11,7 +14,7 @@ export function watchSections(host) {
     return next;
   };
   host.addEventListener("pointerover", (event) => {
-    const section = event.target.closest?.(".note-section");
+    const section = event.target.closest?.(FOLDING);
     over = mark(
       over,
       section && host.contains(section) ? section : null,
@@ -23,12 +26,12 @@ export function watchSections(host) {
     () => (over = mark(over, null, "section-hover")),
   );
   host.addEventListener("focusin", (event) => {
-    const control = event.target.closest?.(".fold, .section-rail");
+    const control = event.target.closest?.(
+      ".fold, .section-rail, .ix-twisty, .ix-rail",
+    );
     focused = mark(
       focused,
-      control?.matches(":focus-visible")
-        ? control.closest(".note-section")
-        : null,
+      control?.matches(":focus-visible") ? control.closest(FOLDING) : null,
       "section-focus",
     );
   });

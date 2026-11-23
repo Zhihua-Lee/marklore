@@ -42,15 +42,16 @@ test("Read mode: the list as rows, the rest of the note as written", async ({
     ["符号表", "1"],
     ["参考书目", "1"],
   ]);
-  // The page's first sentence (front matter and heading skipped), and the
-  // file name where it is not the title.
+  // The page's first sentence (front matter and heading skipped). File
+  // names are in the rows' tooltips only.
   await expect(row(page, "1.2 确界原理").locator(".ix-excerpt")).toHaveText(
     "非空有上界的数集必有上确界。",
   );
-  await expect(row(page, "参考书目").locator(".ix-file")).toHaveText(
-    "books.md",
+  await expect(content.locator(".ix-file")).toHaveCount(0);
+  await expect(row(page, "参考书目").locator(".ix-title")).toHaveAttribute(
+    "title",
+    "参考书目\nbooks.md",
   );
-  await expect(row(page, "第一章 实数").locator(".ix-file")).toHaveCount(0);
   // A missing page says so, with its repairs.
   const missing = item(page, "2.2 单调有界定理");
   await expect(missing).toHaveClass(/missing/);

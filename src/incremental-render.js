@@ -420,6 +420,16 @@ export function createIncrementalRender({ cache }) {
       )
     )
       return note({ result: "full", reason: "structure" });
+    // Whether the note has a title (its first block a level-one heading,
+    // markdown.js markTitle) may change: blocks put before its heading, or
+    // those before a heading taken away.
+    const firstBody = blocks.findIndex((block) => !block.frontMatter);
+    if (
+      firstBody >= 0 &&
+      plan.first <= firstBody &&
+      (blocks[firstBody].heading || (!added.length && blocks[last]?.heading))
+    )
+      return note({ result: "full", reason: "title" });
     const old = removed.flatMap((block) => block.nodes);
     // Where the new blocks go: in place of the old, or after the block
     // before them (its section's body), or first in the note.

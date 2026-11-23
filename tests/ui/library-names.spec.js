@@ -99,7 +99,24 @@ async function library(page, { long = 0 } = {}) {
         return { files: [], moves: [], rewritten: 0, failed: [], drafts: [] };
       },
       planUnify: async (id, options) => {
-        window.mock.calls.push(["planUnify", id, options.deep]);
+        window.mock.calls.push(["planUnify", id, options.deep, options.only]);
+        if (options.only)
+          return {
+            folder: CH,
+            notes: [
+              {
+                path: CH + "\\" + options.only,
+                folder: CH,
+                name: options.only,
+                title: "第一章：集合与映射",
+                to: "第一章：集合与映射.md",
+                heading: null,
+                entry: null,
+                front: null,
+              },
+            ],
+            skipped: [],
+          };
         return {
           folder: CH,
           notes: [
@@ -138,6 +155,7 @@ async function library(page, { long = 0 } = {}) {
           id,
           options.deep,
           JSON.parse(options.expect).length,
+          ...(options.only ? [options.only] : []),
         ]);
         return {
           files: [],
@@ -159,7 +177,7 @@ const tree = (page) => page.locator("#tree");
 const folderRow = (page, name) =>
   tree(page).locator("details.folder > summary", { hasText: name }).first();
 
-test("the tree shows a note by its heading, the file name quietly when it differs", async ({
+test("the tree shows a note by its heading, a quiet mark when its file is named otherwise", async ({
   page,
 }) => {
   await library(page);
@@ -167,16 +185,51 @@ test("the tree shows a note by its heading, the file name quietly when it differ
   const first = tree(page).locator(
     'button.file[data-name="第一章_集合与映射.md"]',
   );
-  await expect(first.locator(".file-title")).toHaveText("第一章：集合与映射");
-  await expect(first.locator(".file-name")).toHaveText("第一章_集合与映射.md");
-  // A file named after its heading: the name alone.
+  // The name alone; the file in the tooltip (its path).
+  await expect(first).toHaveText("第一章：集合与映射");
+  await expect(first).toHaveAttribute("title", /第一章_集合与映射\.md$/);
+  await expect(first.locator(".file-name")).toHaveCount(0);
+  await expect(first.locator(".name-mark")).toHaveAttribute(
+    "title",
+    "文件名“第一章_集合与映射.md”与标题不同，点击统一名字",
+  );
+  // A file named after its heading: no mark.
   const same = tree(page).locator('button.file[data-name="1.2 映射.md"]');
   await expect(same).toHaveText("1.2 映射");
-  await expect(same.locator(".file-name")).toHaveCount(0);
+  await expect(same.locator(".name-mark")).toHaveCount(0);
   // A note without a heading, and the index file: their file names.
   await expect(
     tree(page).locator('button.file[data-name="_目录.md"]'),
   ).toHaveText("_目录.md");
+  // The mark unifies that note's names (not the folder's), after the list
+  // of what changes; the note does not open.
+  await first.locator(".name-mark").click();
+  const dialog = page.getByRole("dialog", {
+    name: "统一“第一章：集合与映射”的名字",
+  });
+  await expect(dialog.locator(".unify-item")).toHaveCount(1);
+  await expect(dialog.getByText("包括子文件夹")).toHaveCount(0);
+  await dialog.getByRole("button", { name: "统一名字" }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        window.mock.calls.filter((c) => /Unify|unify/.test(c[0])),
+      ),
+    )
+    .toEqual([
+      ["planUnify", "ch", false, "第一章_集合与映射.md"],
+      ["unifyNames", "ch", false, 1, "第一章_集合与映射.md"],
+    ]);
+  expect(
+    await page.evaluate(() =>
+      window.mock.calls.filter((c) => c[0] === "openChild"),
+    ),
+  ).toEqual([]);
+  // The note's menu offers the same.
+  await first.click({ button: "right" });
+  await expect(
+    page.locator("#context").getByRole("menuitem", { name: /统一名字/ }),
+  ).toBeVisible();
 });
 
 test("a folder with an index has a button opening it in a new tab; a click on the folder still folds it", async ({
@@ -669,23 +722,40 @@ test("the index view shows a note's heading as its name, the file name only when
     ),
   });
   const title = chapter.locator(":scope > .ix-row > .ix-title");
-  const file = chapter.locator(":scope > .ix-row > .ix-file");
   await expect(title).toHaveText("第二章");
-  await expect(file).toHaveText("第二章 数列极限.md");
-  // Quieter than the name.
-  const [nameColor, fileColor] = await Promise.all([
-    title.evaluate((el) => getComputedStyle(el).color),
-    file.evaluate((el) => getComputedStyle(el).color),
-  ]);
-  expect(fileColor).not.toBe(nameColor);
-  // A file named after its heading: the name alone.
-  await expect(row(page, "1.1 有理数的稠密性").locator(".ix-file")).toHaveCount(
-    0,
+  // No file names in the rows: the file in the tooltip, and one quiet mark
+  // where it is named otherwise.
+  await expect(page.locator("#content .ix-file")).toHaveCount(0);
+  await expect(title).toHaveAttribute("title", "第二章\n第二章 数列极限.md");
+  await expect(chapter.locator(":scope > .ix-row > .name-mark")).toHaveCount(0);
+  // Unify is offered only where main can do it.
+  await page.evaluate(() => {
+    window.folio.planUnify = async (id, options) => {
+      window.mock.unify = [id, options.only];
+      return { folder: "", notes: [], skipped: [] };
+    };
+    window.mock.handlers.library();
+  });
+  const mark = chapter.locator(":scope > .ix-row > .name-mark");
+  await expect(mark).toHaveAttribute(
+    "title",
+    "文件名“第二章 数列极限.md”与标题不同，点击统一名字",
   );
-  // "books.md" begins "# 参考书目": named so, its file name beside it.
-  await expect(row(page, "参考书目").locator(".ix-file")).toHaveText(
-    "books.md",
+  // A file named after its heading: no mark.
+  await expect(
+    row(page, "1.1 有理数的稠密性").locator(".name-mark"),
+  ).toHaveCount(0);
+  // "books.md" begins "# 参考书目": named so, marked.
+  await expect(row(page, "参考书目").locator(".name-mark")).toHaveCount(1);
+  // The mark asks to unify that note's names; the page does not open.
+  await mark.click();
+  const dialog = page.getByRole("dialog", { name: "统一“第二章”的名字" });
+  await expect(dialog).toBeVisible();
+  expect(await page.evaluate(() => window.mock.unify?.[1])).toBe(
+    "第二章 数列极限.md",
   );
+  await dialog.getByRole("button", { name: "取消" }).click();
+  await expect(page.getByRole("tab")).toHaveCount(1);
 });
 
 // The rename after a save follows what was saved, not what was typed since.

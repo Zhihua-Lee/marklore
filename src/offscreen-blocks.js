@@ -139,6 +139,9 @@ export function skipOffscreenBlocks(host, scroller) {
     drawn.delete(block);
     block.classList.remove(SKIP);
     block.style.removeProperty("contain-intrinsic-block-size");
+    // A block of the note's own (a paragraph under its title) is left as
+    // it was rendered, without an empty style.
+    if (!block.getAttribute("style")) block.removeAttribute("style");
     verdicts.delete(block);
   }
   function unskipAll() {

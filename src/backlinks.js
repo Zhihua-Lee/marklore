@@ -249,8 +249,16 @@ export function createBacklinks({
     // Counts and anchors are read from the note as rendered: not while
     // what is rendered is not the note shown.
     if (!shown()) return;
-    const buttons = [...outline.querySelectorAll(":scope > button")];
-    const headings = getHeadings();
+    // Each heading's entry by the heading's place (data-heading): the
+    // note's title has none, and an index file lists its entries between.
+    const buttons = [
+      ...outline.querySelectorAll(":scope > button[data-heading]"),
+    ];
+    const byIndex = new Map(
+      buttons.map((button) => [button.dataset.heading, button]),
+    );
+    const entryOf = (heading) =>
+      heading ? byIndex.get(heading.getAttribute("data-heading")) : null;
     const counts = new Map(
       targets.map((target) => [
         target.element,
@@ -266,27 +274,28 @@ export function createBacklinks({
       span.setAttribute("aria-label", t("被 {count} 处引用", { count: n }));
       return span;
     };
-    const domHeadings = content.querySelectorAll(HEADINGS);
-    buttons.forEach((button, i) => {
-      const n = count(domHeadings[i]);
-      if (!n || !headings[i]) return;
-      button.prepend(countSpan(n));
-    });
+    for (const button of buttons) {
+      const heading = content.querySelector(
+        `:is(${HEADINGS})[data-heading="${button.dataset.heading}"]`,
+      );
+      const n = heading ? count(heading) : 0;
+      if (n) button.prepend(countSpan(n));
+    }
     const after = new Map();
     for (const anchor of explicitAnchors(content)) {
       const block = markedBlock(anchor, content);
       if (!block || block.matches(HEADINGS)) continue;
       const n = count(block);
       if (mode === "referenced" && !n) continue;
-      const heading = precedingHeading(block, content);
-      const index = heading ? [...domHeadings].indexOf(heading) : -1;
-      const parent = buttons[index];
-      const level = Number(heading?.tagName[1] || 1);
+      // Under the heading above it; above the first listed heading (under
+      // the note's title, or none): at the top, at the top level.
+      const parent = entryOf(precedingHeading(block, content)) || null;
+      const depth = parent ? Number(parent.dataset.depth || 0) + 1 : 0;
       const entry = document.createElement("button");
       entry.type = "button";
       entry.className = "outline-anchor";
       entry.dataset.anchor = anchor.id;
-      entry.style.paddingLeft = 12 + level * 12 + "px";
+      entry.style.paddingLeft = 12 + depth * 12 + "px";
       entry.title = blockLabel(block);
       const label = document.createElement("span");
       label.className = "outline-label";

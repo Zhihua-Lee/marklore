@@ -13,7 +13,8 @@ import { createBoundedCache } from "./bounded-cache.js";
 import { decorateCodeBlocks } from "./code-blocks.js";
 import { decorateTextColors } from "./text-colors.js";
 import { t } from "../desktop/i18n.mjs";
-import { propertiesCard, firstHeading } from "./properties.js";
+import { propertiesCard } from "./properties.js";
+import { leadingHeading } from "../desktop/note-names.mjs";
 import { createSlugger } from "../desktop/slug.mjs";
 import { imageLayout } from "./image-layout.js";
 import { applyDensity } from "./image-density.js";
@@ -783,6 +784,7 @@ export function createParser() {
         });
       }
     }
+    markTitle(state);
   });
   for (const name of ["fence", "code_block"]) {
     const original = md.renderer.rules[name];
@@ -990,7 +992,7 @@ function frontMatter(md) {
       const lines = m[0].replace(/\r?\n$/, "").split("\n").length;
       const token = state.push("front_matter", "details", 0);
       token.content = m[1];
-      token.meta = { heading: firstHeading(state.src.slice(m[0].length)) };
+      token.meta = { heading: leadingHeading(state.src)?.title ?? null };
       token.map = [0, lines];
       token.block = true;
       state.line = lines;
@@ -1298,6 +1300,31 @@ const blockMarks = (blocks, nonce) => {
   const mark = `<div data-folio-block="${nonce}"></div>`;
   return mark + blocks.map((block) => block.html).join(mark) + mark;
 };
+// The note's title: its level-one heading when that is the first block
+// after the front matter and the note has no other level-one heading (as
+// desktop/note-names.mjs leadingHeading reads the note's one name). It is
+// the page's title, not a section: shown unfolded and left out of the
+// outline. Its entry in `env.headings` gets `title: true`. Only a parse of
+// the whole note can tell (a window of blocks, incremental-render.js, starts
+// further down).
+function markTitle(state) {
+  const top = state.tokens.filter(
+    (token) =>
+      token.level === 0 && token.nesting !== -1 && token.type !== "inline",
+  );
+  const first = top.find((token) => token.type !== "front_matter");
+  if (first?.type !== "heading_open" || first.tag !== "h1" || !first.map)
+    return;
+  // The parse began at the note's top: nothing but blank lines (and the
+  // front matter) before this heading.
+  const lines = state.src.split("\n", first.map[0]);
+  const from = top[0].type === "front_matter" ? top[0].map[1] : 0;
+  if (lines.slice(from).some((line) => line.trim())) return;
+  if (top.filter((t) => t.type === "heading_open" && t.tag === "h1").length > 1)
+    return;
+  const heading = state.env.headings[Number(first.attrGet("data-heading"))];
+  if (heading) heading.title = true;
+}
 // The text of a section's block count (shown when it is folded).
 export const sectionSummary = (count) =>
   count === 1 ? t("1 块") : t("{count} 块", { count });
@@ -1711,11 +1738,23 @@ function finishNote(
   // HTML is sanitized before heading controls are created. Source mapping stays on headings/blocks.
   const fragment = template.content,
     stack = [];
+  // The note's title (markTitle) stays a plain heading at the top: no fold,
+  // rail or summary, and the `##` sections below it are the top level.
+  const titleIndex = (env.headings || []).findIndex((h) => h.title);
   for (const node of [...fragment.childNodes]) {
     const level =
       node.nodeType === 1 && /^H[1-6]$/.test(node.tagName)
         ? Number(node.tagName[1])
         : 0;
+    if (
+      level === 1 &&
+      titleIndex >= 0 &&
+      !stack.length &&
+      node.getAttribute("data-heading") === String(titleIndex)
+    ) {
+      node.classList.add("note-title");
+      continue;
+    }
     if (level) {
       while (stack.length && stack.at(-1).level >= level) stack.pop();
       const section = document.createElement("section");

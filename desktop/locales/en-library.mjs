@@ -112,6 +112,10 @@ export default {
     "Names of {notes} notes unified; {count} files updated",
   "统一了“{name}”中的名字": "Unified names in “{name}”",
   "统一“{name}”中的名字": "Unify names in “{name}”",
+  "统一“{name}”的名字": "Unify the names of “{name}”",
+  "文件名“{name}”与标题不同，点击统一名字":
+    "The file name “{name}” differs from the title; click to unify them",
+  暂无标题: "No headings",
   "笔记的名字是它开头的一级标题；没有标题的笔记取目录条目或文件名作为标题。文件名、目录条目和属性 title 都改为这个名字。":
     "A note's name is its leading level-1 heading; a note without one gets its index entry or file name as its heading. File names, index entries and the title property all become that name.",
   包括子文件夹: "Include subfolders",

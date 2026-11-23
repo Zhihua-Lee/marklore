@@ -1311,8 +1311,10 @@ else {
       });
       // "Unify names" of a folder (files.mjs unifyPlan): what would change,
       // then the change as one batch, links followed, undone in one step.
+      // only: one note of the folder (its file name).
       const unifyOptions = (options) => ({
-        deep: Boolean(options?.deep),
+        deep: Boolean(options?.deep) && typeof options?.only !== "string",
+        only: typeof options?.only === "string" ? options.only : null,
         drafts: draftsOf(options?.drafts),
       });
       api("planUnify", (id, options = {}) =>

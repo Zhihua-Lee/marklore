@@ -97,8 +97,11 @@ test("current folder follows the note, navigation typography persists and reopen
     return {
       file: [style("#tree .file").fontSize, style("#tree summary").fontWeight],
       tab: style(".tab-label").fontSize,
+      // The note's title has no fold control: its sections, from `##`.
       headings: [
-        ...document.querySelectorAll("#content :is(h1,h2,h3,h4,h5,h6)"),
+        ...document.querySelectorAll(
+          "#content :is(h1,h2,h3,h4,h5,h6):not(.note-title)",
+        ),
       ].map((el) => {
         const rail = el.parentElement.querySelector(":scope > .section-rail");
         const fold = el.querySelector(".fold").getBoundingClientRect();
@@ -335,7 +338,8 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
       await page.locator("#text-weight").selectOption(weight);
       const styles = await page.evaluate(() =>
         [
-          "#content .section-body > p",
+          // Under the note's title, at the top level (no section).
+          "#content > p",
           "#content li",
           "#content blockquote p",
           "#content td",
@@ -359,7 +363,7 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
   await page.locator("#outline-toggle").click();
   const measure = await page.evaluate(() => {
     const content = document.querySelector("#content"),
-      section = content.querySelector(".note-section");
+      section = content.querySelector(":scope > p");
     return {
       width: section.getBoundingClientRect().width,
       padding: getComputedStyle(section).paddingLeft,
@@ -410,9 +414,17 @@ Retained when the other chapter is folded.
   const child = page.locator(
     '.note-section[data-fold-key="a-bounded-sequence"]',
   );
-  expect((await child.boundingBox()).x).toBeGreaterThan(
-    (await parent.boundingBox()).x,
+  // The `###` steps in from its `##` (a top-level section, under the
+  // note's title).
+  expect((await child.locator(":scope > h3").boundingBox()).x).toBeGreaterThan(
+    (await parent.locator(":scope > h2").boundingBox()).x,
   );
+  expect(
+    await parent.evaluate((el) => [
+      el.parentElement.id,
+      getComputedStyle(el).paddingLeft,
+    ]),
+  ).toEqual(["content", "0px"]);
   const rail = parent.locator(":scope > .section-rail");
   const guide = (section) =>
     section
@@ -596,14 +608,21 @@ for (const deviceScaleFactor of [1, 1.25, 2]) {
 test("half-screen widths keep the reader full width and toolbar reachable", async ({
   page,
 }) => {
-  await boot(page);
+  // A section under the title: its fold control must stay on screen.
+  await boot(page, typographyText + "\n## Section\n\nText.\n");
   for (const width of [680, 640, 512, 480]) {
     await page.setViewportSize({ width, height: 600 });
+    // No sideways scrolling once the new width is laid out (the frame of
+    // the resize itself may still hold the old one).
+    await expect
+      .poll(() =>
+        page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+      )
+      .toBe(false);
     const layout = await page.evaluate(() => {
       const main = document.querySelector("main").getBoundingClientRect();
       return {
         mainWidth: main.width,
-        overflow: document.documentElement.scrollWidth > innerWidth,
         left: getComputedStyle(document.querySelector("#sidebar")).position,
         right: getComputedStyle(document.querySelector("#right-sidebar"))
           .position,
@@ -616,7 +635,6 @@ test("half-screen widths keep the reader full width and toolbar reachable", asyn
       };
     });
     expect(layout.mainWidth).toBeGreaterThanOrEqual(width - 2);
-    expect(layout.overflow).toBe(false);
     expect(layout.left).toBe("absolute");
     expect(layout.right).toBe("absolute");
     for (const box of layout.controls) {

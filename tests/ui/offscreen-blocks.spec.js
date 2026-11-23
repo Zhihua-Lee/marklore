@@ -193,7 +193,7 @@ test("blocks near the screen are skipped only once the reader has left them", as
   const firstBody = () =>
     page.evaluate(() =>
       document
-        .querySelector("#content .note-section .note-section > .section-body")
+        .querySelector("#content > .note-section > .section-body")
         .classList.contains("reading-skip"),
     );
   const near = () =>

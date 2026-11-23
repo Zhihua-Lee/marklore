@@ -3,9 +3,10 @@ import { boot, editor, saved, caretAfter } from "./rich-helpers.js";
 
 // Front matter reads as a folded line of the note's properties (its date,
 // notebook and section), not as a rule and a heading; unfolded, a row per
-// property, changed in place in Edit mode. Its title is the page's title,
-// above the line, once. Emphasis beside CJK text
-// follows Settings → Reading.
+// property, changed in place in Edit mode. A note is named by its leading
+// level-one heading: its `title` is then one of the rows, never a second
+// title. A note without such a heading shows `title` as its page's title,
+// above the line. Emphasis beside CJK text follows Settings → Reading.
 const text =
   "---\ntitle: 会议记录\nmodified: 2026-11-06 14:32\nnotebook: 数学笔记\nsection: 第一学期\ntags: [a, b]\nonenote_id: abc\n---\n\n# 正文\n\n**定义：**其中 x\n";
 
@@ -14,28 +15,22 @@ test("front matter is a folded line of properties", async ({ page }) => {
   await page.keyboard.press("Control+1");
   const card = page.locator("#content details.front-matter");
   await expect(card).toBeVisible();
-  // The title heads the page, above the properties' line.
-  const title = page.locator("#content .fm-title");
-  await expect(title).toHaveText("会议记录");
-  expect(
-    await title.evaluate(
-      (h, card) =>
-        h.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
-      await card.elementHandle(),
-    ),
-  ).toBeTruthy();
+  // One title: the heading. The `title` property is not shown above it.
+  await expect(page.locator("#content .fm-title")).toHaveCount(0);
+  await expect(page.locator("#content h1")).toHaveText("正文");
   const line = card.locator("summary").first();
   await expect(line.locator(".fm-when")).toHaveText(
     "2026年11月6日星期五 14:32",
   );
   await expect(line.locator(".fm-place")).toHaveText("数学笔记 › 第一学期");
-  await expect(line.locator(".fm-count")).toHaveText("5 项属性");
+  await expect(line.locator(".fm-count")).toHaveText("6 项属性");
   await expect(page.locator("#content hr")).toHaveCount(0);
   await expect(page.locator("#content h2")).toHaveCount(0);
   await expect(card.locator(".fm-rows")).toBeHidden();
   await line.click();
   const row = (key) => card.locator(`.fm-row[data-key="${key}"]`);
-  await expect(row("title")).toHaveCount(0);
+  // The title is one of the rows, seen unfolded.
+  await expect(row("title").locator(".fm-value")).toHaveText("会议记录");
   await expect(row("modified").locator(".fm-value")).toHaveText(
     "2026年11月6日 14:32",
   );
@@ -44,8 +39,9 @@ test("front matter is a folded line of properties", async ({ page }) => {
   await expect(row("onenote_id")).toBeHidden();
   await card.locator(".fm-more > summary").click();
   await expect(row("onenote_id").locator(".fm-value")).toHaveText("abc");
-  // The outline lists the note's own headings only.
+  // The outline lists the note's own headings, not its title: none here.
   await expect(page.locator("#outline")).not.toContainText("title");
+  await expect(page.locator("#outline button")).toHaveCount(0);
 });
 
 test("properties change in place in Edit mode", async ({ page }) => {
@@ -57,16 +53,16 @@ test("properties change in place in Edit mode", async ({ page }) => {
   );
   await card.locator("summary").first().click();
   const row = (key) => card.locator(`.fm-row[data-key="${key}"]`);
-  // The title above the card: click, type, Enter.
-  const title = editor(page).locator(".fm-title");
-  await title.click();
-  const field = title.locator("input");
+  // Under the note's heading, the title is a row like the others: click,
+  // type, Enter.
+  await expect(editor(page).locator(".fm-title")).toHaveCount(0);
+  await row("title").locator(".fm-value").click();
+  const field = row("title").locator("input");
   await expect(field).toBeFocused();
   await expect(field).toHaveValue("会议记录");
   await field.fill("周会: 第 3 次");
   await field.press("Enter");
-  await expect(title).toHaveText("周会: 第 3 次");
-  await expect(row("title")).toHaveCount(0);
+  await expect(row("title").locator(".fm-value")).toHaveText("周会: 第 3 次");
   // A value: the same.
   await row("modified").locator(".fm-value").click();
   await expect(row("modified").locator("input")).toBeFocused();
@@ -114,14 +110,30 @@ test("a title that is also the note's first heading shows once", async ({
   await expect(page.locator("#content .fm-title")).toHaveCount(0);
   await page.locator("#content details.front-matter summary").first().click();
   await expect(page.locator('#content .fm-row[data-key="title"]')).toHaveCount(
-    0,
+    1,
   );
-  // In Edit mode too; renaming the heading brings the title back above.
+  // In Edit mode too; a heading renamed (no longer the same as `title`)
+  // still names the note alone.
   await page.keyboard.press("Control+2");
   await expect(editor(page).locator(".fm-title")).toHaveCount(0);
-  await caretAfter(page, "会议记录");
+  await editor(page).locator("h1").click();
+  await page.keyboard.press("End");
   await page.keyboard.type("（续）");
-  await expect(editor(page).locator(".fm-title")).toHaveText("会议记录");
+  await expect(editor(page).locator("h1")).toHaveText("会议记录（续）");
+  await expect(editor(page).locator(".fm-title")).toHaveCount(0);
+  await page.keyboard.press("Control+1");
+  await expect(page.locator("#content h1")).toHaveText("会议记录（续）");
+  await expect(page.locator("#content .fm-title")).toHaveCount(0);
+});
+
+test("a note whose only property is its title, under its heading, shows no card", async ({
+  page,
+}) => {
+  await boot(page, "---\ntitle: Only\n---\n\n# Only\n\nText.\n");
+  await page.keyboard.press("Control+1");
+  await expect(page.locator("#content h1")).toHaveText("Only");
+  await expect(page.locator("#content .fm-title")).toHaveCount(0);
+  await expect(page.locator("#content details.front-matter")).toHaveCount(0);
 });
 
 test("a note whose only property is its title shows the title alone", async ({

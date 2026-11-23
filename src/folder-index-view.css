@@ -57,19 +57,37 @@
   background: var(--hover);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent);
 }
-/* The fold arrow: the library tree's chevron, in its own column. */
+/* Folding, as a note's sections fold (style.css .fold, .section-rail): the
+   same triangle on the guide line's axis, the same line down the pages
+   under the entry, both of them controls; the entry under the pointer (or
+   whose control has the keys: sections.js) marks its arrow and line with
+   the accent, a folded one its arrow. */
+.ix-item[aria-expanded] {
+  --section-marker: var(--muted);
+  --section-guide: color-mix(in srgb, var(--reading-ink) 12%, transparent);
+}
+.ix-item[aria-expanded]:is(.section-hover, .section-focus) {
+  --section-marker: var(--accent);
+  --section-guide: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.ix-item.closed {
+  --section-marker: var(--accent);
+}
+.ix-item:focus-visible > .ix-row > .ix-twisty {
+  --section-marker: var(--accent);
+}
 .ix-twisty,
 .ix-twisty-space {
+  position: relative;
   flex: none;
   align-self: center;
   width: var(--ix-arrow);
-  height: 20px;
+  height: 24px;
   min-height: 0;
-  margin: 0;
+  margin: -2px 0;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--ix-muted);
   font-size: 0;
   cursor: pointer;
 }
@@ -78,37 +96,73 @@
 }
 .ix-twisty::before {
   content: "";
-  display: block;
-  width: 100%;
-  height: 100%;
-  background: currentColor;
-  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
-    center / 12px no-repeat;
-  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9.5 6 6 6-6 6'/%3E%3C/svg%3E")
-    center / 12px no-repeat;
-  transform: rotate(90deg);
+  position: absolute;
+  inset: 3px 0;
+  border-radius: 5px;
+  background: transparent;
+  transition: background-color 120ms ease;
 }
-.ix-item.closed > .ix-row > .ix-twisty::before {
-  transform: none;
-}
-@media (prefers-reduced-motion: no-preference) {
-  .ix-twisty::before {
-    transition: transform 120ms ease;
-  }
-}
-.ix-twisty:hover {
-  color: var(--reading-ink);
+.ix-twisty:is(:hover, :focus-visible)::before {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 .ix-twisty:hover {
   background: none;
 }
+.ix-twisty::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  /* The triangle's area centroid, not its bounding box, sits on the axis. */
+  clip-path: polygon(33.333% 20.833%, 83.333% 50%, 33.333% 79.167%);
+  background: var(--section-marker);
+  transform: translate(-50%, -50%) rotate(90deg);
+}
+.ix-item.closed > .ix-row > .ix-twisty::after {
+  transform: translate(-50%, -50%) rotate(0deg);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ix-twisty::after {
+    transition:
+      transform 120ms ease,
+      background-color 120ms ease;
+  }
+}
 /* One step in per level (arrow + gap: the arrow under the parent's title),
-   on a guide line down from the parent's arrow. */
+   on a guide line down from the parent's arrow: the rail, a 24px control
+   centred on it. */
 .ix-children {
   --ix-half: calc(var(--ix-pad) + var(--ix-arrow) / 2 - 0.5px);
+  position: relative;
   margin-left: var(--ix-half);
-  padding-left: calc(var(--ix-arrow) + var(--ix-gap) - var(--ix-half) - 1px);
-  border-left: 1px solid var(--ix-guide);
+  padding-left: calc(var(--ix-arrow) + var(--ix-gap) - var(--ix-half));
+}
+.ix-rail {
+  position: absolute;
+  inset: 0 auto 0 -11.5px;
+  width: 24px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  font-size: 0;
+  cursor: pointer;
+}
+.ix-rail:hover {
+  background: none;
+}
+.ix-rail::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 calc(50% - 0.5px);
+  width: 1px;
+  border-radius: 1px;
+  background: var(--section-guide);
+  transition: background-color 120ms ease;
 }
 .ix-item.closed > .ix-children {
   display: none;
@@ -156,20 +210,20 @@
 .ix-item[aria-level="1"] > .ix-row > .ix-title {
   font-weight: 600;
 }
-/* The file name, when it is not the title. */
-.ix-file {
-  flex: none;
-  max-width: 34%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 0 5px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--reading-ink) 6%, transparent);
-  color: var(--ix-muted);
-  font: 400 0.74em/1.6 var(--font-code);
+/* A note whose file is named otherwise (library-index.css .name-mark): the
+   mark sits after the title, centred on its line. */
+.ix-row > .name-mark {
+  align-self: center;
+  min-height: 0;
+  margin: 0 0 0 -4px;
+  padding: 0;
+  border: 0;
+  background: none;
 }
-.ix-row[data-kind="folder"] .ix-file,
+.ix-row > .name-mark:hover,
+.ix-row > .name-mark:focus-visible {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .ix-item[data-kind="folder"] > .ix-row > .ix-title::before {
   color: var(--ix-muted);
 }
@@ -411,6 +465,14 @@
   color: var(--ix-muted);
   font-size: 0.92em;
   font-weight: 400;
+}
+.ix-unlisted-item > .name-mark {
+  align-self: center;
+  min-height: 0;
+  margin: 0 0 0 -4px;
+  padding: 0;
+  border: 0;
+  background: none;
 }
 .ix-unlisted-item > .ix-text-button {
   margin-left: auto;

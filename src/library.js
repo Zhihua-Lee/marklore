@@ -259,6 +259,31 @@ export function createLibrary({
   // another showing as its sub-item (depth), and those the index does not
   // list after a quiet separator; dragging rewrites the index (a folder
   // without one is asked to start one first).
+  // The mark after a note whose file is named otherwise than its name: a
+  // click unifies the two (the note's "统一名字…").
+  function nameMark(fileName) {
+    const mark = element("span", "name-mark");
+    const label = t("文件名“{name}”与标题不同，点击统一名字", {
+      name: fileName,
+    });
+    mark.title = label;
+    mark.setAttribute("aria-label", label);
+    mark.setAttribute("role", "button");
+    mark.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const file = mark.closest("button.file");
+      const folder = file && folderOf(file);
+      if (folder)
+        run(() =>
+          unify(folder, {
+            name: file.dataset.name,
+            title: file.dataset.title,
+          }),
+        )();
+    });
+    return mark;
+  }
   async function fillFolder(details, entry, children) {
     const indexFile = children.find((child) => child.index);
     if (indexFile) showIndexButton(details, indexFile.path);
@@ -289,16 +314,19 @@ export function createLibrary({
       b.className = "file";
       b.dataset.name = child.name;
       b.title = child.path;
-      // A note is shown by its name (its leading heading), with its file
-      // name quietly beside it when that is not simply the name; an index
-      // file, and a note without a heading, by the file name.
+      // A note is shown by its name (its leading heading), its file in the
+      // tooltip; when the file is named otherwise, a quiet mark after the
+      // name offers to unify them. An index file, and a note without a
+      // heading, by the file name.
       const title = child.index ? null : child.title;
       if (title) {
         b.dataset.title = title;
         if (child.heading) b.dataset.heading = child.heading;
         b.append(element("span", "file-title", title));
-        if (!fileMatches(title, child.name))
-          b.append(element("span", "file-name", child.name));
+        if (!fileMatches(title, child.name)) {
+          b.dataset.mismatch = "";
+          b.append(nameMark(child.name));
+        }
       } else b.textContent = child.name;
       // An index with entries whose note is gone says how many (repaired
       // from its menu).
@@ -1539,15 +1567,20 @@ export function createLibrary({
     !api?.planUnify,
     t("文件名、目录条目和标题统一为笔记的标题"),
   ];
-  async function unify(details) {
+  // `note`: one note of the folder (its file name, and the name shown), as
+  // the mismatch mark beside a note offers it (the tree, the index view).
+  async function unify(details, note = null) {
     const id = details.dataset.id;
+    const only = note?.name;
     const choice = await askUnify({
       folder: details.dataset.name,
-      plan: (deep) => api.planUnify(id, { deep, drafts: drafts() }),
+      note: note?.title ?? null,
+      plan: (deep) => api.planUnify(id, { deep, only, drafts: drafts() }),
     });
     if (!choice) return;
     const result = await api.unifyNames(id, {
       deep: choice.deep,
+      only,
       expect: choice.expect,
       drafts: drafts(),
     });
@@ -1563,6 +1596,10 @@ export function createLibrary({
       result,
     );
   }
+  // One note's names unified ({ folderId, name: its file name, title: the
+  // name it shows }), after the reader saw what changes.
+  const unifyNote = ({ folderId, name, title }) =>
+    unify({ dataset: { id: folderId, name: "" } }, { name, title });
   // What the menu says undo would take back.
   function lastMoveItem() {
     const label = lastMove?.label;
@@ -1712,6 +1749,21 @@ export function createLibrary({
           !own,
         ],
         [t("重命名…"), run(() => rename(file)), !folder],
+        // A note whose file is named otherwise than its name.
+        ...(folder && file.dataset.mismatch !== undefined
+          ? [
+              [
+                t("统一名字…"),
+                run(() =>
+                  unify(folder, {
+                    name: file.dataset.name,
+                    title: file.dataset.title,
+                  }),
+                ),
+                !api?.planUnify,
+              ],
+            ]
+          : []),
         [t("移动到…"), run(() => moveEntry(movingOf(file))), !own],
         // The folder's index: its entries whose note is gone.
         ...(folder && file.dataset.indexFile !== undefined
@@ -1820,6 +1872,7 @@ export function createLibrary({
     repairLink,
     revealPath,
     renameTo,
+    unifyNote,
     nameSaved,
   };
 }

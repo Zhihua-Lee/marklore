@@ -231,8 +231,31 @@ main {
   font-family: var(--font-code);
   font-size: 0.95em;
 }
+/* Levels read by weight and ink, quietly: the shallowest a little firmer
+   when deeper ones sit under it, the deepest quietest. The part being read
+   is marked as the tree marks the open note. */
+#outline[data-nested] button[data-depth="0"] {
+  font-weight: 500;
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+}
+#outline
+  button:is(
+    [data-depth="2"],
+    [data-depth="3"],
+    [data-depth="4"],
+    [data-depth="5"]
+  ) {
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+}
+#outline button:hover {
+  color: var(--ink);
+}
+#outline button[aria-current="location"] {
+  background: var(--hover);
+  color: var(--accent);
+}
 #outline:empty::after {
-  content: "暂无标题";
+  content: attr(data-empty);
   display: block;
   padding: 8px 5px;
   color: var(--muted);

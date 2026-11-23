@@ -195,7 +195,8 @@ test("table headers: text double-click locates source, only the button sorts", a
 }) => {
   await boot(
     page,
-    "# T\n\n| Name | Value |\n|---|---|\n| b | 2 |\n| a | 1 |\n| c | 3 |\n",
+    // A section, so the outline (which leaves out the title) lists one.
+    "# T\n\n## Values\n\n| Name | Value |\n|---|---|\n| b | 2 |\n| a | 1 |\n| c | 3 |\n",
   );
   const order = () =>
     page

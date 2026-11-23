@@ -381,6 +381,28 @@ test("a rename after a save leaves a heading typed since in the draft alone", as
   }
 });
 
+test("unify names of one note: only that note is in the plan", async () => {
+  const lib = await library();
+  const { store, root } = lib;
+  try {
+    const plan = await store.unifyPlan(root.id, {
+      only: "第一章_集合与映射.MD",
+      deep: true,
+    });
+    assert.deepEqual(
+      plan.notes.map((n) => [n.name, n.to]),
+      [["第一章_集合与映射.md", "第一章：集合与映射.md"]],
+    );
+    // A note already named after its heading: nothing to change.
+    assert.deepEqual(
+      (await store.unifyPlan(root.id, { only: "第二章 极限.md" })).notes,
+      [],
+    );
+  } finally {
+    await fs.rm(lib.dir, { recursive: true, force: true });
+  }
+});
+
 test("a unify plan changed after it was shown is told apart from the one shown", async () => {
   const lib = await library();
   const { kb, store, root } = lib;

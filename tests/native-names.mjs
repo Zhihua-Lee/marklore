@@ -73,12 +73,17 @@ try {
   const tree = page.locator("#tree");
   const file = (name) => tree.locator(`button.file[data-name="${name}"]`);
   await file("第一章_集合与映射.md").waitFor();
-  // The tree shows notes by their heading; the file name only where it is
-  // named otherwise.
+  // The tree shows notes by their heading, the file in the tooltip; one
+  // named otherwise has a quiet mark offering to unify its names.
   assert.equal(
     await file("第一章_集合与映射.md").innerText(),
-    "第一章：集合与映射第一章_集合与映射.md",
+    "第一章：集合与映射",
   );
+  assert.equal(
+    await file("第一章_集合与映射.md").locator(".name-mark").count(),
+    1,
+  );
+  assert.equal(await file("1.2 映射.md").locator(".name-mark").count(), 0);
   assert.equal(await file("1.2 映射.md").innerText(), "1.2 映射");
   // The link index has read the library.
   await page.waitForFunction(async () => {

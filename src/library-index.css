@@ -298,6 +298,11 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* In the tree, at the row's end: a click on the name opens the note. */
+#tree .file > .name-mark {
+  float: right;
+  margin: 0 0 0 4px;
+}
 /* A note whose file is named otherwise: one small ring after the name, a
    click unifying them (shared with the index view). */
 .name-mark {

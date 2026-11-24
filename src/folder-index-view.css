@@ -41,8 +41,10 @@
   box-sizing: border-box;
 }
 /* A section head: a level-1 entry that heads a group (a folder or a page
-   with sub-pages). Every level-1 row keeps the same height so folded rows
-   share one pitch; space above and below appears only around open groups. */
+   with sub-pages). Every level-1 row keeps the same height and the same
+   half-line space above it (except the first), so folding or unfolding a
+   group never shifts rows above or adds extra gap around it; children rows
+   stay tight. */
 .ix-list > .ix-item > .ix-row {
   min-height: calc(1.595em + 4px);
 }
@@ -52,9 +54,8 @@
 .ix-list > .ix-item:not([aria-expanded]) > .ix-row {
   padding-block: calc(2px + 0.0725em);
 }
-.ix-list > .ix-item[aria-expanded="true"]:not(:first-child),
-.ix-list > .ix-item[aria-expanded="true"] + .ix-item {
-  margin-top: 0.85em;
+.ix-list > .ix-item:not(:first-child) {
+  margin-top: 0.5em;
 }
 .ix-row:hover {
   background: var(--hover);

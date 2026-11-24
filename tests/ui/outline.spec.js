@@ -335,6 +335,33 @@ test("outline pauses auto-scroll on manual wheel and keyboard scroll, keeps upda
         h.getBoundingClientRect().top - reader.getBoundingClientRect().top - 16;
     }, idx);
   };
+  const waitForReaderSettled = async (idx) => {
+    await expect
+      .poll(
+        () =>
+          page.evaluate(
+            (i) =>
+              new Promise((resolve) => {
+                const reader = document.querySelector("#reader");
+                const h = document.querySelectorAll("#content h2")[i];
+                if (!reader || !h) return resolve(false);
+                const rTop = reader.getBoundingClientRect().top;
+                const hTop = h.getBoundingClientRect().top - rTop;
+                const atBottom =
+                  reader.scrollTop + reader.clientHeight >=
+                  reader.scrollHeight - 2;
+                if (Math.abs(hTop) > 120 && !atBottom) return resolve(false);
+                const t0 = reader.scrollTop;
+                setTimeout(() => {
+                  resolve(Math.abs(reader.scrollTop - t0) < 1);
+                }, 160);
+              }),
+            idx,
+          ),
+        { timeout: 5000 },
+      )
+      .toBe(true);
+  };
 
   // 1. Programmatic follow keeps active entry in view (does NOT pause itself).
   await scrollReaderToHeading(38);
@@ -373,6 +400,7 @@ test("outline pauses auto-scroll on manual wheel and keyboard scroll, keeps upda
   );
   // First click Alpha 2 to guarantee following=true, then release pin via wheel on #reader.
   await outline(page).locator("button").nth(1).click();
+  await waitForReaderSettled(1);
   const rBox = await page.locator("#reader").boundingBox();
   await page.mouse.move(rBox.x + rBox.width / 2, rBox.y + rBox.height / 2);
   await page.mouse.wheel(0, 10);
@@ -414,6 +442,7 @@ test("outline pauses auto-scroll on manual wheel and keyboard scroll, keeps upda
   await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
     `Alpha ${visibleIdx + 1}`,
   );
+  await waitForReaderSettled(visibleIdx);
   // Hand scroll on #reader releases pin, then scrolling to Alpha 2 follows in #outline.
   await scrollReaderToHeading(1);
   await expect(outline(page).locator('[aria-current="location"]')).toHaveText(

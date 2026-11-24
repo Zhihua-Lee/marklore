@@ -752,18 +752,30 @@ test("nested index expands lazily to 2 levels and supports expand-all / top-leve
     ),
   ).toHaveText(["NestedPlainDir", "Alpha 标题", "Beta 标题"]);
 
-  // Outline header toggle collapses Level 1.
-  await page.getByRole("button", { name: "全部折叠" }).click();
+  // Alt+Shift+[ collapses back to Level 1 cleanly.
+  await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(ixItem(page, "第一部分 基础")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
   await expect(ixItem(page, "进阶专题")).toBeHidden();
 
-  // Outline header toggle expands everything recursively including Inner -> 最深一页.
-  await page.getByRole("button", { name: "全部展开" }).click();
-  await expect(ixItem(page, "最深一页")).toBeVisible();
+  // Outline header toggle expands lazily one level at a time until deepest level (Inner -> 最深一页).
+  await page.getByRole("button", { name: "展开下一层" }).click();
+  await expect(ixItem(page, "进阶专题")).toBeVisible();
+  await expect(ixItem(page, "进阶专题")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "展开下一层" }).click();
   await expect(ixItem(page, "详细推导")).toBeVisible();
+  await expect(ixItem(page, "底层归档")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "展开下一层" }).click();
+  await expect(ixItem(page, "最深一页")).toBeVisible();
+  await expect(page.getByRole("button", { name: "全部折叠" })).toBeVisible();
 
   // Fold state persists across Edit -> Read mode switch and in session tabs.
   await page.keyboard.press("Control+2");
@@ -1116,8 +1128,8 @@ test("outline lists expanded nested levels and updates as branches fold and unfo
     "写在前面",
   ]);
 
-  // Outline header toggle removes expanded nested levels from outline.
-  await page.getByRole("button", { name: "全部折叠" }).click();
+  // Alt+Shift+[ removes expanded nested levels from outline.
+  await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 });
 

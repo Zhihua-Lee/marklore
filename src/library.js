@@ -86,6 +86,7 @@ export function createLibrary({
   report,
   changed,
   openResult,
+  openFolderView = null,
   // Whether a note (by path) is open with unsaved changes.
   isUnsaved = () => false,
   // Open notes at or under a path that have unsaved changes (names).
@@ -289,7 +290,17 @@ export function createLibrary({
     if (indexFile) showIndexButton(details, indexFile.path);
     else {
       delete details.dataset.index;
-      details.querySelector(":scope > summary > .folder-index-open")?.remove();
+      if (
+        details.classList.contains("root") &&
+        !details.classList.contains("outside") &&
+        openFolderView
+      ) {
+        showRootContentsButton(details);
+      } else {
+        details
+          .querySelector(":scope > summary > .folder-index-open")
+          ?.remove();
+      }
     }
     const stack = [{ depth: -1, box: details }];
     let separated = false;
@@ -683,9 +694,11 @@ export function createLibrary({
         report(indent ? t("上面没有可作为上级的笔记") : t("已在最上一层"));
     })();
   });
-  async function branch(entry, { root = false } = {}) {
+  async function branch(entry, { root = false, outside = false } = {}) {
     const details = document.createElement("details");
     details.className = "folder";
+    if (root) details.classList.add("root");
+    if (outside) details.classList.add("outside");
     details.dataset.path = entry.path;
     details.dataset.id = entry.id;
     details.dataset.name = entry.name;
@@ -695,12 +708,16 @@ export function createLibrary({
     details.append(summary);
     markExcluded(details, excludedNow());
     // A folder with an index file: a button on its row (shown on hover and
-    // keyboard focus) opens the index in a tab of its own.
+    // keyboard focus) opens the index in a tab of its own. A library root
+    // without an index gets the same button opening a generated contents view.
     if (entry.index) showIndexButton(details, entry.index);
-    else if (api?.folderIndex)
-      summary.addEventListener("pointerenter", () => findIndex(details), {
-        once: true,
-      });
+    else {
+      if (root && !outside && openFolderView) showRootContentsButton(details);
+      if (api?.folderIndex)
+        summary.addEventListener("pointerenter", () => findIndex(details), {
+          once: true,
+        });
+    }
     // Entries load once, when the folder is first opened.
     let loading = null;
     const load = () =>
@@ -753,33 +770,54 @@ export function createLibrary({
     if (index?.path && !details.dataset.index)
       showIndexButton(details, index.path);
   }
-  function showIndexButton(details, indexPath) {
-    details.dataset.index = indexPath;
+  function ensureFolderOpenButton(details, label) {
     const summary = details.querySelector(":scope > summary");
-    if (summary.querySelector(":scope > .folder-index-open")) return;
-    const name = indexPath.split(/[\\/]/).pop();
-    const open = element("button", "folder-index-open");
-    open.type = "button";
-    open.innerHTML = icon("outline");
-    const label = t("打开目录（{name}）", { name });
+    let open = summary.querySelector(":scope > .folder-index-open");
+    if (!open) {
+      open = element("button", "folder-index-open");
+      open.type = "button";
+      open.innerHTML = icon("outline");
+      open.addEventListener("click", (event) => {
+        // The folder neither opens nor closes; the contents get their own tab.
+        event.preventDefault();
+        event.stopPropagation();
+        const idxPath = details.dataset.index;
+        if (idxPath) {
+          run(async () =>
+            add(
+              await api.openChild(
+                details.dataset.id,
+                idxPath.split(/[\\/]/).pop(),
+              ),
+            ),
+          )();
+        } else if (openFolderView) {
+          run(() =>
+            openFolderView({
+              id: details.dataset.id,
+              name: details.dataset.name,
+              path: details.dataset.path,
+            }),
+          )();
+        }
+      });
+      // Enter or Space on the button is the button's, not the folder's.
+      open.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+      });
+      summary.append(open);
+    }
     open.setAttribute("aria-label", label);
     open.title = label;
-    open.addEventListener("click", (event) => {
-      // The folder neither opens nor closes; the index gets its own tab.
-      event.preventDefault();
-      event.stopPropagation();
-      run(async () =>
-        add(
-          await api.openChild(
-            details.dataset.id,
-            details.dataset.index.split(/[\\/]/).pop(),
-          ),
-        ),
-      )();
-    });
-    // Enter or Space on the button is the button's, not the folder's.
-    open.addEventListener("keydown", (event) => event.stopPropagation());
-    summary.append(open);
+  }
+  function showIndexButton(details, indexPath) {
+    details.dataset.index = indexPath;
+    const name = indexPath.split(/[\\/]/).pop();
+    ensureFolderOpenButton(details, t("打开目录（{name}）", { name }));
+  }
+  function showRootContentsButton(details) {
+    delete details.dataset.index;
+    ensureFolderOpenButton(details, t("打开目录"));
   }
   // What a tree shows: names, order, open folders. The entries of a closed
   // folder and the current note's mark do not count.
@@ -825,14 +863,15 @@ export function createLibrary({
       fragment.append(empty);
     }
     for (const root of displayedRoots) {
-      const el = await branch(root, { root: true });
+      const outside = root === outsideFolder();
+      const el = await branch(root, { root: true, outside });
       el.classList.add("root");
       // A library folder takes notes and folders dropped on its name (the
       // open note's folder outside the library does not).
-      if (root !== outsideFolder())
+      if (!outside)
         dropZone(el.firstChild, null, { ...root, directory: true }, false);
       // The open note's folder outside the library: said so beside its name.
-      if (root === outsideFolder()) {
+      if (outside) {
         el.classList.add("outside");
         el.firstChild.dataset.note = t("不在笔记库中");
       }

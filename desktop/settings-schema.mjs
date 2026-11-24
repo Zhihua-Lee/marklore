@@ -40,6 +40,7 @@ export function defaultSettings() {
     tabGroups: [],
     navigationScope: "all",
     showHistoryButtons: false,
+    showBreadcrumb: true,
     smoothScroll: "off",
     // Link previews on hover: "hover" (restrained), "ctrl" or "off".
     linkPreview: "hover",
@@ -105,6 +106,7 @@ export function normalizeSettings(saved = {}) {
   settings.navigationScope =
     settings.navigationScope === "current" ? "current" : "all";
   settings.showHistoryButtons = settings.showHistoryButtons === true;
+  settings.showBreadcrumb = settings.showBreadcrumb !== false;
   settings.readingFormat = settings.readingFormat === true;
   settings.editSplit = settings.editSplit === true;
   settings.richEdit = settings.richEdit !== false;

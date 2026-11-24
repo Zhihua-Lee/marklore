@@ -23,7 +23,7 @@ export function createDocumentSync({
   saved = () => {},
 }) {
   async function save(as = false, doc = getActive()) {
-    if (!doc) return false;
+    if (!doc || doc.generated) return false;
     if (!api) {
       report(t("浏览器演示不写入磁盘；请运行桌面版"));
       return false;

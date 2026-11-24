@@ -13,8 +13,13 @@ import {
   movedPathOf,
   unlinkTarget,
 } from "../desktop/link-rewrite.mjs";
-import { applyIndexOp, removeEntriesTo } from "../desktop/folder-index.mjs";
-import { setNoteName } from "../desktop/note-names.mjs";
+import {
+  applyIndexOp,
+  isIndexName,
+  removeEntriesTo,
+} from "../desktop/folder-index.mjs";
+import { leadingHeading, setNoteName } from "../desktop/note-names.mjs";
+import { createBreadcrumb } from "./breadcrumb.js";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
 import { createMenus } from "./menus.js";
@@ -159,15 +164,15 @@ configureColorTools(
 let editingKeys = [];
 let imageInsertion, backlinks, linkHere, proposals, marks, paintAiSettings;
 // A folder's index file shown as its pages (src/folder-index-view.js).
-let indexView;
+let indexView, breadcrumb;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
 <div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}" data-empty="${t("暂无标题")}"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="marks-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
-<div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><article id="content" class="prose"></article></div><div id="rich-reader"><article id="rich" class="prose"></article></div></div>
+<div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><nav id="breadcrumb-read" class="note-breadcrumb" aria-label="${t("位置导航")}" hidden></nav><article id="content" class="prose"></article></div><div id="rich-reader"><nav id="breadcrumb-rich" class="note-breadcrumb" aria-label="${t("位置导航")}" hidden></nav><article id="rich" class="prose"></article></div></div>
 <span id="status" class="sr-only" role="status"></span></main><aside id="right-sidebar" class="dock" aria-label="${t("右侧栏")}"></aside></div>
-<div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div>
+<div id="toast" role="status" hidden></div><div id="context" class="context" role="menu" hidden></div><div id="breadcrumb-menu" class="context breadcrumb-menu" role="menu" aria-label="${t("同级条目")}" hidden></div>
 <div id="app-menu" class="context app-menu" role="menu" aria-label="${t("应用菜单")}" hidden></div>${appearanceMarkup}
 <dialog id="confirm"><form method="dialog"><h2 id="confirm-title"></h2><p id="confirm-detail"></p><div class="dialog-actions"><button value="cancel">${t("取消")}</button><button value="discard">${t("放弃修改")}</button><button value="save" class="primary">${t("保存")}</button></div></form></dialog>`;
 
@@ -290,7 +295,23 @@ const outline = createOutline({
   go: (item) => {
     // An index entry: its row shown (folded entries above it unfolded),
     // not its page opened.
-    if (item.kind === "entry") indexView.reveal(item.line);
+    if (item.kind === "entry") {
+      const target = indexView.reveal(item.key ?? item.line);
+      if (target && item.nested) {
+        const reader = $("#reader");
+        const row = target.querySelector(":scope > .ix-row") || target;
+        const top =
+          row.getBoundingClientRect().top -
+          reader.getBoundingClientRect().top +
+          reader.scrollTop -
+          32;
+        reader.scrollTo({
+          top: Math.max(0, top),
+          behavior: navigationMotion(),
+        });
+        return;
+      }
+    }
     jump(item.from);
   },
 });
@@ -354,6 +375,7 @@ function run(fn) {
       );
 }
 function dirty(doc) {
+  if (!doc || doc.generated) return false;
   return doc.text !== doc.base;
 }
 function docFrom(file = {}) {
@@ -365,6 +387,7 @@ function docFrom(file = {}) {
     text: file.text || "",
     base: file.text || "",
     version: file.version || null,
+    generated: file.generated || null,
     mode: "read",
     pane: "preview",
     anchor: { from: 0, top: true },
@@ -379,8 +402,17 @@ function docFrom(file = {}) {
   };
 }
 function add(file, { activate = true, opener = null } = {}) {
-  const existing =
-    file?.id && tabs.find((t) => t.fileId === file.id || t.path === file.path);
+  const existing = file?.generated
+    ? tabs.find(
+        (t) =>
+          t.generated &&
+          t.generated.path?.toLowerCase() ===
+            String(file.generated.path || "").toLowerCase(),
+      )
+    : file?.id &&
+      tabs.find(
+        (t) => !t.generated && (t.fileId === file.id || t.path === file.path),
+      );
   if (existing) {
     if (activate) activateTab(existing);
     return existing;
@@ -410,14 +442,14 @@ function stateFor(doc) {
         {
           key: "Mod-s",
           run: () => {
-            run(save)();
+            run(commands.save)();
             return true;
           },
         },
         {
           key: "Mod-Shift-s",
           run: () => {
-            run(() => save(true))();
+            run(commands.saveAs)();
             return true;
           },
         },
@@ -443,6 +475,14 @@ function stateFor(doc) {
           }
           updateStatus();
           scheduleSession();
+          // The path line names the note by its leading heading: asked
+          // again only when that changes (each ask lists the folders above).
+          const crumb =
+            leadingHeading(active.text.slice(0, 20000))?.title ?? null;
+          if (crumb !== active.crumbTitle) {
+            active.crumbTitle = crumb;
+            scheduleBreadcrumb();
+          }
           clearTimeout(renderingTimer);
           // Typed in the editor, the note already shows; only the outline
           // follows, once typing pauses.
@@ -600,7 +640,17 @@ indexView = createIndexView({
   report: toast,
   run,
   setMode: (mode) => setMode(mode),
-  openText: (id) => tabs.find((doc) => doc.fileId === id)?.text ?? null,
+  openText: (id) =>
+    tabs.find((doc) => !doc.generated && doc.fileId === id)?.text ?? null,
+  openPathText: (p) =>
+    tabs.find(
+      (doc) =>
+        !doc.generated &&
+        doc.path &&
+        doc.path.toLowerCase() === String(p).toLowerCase(),
+    )?.text ?? null,
+  openNote: ({ folderId, name }) => openChildNote(folderId, name),
+  openFolder: (folder) => openFolderView(folder),
   newNoteText: (name) =>
     settings.newNoteProperties
       ? templateNote(settings.propertyTemplate, {
@@ -621,6 +671,10 @@ indexView = createIndexView({
   foldsChanged: () => {
     scheduleSession();
     outline.schedule();
+  },
+  outlineChanged: () => {
+    if (active && indexView.applies(active))
+      updateOutline(active.headings || []);
   },
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
@@ -761,12 +815,15 @@ function capture() {
   // The editor of Edit mode shows no folds, and the reading view then
   // still holds the note read before: this note's folds stay as they were.
   if (richActive()) return;
-  // Sections folded, and an index file's entries (folder-index-view.js).
-  active.folds = [
-    ...$("#content").querySelectorAll(
-      ".note-section.collapsed, .ix-item.closed[data-fold-key]",
-    ),
-  ].map((el) => el.dataset.foldKey);
+  // Sections folded, plus index-view folds maintained on doc.folds.
+  const preservedIx = indexView.applies(active)
+    ? (active.folds || []).filter(
+        (k) => k.startsWith("ix:") || k.startsWith("+ix:"),
+      )
+    : [];
+  active.folds = [...$("#content").querySelectorAll(".note-section.collapsed")]
+    .map((el) => el.dataset.foldKey)
+    .concat(preservedIx);
   active.details = [...$("#content").querySelectorAll("details")]
     .map((el, i) => (el.open ? i : -1))
     .filter((i) => i >= 0);
@@ -947,16 +1004,22 @@ function activateTab(doc, { revealGroup = true } = {}) {
   scheduleSession();
   run(() => checkDisk(doc))();
   if (settings.sidebar) run(followCurrentFolder)();
+  updateBreadcrumb();
 }
 // `now`: the caret is placed at once rather than after the next frame (a new
 // note, typed into right away), so nothing comes later to move it.
 function setMode(mode, { anchor: destination, now = false } = {}) {
   if (!active || active.mode === mode) return;
+  if (active.generated && mode === "source") {
+    toast(t("自动生成的目录为只读视图"));
+    return;
+  }
   // Leaving a proposal's preview: back where the note was read before it.
   const back = proposals?.leave();
   selectionTools?.hide();
   closeColorPicker();
   linkPreview.hide();
+  breadcrumb?.closeMenu();
   clearTimeout(renderingTimer);
   capture();
   const doc = active,
@@ -1125,10 +1188,11 @@ function updateOutline(headings) {
       : null;
   const items = outlineItems(headings, entries);
   const signature = JSON.stringify(
-    items.map(({ kind, label, id, line, depth }) => [
+    items.map(({ kind, label, id, key, line, depth }) => [
       kind,
       label,
       id,
+      key,
       line,
       depth,
     ]),
@@ -1197,6 +1261,8 @@ function showHome() {
   updateHistoryButtons();
   setEditorState(stateFor(docFrom()));
   $("#content").replaceChildren();
+  breadcrumbEpoch++;
+  breadcrumb?.clear();
   previewCache.clear();
   outline.clear();
   outlineSignature = "";
@@ -1312,7 +1378,10 @@ const { save, checkDisk, showConflict } = createDocumentSync({
       changeFront(doc, splitFront(text).yaml, { history: false });
   },
   // A note saved with a new leading heading is renamed after it.
-  saved: (doc, before, text) => nameSaved(doc, before, text),
+  saved: (doc, before, text) => {
+    nameSaved(doc, before, text);
+    scheduleBreadcrumb();
+  },
 });
 function jump(from, { record = true } = {}) {
   if (!active) return;
@@ -1748,6 +1817,176 @@ $("#reader").addEventListener(
   { passive: true },
 );
 
+function replaceIndexTab(doc, payload) {
+  doc.saving = false;
+  doc.closing = false;
+  sentDrafts.delete(doc.id);
+  if (payload.file) {
+    doc.generated = null;
+    doc.fileId = payload.file.id;
+    doc.path = payload.file.path;
+    doc.name = payload.file.name;
+    doc.text = payload.file.text || "";
+    doc.base = doc.text;
+    doc.version = payload.file.version || null;
+  } else {
+    doc.generated = payload.generated;
+    doc.fileId = null;
+    doc.path = payload.generated.path;
+    doc.name = payload.generated.name;
+    doc.text = `# ${payload.generated.name}\n`;
+    doc.base = doc.text;
+    doc.version = null;
+    if (doc.mode === "source") doc.mode = "read";
+  }
+  doc.epoch = 0;
+  doc.conflict = null;
+  doc.html = null;
+  doc.htmlText = null;
+  doc.indexKey = null;
+  doc.folds = [];
+  doc.details = [];
+  doc.anchor = { from: 0, top: true };
+  doc.state = stateFor(doc);
+  if (active === doc) {
+    setEditorState(doc.state);
+    $("#panes").dataset.mode = doc.mode;
+    render(false);
+    updateTabs();
+    updateModes();
+    showConflict();
+    restoreSoon(doc, doc.anchor);
+    updateHistoryButtons();
+    scheduleSession();
+    if (doc.fileId) run(() => checkDisk(doc))();
+    if (settings.sidebar) run(followCurrentFolder)();
+    updateBreadcrumb();
+  } else {
+    updateTabs();
+    activateTab(doc);
+  }
+  return doc;
+}
+
+let breadcrumbEpoch = 0;
+let breadcrumbTimer = 0;
+function scheduleBreadcrumb() {
+  clearTimeout(breadcrumbTimer);
+  breadcrumbTimer = setTimeout(() => updateBreadcrumb(), 180);
+}
+async function updateBreadcrumb() {
+  clearTimeout(breadcrumbTimer);
+  const epoch = ++breadcrumbEpoch;
+  const doc = active;
+  if (!doc || !settings.showBreadcrumb || !api?.breadcrumb) {
+    breadcrumb?.clear();
+    return;
+  }
+  let query = null;
+  if (doc.generated?.folderId) {
+    query = { folderId: doc.generated.folderId };
+  } else if (doc.fileId) {
+    const drafts = tabs
+      .filter(
+        (t) => !t.generated && t.path && dirty(t) && isIndexName(t.name || ""),
+      )
+      .map((t) => ({ path: t.path, text: t.text }));
+    const title = isIndexName(doc.name || "")
+      ? null
+      : (leadingHeading(doc.text)?.title ?? null);
+    query = { fileId: doc.fileId, title, drafts };
+  }
+  if (!query) {
+    breadcrumb?.clear();
+    return;
+  }
+  const data = await api.breadcrumb(query).catch(() => null);
+  if (epoch !== breadcrumbEpoch || active !== doc || !settings.showBreadcrumb)
+    return;
+  breadcrumb?.render(data);
+}
+breadcrumb = createBreadcrumb({
+  readHost: $("#breadcrumb-read"),
+  richHost: $("#breadcrumb-rich"),
+  menuHost: $("#breadcrumb-menu"),
+  scrollers: [$("#reader"), $("#rich-reader")],
+  onOpenFolder: (target) =>
+    run(() =>
+      openFolderView(
+        { id: target.folderId, name: target.name, path: target.path },
+        { replace: Boolean(active && indexView.applies(active)) },
+      ),
+    )(),
+  onOpenNote: (target) =>
+    run(() => openChildNote(target.folderId, target.fileName))(),
+});
+
+async function openChildNote(folderId, name) {
+  if (!api?.openChild || !folderId || !name) return null;
+  const file = await api.openChild(folderId, name);
+  return file ? add(file, { opener: active }) : null;
+}
+
+async function findFolderIndex(folderId) {
+  if (!folderId) return null;
+  if (api?.folderIndex) {
+    const hit = await api.folderIndex(folderId).catch(() => null);
+    if (hit) return hit;
+  }
+  if (api?.list) {
+    const items = (await api.list(folderId).catch(() => null)) || [];
+    const item = items.find(
+      (c) => !c.directory && (c.index || isIndexName(c.name)),
+    );
+    if (item) return { path: item.path, name: item.name };
+  }
+  return null;
+}
+
+async function openFolderView(folder, { replace = false } = {}) {
+  if (!folder?.id) return null;
+  const idx = await findFolderIndex(folder.id);
+  const existing = idx?.path
+    ? tabs.find(
+        (t) => !t.generated && t.path?.toLowerCase() === idx.path.toLowerCase(),
+      )
+    : tabs.find(
+        (t) =>
+          t.generated &&
+          t.generated.path?.toLowerCase() ===
+            String(folder.path || "").toLowerCase(),
+      );
+  if (existing) {
+    activateTab(existing);
+    return existing;
+  }
+  let payload;
+  if (idx && api?.openChild) {
+    const file = await api.openChild(folder.id, idx.name);
+    if (!file) return null;
+    payload = { file };
+  } else {
+    payload = {
+      generated: {
+        folderId: folder.id,
+        name: folder.name,
+        path: folder.path,
+      },
+    };
+  }
+  if (replace && active && indexView.applies(active) && !dirty(active))
+    return replaceIndexTab(active, payload);
+  return add(
+    payload.file || {
+      name: payload.generated.name,
+      path: payload.generated.path,
+      text: `# ${payload.generated.name}\n`,
+      generated: payload.generated,
+    },
+    { opener: active },
+  );
+}
+
 async function openFiles() {
   if (!api) return toast(t("请运行桌面版以访问本地文件"));
   for (const file of await api.pickFiles()) add(file);
@@ -1776,6 +2015,7 @@ const {
   report: toast,
   changed: scheduleSession,
   openResult: openSearchResult,
+  openFolderView,
   isUnsaved: (path) =>
     tabs.some(
       (doc) => doc.path?.toLowerCase() === path.toLowerCase() && dirty(doc),
@@ -2189,6 +2429,7 @@ function changeSettings(patch) {
   if ("richEdit" in patch && active) render(false);
   if ("searchExclude" in patch) showExcluded();
   if ("groupCounts" in patch) updateTabs();
+  if ("showBreadcrumb" in patch) updateBreadcrumb();
   if (patch.sidebar === true) run(followCurrentFolder)();
   const doc = active;
   if (doc && geometryChanged)
@@ -2218,9 +2459,10 @@ async function flushSession() {
     return {
       id: t.id,
       fileId: t.fileId,
+      generatedFolderId: t.generated?.folderId || null,
       name: t.name,
       // A dirty untitled note travels once, as its draft.
-      content: t.fileId || changed ? undefined : t.text,
+      content: t.fileId || t.generated || changed ? undefined : t.text,
       mode: t.mode,
       groupId: t.groupId || null,
       pane: t.pane,
@@ -2264,8 +2506,14 @@ const commands = {
     const doc = add({ name: t("未命名.md"), text }, { opener: active });
     if (doc) editNewNote(doc);
   },
-  save: () => save(),
-  saveAs: () => save(true),
+  save: () => {
+    if (active?.generated) return toast(t("自动生成的目录为只读视图"));
+    return save();
+  },
+  saveAs: () => {
+    if (active?.generated) return toast(t("自动生成的目录为只读视图"));
+    return save(true);
+  },
   refresh: () => checkDisk(active, true),
   exportHTML: () => exportActive("html"),
   exportPDF: () => exportActive("pdf"),
@@ -2534,11 +2782,13 @@ if (api) {
   api.on("library", () => {
     indexView.invalidate("library");
     run(refreshLibrary)();
+    scheduleBreadcrumb();
   });
   api.on("links", () => {
     indexView.invalidate("links");
     backlinks?.invalidate();
     researchText();
+    scheduleBreadcrumb();
   });
   api.on("names", () => researchText());
   api.on("command", (cmd) => run(commands[cmd] || (() => {}))());
@@ -2552,10 +2802,19 @@ if (api) {
     for (const entry of boot.restored || []) {
       // Retire only the exact unedited app-generated welcome. Never alter a user document.
       if (await untouchedLegacyWelcome(entry)) continue;
-      const doc = add(
-        entry.document || { name: entry.name, text: entry.content || "" },
-        { activate: false },
-      );
+      const initial = entry.generated
+        ? {
+            name: entry.generated.name,
+            path: entry.generated.path,
+            text: `# ${entry.generated.name}\n`,
+            generated: {
+              folderId: entry.generated.id,
+              name: entry.generated.name,
+              path: entry.generated.path,
+            },
+          }
+        : entry.document || { name: entry.name, text: entry.content || "" };
+      const doc = add(initial, { activate: false });
       if (!doc) break;
       doc.id = entry.id || doc.id;
       Object.assign(doc, {

@@ -6,6 +6,8 @@ import { randomUUID, createHash } from "node:crypto";
 import { t } from "./i18n.mjs";
 import { createNameWalks } from "./name-walk.mjs";
 import { skippedName } from "./scan-rules.mjs";
+import { buildBreadcrumb, matchingRoot } from "./breadcrumb.mjs";
+import { pathKey } from "./link-rewrite.mjs";
 import {
   INDEX_NAMES,
   findIndexName,
@@ -905,6 +907,25 @@ export class FileStore {
     const file = await this.indexFile(folder);
     return file ? { path: file, name: path.basename(file) } : null;
   }
+  // A folder's direct index text and children for lazy nested index views.
+  // Reads only this folder without starting watchers.
+  async folderIndexText(id) {
+    const folder = this.folderPath(id);
+    await unchangedPath(folder);
+    const items = await this.list(id);
+    const indexItem = items.find((item) => item.index && !item.directory);
+    const text = indexItem ? await this.indexText(indexItem.path) : null;
+    return {
+      folder: {
+        id,
+        name: path.basename(folder) || folder,
+        path: folder,
+      },
+      index: indexItem ? { name: indexItem.name, path: indexItem.path } : null,
+      text,
+      items,
+    };
+  }
   // "Unify names" for a folder (and its subfolders with deep): for each
   // note, what makes its file name, its index entry, its heading and its
   // front-matter title one name (note-names.mjs): the leading heading, or
@@ -1242,6 +1263,117 @@ export class FileStore {
     const real = await realPath(path.join(folder, name));
     if (!within(folder, real)) throw Error(t("文件位于所选文件夹之外"));
     return this.open(real);
+  }
+  // Read a single note inside an authorized folder without starting a watcher.
+  async previewChild(id, name) {
+    const folder = this.directories.get(id);
+    if (!folder || typeof name !== "string" || path.basename(name) !== name)
+      throw Error(t("未授权的文件"));
+    await unchangedPath(folder);
+    const real = await realPath(path.join(folder, name));
+    if (!within(folder, real)) throw Error(t("文件位于所选文件夹之外"));
+    if (!markdownPath(real)) throw Error(t("仅预览 Markdown 或文本文件"));
+    const existing = [...this.files].find(([, file]) => file.path === real);
+    if (existing)
+      return { id: existing[0], path: real, name: path.basename(real) };
+    return this.open(real);
+  }
+  // Breadcrumb chain and per-level sibling lists for a note, index view, or
+  // generated folder view inside a library root; null outside all roots.
+  async breadcrumb(query = {}) {
+    if (!query || typeof query !== "object" || !this.roots.length) return null;
+    let kind = "note";
+    let targetPath = null;
+    let folder = null;
+    let fileName = null;
+    if (query.fileId) {
+      const file = this.file(query.fileId);
+      await unchangedPath(file.path);
+      targetPath = file.path;
+      folder = path.dirname(file.path);
+      fileName = path.basename(file.path);
+      kind = isIndexName(fileName) ? "index" : "note";
+    } else if (query.folderId) {
+      folder = this.folderPath(query.folderId);
+      await unchangedPath(folder);
+      targetPath = folder;
+      kind = "folder";
+    } else {
+      return null;
+    }
+
+    const roots = [];
+    for (const rootPath of this.roots) {
+      try {
+        roots.push(await this.directory(rootPath));
+      } catch {}
+    }
+    const matched = matchingRoot(roots, targetPath);
+    if (!matched) return null;
+
+    if (roots.length > 1) {
+      for (const root of roots) {
+        try {
+          const idx = await this.indexFile(root.path);
+          root.indexName = idx ? path.basename(idx) : null;
+        } catch {
+          root.indexName = null;
+        }
+      }
+    }
+
+    const draftMap = new Map();
+    if (Array.isArray(query.drafts)) {
+      for (const item of query.drafts.slice(0, 200)) {
+        if (typeof item?.path === "string" && typeof item?.text === "string")
+          draftMap.set(pathKey(item.path), item.text);
+      }
+    }
+
+    const rel = path.relative(matched.path, folder);
+    if (rel.startsWith("..") || path.isAbsolute(rel)) return null;
+    const parts = rel ? rel.split(path.sep).filter(Boolean) : [];
+    const chain = [];
+    let current = matched.path;
+    for (let i = 0; ; i++) {
+      const info = await this.directory(current);
+      await unchangedPath(info.path);
+      const indexPath = await this.indexFile(info.path).catch(() => null);
+      const indexName = indexPath ? path.basename(indexPath) : null;
+      let indexText = null;
+      if (indexPath) {
+        const key = pathKey(indexPath);
+        indexText = draftMap.has(key)
+          ? draftMap.get(key)
+          : await this.indexText(indexPath).catch(() => null);
+      }
+      const items = await this.list(info.id);
+      chain.push({
+        id: info.id,
+        name: info.name,
+        path: info.path,
+        indexName,
+        indexText,
+        children: items.map((item) => ({
+          id: item.directory ? item.id : null,
+          name: item.name,
+          path: item.path,
+          directory: Boolean(item.directory),
+          title: item.title ?? null,
+        })),
+      });
+      if (i >= parts.length) break;
+      current = path.join(current, parts[i]);
+    }
+
+    return buildBreadcrumb({
+      kind,
+      targetPath,
+      targetTitle: typeof query.title === "string" ? query.title : null,
+      fileName,
+      roots,
+      chain,
+    });
   }
   // Notes whose names hold every word of the query, in these folders and
   // below (desktop/name-walk.mjs: walked once in the background, by the

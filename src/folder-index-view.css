@@ -302,6 +302,69 @@
 }
 
 /* Edit mode: the row's own tools, shown where the pointer or focus is. */
+.ix-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0.15em 0 0.35em;
+}
+.ix-control {
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--reading-ink) 12%, transparent);
+  border-radius: 5px;
+  background: none;
+  color: var(--muted);
+  font: 400 12px/1.5 var(--font-ui);
+  cursor: pointer;
+}
+.ix-control:hover,
+.ix-control:focus-visible {
+  background: var(--hover);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--accent);
+}
+.ix-empty {
+  margin: 0.6em 0;
+  color: var(--muted);
+  font: 400 0.9em/1.6 var(--font-ui);
+}
+.ix-row-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  align-self: center;
+}
+.ix-open-folder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--ix-muted);
+  opacity: 0;
+  cursor: pointer;
+}
+.ix-open-folder .ui-icon {
+  width: 14px;
+  height: 14px;
+}
+.ix-row:hover .ix-open-folder,
+.ix-item:focus-visible > .ix-row .ix-open-folder,
+.ix-row:focus-within .ix-open-folder {
+  opacity: 1;
+}
+.ix-open-folder:hover,
+.ix-open-folder:focus-visible {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--accent);
+}
 .ix-tools {
   display: inline-flex;
   flex: none;
@@ -315,9 +378,19 @@
 .ix-row:focus-within > .ix-tools {
   opacity: 1;
 }
+.ix-excerpt + .ix-row-actions,
+.ix-rest + .ix-row-actions,
 .ix-excerpt + .ix-tools,
 .ix-rest + .ix-tools {
   margin-left: 0;
+}
+.ix-row-actions > .ix-tools {
+  margin-left: 0;
+}
+.ix-row:hover .ix-tools,
+.ix-item:focus-visible > .ix-row .ix-tools,
+.ix-row:focus-within .ix-tools {
+  opacity: 1;
 }
 .ix-tool {
   display: inline-flex;

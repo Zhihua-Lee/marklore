@@ -62,6 +62,7 @@ export const appearanceMarkup = `
   </fieldset>
   <fieldset id="settings-navigation"><legend>${t("导航与滚动")}</legend>
     ${row("navigation-scope", t("导航范围"), `<select id="navigation-scope"><option value="all">${t("全部笔记")}</option><option value="current">${t("仅当前笔记")}</option></select>`)}
+    ${row("show-breadcrumb", t("显示路径导航"), '<input id="show-breadcrumb" type="checkbox" class="switch">', t("在笔记与目录页上方显示所属笔记库与层级路径"))}
     ${row("history-buttons", t("前进 / 后退按钮"), `<select id="history-buttons"><option value="hidden">${t("隐藏")}</option><option value="visible">${t("显示")}</option></select>`, t("隐藏后仍可用鼠标侧键或 Alt+← / →"))}
     ${row("link-preview-mode", t("链接预览"), `<select id="link-preview-mode"><option value="hover">${t("悬停（克制，默认）")}</option><option value="ctrl">${t("按住 Ctrl 悬停")}</option><option value="off">${t("关")}</option></select>`, t("指针停留片刻才打开；按着鼠标或刚选过文字时不打开"))}
     ${row("smooth-scroll", t("平滑滚动"), `<select id="smooth-scroll"><option value="off">${t("关")}</option><option value="touchpad">${t("仅触控板")}</option><option value="all">${t("触控板、滚轮与滚动条")}</option></select>`, t("速度更均匀，跟手稍慢"))}
@@ -154,6 +155,7 @@ export function applyAppearance(settings) {
   $("#table-style").value = settings.tableStyle;
   $("#table-width").value = settings.tableWidth;
   $("#navigation-scope").value = settings.navigationScope;
+  $("#show-breadcrumb").checked = settings.showBreadcrumb;
   $("#history-buttons").value = settings.showHistoryButtons
     ? "visible"
     : "hidden";
@@ -279,6 +281,8 @@ export function wireAppearance(change) {
     change({ tableWidth: event.target.value });
   $("#navigation-scope").onchange = (event) =>
     change({ navigationScope: event.target.value });
+  $("#show-breadcrumb").onchange = (event) =>
+    change({ showBreadcrumb: event.target.checked });
   $("#history-buttons").onchange = (event) =>
     change({ showHistoryButtons: event.target.value === "visible" });
   $("#edit-split").onchange = (event) =>

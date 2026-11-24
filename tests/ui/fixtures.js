@@ -29,6 +29,7 @@ export const FOLIO_API = [
   "planUnify",
   "unifyNames",
   "folderIndex",
+  "folderIndexText",
   "libraryFolders",
   "repairOptions",
   "repairLink",
@@ -41,6 +42,8 @@ export const FOLIO_API = [
   "openChild",
   "read",
   "preview",
+  "previewChild",
+  "breadcrumb",
   "save",
   "saveAs",
   "link",
@@ -127,6 +130,8 @@ function harness(api) {
         }),
         read: async () => ({ unchanged: true }),
         list: async () => [],
+        breadcrumb: async () => null,
+        folderIndexText: async () => null,
         ...overrides,
         // Specs written for Edit mode as preview and source pane keep it;
         // a spec of the new editor (src/rich) asks for it with richEdit.

@@ -339,14 +339,38 @@ function firstBelow(host, y) {
     for (let i = lo; i < kids.length; i++) {
       const el = kids[i];
       if (!shown(el)) continue;
-      if (el.matches?.(DRAWN)) return { el, r: el.getBoundingClientRect() };
+      if (el.matches?.(".math-block[data-from]"))
+        return { el, r: el.getBoundingClientRect() };
       if (el.classList?.contains("ix-item")) {
         const row = el.querySelector(":scope > .ix-row");
         if (row && shown(row) && row.getBoundingClientRect().bottom > y)
           return { el, r: el.getBoundingClientRect() };
       }
-      const inner = within(el);
-      if (inner) return inner;
+      const container =
+        !el.hasAttribute("data-from") ||
+        el.matches?.(
+          ".ix-list, .ix-item, .ix-group, .ix-children, ul, ol, blockquote, details, .columns, .column",
+        ) ||
+        (el.tagName === "LI" &&
+          Boolean(
+            el.querySelector(
+              ":scope > p, :scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > .table-scroll, :scope > .math-block",
+            ),
+          ) &&
+          !(
+            !el.firstElementChild?.matches?.(
+              "p, ul, ol, blockquote, pre, .table-scroll, .math-block",
+            ) &&
+            (el
+              .querySelector(
+                ":scope > ul, :scope > ol, :scope > blockquote, :scope > pre, :scope > .table-scroll, :scope > .math-block",
+              )
+              ?.getBoundingClientRect().top ?? -Infinity) > y
+          ));
+      if (container) {
+        const inner = within(el);
+        if (inner) return inner;
+      }
       if (el.hasAttribute("data-from"))
         return { el, r: el.getBoundingClientRect() };
     }

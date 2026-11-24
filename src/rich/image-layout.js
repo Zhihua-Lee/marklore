@@ -25,7 +25,7 @@ export function lineClass(node) {
       : "";
   if (images.length > 1 && images.every((image) => image.attrs.width))
     return "image-row" + aligned;
-  return images.length === 1 || aligned ? "image-line" + aligned : null;
+  return "image-line" + aligned;
 }
 // The paragraphs between from and to: their classes.
 function decorate(doc, from, to, found = []) {

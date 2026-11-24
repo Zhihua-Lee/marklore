@@ -22,7 +22,8 @@ article img:not([width]),
   margin-right: 0;
 }
 /* Images in a row, side by side; stacked when the column gets narrow. */
-.image-row {
+.image-row,
+.prose p.image-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;

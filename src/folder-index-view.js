@@ -18,7 +18,13 @@
 // Every change is a small edit of the note's text (src/index-list.js) made
 // through the source editor, so it is undone, kept as a draft and saved as
 // any edit is. Prose is edited by double-clicking it (its Markdown, in place).
-import { isolateHistory, undo, redo } from "@codemirror/commands";
+import {
+  isolateHistory,
+  undo,
+  redo,
+  invertedEffects,
+} from "@codemirror/commands";
+import { StateEffect } from "@codemirror/state";
 import { t } from "../desktop/i18n.mjs";
 import { folderEntry, isIndexName } from "../desktop/folder-index.mjs";
 import { compareTreeItems, folderDisplayName } from "../desktop/breadcrumb.mjs";
@@ -48,6 +54,20 @@ import {
 } from "./index-list.js";
 import "./folder-index-view.css";
 
+// Tracks newly created note pages on undo/redo transactions so undoing a
+// "new page" step recycles an untouched file and redoing recreates it.
+export const createdPageEffect = StateEffect.define();
+export const indexHistoryExtension = invertedEffects.of((tr) =>
+  tr.effects
+    .filter((effect) => effect.is(createdPageEffect))
+    .map((effect) =>
+      createdPageEffect.of({
+        ...effect.value,
+        op: effect.value.op === "add" ? "remove" : "add",
+      }),
+    ),
+);
+
 const DRAG_TYPE = "application/x-marklore-index";
 // Pages read for their first sentence, at most (an index lists a folder).
 const EXCERPT_LIMIT = 200;
@@ -62,6 +82,9 @@ const attachment = (name) => EXTENSION.test(name) && !NOTE_NAME.test(name);
 // A link to a file elsewhere (not a site, not this note's own anchor).
 const localHref = (href) => href && !/^([a-z][a-z0-9+.-]*:|#)/i.test(href);
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+// Recursive expand-all caps so giant vaults stay responsive.
+const MAX_EXPAND_FOLDERS = 64;
+const MAX_EXPAND_ITEMS = 800;
 
 export function createIndexView({
   api,
@@ -91,6 +114,10 @@ export function createIndexView({
   // An entry's note or folder renamed by its new name ({ folderId, name,
   // title, shown }): resolves whether it was.
   renameNote = async () => null,
+  undoRename = async () => null,
+  canUndoRename = () => null,
+  trashNewPage = async () => null,
+  recreateNewPage = async () => null,
   // One note's file name and name unified ({ folderId, name, title }), as
   // the library's "统一名字…", where canUnify() says it is offered.
   unifyNote = async () => {},
@@ -106,6 +133,8 @@ export function createIndexView({
   const subfolders = new Map();
   let subVersion = 0;
   let lastShown = null;
+  // The reading view's scrolling box.
+  const scroller = () => host.parentElement || host;
 
   const docKey = (doc) =>
     doc?.generated ? "gen:" + doc.generated.folderId : doc?.fileId || null;
@@ -117,7 +146,16 @@ export function createIndexView({
     doc.mode === "edit" && !doc.preview && !doc.generated;
   const stateOf = (doc) => {
     let state = states.get(doc);
-    if (!state) states.set(doc, (state = { tray: false, expandToken: 0 }));
+    if (!state)
+      states.set(
+        doc,
+        (state = {
+          tray: false,
+          expandToken: 0,
+          pendingRename: null,
+          justUndidRename: null,
+        }),
+      );
     return state;
   };
   const pathLower = (p) =>
@@ -154,8 +192,21 @@ export function createIndexView({
         info.byName.set(child.name.toLowerCase(), child);
   }
   function addChild(info, child) {
-    info.children.push(child);
-    info.byName.set(child.name.toLowerCase(), child);
+    const lower = child.name.toLowerCase();
+    if (!info.byName.has(lower)) info.children.push(child);
+    else
+      info.children = info.children.map((item) =>
+        item.name.toLowerCase() === lower ? child : item,
+      );
+    info.byName.set(lower, child);
+  }
+  function removeChild(info, name) {
+    if (!info || !name) return;
+    const lower = name.toLowerCase();
+    info.children = info.children.filter(
+      (child) => child.name.toLowerCase() !== lower,
+    );
+    info.byName.delete(lower);
   }
   // Is the entry's file missing? A file of the folder that is not listed (a
   // note or folder named), or a link deeper or outside that main reports
@@ -478,23 +529,6 @@ export function createIndexView({
     return m.startsWith("<") ? encodeURI(m.slice(1, -1)) : m;
   };
 
-  function controlsNode() {
-    const bar = element("div", "ix-controls");
-    bar.setAttribute("role", "toolbar");
-    bar.setAttribute("aria-label", t("目录展开层级"));
-    const expand = button("ix-control", t("展开全部"), null, "expand-all");
-    expand.tabIndex = 0;
-    const level1 = button(
-      "ix-control",
-      t("只看第一层"),
-      null,
-      "collapse-level1",
-    );
-    level1.tabIndex = 0;
-    bar.append(expand, level1);
-    return bar;
-  }
-
   function render(doc) {
     const info = folderOf(doc);
     if (doc.generated) {
@@ -519,7 +553,6 @@ export function createIndexView({
           .filter((c) => !c.index && !isIndexName(c.name))
           .sort(compareTreeItems);
         if (items.length) {
-          fragment.append(controlsNode());
           const list = element("div", "ix-list");
           list.setAttribute("role", "tree");
           list.setAttribute("aria-label", t("目录中的页面"));
@@ -594,14 +627,9 @@ export function createIndexView({
       first: true,
       visibleNotes: [],
     };
-    let placedControls = false;
     for (const run of scan.runs) {
       const list = runNode(context, run);
       place(fragment, scan.lines[run.first].start, list);
-      if (!placedControls && list.parentNode) {
-        list.parentNode.insertBefore(controlsNode(), list);
-        placedControls = true;
-      }
     }
     if (info?.status === "ready") {
       loadExcerpts(doc, info, context.visibleNotes);
@@ -1289,34 +1317,58 @@ export function createIndexView({
     return { doc, scan, index, entry: scan.entries[index] };
   }
   // One edit of the note: one step to undo.
-  function apply(doc, result) {
+  function apply(
+    doc,
+    result,
+    { effects = [], fallbackLine = null, refocus = true } = {},
+  ) {
     if (!result || getDocument() !== doc) return false;
     if (view.state.doc.toString() !== doc.text) {
       report(t("目录正在更新，请稍后再试。"));
       return false;
     }
+    const scrollTop = scroller()?.scrollTop;
+    const st = stateOf(doc);
+    st.pendingRename = null;
+    st.justUndidRename = null;
     // The entry acted on is shown anew; the focus goes to it after.
     if (host.contains(document.activeElement)) document.activeElement.blur();
     view.dispatch({
       changes: result.change,
+      effects,
       annotations: isolateHistory.of("full"),
       userEvent: "input.index",
     });
     pending = null;
     rerender(doc);
-    if (result.line != null) focusLine(result.line);
+    if (scrollTop != null && scroller()) scroller().scrollTop = scrollTop;
+    if (refocus) {
+      if (result.line != null) {
+        if (!focusLine(result.line, { preventScroll: true }))
+          focusNear(result.line, { preventScroll: true });
+      } else {
+        focusNear(fallbackLine ?? 0, { preventScroll: true });
+      }
+    }
     return true;
   }
-  function focusLine(line) {
+  function focusLine(line, opts = {}) {
     const item = host.querySelector(`.ix-item[data-line="${line}"]`);
-    if (item) focusItem(item);
+    if (!item) return false;
+    focusItem(item, true, opts);
+    return true;
   }
   // The entry at a line, else the nearest after it, else the last.
-  function focusNear(line) {
+  function focusNear(line = 0, opts = {}) {
     const items = visibleItems();
-    if (!items.length) return;
+    if (!items.length) {
+      scroller()?.focus?.({ preventScroll: Boolean(opts.preventScroll) });
+      return;
+    }
     focusItem(
       items.find((item) => Number(item.dataset.line) >= line) || items.at(-1),
+      true,
+      opts,
     );
   }
   // An inline editor closed without a change: what came meanwhile is
@@ -1327,28 +1379,130 @@ export function createIndexView({
     if (item.isConnected) focusItem(item);
     else focusLine(line);
   }
+  async function handlePageEffects(doc, effects) {
+    const info = folders.get(docKey(doc));
+    for (const effect of effects) {
+      const item = effect.value;
+      if (!item?.folderId || !item?.name) continue;
+      if (item.op === "remove") {
+        const res = await trashNewPage(item);
+        if (res?.modified) {
+          report(
+            t("“{name}”已有修改，未移入回收站", {
+              name: item.title || item.name,
+            }),
+          );
+        } else if (res?.trashed) {
+          if (info?.folderId === item.folderId) {
+            removeChild(info, item.name);
+            info.version++;
+          }
+          filesChanged();
+        }
+      } else if (item.op === "add") {
+        const res = await recreateNewPage(item);
+        if (res?.created || res?.exists) {
+          if (info?.folderId === item.folderId) {
+            addChild(info, {
+              name: item.name,
+              directory: false,
+              title: item.title,
+              heading: item.title,
+            });
+            info.version++;
+          }
+          if (res?.created) filesChanged();
+        }
+      }
+    }
+  }
+  async function runHistory(kind, doc) {
+    if (!applies(doc) || doc.mode === "source" || doc.preview || doc.generated)
+      return false;
+    const st = stateOf(doc);
+    const scrollTop = scroller()?.scrollTop;
+    if (kind === "undo" && st.pendingRename) {
+      const pendingOp = st.pendingRename;
+      const unchangedSinceRename =
+        doc.epoch === pendingOp.epoch && doc.text === pendingOp.text;
+      const currentMove = canUndoRename();
+      st.pendingRename = null;
+      if (
+        unchangedSinceRename &&
+        currentMove &&
+        currentMove === pendingOp.move
+      ) {
+        const undone = await undoRename();
+        if (undone && getDocument() === doc) {
+          st.justUndidRename = { epoch: doc.epoch, text: doc.text };
+          flush();
+          if (scrollTop != null && scroller()) scroller().scrollTop = scrollTop;
+          if (!focusLine(pendingOp.line, { preventScroll: true }))
+            focusNear(pendingOp.line, { preventScroll: true });
+        }
+        return Boolean(undone);
+      }
+    }
+    if (kind === "redo" && st.justUndidRename) {
+      const snap = st.justUndidRename;
+      if (doc.epoch === snap.epoch && doc.text === snap.text) {
+        report(t("改名无法重做"));
+        return true;
+      }
+      st.justUndidRename = null;
+    }
+    const before = view.state.doc.toString();
+    const effects = [];
+    (kind === "redo" ? redo : undo)({
+      state: view.state,
+      dispatch: (tr) => {
+        effects.push(...tr.effects);
+        view.dispatch(tr);
+      },
+    });
+    const after = view.state.doc.toString();
+    if (after !== before) {
+      st.pendingRename = null;
+      st.justUndidRename = null;
+    }
+    const pageEffects = effects.filter((effect) =>
+      effect.is(createdPageEffect),
+    );
+    if (pageEffects.length) await handlePageEffects(doc, pageEffects);
+    if (getDocument() !== doc) return true;
+    pending = null;
+    rerender(doc);
+    if (scrollTop != null && scroller()) scroller().scrollTop = scrollTop;
+    const change = difference(before, after);
+    if (change) {
+      const line = after.slice(0, change.from).split("\n").length - 1;
+      if (!focusLine(line, { preventScroll: true }))
+        focusNear(line, { preventScroll: true });
+    } else if (after !== before) {
+      focusNear(0, { preventScroll: true });
+    }
+    return true;
+  }
+  let historyChain = Promise.resolve();
   // Undo or redo in the index (keys or the toolbar): shown again, the keys
   // on the entry the change was at.
   function history(kind) {
     const doc = getDocument();
-    if (!applies(doc) || doc.preview || doc.generated) return false;
-    const before = view.state.doc.toString();
-    (kind === "redo" ? redo : undo)(view);
-    const after = view.state.doc.toString();
-    pending = null;
-    rerender(doc);
-    const change = difference(before, after);
-    if (change) {
-      const line = after.slice(0, change.from).split("\n").length - 1;
-      focusNear(line);
-    }
+    if (!applies(doc) || doc.mode === "source" || doc.preview || doc.generated)
+      return false;
+    const task = historyChain.then(
+      () => runHistory(kind, doc),
+      () => runHistory(kind, doc),
+    );
+    historyChain = task;
+    run(async () => await task)();
     return true;
   }
-  function focusItem(item, visible = true) {
+  function focusItem(item, visible = true, { preventScroll = false } = {}) {
     for (const other of host.querySelectorAll('.ix-item[tabindex="0"]'))
       if (other !== item) other.tabIndex = -1;
     item.tabIndex = 0;
-    item.focus({ preventScroll: false, focusVisible: visible });
+    item.focus({ preventScroll, focusVisible: visible });
   }
   const visibleItems = () =>
     [...host.querySelectorAll(".ix-item")].filter(
@@ -1385,11 +1539,76 @@ export function createIndexView({
       loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
     }
   }
+  const hasFoldable = (doc = getDocument()) =>
+    Boolean(
+      doc &&
+      applies(doc) &&
+      !doc.preview &&
+      doc.mode !== "source" &&
+      host.querySelector(".ix-list .ix-item[aria-expanded]"),
+    );
+  const anyExpanded = (doc = getDocument()) =>
+    Boolean(
+      doc &&
+      applies(doc) &&
+      !doc.preview &&
+      doc.mode !== "source" &&
+      host.querySelector('.ix-item[aria-level="1"][aria-expanded="true"]'),
+    );
+  function scrollAnchorFor(selector) {
+    const reader = scroller();
+    if (!reader || reader.scrollTop <= 2) return { top0: true };
+    const rRect = reader.getBoundingClientRect();
+    const candidates = [...host.querySelectorAll(selector)].filter(
+      (el) => !el.parentElement.closest(".ix-item.closed"),
+    );
+    const targetEl =
+      candidates.find(
+        (el) => el.getBoundingClientRect().bottom > rRect.top + 8,
+      ) || candidates[0];
+    if (!targetEl) return { top0: true };
+    return {
+      top0: false,
+      ixId: targetEl.dataset.ixId || null,
+      fKey: targetEl.dataset.foldKey || null,
+      line: targetEl.dataset.line || null,
+      beforeTop: targetEl.getBoundingClientRect().top - rRect.top,
+    };
+  }
+  function restoreScrollAnchor(anchor) {
+    const reader = scroller();
+    if (!reader) return;
+    if (anchor.top0) {
+      reader.scrollTop = 0;
+      return;
+    }
+    const targetEl =
+      (anchor.ixId &&
+        host.querySelector(
+          `.ix-item[data-ix-id="${CSS.escape(anchor.ixId)}"]`,
+        )) ||
+      (anchor.fKey &&
+        host.querySelector(
+          `.ix-item[data-fold-key="${CSS.escape(anchor.fKey)}"]`,
+        )) ||
+      (anchor.line != null &&
+        host.querySelector(`.ix-item[data-line="${anchor.line}"]`));
+    if (!targetEl) return;
+    const rRect = reader.getBoundingClientRect();
+    const maxOff = Math.max(16, reader.clientHeight - 48);
+    const wantTop =
+      anchor.beforeTop < 12 ? 16 : Math.min(anchor.beforeTop, maxOff);
+    const afterTop = targetEl.getBoundingClientRect().top - rRect.top;
+    reader.scrollTop += afterTop - wantTop;
+  }
   function collapseLevel1() {
     const doc = managed();
     if (!doc) return;
+    const anchor = scrollAnchorFor('.ix-item[aria-level="1"]');
     stateOf(doc).expandToken++;
-    doc.folds = [];
+    doc.folds = (doc.folds || []).filter(
+      (k) => !k.startsWith("ix:") && !k.startsWith("+ix:"),
+    );
     for (const item of host.querySelectorAll(
       '.ix-item[aria-level="1"][aria-expanded]',
     )) {
@@ -1403,15 +1622,41 @@ export function createIndexView({
       ))
         control.setAttribute("aria-expanded", "false");
     }
+    const hiddenFocus =
+      host.contains(document.activeElement) &&
+      document.activeElement?.closest?.(".ix-item.closed");
+    if (hiddenFocus) focusItem(hiddenFocus, false, { preventScroll: true });
+    else {
+      const hiddenTab = host
+        .querySelector('.ix-item[tabindex="0"]')
+        ?.closest?.(".ix-item.closed");
+      if (hiddenTab) {
+        for (const other of host.querySelectorAll('.ix-item[tabindex="0"]'))
+          other.tabIndex = -1;
+        hiddenTab.tabIndex = 0;
+      }
+    }
+    restoreScrollAnchor(anchor);
     foldsChanged(doc);
     outlineChanged();
   }
   async function expandAll() {
     const doc = managed();
     if (!doc) return;
+    const anchor = scrollAnchorFor(".ix-item");
     const token = ++stateOf(doc).expandToken;
+    let loadedFolders = 0;
+    let capped = false;
+    const seenFolders = new Set();
     for (let round = 0; round < 16; round++) {
       if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
+      if (host.querySelectorAll(".ix-item").length >= MAX_EXPAND_ITEMS) {
+        if (
+          host.querySelector('.ix-item[aria-expanded="false"][data-fold-key]')
+        )
+          capped = true;
+        break;
+      }
       const closedItems = [
         ...host.querySelectorAll(
           '.ix-item[aria-expanded="false"][data-fold-key]',
@@ -1419,12 +1664,21 @@ export function createIndexView({
       ];
       const toLoad = [];
       for (const item of closedItems) {
+        const cid = item.dataset.childId;
+        if (cid && !seenFolders.has(cid)) {
+          if (loadedFolders >= MAX_EXPAND_FOLDERS) {
+            capped = true;
+            continue;
+          }
+          seenFolders.add(cid);
+          loadedFolders++;
+        }
         const fKey = item.dataset.foldKey;
         const defClosed = item.dataset.defaultClosed === "true";
         setFoldKey(doc, fKey, defClosed, false);
-        if (item.dataset.childId) {
-          const sub = ensureSubfolder(doc, item.dataset.childId, {
-            id: item.dataset.childId,
+        if (cid) {
+          const sub = ensureSubfolder(doc, cid, {
+            id: cid,
             name: item.dataset.childName || "",
             path: item.dataset.childPath || "",
           });
@@ -1438,17 +1692,30 @@ export function createIndexView({
         if (sub?.promise) toLoad.push(sub.promise);
       }
       if (!closedItems.length && !toLoad.length) break;
+      if (capped && !toLoad.length) {
+        foldsChanged(doc);
+        rerender(doc);
+        break;
+      }
       foldsChanged(doc);
       if (toLoad.length) {
         await Promise.all(toLoad);
         if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
       }
       rerender(doc);
+      if (
+        round === 15 &&
+        host.querySelector('.ix-item[aria-expanded="false"][data-fold-key]')
+      )
+        capped = true;
     }
     if (getDocument() === doc && stateOf(doc).expandToken === token) {
+      restoreScrollAnchor(anchor);
+      if (capped) report(t("条目较多，仅展开前一部分"));
       const info = folderOf(doc);
       if (info?.status === "ready")
         loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
+      foldsChanged(doc);
       outlineChanged();
     }
   }
@@ -1526,6 +1793,7 @@ export function createIndexView({
       }
       if (again && child && info?.folderId && value.trim()) {
         if (value.trim() === start) return closed(item);
+        const line = again.entry.line;
         // The index tab may be redrawn meanwhile (its entry rewritten).
         run(async () => {
           let done = false;
@@ -1537,6 +1805,7 @@ export function createIndexView({
               // Asked about by the name the row shows.
               shown: child.title || again.entry.title,
               directory: Boolean(child.directory),
+              focus: false,
             });
           } finally {
             // Not renamed (cancelled, failed): the keys back on the entry.
@@ -1549,7 +1818,27 @@ export function createIndexView({
             apply(now.doc, retitleEntry(now.doc.text, now.index, value))
           )
             return;
-          if (done === null && item.isConnected) closed(item);
+          if (done === null) {
+            if (item.isConnected) closed(item);
+            return;
+          }
+          if (!done || getDocument() !== again.doc) return;
+          const scrollTop = scroller()?.scrollTop;
+          const st = stateOf(again.doc);
+          st.justUndidRename = null;
+          const move = canUndoRename();
+          st.pendingRename = move
+            ? {
+                move,
+                epoch: again.doc.epoch,
+                text: again.doc.text,
+                line,
+              }
+            : null;
+          flush();
+          if (scrollTop != null && scroller()) scroller().scrollTop = scrollTop;
+          if (!focusLine(line, { preventScroll: true }))
+            focusNear(line, { preventScroll: true });
         })();
         return;
       }
@@ -1575,10 +1864,16 @@ export function createIndexView({
   // The file of a new page. One place to change when the main process
   // offers creating index pages itself.
   // A new page named `title`: that is its heading (desktop/note-names.mjs).
-  async function createPageFile(folderId, name, title = titleFor(name)) {
+  function pageInitialText(name, title = titleFor(name)) {
     const start = newNoteText(name);
-    const text =
-      setNoteName(start, { heading: title, insert: true, title }) ?? start;
+    return setNoteName(start, { heading: title, insert: true, title }) ?? start;
+  }
+  async function createPageFile(
+    folderId,
+    name,
+    title = titleFor(name),
+    text = pageInitialText(name, title),
+  ) {
     // The view lists it itself (in its draft): main leaves the index alone.
     return api.createEntry(folderId, name, "note", text, { list: false });
   }
@@ -1655,13 +1950,22 @@ export function createIndexView({
       else flush();
       return;
     }
+    const alreadyExisted = Boolean(childOf(info, name));
+    const expectedText = pageInitialText(name, title);
+    let created = null;
     // A file of that name already in the folder is listed, not made again.
-    if (!childOf(info, name)) {
-      await createPageFile(info.folderId, name, title);
-      addChild(info, { name, directory: false, title, heading: title });
+    if (!alreadyExisted) {
+      created = await createPageFile(info.folderId, name, title, expectedText);
+      addChild(info, {
+        name: created?.name || name,
+        directory: false,
+        title,
+        heading: title,
+      });
       info.version++;
       filesChanged();
     }
+    const createdName = created?.name || name;
     const now = getDocument();
     if (now !== doc) return;
     const parent = item ? entryAt(item) : null;
@@ -1670,10 +1974,28 @@ export function createIndexView({
       doc,
       insertEntry(
         doc.text,
-        { title, href: hrefFor(name) },
+        { title, href: hrefFor(createdName) },
         parent ? parent.index : -1,
         parent ? "into" : "after",
       ),
+      {
+        effects: alreadyExisted
+          ? []
+          : [
+              createdPageEffect.of({
+                op: "add",
+                folderId: info.folderId,
+                name: createdName,
+                title,
+                initialText:
+                  typeof created?.text === "string"
+                    ? created.text
+                    : expectedText,
+                fileId: created?.id || null,
+                path: created?.path || null,
+              }),
+            ],
+      },
     );
   }
   async function createMissing(item) {
@@ -1813,7 +2135,8 @@ export function createIndexView({
       remove: () => removeEntry(doc.text, index),
     };
     const result = edits[action]();
-    if (!apply(doc, result)) focusItem(item);
+    if (!apply(doc, result, { fallbackLine: found.entry.line }))
+      focusItem(item);
   }
 
   // A prose block's Markdown, edited in place (Edit mode): Ctrl+Enter or
@@ -1890,41 +2213,59 @@ export function createIndexView({
     fit();
     area.addEventListener("input", fit);
     area.focus();
+    const blockLine = doc.text.slice(0, from).split("\n").length - 1;
     let done = false;
-    const finish = (keep) => {
+    const finish = (keep, restoreFocus = false, related = null) => {
       if (done) return;
       done = true;
       const value = area.value;
       area.remove();
       if (block) block.hidden = wasHidden;
-      if (!keep || value === shown || getDocument() !== doc) return flush();
+      const shouldFocus =
+        restoreFocus ||
+        !related ||
+        host.contains(related) ||
+        related === scroller();
+      if (!keep || value === shown || getDocument() !== doc) {
+        flush();
+        if (shouldFocus) focusNear(blockLine, { preventScroll: true });
+        return;
+      }
       if (doc.text.slice(from, to) !== original) {
         report(t("这段文字已在别处改动，这次修改未写入"));
-        return flush();
+        flush();
+        if (shouldFocus) focusNear(blockLine, { preventScroll: true });
+        return;
       }
-      apply(doc, {
-        change: { from, to: from + shown.length, insert: value },
-        line: null,
-      });
+      apply(
+        doc,
+        {
+          change: { from, to: from + shown.length, insert: value },
+          line: null,
+        },
+        { fallbackLine: blockLine, refocus: shouldFocus },
+      );
     };
     area.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
-        finish(false);
+        finish(false, true);
       } else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
         event.preventDefault();
         event.stopPropagation();
-        finish(true);
+        finish(true, true);
       } else if (
         (event.ctrlKey || event.metaKey) &&
         event.key.toLowerCase() === "s"
       )
         // Saving takes what was typed first.
-        finish(true);
+        finish(true, true);
       else event.stopPropagation();
     });
-    area.addEventListener("blur", () => finish(true));
+    area.addEventListener("blur", (event) =>
+      finish(true, false, event.relatedTarget),
+    );
   }
 
   // ── Events (on the reading view; only for an index note) ──
@@ -2025,8 +2366,6 @@ export function createIndexView({
     if (control) {
       event.preventDefault();
       const action = control.dataset.ix;
-      if (action === "expand-all") return run(() => expandAll())();
-      if (action === "collapse-level1") return collapseLevel1();
       if (action === "fold") {
         fold(item, !item.classList.contains("closed"));
         // The keys stay on the entry folded (no ring for a click).
@@ -2083,9 +2422,7 @@ export function createIndexView({
         event.stopPropagation();
         return;
       }
-      const inList = event.target.closest?.(
-        ".ix-list, .ix-footer, .ix-controls",
-      );
+      const inList = event.target.closest?.(".ix-list, .ix-footer");
       if (inList) {
         event.stopPropagation();
         event.preventDefault();
@@ -2127,16 +2464,17 @@ export function createIndexView({
       event.preventDefault();
       event.stopPropagation();
     };
-    // Undo and redo: in Edit mode anywhere in the view, in Read mode in its
-    // list (where repairs are made), not in a box being typed in.
+    // Undo and redo: in Read or Edit mode anywhere in the view, not in a box
+    // being typed in.
     if (
       (event.ctrlKey || event.metaKey) &&
       !event.altKey &&
-      ["z", "y"].includes(key.toLowerCase()) &&
+      (key.toLowerCase() === "z" ||
+        (key.toLowerCase() === "y" && !event.shiftKey)) &&
+      doc.mode !== "source" &&
       !doc.preview &&
       !doc.generated &&
-      !event.target.closest?.("input, textarea, select") &&
-      (editing(doc) || event.target.closest?.(".ix-list, .ix-footer"))
+      !event.target.closest?.("input, textarea, select, [contenteditable]")
     ) {
       handled();
       history(key.toLowerCase() === "y" || event.shiftKey ? "redo" : "undo");
@@ -2232,8 +2570,6 @@ export function createIndexView({
     // off screen.
     autoscroll.attach(scroller());
   });
-  // The reading view's scrolling box.
-  const scroller = () => host.parentElement || host;
   host.addEventListener("dragend", () => {
     for (const el of host.querySelectorAll(".dragging"))
       el.classList.remove("dragging");
@@ -2290,5 +2626,9 @@ export function createIndexView({
     editFront,
     reveal,
     outlineEntries,
+    hasFoldable,
+    anyExpanded,
+    collapseLevel1,
+    expandAll,
   };
 }

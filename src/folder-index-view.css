@@ -308,28 +308,6 @@
   font: 400 0.8em var(--font-ui);
 }
 
-/* Edit mode: the row's own tools, shown where the pointer or focus is. */
-.ix-controls {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  margin: 0.15em 0 0.35em;
-}
-.ix-control {
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--reading-ink) 12%, transparent);
-  border-radius: 5px;
-  background: none;
-  color: var(--muted);
-  font: 400 12px/1.5 var(--font-ui);
-  cursor: pointer;
-}
-.ix-control:hover,
-.ix-control:focus-visible {
-  background: var(--hover);
-  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-  color: var(--accent);
-}
 .ix-empty {
   margin: 0.6em 0;
   color: var(--muted);

@@ -1391,20 +1391,26 @@ else {
           ),
         };
       });
-      api("trashEntry", async (id, name, drafts) => {
+      api("trashEntry", async (id, name, options) => {
+        const drafts = Array.isArray(options)
+          ? draftsOf(options)
+          : draftsOf(options?.drafts);
+        const unlist = Array.isArray(options)
+          ? true
+          : options?.unlist !== false;
         const target = await files.childPath(id, name);
         // Not while a note at or under it is being saved.
         files.checkUnlocked(target);
-        if (!isIndexName(name))
-          await files.checkIndexSaved(path.dirname(target), draftsOf(drafts));
+        if (unlist && !isIndexName(name))
+          await files.checkIndexSaved(path.dirname(target), drafts);
         await withoutWatchersUnder(target, () => shell.trashItem(target));
         // Its folder's index no longer lists it; its marks, pending
         // proposals, recent entry and links go with it.
-        const index = await files
-          .unlistEntry(path.dirname(target), name, {
-            drafts: draftsOf(drafts),
-          })
-          .catch((e) => ({ error: e.message }));
+        const index = unlist
+          ? await files
+              .unlistEntry(path.dirname(target), name, { drafts })
+              .catch((e) => ({ error: e.message }))
+          : null;
         await Promise.allSettled([
           aiStore.trashNotes([target]),
           recent.remove([target]),

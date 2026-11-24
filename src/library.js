@@ -1427,6 +1427,7 @@ export function createLibrary({
     directory = false,
     // An extension typed with the name (".txt"): the file takes it.
     ext: typedExt = null,
+    focus = true,
   }) {
     if (!api?.renameEntry) return null;
     // The name on disk as it will most likely be (main makes the real one
@@ -1466,9 +1467,9 @@ export function createLibrary({
     const patched = followMoves(result, links);
     await refresh();
     await refreshLastMove();
-    if (result.path) await focusRow(result.path);
+    if (focus && result.path) await focusRow(result.path);
     const count = (result.rewritten || 0) + patched;
-    if (!result.moves?.length && !count && !result.updated) return true;
+    if (!result.moves?.length && !count && !result.updated) return result;
     if (links && count)
       reportMove(t("已改名，{count} 篇笔记中的链接已更新", { count }), result);
     else if (!links && affected.length)
@@ -1479,7 +1480,7 @@ export function createLibrary({
         result,
       );
     else reportMove(t("已改名为“{name}”", { name: to }), result);
-    return true;
+    return result;
   }
   // A note saved with a new leading heading (before: its text as it was
   // on disk): renamed after it, its index entry and the links to it
@@ -1586,6 +1587,7 @@ export function createLibrary({
   // The last rename or move taken back: names, index entries and links.
   async function undoMove() {
     const result = await api.undoMove(drafts());
+    lastMove = null;
     // Links are written back only where the move rewrote them.
     followMoves(result, result.links !== false);
     await refresh();
@@ -1602,6 +1604,7 @@ export function createLibrary({
           )
         : t("已撤销上次改名/移动"),
     );
+    return result;
   }
   // "Unify names…" on a folder: each note's file name, index entry, heading
   // and front-matter title made one name, after the reader saw the list.
@@ -1916,6 +1919,9 @@ export function createLibrary({
     repairLink,
     revealPath,
     renameTo,
+    undoMove,
+    canUndoMove: () => Boolean(lastMove),
+    lastMoveInfo: () => lastMove,
     unifyNote,
     nameSaved,
   };

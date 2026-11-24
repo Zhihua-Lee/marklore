@@ -36,7 +36,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { renderDocument } from "./document-render.js";
 import { createIncrementalRender } from "./incremental-render.js";
 import { isDiffDocument } from "./diff-view.js";
-import { createIndexView } from "./folder-index-view.js";
+import { createIndexView, indexHistoryExtension } from "./folder-index-view.js";
 import {
   splitFront,
   withFront,
@@ -167,7 +167,7 @@ let imageInsertion, backlinks, linkHere, proposals, marks, paintAiSettings;
 let indexView, breadcrumb;
 $("#app").innerHTML = `
 <header class="topbar"><div id="panel-controls-left" class="panel-controls"><button id="sidebar-toggle" class="icon" title="${t("切换文件夹浏览")}" aria-label="${t("切换文件夹浏览")}">${icon("folder")}</button></div><button id="app-menu-toggle" class="icon brand-menu" title="${t("Marklore 菜单")}" aria-label="${t("应用菜单")}" aria-haspopup="menu" aria-expanded="false">${icon("eye")}</button><button id="tabs-back" class="icon tab-nav" aria-label="${t("向左浏览标签")}">${icon("chevronLeft")}</button><div id="tabs" role="tablist" aria-label="${t("打开的笔记")}"></div><button id="tabs-forward" class="icon tab-nav" aria-label="${t("向右浏览标签")}">${icon("chevronRight")}</button><button id="new" class="icon" aria-label="${t("新笔记")}" title="${t("新笔记 Ctrl+N")}">${icon("plus")}</button><div id="panel-controls-right" class="panel-controls"><button id="outline-toggle" class="icon" title="${t("切换本文目录")}" aria-label="${t("切换本文目录")}">${icon("outline")}</button></div></header>
-<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span></div><nav id="outline" aria-label="${t("本文目录")}" data-empty="${t("暂无标题")}"></nav></section></aside>
+<div class="workspace"><aside id="sidebar" class="dock" aria-label="${t("左侧栏")}"><section id="library-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("笔记库")}</span><span><button id="tree-refresh" class="icon" aria-label="${t("刷新文件树")}" title="${t("刷新文件树")}">${icon("refresh")}</button><button id="folder" class="icon" aria-label="${t("打开文件夹")}" title="${t("打开文件夹")}">${icon("plus")}</button></span></div><input id="file-filter" type="search" placeholder="${t("搜索笔记…")}" aria-label="${t("搜索笔记")}" title="${t("搜索文件名和笔记内容（Ctrl+Shift+F）")}"><div id="tree"><div class="empty-tree">${t("尚未添加文件夹")}<br><button id="folder-empty">${t("打开文件夹")}</button></div></div></section><section id="outline-panel" class="side-panel"><div class="sidebar-top"><span class="eyebrow">${t("本文目录")}</span><button id="outline-fold" class="icon" aria-label="${t("全部折叠")}" title="${t("全部折叠（Alt+Shift+[）")}" disabled>${icon("foldAll")}</button></div><nav id="outline" aria-label="${t("本文目录")}" data-empty="${t("暂无标题")}"></nav></section></aside>
 <main><div class="toolbar"><div class="toolbar-group document-tools" role="group" aria-label="${t("文件操作")}"><button id="open" class="icon" aria-label="${t("打开文件")}" title="${t("打开文件 Ctrl+O")}">${icon("open")}</button><button id="save" class="icon" aria-label="${t("保存")}" title="${t("保存 Ctrl+S")}">${icon("save")}</button></div><div class="modes" role="group" aria-label="${t("查看模式")}"><button data-mode="read">${t("阅读")}</button><button data-mode="edit">${t("编辑")}</button><button data-mode="source">${t("源码")}</button></div><div class="toolbar-group reading-tools" role="group" aria-label="${t("阅读设置")}"><button id="marks-button" class="icon" hidden>${icon("comment")}</button><button id="proposals-button" class="icon" hidden>${icon("spark")}</button><button id="width-toggle" class="icon" aria-label="${t("切换阅读宽度")}" title="${t("切换阅读宽度")}" aria-pressed="false">${icon("width")}</button><button id="weight" class="icon" title="${t("设置")}" aria-label="${t("设置")}">${icon("settings")}</button></div></div>
 <section id="home" aria-labelledby="home-title" hidden><div class="start-page"><div class="start-brand">${folioLogo}<h1 id="home-title">Marklore</h1></div><p>${t("打开一篇笔记，或选择一个文件夹。")}</p><div class="start-actions"><button id="start-open">${icon("open")}<span>${t("打开文件")}</span><kbd>Ctrl O</kbd></button><button id="start-folder">${icon("folder")}<span>${t("打开文件夹")}</span><kbd>Ctrl Shift O</kbd></button><button id="start-new">${icon("plus")}<span>${t("新建笔记")}</span><kbd>Ctrl N</kbd></button></div><section class="start-recent" aria-labelledby="recent-title" hidden><div class="start-recent-head"><h2 id="recent-title">${t("最近打开")}</h2><button id="recent-clear" type="button">${t("清除记录")}</button></div><ul id="recent-list"></ul></section></div></section>
 <div id="conflict" role="alert" hidden></div><div id="proposal-bar" role="region" aria-label="${t("AI 提议")}" hidden></div><div id="panes" data-mode="read"><div id="editor-pane"><div class="pane-caption">MARKDOWN <span id="editor-position"></span></div><div id="editor"></div></div><div id="split" role="separator" aria-label="${t("调整编辑预览比例")}" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="50" tabindex="0"></div><div id="reader" tabindex="0" aria-label="${t("笔记预览")}"><nav id="breadcrumb-read" class="note-breadcrumb" aria-label="${t("位置导航")}" hidden></nav><article id="content" class="prose"></article></div><div id="rich-reader"><nav id="breadcrumb-rich" class="note-breadcrumb" aria-label="${t("位置导航")}" hidden></nav><article id="rich" class="prose"></article></div></div>
@@ -434,6 +434,7 @@ function stateFor(doc) {
       editorSearch,
       editingHighlight,
       editingKeys,
+      indexHistoryExtension,
       // A diff is plain text in the editor; only notes read as Markdown.
       ...(isDiffDocument(doc) ? [] : [markdown()]),
       EditorView.lineWrapping,
@@ -584,7 +585,12 @@ editingKeys = wireEditing({
   rich: { target: richTarget },
   addProperty: () => addProperty(),
   // An index file's undo and redo keep the keys on its entries.
-  history: (action) => indexView.applies(active) && indexView.history(action),
+  history: (action) =>
+    indexView.applies(active) &&
+    active.mode !== "source" &&
+    !active.preview &&
+    !active.generated &&
+    indexView.history(action),
 });
 imageInsertion = createImageInsertion({
   view,
@@ -621,6 +627,7 @@ selectionTools = createSelectionTools({
     !isDiffDocument(doc) &&
     !doc.preview &&
     (doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat)),
+  skipHistory: (doc) => indexView.applies(doc) && doc.mode !== "source",
   render: () => {
     clearTimeout(renderingTimer);
     render(true);
@@ -665,12 +672,18 @@ indexView = createIndexView({
     return revealPath(path);
   },
   // An entry's title edited in the view renames the note (src/library.js).
-  renameNote: (args) => renameTo(args),
+  renameNote: (args) =>
+    syncMovesWithHistory(() => renameTo({ ...args, focus: false })),
+  undoRename: () => syncMovesWithHistory(() => undoMove()),
+  canUndoRename: () => lastMoveInfo(),
+  trashNewPage,
+  recreateNewPage,
   unifyNote: (args) => unifyNote(args),
   canUnify: () => Boolean(api?.planUnify),
   foldsChanged: () => {
     scheduleSession();
     outline.schedule();
+    updateOutlineFold();
   },
   outlineChanged: () => {
     if (active && indexView.applies(active))
@@ -1178,6 +1191,7 @@ function render(preserve) {
   proposals?.rendered();
   marks?.rendered();
   proposals?.paint();
+  updateOutlineFold();
 }
 let outlineSignature = "";
 function updateOutline(headings) {
@@ -1200,11 +1214,13 @@ function updateOutline(headings) {
   if (outlineSignature === signature) {
     // The same entries: their places in the text may have moved.
     outline.move(items);
+    updateOutlineFold();
     return;
   }
   outlineSignature = signature;
   outline.build(items);
   backlinks?.decorateOutline();
+  updateOutlineFold();
   // Math in headings renders as TeX until KaTeX loads; then redraw this outline.
   if (!mathReady() && headings.some((h) => mayContainMath(h.label)))
     loadMath().then(() => {
@@ -1213,6 +1229,91 @@ function updateOutline(headings) {
       updateOutline(headings);
     });
 }
+function canFoldActive() {
+  if (
+    !active ||
+    isDiffDocument(active) ||
+    active.preview ||
+    proposals?.shown(active) ||
+    active.mode === "source"
+  )
+    return false;
+  if (indexView.applies(active)) return indexView.hasFoldable(active);
+  if (active.mode !== "read") return false;
+  return Boolean($("#content")?.querySelector("#content > .note-section"));
+}
+function anyOutlineExpanded() {
+  if (!canFoldActive()) return false;
+  if (indexView.applies(active)) return indexView.anyExpanded(active);
+  return [...$("#content").querySelectorAll(".note-section")].some(
+    (el) =>
+      !el.classList.contains("collapsed") &&
+      !el.parentElement.closest(".note-section.collapsed"),
+  );
+}
+function updateOutlineFold() {
+  const btn = $("#outline-fold");
+  if (!btn) return;
+  const enabled = canFoldActive();
+  const expanded = enabled && anyOutlineExpanded();
+  btn.disabled = !enabled;
+  const label = expanded ? t("全部折叠") : t("全部展开");
+  const tip = expanded
+    ? t("全部折叠（Alt+Shift+[）")
+    : t("全部展开（Alt+Shift+]）");
+  const nextIcon = !enabled || expanded ? "foldAll" : "unfoldAll";
+  if (btn.dataset.state !== nextIcon) {
+    btn.dataset.state = nextIcon;
+    btn.innerHTML = icon(nextIcon);
+  }
+  btn.setAttribute("aria-label", label);
+  btn.title = tip;
+}
+function foldActive(collapse) {
+  if (!canFoldActive()) return false;
+  if (indexView.applies(active)) {
+    if (collapse) indexView.collapseLevel1();
+    else run(() => indexView.expandAll())();
+    updateOutlineFold();
+    return true;
+  }
+  const container = $("#content");
+  const reader = $("#reader");
+  const topSections = [
+    ...container.querySelectorAll("#content > .note-section"),
+  ];
+  if (!topSections.length) return false;
+  const wasAtTop = !reader || reader.scrollTop <= 2;
+  const rRect = reader?.getBoundingClientRect();
+  const anchorSection =
+    reader && !wasAtTop
+      ? topSections.find(
+          (el) => el.getBoundingClientRect().bottom > rRect.top + 8,
+        ) || topSections[0]
+      : null;
+  const beforeTop = anchorSection
+    ? anchorSection.getBoundingClientRect().top - rRect.top
+    : 0;
+  const targets = collapse
+    ? topSections
+    : [...container.querySelectorAll(".note-section")];
+  for (const el of targets) setSectionCollapsed(el, collapse);
+  if (reader) {
+    if (wasAtTop) reader.scrollTop = 0;
+    else if (anchorSection) {
+      const maxOff = Math.max(16, reader.clientHeight - 48);
+      const wantTop = beforeTop < 12 ? 16 : Math.min(beforeTop, maxOff);
+      const afterTop = anchorSection.getBoundingClientRect().top - rRect.top;
+      reader.scrollTop += afterTop - wantTop;
+    }
+  }
+  capture();
+  scheduleSession();
+  outline.schedule();
+  updateOutlineFold();
+  return true;
+}
+$("#outline-fold").onclick = () => foldActive(anyOutlineExpanded());
 function updateTabs() {
   // What the tab bar shows: a save or a reload clears the mark, and the next
   // edit must draw it again.
@@ -1224,6 +1325,7 @@ function updateModes() {
     if (b.tagName === "BUTTON")
       b.setAttribute("aria-pressed", String(b.dataset.mode === active?.mode));
   updateStatus();
+  updateOutlineFold();
 }
 function updateStatus() {
   if (!active) {
@@ -1354,6 +1456,76 @@ async function closeTab(doc) {
     doc.closing = false;
   }
 }
+const preserveHistoryDocs = new WeakSet();
+async function syncMovesWithHistory(fn) {
+  const clean = tabs.filter((d) => d.fileId && !dirty(d));
+  for (const d of clean) preserveHistoryDocs.add(d);
+  try {
+    const res = await fn();
+    await Promise.all(
+      clean
+        .filter((d) => tabs.includes(d) && d.fileId && !dirty(d))
+        .map((d) => checkDisk(d)),
+    );
+    return res;
+  } finally {
+    for (const d of clean) preserveHistoryDocs.delete(d);
+  }
+}
+async function trashNewPage({ folderId, name, initialText, fileId, path }) {
+  if (!folderId || !name) return { trashed: false };
+  const norm = (s) =>
+    String(s ?? "")
+      .replace(/\r\n/g, "\n")
+      .trimEnd();
+  let childPath = path || null;
+  let childId = fileId || null;
+  let diskText = null;
+  if (api?.previewChild) {
+    const info = await api.previewChild(folderId, name).catch(() => null);
+    if (!info) return { trashed: false, missing: true };
+    childId ||= info.id || null;
+    childPath ||= info.path || null;
+    if (typeof info.text === "string") diskText = info.text;
+    else if (childId && api?.read) {
+      const readRes = await api.read(childId).catch(() => null);
+      if (readRes && typeof readRes.text === "string") diskText = readRes.text;
+    }
+  }
+  const open = tabs.find(
+    (doc) =>
+      !doc.generated &&
+      ((childId && doc.fileId === childId) ||
+        (childPath && doc.path && samePath(doc.path, childPath))),
+  );
+  if (open && (dirty(open) || norm(open.text) !== norm(initialText)))
+    return { trashed: false, modified: true };
+  if (diskText != null && norm(diskText) !== norm(initialText))
+    return { trashed: false, modified: true };
+  if (!api?.trashEntry) return { trashed: false };
+  const res = await api.trashEntry(folderId, name, { unlist: false });
+  const trashedPath = res?.path || childPath;
+  for (const doc of [...tabs])
+    if (
+      doc !== active &&
+      !dirty(doc) &&
+      ((trashedPath && doc.path && samePath(doc.path, trashedPath)) ||
+        (childId && doc.fileId === childId))
+    )
+      await closeTab(doc);
+  return { trashed: true, path: trashedPath };
+}
+async function recreateNewPage({ folderId, name, initialText }) {
+  if (!folderId || !name || !api?.createEntry) return { created: false };
+  if (api?.previewChild) {
+    const exists = await api.previewChild(folderId, name).catch(() => null);
+    if (exists) return { created: false, exists: true };
+  }
+  const made = await api.createEntry(folderId, name, "note", initialText, {
+    list: false,
+  });
+  return { created: true, made };
+}
 const { save, checkDisk, showConflict } = createDocumentSync({
   api,
   tabs,
@@ -1367,6 +1539,22 @@ const { save, checkDisk, showConflict } = createDocumentSync({
     setEditorState(stateFor(doc));
     render(false);
     restore(doc);
+  },
+  applyDisk: (doc, file, prevText) => {
+    if (!preserveHistoryDocs.has(doc)) return false;
+    const current = doc === active;
+    if (!current && !doc.state) return false;
+    doc.text = prevText;
+    replaceDraft(doc, file.text, { history: false });
+    doc.base = file.text;
+    if (current) {
+      clearTimeout(renderingTimer);
+      render(false);
+      restore(doc);
+    }
+    updateTabs();
+    updateStatus();
+    return true;
   },
   updateStatus,
   updateTabs,
@@ -1697,6 +1885,7 @@ $("#content").addEventListener(
       capture();
       scheduleSession();
       outline.schedule();
+      updateOutlineFold();
       return;
     }
     const link = event.target.closest("a");
@@ -2026,6 +2215,8 @@ const {
   repairLink,
   revealPath,
   renameTo,
+  undoMove,
+  lastMoveInfo,
   unifyNote,
   nameSaved,
 } = createLibrary({
@@ -2687,8 +2878,48 @@ document.addEventListener("keydown", (e) => {
     else findBar.next();
     return;
   }
+  if (
+    !e.defaultPrevented &&
+    e.altKey &&
+    e.shiftKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !e.target.closest?.("input, textarea, select")
+  ) {
+    if (e.code === "BracketLeft" || e.key === "[" || e.key === "{") {
+      if (foldActive(true)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+    if (e.code === "BracketRight" || e.key === "]" || e.key === "}") {
+      if (foldActive(false)) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      return;
+    }
+  }
   if (!(e.ctrlKey || e.metaKey)) return;
   const key = e.key.toLowerCase();
+  if (
+    !e.defaultPrevented &&
+    !e.altKey &&
+    (key === "z" || (key === "y" && !e.shiftKey)) &&
+    indexView.applies(active) &&
+    active.mode !== "source" &&
+    !active.preview &&
+    !active.generated &&
+    !e.target.closest?.(
+      "input, textarea, select, [contenteditable], .cm-editor",
+    )
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    indexView.history(key === "y" || e.shiftKey ? "redo" : "undo");
+    return;
+  }
   // Ctrl+Shift+F: search the library, file names and note text.
   if (key === "f" && e.shiftKey && !e.altKey) {
     e.preventDefault();

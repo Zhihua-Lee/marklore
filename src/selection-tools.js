@@ -647,6 +647,7 @@ export function createSelectionTools({
   render,
   report,
   editable = (doc) => doc.mode === "edit",
+  skipHistory = () => false,
   getLinkTargets = null,
 }) {
   const bar = document.createElement("div");
@@ -922,6 +923,7 @@ export function createSelectionTools({
       getDocument() &&
       editable(getDocument()) &&
       !blocked() &&
+      !skipHistory(getDocument()) &&
       ["z", "y"].includes(key)
     ) {
       event.preventDefault();

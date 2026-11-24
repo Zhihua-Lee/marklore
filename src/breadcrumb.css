@@ -66,6 +66,9 @@
   color: inherit;
   cursor: pointer;
 }
+.bc-item:first-child > .bc-link {
+  margin-left: -4px;
+}
 .bc-link:hover,
 .bc-link:focus-visible {
   background: var(--hover);
@@ -74,6 +77,9 @@
 .bc-current {
   padding: 0 2px;
   color: color-mix(in srgb, var(--reading-ink) 74%, var(--reading-paper));
+}
+.bc-item:first-child > .bc-current {
+  padding-left: 0;
 }
 .bc-chevron {
   position: relative;

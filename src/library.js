@@ -86,7 +86,7 @@ export function createLibrary({
   report,
   changed,
   openResult,
-  openFolder = null,
+  openFolderView = null,
   // Whether a note (by path) is open with unsaved changes.
   isUnsaved = () => false,
   // Open notes at or under a path that have unsaved changes (names).
@@ -293,7 +293,7 @@ export function createLibrary({
       if (
         details.classList.contains("root") &&
         !details.classList.contains("outside") &&
-        openFolder
+        openFolderView
       ) {
         showRootContentsButton(details);
       } else {
@@ -697,6 +697,8 @@ export function createLibrary({
   async function branch(entry, { root = false, outside = false } = {}) {
     const details = document.createElement("details");
     details.className = "folder";
+    if (root) details.classList.add("root");
+    if (outside) details.classList.add("outside");
     details.dataset.path = entry.path;
     details.dataset.id = entry.id;
     details.dataset.name = entry.name;
@@ -710,7 +712,7 @@ export function createLibrary({
     // without an index gets the same button opening a generated contents view.
     if (entry.index) showIndexButton(details, entry.index);
     else {
-      if (root && !outside && openFolder) showRootContentsButton(details);
+      if (root && !outside && openFolderView) showRootContentsButton(details);
       if (api?.folderIndex)
         summary.addEventListener("pointerenter", () => findIndex(details), {
           once: true,
@@ -789,9 +791,9 @@ export function createLibrary({
               ),
             ),
           )();
-        } else if (openFolder) {
+        } else if (openFolderView) {
           run(() =>
-            openFolder({
+            openFolderView({
               id: details.dataset.id,
               name: details.dataset.name,
               path: details.dataset.path,
@@ -800,7 +802,9 @@ export function createLibrary({
         }
       });
       // Enter or Space on the button is the button's, not the folder's.
-      open.addEventListener("keydown", (event) => event.stopPropagation());
+      open.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") event.stopPropagation();
+      });
       summary.append(open);
     }
     open.setAttribute("aria-label", label);

@@ -442,14 +442,14 @@ function stateFor(doc) {
         {
           key: "Mod-s",
           run: () => {
-            run(save)();
+            run(commands.save)();
             return true;
           },
         },
         {
           key: "Mod-Shift-s",
           run: () => {
-            run(() => save(true))();
+            run(commands.saveAs)();
             return true;
           },
         },
@@ -808,12 +808,15 @@ function capture() {
   // The editor of Edit mode shows no folds, and the reading view then
   // still holds the note read before: this note's folds stay as they were.
   if (richActive()) return;
-  // Sections folded, and an index file's entries (folder-index-view.js).
-  active.folds = [
-    ...$("#content").querySelectorAll(
-      ".note-section.collapsed, .ix-item.closed[data-fold-key]",
-    ),
-  ].map((el) => el.dataset.foldKey);
+  // Sections folded, plus index-view folds maintained on doc.folds.
+  const preservedIx = indexView.applies(active)
+    ? (active.folds || []).filter(
+        (k) => k.startsWith("ix:") || k.startsWith("+ix:"),
+      )
+    : [];
+  active.folds = [...$("#content").querySelectorAll(".note-section.collapsed")]
+    .map((el) => el.dataset.foldKey)
+    .concat(preservedIx);
   active.details = [...$("#content").querySelectorAll("details")]
     .map((el, i) => (el.open ? i : -1))
     .filter((i) => i >= 0);
@@ -2005,7 +2008,7 @@ const {
   report: toast,
   changed: scheduleSession,
   openResult: openSearchResult,
-  openFolder: openFolderView,
+  openFolderView,
   isUnsaved: (path) =>
     tabs.some(
       (doc) => doc.path?.toLowerCase() === path.toLowerCase() && dirty(doc),

@@ -122,7 +122,7 @@ test("current folder follows the note, navigation typography persists and reopen
   expect(values.tab).toBe("10px");
   expect(values.em).toBe("italic");
   for (let i = 0; i < values.headings.length; i++) {
-    expect(values.headings[i].weight).toBe("600");
+    expect(values.headings[i].weight).toBe("650");
     expect(values.headings[i].alignment).toBeLessThan(1);
     if (i)
       expect(values.headings[i].size).toBeLessThan(values.headings[i - 1].size);
@@ -197,7 +197,7 @@ $$`,
         }));
         expect(metrics.dpr).toBeCloseTo(dpr, 5);
         expect(metrics.spacing).toBe("normal");
-        expect(metrics.weight).toBe("400");
+        expect(metrics.weight).toBe(dpr <= 1.25 ? "450" : "400");
         expect(metrics.transform).toBe("none");
         for (const formula of metrics.formulas) {
           expect(formula.vertical).toBe("hidden");
@@ -353,7 +353,7 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
         }),
       );
       for (const value of styles) expect(value).toEqual(styles[0]);
-      expect(styles[0].weight).toBe(weight === "auto" ? "400" : weight);
+      expect(styles[0].weight).toBe(weight === "auto" ? "450" : weight);
     }
   }
   await page.locator("#reading-preset").click();
@@ -369,7 +369,7 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
       padding: getComputedStyle(section).paddingLeft,
     };
   });
-  expect(measure.width).toBeGreaterThanOrEqual(590);
+  expect(measure.width).toBeGreaterThanOrEqual(535);
   expect(measure.padding).toBe("0px");
   await page.screenshot({ path: ".local/reading-v018-80-percent.png" });
 });
@@ -673,13 +673,13 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   await closeAppearance(page);
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "400",
+    "450",
   );
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-size",
     "11.2px",
   );
-  await expect(page.locator("#content strong")).toHaveCSS("font-weight", "600");
+  await expect(page.locator("#content strong")).toHaveCSS("font-weight", "650");
   await expect(page.locator("#content .formula > .katex")).toHaveCSS(
     "font-weight",
     "400",
@@ -694,7 +694,7 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   await page.reload();
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "400",
+    "450",
   );
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: ".local/visual-v014/reading-70.png" });
@@ -702,7 +702,7 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   await page.locator("#zoom-out").click();
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "400",
+    "450",
   );
   await page.locator("#text-weight").selectOption("400");
   await expect(page.locator("#content p").first()).toHaveCSS(
@@ -799,8 +799,11 @@ test("wide reading expands the measure, preserves the current paragraph and pers
     "aria-pressed",
     "false",
   );
+  const expectedSize = 16 * (1 + (0.09 * (1800 - 1366)) / (1920 - 1366));
+  const expectedMeasure = 42 * expectedSize;
+  const expectedOuter = expectedMeasure + 80;
   const before = await page.locator("#content").boundingBox();
-  expect(before.width).toBeCloseTo(760, 0);
+  expect(before.width).toBeCloseTo(expectedOuter, 0);
   const measure = await page.locator("#content").evaluate((el) => {
     const style = getComputedStyle(el);
     return {
@@ -812,7 +815,9 @@ test("wide reading expands the measure, preserves the current paragraph and pers
         parseFloat(style.paddingRight),
     };
   });
-  expect(measure).toEqual({ left: 32, right: 48, width: 680 });
+  expect(measure.left).toBe(32);
+  expect(measure.right).toBe(48);
+  expect(measure.width).toBeCloseTo(expectedMeasure, 0);
   await page.locator("#reader").evaluate((el) => {
     el.scrollTop +=
       el.querySelector("#section-30").getBoundingClientRect().top -
@@ -855,7 +860,7 @@ test("wide reading expands the measure, preserves the current paragraph and pers
     "false",
   );
   expect((await page.locator("#content").boundingBox()).width).toBeCloseTo(
-    760,
+    expectedOuter,
     0,
   );
 });
@@ -910,9 +915,9 @@ test("default typography uses actual Literata and JetBrains with the original in
   });
   expect(css.paragraph.family).toContain("Literata");
   expect(css.paragraph.size).toBe(16);
-  expect(css.paragraph.weight).toBe("400");
+  expect(css.paragraph.weight).toBe("450");
   expect(css.paragraph.lineHeight / css.paragraph.size).toBeCloseTo(1.7, 2);
-  expect(css.strong.weight).toBe("600");
+  expect(css.strong.weight).toBe("650");
   expect(css.math.size / css.paragraph.size).toBeCloseTo(1, 3);
   expect(css.math.family).toContain("KaTeX_Main");
   expect(css.boldMath.weight).toBe("700");

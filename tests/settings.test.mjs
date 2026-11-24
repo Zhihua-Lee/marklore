@@ -64,6 +64,8 @@ test("enumerated settings reject unknown values", () => {
   assert.equal(result.outlineSide, "right");
   assert.equal(result.theme, "light");
   assert.equal(result.weight, "auto");
+  assert.equal(normalizeSettings({ weight: 600 }).weight, 500);
+  assert.equal(normalizeSettings({ weight: "600" }).weight, 500);
   assert.equal(result.wide, false);
   assert.equal(result.showHistoryButtons, false);
   assert.equal(result.smoothScroll, "off");

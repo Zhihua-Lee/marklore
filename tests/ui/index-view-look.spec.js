@@ -885,7 +885,7 @@ test("same typography for a page in a flat index and in a nested one, and equal 
   const nestedPage = nestedMetrics.rows.find((r) => r.label === "分析 第 1 节");
   const nestedLoose = nestedMetrics.rows.find((r) => r.label === "缺失页面");
   expect(nestedHead.fontSize).toBeCloseTo(16.72, 1);
-  expect(nestedHead.fontWeight).toBe(600);
+  expect(nestedHead.fontWeight).toBe(650);
   expect(nestedPage.fontSize).toBeCloseTo(15.2, 1);
   expect(nestedPage.fontWeight).toBe(500);
   expect(nestedLoose.fontSize).toBeCloseTo(15.2, 1);
@@ -906,7 +906,7 @@ test("same typography for a page in a flat index and in a nested one, and equal 
   const genHead = genL1.find((r) => r.label === "数学分析笔记");
   const genLoose = genL1.find((r) => r.label === "普通一级笔记");
   expect(genHead.fontSize).toBeCloseTo(16.72, 1);
-  expect(genHead.fontWeight).toBe(600);
+  expect(genHead.fontWeight).toBe(650);
   expect(genLoose.fontSize).toBeCloseTo(15.2, 1);
   expect(genLoose.fontWeight).toBe(500);
   const genPitches = genL1.slice(1).map((r, i) => r.rowTop - genL1[i].rowTop);

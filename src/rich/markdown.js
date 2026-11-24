@@ -128,6 +128,7 @@ export const schema = new Schema({
     .update("horizontal_rule", {
       ...nodes.get("horizontal_rule"),
       attrs: { markup: { default: "---" } },
+      toDOM: () => ["hr"],
     })
     .update("code_block", {
       ...nodes.get("code_block"),

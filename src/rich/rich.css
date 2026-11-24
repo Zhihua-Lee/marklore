@@ -82,8 +82,15 @@
 }
 #rich .raw-inline[data-kind="footnote"] {
   vertical-align: super;
-  font-size: 0.7em;
+  font-size: 0.75em;
+  line-height: 0;
   color: var(--accent);
+}
+#rich .raw-block[data-kind="diagram"] {
+  margin: 1.25em 0;
+}
+#rich .raw-block[data-kind="diagram"] > .code-block {
+  margin: 0;
 }
 #rich .raw-block[data-kind="text"] pre,
 #rich .raw-block[data-kind="frontmatter"] pre {
@@ -191,7 +198,16 @@
 }
 #rich
   .ProseMirror
-  > :not(.rich-current, .ProseMirror-gapcursor, ul, ol, .table-scroll) {
+  > :not(
+    .rich-current,
+    .ProseMirror-gapcursor,
+    ul,
+    ol,
+    .table-scroll,
+    .image-line,
+    .image-row,
+    hr
+  ) {
   content-visibility: auto;
 }
 /* Lists and tables too, once they have been laid out (editor.js adds the class
@@ -430,51 +446,84 @@
   > :last-child {
   margin-bottom: 0;
 }
-/* A leading heading (other than a lone title) starts a section in the
-   reading view (.note-section:first-child, .front-matter + .note-section),
-   so its top margin is zero; its bottom margin matches .note-section's. */
-#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child,
+/* Sections (sections.js): mirror the reading view's nested section inset,
+   non-collapsed heading-body spacing, and zeroed trailing section margins. */
+#rich .ProseMirror > [style*="--rich-depth"] {
+  margin-left: calc(18px * var(--rich-depth, 0));
+}
+#rich .ProseMirror > hr[style*="--rich-depth"] {
+  width: auto;
+  margin-right: 0;
+}
+#rich .ProseMirror > .table-scroll[style*="--rich-depth"] {
+  max-width: calc(100% - 18px * var(--rich-depth, 0));
+}
 #rich
   .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + :is(h1, h2, h3, h4, h5, h6),
-#rich
+  > .table-scroll[style*="--rich-depth"]:has(> table.reading-columns),
+:root[data-table-width="full"]
+  #rich
   .ProseMirror
-  > .raw-block[data-kind="frontmatter"]:first-child
-  + :is(h1, h2, h3, h4, h5, h6),
-#rich
-  .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + .raw-block[data-kind="frontmatter"]
-  + :is(h1, h2, h3, h4, h5, h6) {
+  > .table-scroll[style*="--rich-depth"] {
+  width: calc(100% - 18px * var(--rich-depth, 0));
+}
+#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt] {
+  margin-bottom: 0.65em;
+}
+#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="zero"] {
   margin-top: 0;
 }
-#rich .ProseMirror > :is(h2, h3, h4, h5, h6):first-child,
+#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="normal"] {
+  margin-top: calc(1.6 * var(--note-size));
+}
 #rich
   .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + :is(h2, h3, h4, h5, h6),
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="nested-first"] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 0.8 * var(--note-size));
+}
 #rich
   .ProseMirror
-  > .raw-block[data-kind="frontmatter"]:first-child
-  + :is(h2, h3, h4, h5, h6),
-#rich
-  .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + .raw-block[data-kind="frontmatter"]
-  + :is(h2, h3, h4, h5, h6),
-#rich .ProseMirror > h1:first-child:has(~ h1),
-#rich .ProseMirror > .ProseMirror-gapcursor:first-child + h1:has(~ h1),
-#rich
-  .ProseMirror
-  > .raw-block[data-kind="frontmatter"]:first-child
-  + h1:has(~ h1),
-#rich
-  .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + .raw-block[data-kind="frontmatter"]
-  + h1:has(~ h1) {
-  margin-bottom: 0.65em;
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="after-empty"] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.6 * var(--note-size));
+}
+#rich .ProseMirror > :is(ul, ol)[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 0.75em);
+}
+#rich .ProseMirror > blockquote[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.3em);
+}
+#rich .ProseMirror > .code-block[data-rich-sec-first],
+#rich .ProseMirror > .raw-block[data-kind="diagram"][data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.25em);
+}
+#rich .ProseMirror > .math-block[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.75em);
+}
+#rich .ProseMirror > .table-scroll[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.4em);
+}
+#rich .ProseMirror > hr[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 2em);
+}
+#rich .ProseMirror > .rich-details[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.1em);
+}
+#rich .ProseMirror > .columns[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1em);
+}
+#rich .ProseMirror > :is(.image-line, .image-row)[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 20px);
+}
+#rich .ProseMirror > .image-line[data-rich-sec-first] > img:first-child {
+  margin-top: 0;
+}
+#rich .ProseMirror > [data-rich-sec-last],
+#rich .ProseMirror > p.image-row[data-rich-sec-last],
+#rich .ProseMirror > p.image-line[data-rich-sec-last] {
+  margin-bottom: 0;
+}
+#rich .ProseMirror > .image-line[data-rich-sec-last] > img:last-child {
+  margin-bottom: 0;
 }
 /* The caret between two blocks (before or after a table, a formula...): a
    line across the note, so it is seen at once. */
@@ -504,21 +553,39 @@
   opacity: 0.6;
   padding: 0 1px;
 }
-/* <details> folds: the marker before the summary folds and unfolds. */
+/* <details> folds: card styling and marker matching Read mode; clicking the
+   marker before the summary folds and unfolds. */
 #rich .rich-details {
   position: relative;
   margin: 1.1em 0;
-  padding: 0.1em 0 0.1em 1.3em;
-  border-left: 2px solid var(--line);
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+#rich .rich-details.rich-folded:is(:hover, :focus-within),
+#rich .rich-details:has(> .rich-summary:is(:hover, :focus-visible)) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  box-shadow: 0 2px 9px #0000000a;
+}
+#rich .rich-details.rich-folded:is(:hover, :focus-within) {
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg));
+}
+#rich
+  .rich-details.rich-folded:is(:hover, :focus-within)
+  > .rich-summary::before,
+#rich .rich-details > .rich-summary:is(:hover, :focus-visible)::before {
+  color: var(--accent);
 }
 #rich .rich-summary {
   position: relative;
+  margin: 0 0 0 1.25em;
   font-weight: 600;
 }
 #rich .rich-summary::before {
   content: "▾";
   position: absolute;
-  left: -1.15em;
+  left: -1.25em;
   width: 1em;
   color: var(--muted);
   cursor: pointer;
@@ -528,6 +595,20 @@
 }
 #rich .rich-folded > :not(.rich-summary) {
   display: none;
+}
+#rich .rich-details:not(.rich-folded) > :nth-child(2) {
+  margin-top: 0.65em;
+}
+#rich .rich-details:not(.rich-folded) > :last-child:not(.rich-summary) {
+  margin-bottom: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #rich .rich-details {
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease,
+      box-shadow 120ms ease;
+  }
 }
 /* An image's box: its address and its description side by side, its
    layout below (image-layout.js). */

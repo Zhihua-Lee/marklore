@@ -998,12 +998,34 @@ main[data-empty="true"] > #panes {
   cursor: pointer;
   font-weight: 600;
 }
-.prose summary::marker {
-  content: "▸  ";
+.prose details:not(.front-matter, .fm-more) > summary {
+  position: relative;
+  margin: 0 0 0 1.25em;
+  list-style: none;
+}
+.prose details:not(.front-matter, .fm-more) > summary::-webkit-details-marker {
+  display: none;
+}
+.prose details:not(.front-matter, .fm-more) > summary::before {
+  content: "▸";
+  position: absolute;
+  left: -1.25em;
+  width: 1em;
   color: var(--muted);
 }
-.prose details[open] > summary::marker {
-  content: "▾  ";
+.prose details:not(.front-matter, .fm-more)[open] > summary::before {
+  content: "▾";
+}
+.prose details:not(.front-matter, .fm-more)[open] > :nth-child(2) {
+  margin-top: 0.65em;
+}
+.prose details:not(.front-matter, .fm-more)[open] > :last-child {
+  margin-bottom: 0;
+}
+.prose sup.footnote-ref {
+  font-size: 0.75em;
+  line-height: 0;
+  vertical-align: super;
 }
 /* Front matter (properties.js). Folded: one quiet line, as a page's date
    under its title in OneNote. Unfolded: a row per property, a name with its
@@ -1173,8 +1195,12 @@ main[data-empty="true"] > #panes {
   details:not(.front-matter, .fm-more):not([open]):is(:hover, :focus-within) {
   background: color-mix(in srgb, var(--accent) 3%, var(--bg));
 }
-.prose details:not([open]):is(:hover, :focus-within) > summary::marker,
-.prose details > summary:is(:hover, :focus-visible)::marker {
+.prose
+  details:not(.front-matter, .fm-more):not([open]):is(:hover, :focus-within)
+  > summary::before,
+.prose
+  details:not(.front-matter, .fm-more)
+  > summary:is(:hover, :focus-visible)::before {
   color: var(--accent);
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -1284,7 +1310,8 @@ main[data-empty="true"] > #panes {
 .section-body {
   display: flow-root;
 }
-.section-body > :last-child {
+.prose .section-body > :last-child,
+.prose .section-body > p:last-child > img:last-child {
   margin-bottom: 0;
 }
 .section-body > .note-section:first-child {

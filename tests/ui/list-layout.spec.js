@@ -305,6 +305,7 @@ test("nested lists, tables, and note first blocks match Read and Edit across the
     await openDoc(composite, cfg.theme);
     await expect(page.locator("#content table").first()).toBeVisible();
     const measureComposite = async (root, mathSel) => {
+      await page.evaluate(() => document.fonts.ready);
       await expect
         .poll(() =>
           page.evaluate(
@@ -313,7 +314,45 @@ test("nested lists, tables, and note first blocks match Read and Edit across the
           ),
         )
         .toBe(0);
-      await page.waitForTimeout(100);
+      const scroller = root === "#content" ? "#reader" : "#rich-reader";
+      await page.evaluate(
+        ({ scroller, y }) => {
+          document.querySelector(scroller).scrollTop = y;
+        },
+        { scroller, y: 0 },
+      );
+      const max = await page.evaluate(
+        (sel) => document.querySelector(sel).scrollHeight,
+        scroller,
+      );
+      for (const frac of [0.4, 0.8, 1]) {
+        await page.evaluate(
+          ({ scroller, y }) => {
+            document.querySelector(scroller).scrollTop = y;
+          },
+          { scroller, y: Math.round(max * frac) },
+        );
+        await page.waitForTimeout(120);
+      }
+      await expect
+        .poll(() =>
+          page.evaluate((root) => {
+            const tables = [
+              ...document.querySelectorAll(
+                root + " .table-scroll > table:not(.table-measure)",
+              ),
+            ];
+            return (
+              document.querySelectorAll(root + " .table-measure").length ===
+                0 &&
+              tables.some((table) =>
+                table.classList.contains("reading-columns"),
+              )
+            );
+          }, root),
+        )
+        .toBe(true);
+      await page.waitForTimeout(120);
       return page.evaluate((root) => {
         const ps = [...document.querySelectorAll(root + " p")];
         const out = {};

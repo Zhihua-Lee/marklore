@@ -402,7 +402,7 @@ function docFrom(file = {}) {
     pane: "preview",
     anchor: { from: 0, top: true },
     folds: [],
-    details: [],
+    details: null,
     state: null,
     html: null,
     htmlText: null,
@@ -1201,9 +1201,15 @@ function render(preserve) {
       if (doc.folds.includes(el.dataset.foldKey)) {
         setSectionCollapsed(el, true);
       }
-    [...container.querySelectorAll("details")].forEach((el, i) => {
-      el.open = doc.details.includes(i);
-    });
+    if (doc.details) {
+      [...container.querySelectorAll("details")].forEach((el, i) => {
+        el.open = doc.details.includes(i);
+      });
+    } else {
+      doc.details = [...container.querySelectorAll("details")]
+        .map((el, i) => (el.open ? i : -1))
+        .filter((i) => i >= 0);
+    }
     updateOutline(doc.headings || []);
   }
   if (anchor) restoreAnchor(host, anchor);
@@ -2176,7 +2182,7 @@ function replaceIndexTab(doc, payload) {
   doc.htmlText = null;
   doc.indexKey = null;
   doc.folds = [];
-  doc.details = [];
+  doc.details = null;
   doc.anchor = { from: 0, top: true };
   doc.state = stateFor(doc);
   if (active === doc) {
@@ -3224,7 +3230,7 @@ if (api) {
         groupId: typeof entry.groupId === "string" ? entry.groupId : null,
         anchor: entry.anchor || doc.anchor,
         folds: entry.folds || [],
-        details: entry.details || [],
+        details: Array.isArray(entry.details) ? entry.details : null,
       });
       if (typeof entry.draft === "string") {
         doc.text = entry.draft;

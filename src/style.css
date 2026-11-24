@@ -967,9 +967,6 @@ main[data-empty="true"] > #panes {
   background: color-mix(in srgb, var(--accent) 13%, transparent);
   color: color-mix(in srgb, var(--accent) 70%, var(--ink));
 }
-.prose .front-matter .fm-place {
-  white-space: nowrap;
-}
 .prose .front-matter .fm-check {
   display: inline-block;
   width: 14px;

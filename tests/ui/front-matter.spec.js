@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 import { boot, editor, saved, caretAfter } from "./rich-helpers.js";
 
-// Front matter reads as a folded line of the note's properties (its date,
-// notebook and section), not as a rule and a heading; unfolded, a row per
+// Front matter reads as a folded line of the note's properties (its date
+// and how many there are), not as a rule and a heading; unfolded, a row per
 // property, changed in place in Edit mode. A note is named by its leading
 // level-one heading: its `title` is then one of the rows, never a second
 // title. A note without such a heading shows `title` as its page's title,
@@ -22,7 +22,9 @@ test("front matter is a folded line of properties", async ({ page }) => {
   await expect(line.locator(".fm-when")).toHaveText(
     "2026年11月6日星期五 14:32",
   );
-  await expect(line.locator(".fm-place")).toHaveText("数学笔记 › 第一学期");
+  // An exporter's notebook and section are not a second path: the path
+  // line above the title says where the note is.
+  await expect(line).not.toContainText("数学笔记");
   await expect(line.locator(".fm-count")).toHaveText("6 项属性");
   await expect(page.locator("#content hr")).toHaveCount(0);
   await expect(page.locator("#content h2")).toHaveCount(0);
@@ -71,7 +73,8 @@ test("properties change in place in Edit mode", async ({ page }) => {
   await row("tags").locator(".fm-value").click();
   await row("tags").locator("input").fill("a, b, 新");
   await row("tags").locator("input").press("Enter");
-  // Esc drops a change.
+  // Esc drops a change (the exporter's section waits under "N more").
+  await card.locator(".fm-more").evaluate((d) => (d.open = true));
   await row("section").locator(".fm-value").click();
   await row("section").locator("input").fill("x");
   await row("section").locator("input").press("Escape");

@@ -147,9 +147,11 @@ function known(key) {
   const k = key.toLowerCase();
   return KNOWN.find(([keys]) => keys.includes(k));
 }
-// Keys kept for tools (an exporter's ids and levels): under "N more".
+// Keys kept for tools (an exporter's ids and levels): under "N more". An
+// exporter's notebook and section only say where a page came from: where a
+// note is now is its folder, shown by the path line.
 export const isTechnical = (key) =>
-  /^(onenote_id|level|id|uuid)$|^_|_id$/i.test(key);
+  /^(onenote_id|level|id|uuid|notebook|section)$|^_|_id$/i.test(key);
 
 function dateParts(value) {
   const m = DATE.exec(value);
@@ -250,17 +252,10 @@ export function propertiesCard(
   const get = (...keys) =>
     fields.find((f) => keys.includes(f.key.toLowerCase()) && f.text);
   const when = get("created", "date", "modified", "updated");
-  const place = ["notebook", "section"]
-    .map((k) => get(k)?.text)
-    .filter(Boolean);
   const line = [];
   if (when)
     line.push(
       `<span class="fm-when">${escape(when.kind === "date" ? formatDate(when.text, true) : when.text)}</span>`,
-    );
-  if (place.length)
-    line.push(
-      `<span class="fm-place">${place.map(escape).join(' <span aria-hidden="true">›</span> ')}</span>`,
     );
   line.push(
     `<span class="fm-count">${escape(t("{n} 项属性", { n: fields.length }))}</span>`,

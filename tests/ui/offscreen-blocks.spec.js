@@ -372,7 +372,10 @@ test("scrolling over formulas not drawn yet keeps the reading line still", async
 }) => {
   // Right after opening most formulas are still TeX placeholders; they are
   // drawn as they come near the screen (and in idle time). A slower machine
-  // (CI under load): formulas are drawn later, fonts arrive later.
+  // (CI under load): formulas are drawn later, fonts arrive later. With the
+  // CPU slowed four times, opening the note alone takes most of a default
+  // test timeout on CI.
+  test.setTimeout(90000);
   const cdp = await page.context().newCDPSession(page);
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   await boot(page, longNote);

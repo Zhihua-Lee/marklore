@@ -82,6 +82,9 @@ const attachment = (name) => EXTENSION.test(name) && !NOTE_NAME.test(name);
 // A link to a file elsewhere (not a site, not this note's own anchor).
 const localHref = (href) => href && !/^([a-z][a-z0-9+.-]*:|#)/i.test(href);
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
+// Recursive expand-all caps so giant vaults stay responsive.
+const MAX_EXPAND_FOLDERS = 64;
+const MAX_EXPAND_ITEMS = 800;
 
 export function createIndexView({
   api,
@@ -526,23 +529,6 @@ export function createIndexView({
     return m.startsWith("<") ? encodeURI(m.slice(1, -1)) : m;
   };
 
-  function controlsNode() {
-    const bar = element("div", "ix-controls");
-    bar.setAttribute("role", "toolbar");
-    bar.setAttribute("aria-label", t("目录展开层级"));
-    const expand = button("ix-control", t("展开全部"), null, "expand-all");
-    expand.tabIndex = 0;
-    const level1 = button(
-      "ix-control",
-      t("只看第一层"),
-      null,
-      "collapse-level1",
-    );
-    level1.tabIndex = 0;
-    bar.append(expand, level1);
-    return bar;
-  }
-
   function render(doc) {
     const info = folderOf(doc);
     if (doc.generated) {
@@ -567,7 +553,6 @@ export function createIndexView({
           .filter((c) => !c.index && !isIndexName(c.name))
           .sort(compareTreeItems);
         if (items.length) {
-          fragment.append(controlsNode());
           const list = element("div", "ix-list");
           list.setAttribute("role", "tree");
           list.setAttribute("aria-label", t("目录中的页面"));
@@ -642,14 +627,9 @@ export function createIndexView({
       first: true,
       visibleNotes: [],
     };
-    let placedControls = false;
     for (const run of scan.runs) {
       const list = runNode(context, run);
       place(fragment, scan.lines[run.first].start, list);
-      if (!placedControls && list.parentNode) {
-        list.parentNode.insertBefore(controlsNode(), list);
-        placedControls = true;
-      }
     }
     if (info?.status === "ready") {
       loadExcerpts(doc, info, context.visibleNotes);
@@ -1559,11 +1539,76 @@ export function createIndexView({
       loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
     }
   }
+  const hasFoldable = (doc = getDocument()) =>
+    Boolean(
+      doc &&
+      applies(doc) &&
+      !doc.preview &&
+      doc.mode !== "source" &&
+      host.querySelector(".ix-list .ix-item[aria-expanded]"),
+    );
+  const anyExpanded = (doc = getDocument()) =>
+    Boolean(
+      doc &&
+      applies(doc) &&
+      !doc.preview &&
+      doc.mode !== "source" &&
+      host.querySelector('.ix-item[aria-level="1"][aria-expanded="true"]'),
+    );
+  function scrollAnchorFor(selector) {
+    const reader = scroller();
+    if (!reader || reader.scrollTop <= 2) return { top0: true };
+    const rRect = reader.getBoundingClientRect();
+    const candidates = [...host.querySelectorAll(selector)].filter(
+      (el) => !el.parentElement.closest(".ix-item.closed"),
+    );
+    const targetEl =
+      candidates.find(
+        (el) => el.getBoundingClientRect().bottom > rRect.top + 8,
+      ) || candidates[0];
+    if (!targetEl) return { top0: true };
+    return {
+      top0: false,
+      ixId: targetEl.dataset.ixId || null,
+      fKey: targetEl.dataset.foldKey || null,
+      line: targetEl.dataset.line || null,
+      beforeTop: targetEl.getBoundingClientRect().top - rRect.top,
+    };
+  }
+  function restoreScrollAnchor(anchor) {
+    const reader = scroller();
+    if (!reader) return;
+    if (anchor.top0) {
+      reader.scrollTop = 0;
+      return;
+    }
+    const targetEl =
+      (anchor.ixId &&
+        host.querySelector(
+          `.ix-item[data-ix-id="${CSS.escape(anchor.ixId)}"]`,
+        )) ||
+      (anchor.fKey &&
+        host.querySelector(
+          `.ix-item[data-fold-key="${CSS.escape(anchor.fKey)}"]`,
+        )) ||
+      (anchor.line != null &&
+        host.querySelector(`.ix-item[data-line="${anchor.line}"]`));
+    if (!targetEl) return;
+    const rRect = reader.getBoundingClientRect();
+    const maxOff = Math.max(16, reader.clientHeight - 48);
+    const wantTop =
+      anchor.beforeTop < 12 ? 16 : Math.min(anchor.beforeTop, maxOff);
+    const afterTop = targetEl.getBoundingClientRect().top - rRect.top;
+    reader.scrollTop += afterTop - wantTop;
+  }
   function collapseLevel1() {
     const doc = managed();
     if (!doc) return;
+    const anchor = scrollAnchorFor('.ix-item[aria-level="1"]');
     stateOf(doc).expandToken++;
-    doc.folds = [];
+    doc.folds = (doc.folds || []).filter(
+      (k) => !k.startsWith("ix:") && !k.startsWith("+ix:"),
+    );
     for (const item of host.querySelectorAll(
       '.ix-item[aria-level="1"][aria-expanded]',
     )) {
@@ -1577,15 +1622,41 @@ export function createIndexView({
       ))
         control.setAttribute("aria-expanded", "false");
     }
+    const hiddenFocus =
+      host.contains(document.activeElement) &&
+      document.activeElement?.closest?.(".ix-item.closed");
+    if (hiddenFocus) focusItem(hiddenFocus, false, { preventScroll: true });
+    else {
+      const hiddenTab = host
+        .querySelector('.ix-item[tabindex="0"]')
+        ?.closest?.(".ix-item.closed");
+      if (hiddenTab) {
+        for (const other of host.querySelectorAll('.ix-item[tabindex="0"]'))
+          other.tabIndex = -1;
+        hiddenTab.tabIndex = 0;
+      }
+    }
+    restoreScrollAnchor(anchor);
     foldsChanged(doc);
     outlineChanged();
   }
   async function expandAll() {
     const doc = managed();
     if (!doc) return;
+    const anchor = scrollAnchorFor(".ix-item");
     const token = ++stateOf(doc).expandToken;
+    let loadedFolders = 0;
+    let capped = false;
+    const seenFolders = new Set();
     for (let round = 0; round < 16; round++) {
       if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
+      if (host.querySelectorAll(".ix-item").length >= MAX_EXPAND_ITEMS) {
+        if (
+          host.querySelector('.ix-item[aria-expanded="false"][data-fold-key]')
+        )
+          capped = true;
+        break;
+      }
       const closedItems = [
         ...host.querySelectorAll(
           '.ix-item[aria-expanded="false"][data-fold-key]',
@@ -1593,12 +1664,21 @@ export function createIndexView({
       ];
       const toLoad = [];
       for (const item of closedItems) {
+        const cid = item.dataset.childId;
+        if (cid && !seenFolders.has(cid)) {
+          if (loadedFolders >= MAX_EXPAND_FOLDERS) {
+            capped = true;
+            continue;
+          }
+          seenFolders.add(cid);
+          loadedFolders++;
+        }
         const fKey = item.dataset.foldKey;
         const defClosed = item.dataset.defaultClosed === "true";
         setFoldKey(doc, fKey, defClosed, false);
-        if (item.dataset.childId) {
-          const sub = ensureSubfolder(doc, item.dataset.childId, {
-            id: item.dataset.childId,
+        if (cid) {
+          const sub = ensureSubfolder(doc, cid, {
+            id: cid,
             name: item.dataset.childName || "",
             path: item.dataset.childPath || "",
           });
@@ -1612,17 +1692,30 @@ export function createIndexView({
         if (sub?.promise) toLoad.push(sub.promise);
       }
       if (!closedItems.length && !toLoad.length) break;
+      if (capped && !toLoad.length) {
+        foldsChanged(doc);
+        rerender(doc);
+        break;
+      }
       foldsChanged(doc);
       if (toLoad.length) {
         await Promise.all(toLoad);
         if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
       }
       rerender(doc);
+      if (
+        round === 15 &&
+        host.querySelector('.ix-item[aria-expanded="false"][data-fold-key]')
+      )
+        capped = true;
     }
     if (getDocument() === doc && stateOf(doc).expandToken === token) {
+      restoreScrollAnchor(anchor);
+      if (capped) report(t("条目较多，仅展开前一部分"));
       const info = folderOf(doc);
       if (info?.status === "ready")
         loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
+      foldsChanged(doc);
       outlineChanged();
     }
   }
@@ -2273,8 +2366,6 @@ export function createIndexView({
     if (control) {
       event.preventDefault();
       const action = control.dataset.ix;
-      if (action === "expand-all") return run(() => expandAll())();
-      if (action === "collapse-level1") return collapseLevel1();
       if (action === "fold") {
         fold(item, !item.classList.contains("closed"));
         // The keys stay on the entry folded (no ring for a click).
@@ -2331,9 +2422,7 @@ export function createIndexView({
         event.stopPropagation();
         return;
       }
-      const inList = event.target.closest?.(
-        ".ix-list, .ix-footer, .ix-controls",
-      );
+      const inList = event.target.closest?.(".ix-list, .ix-footer");
       if (inList) {
         event.stopPropagation();
         event.preventDefault();
@@ -2537,5 +2626,9 @@ export function createIndexView({
     editFront,
     reveal,
     outlineEntries,
+    hasFoldable,
+    anyExpanded,
+    collapseLevel1,
+    expandAll,
   };
 }

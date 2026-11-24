@@ -752,16 +752,16 @@ test("nested index expands lazily to 2 levels and supports expand-all / top-leve
     ),
   ).toHaveText(["NestedPlainDir", "Alpha 标题", "Beta 标题"]);
 
-  // Header control: 只看第一层 collapses Level 1.
-  await page.getByRole("button", { name: "只看第一层" }).click();
+  // Outline header toggle collapses Level 1.
+  await page.getByRole("button", { name: "全部折叠" }).click();
   await expect(ixItem(page, "第一部分 基础")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
   await expect(ixItem(page, "进阶专题")).toBeHidden();
 
-  // Header control: 展开全部 expands everything recursively including Inner -> 最深一页.
-  await page.getByRole("button", { name: "展开全部" }).click();
+  // Outline header toggle expands everything recursively including Inner -> 最深一页.
+  await page.getByRole("button", { name: "全部展开" }).click();
   await expect(ixItem(page, "最深一页")).toBeVisible();
   await expect(ixItem(page, "详细推导")).toBeVisible();
 
@@ -1116,8 +1116,8 @@ test("outline lists expanded nested levels and updates as branches fold and unfo
     "写在前面",
   ]);
 
-  // 只看第一层 removes expanded nested levels from outline.
-  await page.getByRole("button", { name: "只看第一层" }).click();
+  // Outline header toggle removes expanded nested levels from outline.
+  await page.getByRole("button", { name: "全部折叠" }).click();
   await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 });
 

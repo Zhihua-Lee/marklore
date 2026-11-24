@@ -85,7 +85,7 @@ button {
   padding: 4px 9px;
   white-space: nowrap;
 }
-button:hover {
+button:hover:not(:disabled) {
   background: var(--hover);
 }
 button:disabled {

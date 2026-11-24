@@ -34,6 +34,8 @@ const paths = {
   chevronLeft: '<path d="m14 6-6 6 6 6"/>',
   chevronRight: '<path d="m10 6 6 6-6 6"/>',
   outline: '<path d="M8 6h13M8 12h13M8 18h9M3 6h.1M3 12h.1M3 18h.1"/>',
+  foldAll: '<path d="m7 5 5 4 5-4M5 12h14M7 19l5-4 5 4"/>',
+  unfoldAll: '<path d="m7 9 5-4 5 4M5 12h14M7 15l5 4 5-4"/>',
   settings:
     '<path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3" fill="var(--panel)"/><circle cx="15" cy="17" r="3" fill="var(--panel)"/>',
   eye: '<path d="M2.5 12c2.6-4.5 5.7-6.8 9.5-6.8s6.9 2.3 9.5 6.8c-2.6 4.5-5.7 6.8-9.5 6.8S5.1 16.5 2.5 12Z"/><circle cx="12" cy="12" r="3"/>',

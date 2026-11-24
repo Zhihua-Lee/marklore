@@ -58,7 +58,7 @@ pnpm dev
 
 | 命令                            | 覆盖范围                    |
 | ------------------------------- | --------------------------- |
-| `pnpm test`                     | Node 单元测试。             |
+| `pnpm test`                     | Node 单元测试与规则向量。   |
 | `pnpm test:ui`                  | Playwright 浏览器交互回归。 |
 | `pnpm test:native`              | Electron 桌面基础流程。     |
 | `pnpm test:native-safety`       | 原生文件操作安全。          |
@@ -80,6 +80,37 @@ pnpm dev
 - 编辑模式的编辑器（`src/rich/`）由 `tests/ui/rich-*.spec.js` 覆盖：读入再写回逐字节不变、只改动打字处、输入法组字、公式、列表、表格、链接、图片、折叠块、行内 HTML、查找替换、格式工具栏、标记、光标在各种块之间移动，以及 Typora 式输入。共用的启动与选择工具在 `tests/ui/rich-helpers.js`。
 - 已有开发服务器时，设置 `FOLIO_BASE_URL`（如 `http://127.0.0.1:5173`）可跳过自动启动。浏览器：装有 Chromium headless shell（`playwright install chromium-headless-shell`）时用它，否则用 Edge；`FOLIO_BROWSER_CHANNEL="msedge"` 强制用 Edge，`""` 强制用 headless shell。无头 Edge 每打开一页就建一个隐藏窗口，Windows 资源管理器为每个这样的窗口留下约 6 个 GDI 对象、直到它重启才释放；资源管理器的 GDI 对象接近 9000 时会自行结束（任务栏、托盘和菜单变空白），整轮 UI 测试就要几千个。headless shell 不建窗口，没有这项开销。
 - UI 测试、原生套件（`tools/run-native-suites.mjs` 在每个套件前、`tests/launch-app.mjs` 在每个套件第一次启动前）开始前读取任务栏资源管理器的 GDI 对象数（[tools/explorer-gdi.mjs](../tools/explorer-gdi.mjs)），超过 6000 时不启动并说明原因；`FOLIO_EXPLORER_GDI_LIMIT` 可改这个上限。空闲的原生测试实例和它开关的 Electron 窗口不增加资源管理器的 GDI 对象。
+
+### 规则向量
+
+[tests/vectors](../tests/vectors/README.md) 把笔记的名字与文件名、标题锚点、目录文件的解析和各种修改、改名或移动后的链接改写、提议的定位与显示、标记的重新定位、设置的读回等规则写成与语言无关的数据：每条规则一个 JSON 文件，文件路径就是规则名，每个用例给出输入和应得的输出。数据里不出现函数名、markdown-it 的 token 或 ProseMirror 的位置；文本中的位置写成行和列（都从 1 起，列按 Unicode 码点计）。`ai-store/schemas` 是数据目录 `ai` 文件夹中各文件的 JSON Schema（draft 2020-12），附正例和反例。
+
+[tests/vectors.test.mjs](../tests/vectors.test.mjs) 用当前的 JavaScript 实现逐条核对（`pnpm test` 包含它），并让应用和 MCP 服务器实际写一遍 `ai` 文件夹，检查写出的文件符合这些 schema。以后用其他语言实现时，照 README 写一个读同样数据的测试即可。改动规则时同时改向量；新用例可以先不写 `expected`，以 `VECTORS_FILL=1` 运行一次补上当前结果，看过无误再提交。
+
+### 纯模块
+
+下列 `desktop/` 模块只含规则：不读写文件，不引入 Electron、Node 内置模块、npm 包或页面代码，也不用它们的全局对象，页面、主进程和 MCP 服务器都可以直接引入，日后也最容易照搬到其他语言：`note-names`、`slug`、`folder-index`、`link-rewrite`、`proposal-edits`、`comment-anchors`、`settings-schema`、`excluded`、`i18n`（连同 `locales/`）、`scan-rules`、`snippet`、`note-search`、`image-density`。[tests/pure-modules.test.mjs](../tests/pure-modules.test.mjs) 沿 import 逐个检查它们；新增纯规则模块时加进其中的列表。
+
+以下模块把规则和文件操作写在一起，暂不拆分：
+
+| 模块                                                  | 纯规则的部分                                                                                                                 | 文件操作的部分                                      |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `desktop/files.mjs`                                   | `unifyPlan` 为每篇笔记定名字、文件名和编号的规则（调用 `note-names.mjs`、`folder-index.mjs`）；`decode`／`encode` 的文本规则 | 授权、读写、备份、遍历文件夹、`unifyNames` 执行改名 |
+| `desktop/note-moves.mjs`                              | 链接改写（`link-rewrite.mjs`）；按名字筛选可能受影响的笔记                                                                   | 遍历文件夹、写回笔记、备份、撤销记录                |
+| `desktop/note-repair.mjs`                             | 找出断开的链接和目录条目、改写或去掉它们（`link-rewrite.mjs`、`folder-index.mjs`）                                           | 判断文件是否存在、新建笔记、写回、撤销记录          |
+| `desktop/ai-store.mjs`                                | `isLapsed`、编号格式、标记文件名（SHA-256，用 `node:crypto`）、`renamedNote`（用 `node:path` 按平台解析路径）                | 锁、整文件写入后改名、列出与清理                    |
+| `desktop/moved-path.mjs`、`desktop/rename-memory.mjs` | 移动后的路径对应                                                                                                             | 用 `node:path` 按平台比较路径；后者还记住最近的改名 |
+| `desktop/link-index.mjs`                              | `parseNote`：从笔记文本取出链接、标题与锚点（用 `node:path` 解析目标）                                                       | 读笔记、监视笔记库、搜索                            |
+
+### 设置的定义
+
+[desktop/settings-schema.mjs](../desktop/settings-schema.mjs) 定义设置的默认值和读回时的规范化，不依赖 DOM 和 Electron；`src/settings.js` 只是转出它。分三类，互不混放：
+
+- 用户设置（`DURABLE_SETTINGS`）：数据目录 `session.json` 的 `settings`，由页面随会话写入，读回时经 `normalizeSettings`：缺的取默认值，取值不认识的改回默认，数值限定范围，旧版本的值迁移（`typeface: "balanced"` 改为 `literata`，`touchpadScroll` 并入 `smoothScroll`，删去 `aiTarget`）。不认识的键原样保留；`sidebar`、`split`、`outline` 目前不做校验。主进程从中读取 `theme`、`language`、`searchExclude` 和 `aiLibraries`。
+- 桌面偏好（`DESKTOP_PREFERENCES`）：个人资料目录的 `desktop-settings.json`，由主进程（`desktop/integration.mjs`）读写：`closeToTray`、`otherFormats`、`checkUpdates`，只有存为 `true` 时才算开启。开机启动由 Windows 记录，不在这里。
+- 测试与实验开关（`FLAGS`）：环境变量 `FOLIO_DATA_DIR`、`FOLIO_PROFILE_DIR`、`FOLIO_LANG`、`FOLIO_TEST_INACTIVE`、`FOLIO_TEST_TRAY`、`FOLIO_NO_RELAUNCH`、`FOLIO_UPDATE_FEED`、`FOLIO_CLAUDE`、`MARKLORE_INDEX`、`MARKLORE_RUN`，以及页面上的 `window.__folioIncremental`，都不保存。页面 `localStorage` 中的 `folio-language` 只是 `language` 的副本，供页面在读到会话之前使用。
+
+两类保存的格式和规范化规则也写在 `tests/vectors/settings` 中。
 
 ### 持续集成
 
@@ -200,6 +231,7 @@ flowchart TB
 | 路径                                                                                                   | 职责                                                                                                                                                   |
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | [`desktop/main.mjs`](../desktop/main.mjs)、[`desktop/preload.cjs`](../desktop/preload.cjs)             | 窗口、隔离接口、文件监听与会话恢复。                                                                                                                   |
+| [`desktop/settings-schema.mjs`](../desktop/settings-schema.mjs)                                        | 设置的默认值与读回时的规范化（`src/settings.js` 转出它），以及用户设置、桌面偏好和测试开关的区分，见上文“设置的定义”。                                 |
 | [`desktop/files.mjs`](../desktop/files.mjs)                                                            | 文件授权、编码、版本校验、备份与目录操作。                                                                                                             |
 | [`desktop/folder-index.mjs`](../desktop/folder-index.mjs)、[`src/library.js`](../src/library.js)       | 文件树：目录文件（`_目录.md`、`SUMMARY.md`）决定文件夹的顺序与子页，拖动改写其中的列表。                                                               |
 | [`src/folder-index-view.js`](../src/folder-index-view.js)                                              | 目录文件在阅读、编辑模式下显示为页面目录；对列表的逐行修改在 `src/index-list.js`。                                                                     |

@@ -180,6 +180,8 @@ $$`,
             .letterSpacing,
           weight: getComputedStyle(document.querySelector("#content p"))
             .fontWeight,
+          variation: getComputedStyle(document.querySelector("#content p"))
+            .fontVariationSettings,
           transform: getComputedStyle(document.querySelector("#content"))
             .transform,
           formulas: [...document.querySelectorAll(".math-block")].map((el) => {
@@ -197,7 +199,8 @@ $$`,
         }));
         expect(metrics.dpr).toBeCloseTo(dpr, 5);
         expect(metrics.spacing).toBe("normal");
-        expect(metrics.weight).toBe(dpr <= 1.25 ? "450" : "400");
+        expect(metrics.weight).toBe("400");
+        expect(metrics.variation).toContain(dpr <= 1.25 ? "450" : "400");
         expect(metrics.transform).toBe("none");
         for (const formula of metrics.formulas) {
           expect(formula.vertical).toBe("hidden");
@@ -347,13 +350,15 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
           const s = getComputedStyle(document.querySelector(selector));
           return {
             weight: s.fontWeight,
+            variation: s.fontVariationSettings,
             size: s.fontSize,
             family: s.fontFamily,
           };
         }),
       );
       for (const value of styles) expect(value).toEqual(styles[0]);
-      expect(styles[0].weight).toBe(weight === "auto" ? "450" : weight);
+      expect(styles[0].weight).toBe(weight === "500" ? "500" : "400");
+      expect(styles[0].variation).toContain(weight === "auto" ? "450" : weight);
     }
   }
   await page.locator("#reading-preset").click();
@@ -673,13 +678,21 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   await closeAppearance(page);
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "450",
+    "400",
+  );
+  await expect(page.locator("#content p").first()).toHaveCSS(
+    "font-variation-settings",
+    /"wght" 450/,
   );
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-size",
     "11.2px",
   );
   await expect(page.locator("#content strong")).toHaveCSS("font-weight", "650");
+  await expect(page.locator("#content strong")).toHaveCSS(
+    "font-variation-settings",
+    /"wght" 650/,
+  );
   await expect(page.locator("#content .formula > .katex")).toHaveCSS(
     "font-weight",
     "400",
@@ -694,7 +707,11 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   await page.reload();
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "450",
+    "400",
+  );
+  await expect(page.locator("#content p").first()).toHaveCSS(
+    "font-variation-settings",
+    /"wght" 450/,
   );
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: ".local/visual-v014/reading-70.png" });
@@ -702,12 +719,20 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   await page.locator("#zoom-out").click();
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "450",
+    "400",
+  );
+  await expect(page.locator("#content p").first()).toHaveCSS(
+    "font-variation-settings",
+    /"wght" 450/,
   );
   await page.locator("#text-weight").selectOption("400");
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
     "400",
+  );
+  await expect(page.locator("#content p").first()).toHaveCSS(
+    "font-variation-settings",
+    /"wght" 400/,
   );
 });
 
@@ -901,6 +926,7 @@ test("default typography uses actual Literata and JetBrains with the original in
         family: value.fontFamily,
         size: parseFloat(value.fontSize),
         weight: value.fontWeight,
+        variation: value.fontVariationSettings,
         lineHeight: parseFloat(value.lineHeight),
         spacing: value.letterSpacing,
       };
@@ -915,9 +941,11 @@ test("default typography uses actual Literata and JetBrains with the original in
   });
   expect(css.paragraph.family).toContain("Literata");
   expect(css.paragraph.size).toBe(16);
-  expect(css.paragraph.weight).toBe("450");
+  expect(css.paragraph.weight).toBe("400");
+  expect(css.paragraph.variation).toContain("450");
   expect(css.paragraph.lineHeight / css.paragraph.size).toBeCloseTo(1.7, 2);
   expect(css.strong.weight).toBe("650");
+  expect(css.strong.variation).toContain("650");
   expect(css.math.size / css.paragraph.size).toBeCloseTo(1, 3);
   expect(css.math.family).toContain("KaTeX_Main");
   expect(css.boldMath.weight).toBe("700");

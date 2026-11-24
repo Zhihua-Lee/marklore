@@ -340,7 +340,8 @@ test("inline formula and following closing punctuation never wrap apart in Read 
   page,
 }) => {
   const sample =
-    "# Wrap\n\n" +
+    FIXTURE +
+    "\n\n" +
     [
       "设任意函数列都在区间上成立 $f_n(x)=x^n$，并且满足一致收敛条件 $x=1$。我们还会遇到 $y$；以及 $z$：还有 $w$！或问号 $u$？以及英文 $a$, $b$. $c$; $d$! $e$? 和括号（见 $k$）。",
       "Another test where formula $x+y$， sits near wrap boundary with $(a+b)$」 and 「$c$』 plus $m$、 and $n$!",
@@ -350,7 +351,7 @@ test("inline formula and following closing punctuation never wrap apart in Read 
 
   const countOrphans = async (selector) => {
     let orphans = 0;
-    for (const width of [280, 320, 360, 410, 480, 560]) {
+    for (const width of [280, 320, 360, 410, 480, 560, 672]) {
       await page.evaluate(
         ({ selector, width }) => {
           const el = document.querySelector(selector);
@@ -367,15 +368,41 @@ test("inline formula and following closing punctuation never wrap apart in Read 
         let bad = 0;
         for (const formula of el.querySelectorAll(".formula")) {
           let next = formula.nextSibling;
-          while (next && next.nodeType === 3 && !next.textContent.length)
+          while (
+            next &&
+            next.nodeType === 3 &&
+            next.textContent.replace(/\u2060/g, "").length === 0
+          )
             next = next.nextSibling;
+          if (
+            next &&
+            next.nodeType === 1 &&
+            next.classList.contains("ProseMirror-widget")
+          ) {
+            let after = next.nextSibling;
+            while (after && after.nodeType === 3 && !after.textContent.length)
+              after = after.nextSibling;
+            if (
+              after &&
+              after.nodeType === 3 &&
+              punct.has(after.textContent[0])
+            )
+              bad++;
+            continue;
+          }
           if (!next || next.nodeType !== 3) continue;
-          const ch = next.textContent[0];
+          const cleanIdx = next.textContent.search(/[^\u2060]/);
+          if (cleanIdx < 0) continue;
+          const ch = next.textContent[cleanIdx];
           if (!punct.has(ch)) continue;
-          const fr = formula.getBoundingClientRect();
+          const fRects = [...formula.getClientRects()].filter(
+            (r) => r.width > 0 && r.height > 0,
+          );
+          const fr =
+            fRects[fRects.length - 1] || formula.getBoundingClientRect();
           const pr = document.createRange();
-          pr.setStart(next, 0);
-          pr.setEnd(next, 1);
+          pr.setStart(next, cleanIdx);
+          pr.setEnd(next, cleanIdx + 1);
           const cb = pr.getBoundingClientRect();
           if (cb.top > fr.bottom - 2 || cb.left < fr.left - 1) bad++;
         }
@@ -392,32 +419,175 @@ test("inline formula and following closing punctuation never wrap apart in Read 
   expect(await countOrphans("#rich .ProseMirror")).toBe(0);
 });
 
-test("auto body weight responds to theme and DPR, and dropped 600 option stays absent", async ({
+test("long inline formulas wrap inside narrow 700px column without horizontal overflow", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 700, height: 800 });
+  const longInline =
+    "# Long inline math\n\n" +
+    "在本节关于一致收敛与有限项和上界的讨论中，典型公式为 $a_1 + a_2 + \\cdots + a_{40} = \\sum_{k=1}^{40} a_k \\le M$，并应随中文段落自然换行而不溢出页边距。";
+  await boot(page, longInline);
+  await waitForRendered(page, "#content");
+
+  const measureWrapped = (el) => {
+    const formula = el.querySelector(".formula");
+    const lineHeight = parseFloat(getComputedStyle(el).lineHeight);
+    const rects = [...formula.getClientRects()].filter(
+      (r) => r.width > 0 && r.height > 0,
+    );
+    const tail = rects[rects.length - 1];
+    let next = formula.nextSibling;
+    while (next && next.nodeType === 3 && !next.textContent.length)
+      next = next.nextSibling;
+    const pr = document.createRange();
+    pr.setStart(next, 0);
+    pr.setEnd(next, 1);
+    const comma = pr.getBoundingClientRect();
+    return {
+      overflow: el.scrollWidth - el.clientWidth,
+      formulaHeight: formula.getBoundingClientRect().height,
+      rects: rects.length,
+      lineHeight,
+      commaDetached: comma.top > tail.bottom - 2 || comma.left < tail.left - 1,
+    };
+  };
+
+  const read = await page.locator("#content").evaluate(measureWrapped);
+  expect(read.overflow).toBeLessThanOrEqual(1);
+  expect(read.rects).toBeGreaterThanOrEqual(2);
+  expect(read.formulaHeight).toBeGreaterThan(read.lineHeight * 1.4);
+  expect(read.commaDetached).toBe(false);
+
+  await page.keyboard.press("Control+2");
+  await expect(page.locator("#rich-reader")).toBeVisible();
+  await waitForRendered(page, "#rich .ProseMirror");
+  const edit = await page
+    .locator("#rich .ProseMirror")
+    .evaluate(measureWrapped);
+  expect(edit.overflow).toBeLessThanOrEqual(1);
+  expect(edit.rects).toBeGreaterThanOrEqual(2);
+  expect(edit.formulaHeight).toBeGreaterThan(edit.lineHeight * 1.4);
+  expect(edit.commaDetached).toBe(false);
+});
+
+test("auto and medium weights keep static CJK Regular via wght, darker uses Medium, and bold keeps wght", async ({
   browser,
 }) => {
-  const ctx1 = await browser.newContext({
-    viewport: { width: 1366, height: 900 },
-    deviceScaleFactor: 1,
-  });
-  const page = await ctx1.newPage();
-  await boot(page, FIXTURE);
-
-  await expect(page.locator('#text-weight option[value="600"]')).toHaveCount(0);
-
-  const weights = () =>
+  const probeCjkFonts = async (page) => {
+    const cdp = await page.context().newCDPSession(page);
+    await cdp.send("DOM.enable");
+    await cdp.send("CSS.enable");
+    const { root } = await cdp.send("DOM.getDocument");
+    const { nodeId } = await cdp.send("DOM.querySelector", {
+      nodeId: root.nodeId,
+      selector: "#content p [data-text-from]",
+    });
+    const { fonts } = await cdp.send("CSS.getPlatformFontsForNode", { nodeId });
+    await cdp.detach();
+    return fonts;
+  };
+  const inspect = async (page) =>
     page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
+      const p = getComputedStyle(document.querySelector("#content p"));
+      const h2 = getComputedStyle(document.querySelector("#content h2"));
+      const strong = getComputedStyle(
+        document.querySelector("#content strong"),
+      );
+      const th = getComputedStyle(document.querySelector("#content th"));
+      const summary = getComputedStyle(
+        document.querySelector("#content details:not(.front-matter) > summary"),
+      );
       return {
-        body: parseFloat(root.getPropertyValue("--note-weight")),
-        strong: parseFloat(root.getPropertyValue("--strong-weight")),
-        heading: parseFloat(root.getPropertyValue("--heading-weight")),
+        varWeight: parseFloat(root.getPropertyValue("--note-weight")),
+        varWght: parseFloat(root.getPropertyValue("--note-wght")),
+        strongVar: parseFloat(root.getPropertyValue("--strong-weight")),
+        pWeight: p.fontWeight,
+        pVariation: p.fontVariationSettings,
+        h2Weight: h2.fontWeight,
+        h2Variation: h2.fontVariationSettings,
+        strongVariation: strong.fontVariationSettings,
+        thVariation: th.fontVariationSettings,
+        summaryVariation: summary.fontVariationSettings,
       };
     });
 
-  expect(await weights()).toEqual({ body: 450, strong: 650, heading: 650 });
-  await page.locator("#theme").click();
-  expect(await weights()).toEqual({ body: 400, strong: 600, heading: 600 });
-  await ctx1.close();
+  for (const dpr of [1, 1.25]) {
+    const ctx = await browser.newContext({
+      viewport: { width: 1366, height: 900 },
+      deviceScaleFactor: dpr,
+    });
+    const page = await ctx.newPage();
+    await boot(page, FIXTURE);
+    await page.evaluate(() => document.fonts.ready);
+
+    await expect(page.locator('#text-weight option[value="600"]')).toHaveCount(
+      0,
+    );
+    const autoState = await inspect(page);
+    expect(autoState.varWeight).toBe(400);
+    expect(autoState.varWght).toBe(450);
+    expect(autoState.strongVar).toBe(650);
+    expect(autoState.pWeight).toBe("400");
+    expect(autoState.pVariation).toContain("450");
+    expect(autoState.h2Variation).toContain("650");
+    expect(autoState.strongVariation).toContain("650");
+    expect(autoState.thVariation).toContain("650");
+    expect(autoState.summaryVariation).toContain("650");
+
+    const autoFonts = await probeCjkFonts(page);
+    const hasNoto = autoFonts.some((f) => /Noto Sans SC/i.test(f.familyName));
+    if (hasNoto) {
+      expect(
+        autoFonts.some((f) => /^Noto-Sans-SC$/i.test(f.postScriptName)),
+        JSON.stringify(autoFonts),
+      ).toBe(true);
+    }
+
+    await page.locator("#weight").click();
+    await page.locator("#text-weight").selectOption("450");
+    await page.locator("#appearance-close").click();
+    const medState = await inspect(page);
+    expect(medState.varWeight).toBe(400);
+    expect(medState.varWght).toBe(450);
+    const medFonts = await probeCjkFonts(page);
+    if (hasNoto) {
+      expect(
+        medFonts.some((f) => /^Noto-Sans-SC$/i.test(f.postScriptName)),
+        JSON.stringify(medFonts),
+      ).toBe(true);
+    }
+
+    await page.locator("#weight").click();
+    await page.locator("#text-weight").selectOption("500");
+    await page.locator("#appearance-close").click();
+    const darkFonts = await probeCjkFonts(page);
+    const darkerState = await inspect(page);
+    expect(darkerState.varWeight).toBe(500);
+    expect(darkerState.varWght).toBe(500);
+    if (hasNoto) {
+      expect(
+        darkFonts.some((f) => /Noto-Sans-SC-Medium/i.test(f.postScriptName)),
+        JSON.stringify(darkFonts),
+      ).toBe(true);
+    }
+    console.log(
+      `CDP fonts dpr=${dpr}:`,
+      JSON.stringify({ auto: autoFonts, medium: medFonts, darker: darkFonts }),
+    );
+
+    if (dpr === 1) {
+      await page.locator("#weight").click();
+      await page.locator("#text-weight").selectOption("auto");
+      await page.locator("#appearance-close").click();
+      await page.locator("#theme").click();
+      const darkThemeState = await inspect(page);
+      expect(darkThemeState.varWeight).toBe(400);
+      expect(darkThemeState.varWght).toBe(400);
+      expect(darkThemeState.strongVar).toBe(600);
+    }
+    await ctx.close();
+  }
 
   const ctxHi = await browser.newContext({
     viewport: { width: 1366, height: 900 },
@@ -425,14 +595,8 @@ test("auto body weight responds to theme and DPR, and dropped 600 option stays a
   });
   const hiPage = await ctxHi.newPage();
   await boot(hiPage, FIXTURE);
-  expect(
-    await hiPage.evaluate(() =>
-      parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue(
-          "--note-weight",
-        ),
-      ),
-    ),
-  ).toBe(400);
+  const hiState = await inspect(hiPage);
+  expect(hiState.varWeight).toBe(400);
+  expect(hiState.varWght).toBe(400);
   await ctxHi.close();
 });

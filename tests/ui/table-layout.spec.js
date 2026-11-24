@@ -159,3 +159,55 @@ test("live reader and hover preview optimize automatically and retain cached lay
       .evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
   ).toBe(true);
 });
+
+test("sortable table header text never intersects the sort mark in narrow or wide tables", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  const overlaps = await page.evaluate(async () => {
+    const { renderMarkdown } = await import("/src/markdown.js").then(
+      async (m) => (await m.loadMath(), m),
+    );
+    const { optimizeTable } = await import("/src/table-layout.js");
+    const md = [
+      "| 收敛方式 | 对 $x$ 的要求 | 保持连续性 | 可逐项积分 |",
+      "| --- | --- | --- | --- |",
+      "| 逐点收敛 | 每个 $x$ 单独 | 否 | 否 |",
+      "| 内闭一致收敛 | 每个紧子集 | 是（局部） | 在紧子集上 |",
+    ].join("\n");
+    const found = [];
+    for (const width of [480, 1100]) {
+      const host = document.createElement("article");
+      host.className = "prose";
+      host.style.cssText = `position:absolute;left:0;top:0;width:${width}px;max-width:none;padding:0`;
+      host.innerHTML = renderMarkdown(md).html;
+      document.body.append(host);
+      const table = host.querySelector("table");
+      optimizeTable(table);
+      for (const th of table.querySelectorAll("th.sortable-header")) {
+        const btn = th.querySelector(".table-sort");
+        const bb = btn.getBoundingClientRect();
+        const range = document.createRange();
+        range.setStart(th, 0);
+        range.setEndBefore(btn);
+        for (const r of range.getClientRects()) {
+          if (r.width <= 0 || r.height <= 0) continue;
+          const xOverlap = r.right > bb.left && r.left < bb.right;
+          const yOverlap = r.bottom > bb.top && r.top < bb.bottom;
+          if (xOverlap && yOverlap) {
+            found.push({
+              width,
+              header: th.textContent,
+              textRight: r.right,
+              markLeft: bb.left,
+            });
+          }
+        }
+      }
+      host.remove();
+    }
+    return found;
+  });
+  expect(overlaps).toEqual([]);
+});

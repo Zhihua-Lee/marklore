@@ -135,6 +135,12 @@ async function reset(page) {
     .click({ position: { x, y: 10 } });
   await expect(tools(page)).toBeHidden();
   await expect(opened(page)).toHaveCount(0);
+  // Removing `.rich-current` re-enables `content-visibility: auto` on visible
+  // blocks, leaving Blink one frame of child hit-test lock until painted.
+  await page.evaluate(
+    () =>
+      new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))),
+  );
 }
 async function saved(page) {
   const count = await page.evaluate(() => window.mock.saved.length);

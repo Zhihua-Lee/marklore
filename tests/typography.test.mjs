@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   readingWeight,
+  bodyFontWeight,
   emphasisWeight,
   fluidFactor,
   noteSize,
@@ -26,6 +27,9 @@ test("automatic reading weight adapts to DPR and theme, and fixed weights avoid 
     assert.ok(emphasisWeight(weight) - weight >= 150);
     assert.ok(emphasisWeight(weight) <= 700);
   }
+  assert.equal(bodyFontWeight(400), 400);
+  assert.equal(bodyFontWeight(450), 400);
+  assert.equal(bodyFontWeight(500), 500);
   assert.equal(readingWeight({ weight: 600, dpr: 1, theme: "light" }), 500);
 });
 

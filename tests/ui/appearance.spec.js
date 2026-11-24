@@ -289,6 +289,7 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
           return {
             family: css.fontFamily,
             weight: css.fontWeight,
+            variation: css.fontVariationSettings,
             style: css.fontStyle,
             size: parseFloat(css.fontSize),
             transform: css.transform,
@@ -309,7 +310,8 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
         };
       });
       expect(typography.prose.family).toContain(family);
-      expect(typography.prose.weight).toBe(weight);
+      expect(typography.prose.weight).toBe(weight === "500" ? "500" : "400");
+      expect(typography.prose.variation).toContain(weight);
       expect(typography.math.family).toContain("KaTeX_Main");
       expect(typography.math.weight).toBe("400");
       expect(typography.bold.weight).toBe("700");

@@ -181,7 +181,7 @@ const parityCases = {
     Array.from(
       { length: 4 },
       (_, i) =>
-        `| Row item alpha ${i + 1} | Repeated explanation text that wraps on narrower panes cleanly. | ${i === 0 ? "Long exception details wrapping nicely. ".repeat(3) : "Standard entry"} |`,
+        `| Row item alpha ${i + 1} | Repeated explanation text that wraps on narrower panes cleanly. | ${i === 0 ? "Long exception details wrapping nicely. ".repeat(5) : "Standard entry"} |`,
     ).join("\n"),
   listEndsTable:
     "- item one\n- item two\n\n  | a | b |\n  | --- | --- |\n  | 1 | 2 |",

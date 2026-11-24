@@ -7,7 +7,7 @@
   width: fit-content;
   max-width: 100%;
   overflow-x: auto;
-  margin: 1.4em 0;
+  margin: var(--gap-block, 0.95em) 0;
   border: 1px solid color-mix(in srgb, var(--table-line) 75%, transparent);
   border-radius: 8px;
   background: var(--table-paper);
@@ -15,6 +15,18 @@
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--table-ink) 22%, transparent)
     transparent;
+}
+:is(.prose, .prose .ProseMirror) > .table-scroll:first-child,
+:is(.prose, .prose .ProseMirror)
+  > :is(.fm-none, .rich-properties:empty)
+  + .table-scroll,
+.prose .section-body > .table-scroll:first-child,
+.prose .section-body > p.anchor-only:first-child + .table-scroll {
+  margin-top: 0;
+}
+:is(.prose, .prose .ProseMirror) > .table-scroll:last-child,
+.prose .section-body > .table-scroll:last-child {
+  margin-bottom: 0;
 }
 .table-scroll table,
 .prose .table-scroll table {
@@ -26,14 +38,14 @@
   border-spacing: 0;
   margin: 0;
   font-size: 1em;
-  line-height: 1.6;
+  line-height: 1.5;
 }
 .table-scroll :is(th, td),
 .prose .table-scroll :is(th, td) {
   border: 0;
   border-bottom: 1px solid
     color-mix(in srgb, var(--table-line) 65%, transparent);
-  padding: 0.62em 1em;
+  padding: 0.45em 0.8em;
   min-width: 2.5em;
   vertical-align: top;
   overflow-wrap: anywhere;
@@ -56,6 +68,7 @@
   background: color-mix(in srgb, var(--table-accent) 5%, var(--table-paper));
   text-align: left;
   font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 .table-scroll tbody tr:last-child > td {
   border-bottom: 0;

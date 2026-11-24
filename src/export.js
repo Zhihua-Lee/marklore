@@ -3,6 +3,7 @@ import { loadMath, mayContainMath } from "./markdown.js";
 import { renderDocument } from "./document-render.js";
 import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
+import { readingWeight, bodyFontWeight, emphasisWeight } from "./typography.js";
 import exportCSS from "./export.css?raw";
 import tableCSS from "./tables.css?raw";
 import imageLayoutCSS from "./image-layout.css?raw";
@@ -183,9 +184,13 @@ export async function exportNote(format, { doc, toc = false }) {
           : typeface === "book"
             ? 'Cambria,Georgia,"Songti SC",SimSun,serif'
             : '"Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif';
-    const weight = Number(
-      document.documentElement.style.getPropertyValue("--note-weight"),
+    const rawWeight = Number(
+      document.documentElement.style.getPropertyValue("--note-wght") ||
+        document.documentElement.style.getPropertyValue("--note-weight"),
     );
+    const wght = readingWeight({ weight: rawWeight || 400 });
+    const weight = bodyFontWeight(wght);
+    const boldWeight = emphasisWeight(wght);
     warnings.push(
       ...[...host.querySelectorAll(".math-error,.diagram-error")].map(
         (element) => element.textContent,
@@ -207,7 +212,7 @@ export async function exportNote(format, { doc, toc = false }) {
         exportCSS +
         tableCSS +
         imageLayoutCSS +
-        `\nbody{font-family:${family};font-weight:${[400, 450, 500, 600].includes(weight) ? weight : 400}} strong{font-weight:${Math.max(600, weight + 100)}}`,
+        `\nbody{font-family:${family};font-weight:${weight};font-variation-settings:"wght" ${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight};font-variation-settings:"wght" ${boldWeight}} pre,.katex{font-variation-settings:normal}`,
       images,
       warnings,
     });

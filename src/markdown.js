@@ -239,6 +239,34 @@ function math(source, display) {
   }
   return formulaEntry(source, display).html;
 }
+// Inserts <wbr class="math-brk"> between top-level KaTeX atom groups so inline
+// formulas kept white-space:nowrap against following punctuation can still wrap.
+function withInlineMathBreaks(html) {
+  const start = html.indexOf('<span class="katex-html"');
+  if (start < 0) return html;
+  const openEnd = html.indexOf(">", start);
+  if (openEnd < 0) return html;
+  const tag = /<\/?span\b[^>]*>/g;
+  tag.lastIndex = openEnd + 1;
+  let out = html.slice(0, openEnd + 1),
+    last = openEnd + 1,
+    depth = 0,
+    bases = 0,
+    match;
+  while ((match = tag.exec(html))) {
+    if (match[0][1] === "/") {
+      if (depth === 0) break;
+      depth--;
+      continue;
+    }
+    if (depth === 0 && /\bkatex-base\b/.test(match[0]) && bases++ > 0) {
+      out += html.slice(last, match.index) + '<wbr class="math-brk">';
+      last = match.index;
+    }
+    depth++;
+  }
+  return out + html.slice(last);
+}
 function typeset(source, display) {
   const normalized = source.replace(
     /\\(begin|end)\{(?:align\*?|equation\*?|gather\*?)\}/g,
@@ -255,6 +283,7 @@ function typeset(source, display) {
       maxSize: 30,
       output: "htmlAndMathml",
     });
+    if (!display) html = withInlineMathBreaks(html);
   } catch (e) {
     html = `<span class="math-error" title="${escape(e.message)}">${escape(source)}</span>`;
   }
@@ -1725,6 +1754,15 @@ function finishHtml(
     target.dataset.editFrom = String(block.from);
     target.dataset.editTo = String(block.to);
     target.dataset.editKind = block.kind;
+  }
+  for (const p of template.content.querySelectorAll("p")) {
+    if (
+      !p.textContent.trim() &&
+      p.children.length > 0 &&
+      [...p.children].every((el) => el.matches("a[id], a[name]"))
+    ) {
+      p.classList.add("anchor-only");
+    }
   }
   return { template, fragment: template.content, deferred };
 }

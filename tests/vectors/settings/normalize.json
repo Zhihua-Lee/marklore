@@ -603,7 +603,7 @@
         "theme": "light",
         "sidebar": true,
         "split": 50,
-        "weight": 600,
+        "weight": 500,
         "navigationSize": 12,
         "tabSize": 11,
         "typeface": "literata",

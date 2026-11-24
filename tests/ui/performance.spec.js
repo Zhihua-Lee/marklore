@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { installFolio } from "./fixtures.js";
 
 test("unchanged mode and recent-tab previews retain live DOM and local state", async ({
   page,
@@ -448,4 +449,82 @@ test("a diagram detached before its queued render can render after tab restorati
     "data-diagram-theme",
     "light",
   );
+});
+
+test("ordinary paragraph keystrokes do not rebuild Edit section metadata while structural edits do", async ({
+  page,
+}) => {
+  await installFolio(page);
+  const text = [
+    "# Title",
+    "",
+    "## Section",
+    "",
+    "### Sub",
+    "",
+    "First body paragraph.",
+    "",
+    "Second body paragraph.",
+    "",
+  ].join("\n");
+  await page.addInitScript((docText) => {
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: [
+          {
+            id: "sec-perf",
+            name: "SecPerf.md",
+            path: "C:/notes/SecPerf.md",
+            version: "v1",
+            text: docText,
+          },
+        ],
+        restored: [],
+        roots: [],
+        settings: { sidebar: false, outline: false, richEdit: true },
+      }),
+    });
+  }, text);
+  await page.goto("/");
+  await page.locator("#content h1").waitFor();
+  await page.keyboard.press("Control+2");
+  await expect(page.locator("#rich .ProseMirror")).toBeVisible();
+
+  const readBuilds = () =>
+    page.evaluate(async () => {
+      const { richSectionBuilds } = await import("/src/rich/sections.js");
+      return richSectionBuilds(window.__richView.state);
+    });
+
+  const initialBuilds = await readBuilds();
+  expect(initialBuilds).toBe(1);
+
+  const firstBody = page.locator("#rich .ProseMirror p").first();
+  await expect(firstBody).toHaveAttribute("data-rich-depth", "1");
+  await expect(firstBody).toHaveAttribute("data-rich-head", "3");
+  await expect(firstBody).toHaveAttribute("data-rich-sec-first", "");
+  await firstBody.click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" appended words");
+  await expect(firstBody).toContainText("appended words");
+
+  // Typing inside the existing paragraph must not rebuild the section map.
+  expect(await readBuilds()).toBe(initialBuilds);
+
+  // Structural edits (splitting a paragraph / making a heading) rebuild once per change.
+  await page.keyboard.press("Enter");
+  const afterSplitBuilds = await readBuilds();
+  expect(afterSplitBuilds).toBe(initialBuilds + 1);
+  const paragraphs = page.locator("#rich .ProseMirror p");
+  await expect(paragraphs.nth(1)).toHaveAttribute("data-rich-depth", "1");
+  await expect(paragraphs.nth(1)).not.toHaveAttribute(
+    "data-rich-sec-first",
+    "",
+  );
+
+  await page.keyboard.type("#### Deep Heading");
+  await expect(
+    page.locator('#rich .ProseMirror h4[data-rich-depth="2"]'),
+  ).toBeVisible();
+  expect(await readBuilds()).toBeGreaterThan(afterSplitBuilds);
 });

@@ -104,7 +104,7 @@ const sampleNote = [
   "",
 ].join("\n");
 
-test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), keeps heading in view, and disables in Edit/Source/flat/empty", async ({
+test("normal note Read mode steps level-by-level with two buttons and Shift+click, keeps heading in view, and disables in Edit/Source/flat/empty", async ({
   page,
 }) => {
   await mountFoldDesk(page, {
@@ -125,12 +125,30 @@ test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), ke
     ],
   });
 
-  const toggle = page.locator("#outline-fold");
-  await expect(toggle).toBeVisible();
-  await expect(toggle).toBeEnabled();
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
-  await expect(toggle).toHaveAttribute("data-state", "foldCollapse");
+  const expand = page.locator("#outline-expand");
+  const collapse = page.locator("#outline-collapse");
+  await expect(expand).toBeVisible();
+  await expect(collapse).toBeVisible();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
+  await expect(expand).toHaveAttribute("aria-label", "展开一层");
+  await expect(collapse).toHaveAttribute("aria-label", "折叠一层");
+  await expect(collapse).toHaveAttribute(
+    "title",
+    "折叠一层（Alt+Shift+[，Shift+点击全部折叠）",
+  );
   await expect(page.locator("#content .ix-controls")).toHaveCount(0);
+
+  // Step 1 (collapse one level): folds ONLY level-2 sections (###), keeping top-level ## open.
+  await collapse.click();
+  await expect(page.locator("#content > .note-section.collapsed")).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator("#content .note-section[data-level='3'].collapsed"),
+  ).toHaveCount(2);
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
 
   // Scroll into Section Two's body so its heading is scrolled above the viewport top.
   await page.evaluate(() => {
@@ -139,8 +157,8 @@ test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), ke
     reader.scrollTop = s2.offsetTop + 120;
   });
 
-  // Step 1 (fold): collapses all .note-section levels, preserves .note-title, brings Section Two heading into view.
-  await toggle.click();
+  // Step 2 (collapse one level): folds top-level ## sections, preserves .note-title, brings Section Two heading into view.
+  await collapse.click();
   await expect(page.locator("#content > .note-title")).toBeVisible();
   await expect(page.locator("#content > .note-title")).not.toHaveClass(
     /collapsed/,
@@ -149,8 +167,8 @@ test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), ke
     3,
   );
   await expect(page.locator("#content .note-section.collapsed")).toHaveCount(5);
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
-  await expect(toggle).toHaveAttribute("data-state", "foldExpand");
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeDisabled();
 
   const section2Visible = await page.evaluate(() => {
     const r = document.getElementById("reader").getBoundingClientRect();
@@ -162,8 +180,8 @@ test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), ke
   expect(section2Visible.top).toBeGreaterThanOrEqual(0);
   expect(section2Visible.bottom).toBeLessThanOrEqual(section2Visible.height);
 
-  // Step 2 (+1): opens level-2 sections (## Section One/Two/Three), keeping level-3 (###) collapsed.
-  await toggle.click();
+  // Step 3 (+1): opens level-2 sections (## Section One/Two/Three), keeping level-3 (###) collapsed.
+  await expand.click();
   await expect(page.locator("#content > .note-section.collapsed")).toHaveCount(
     0,
   );
@@ -173,30 +191,34 @@ test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), ke
   await expect(
     page.locator("#content .note-section[data-level='3'] > h3").first(),
   ).toBeVisible();
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
-  await expect(toggle).toHaveAttribute("data-state", "foldExpand");
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
 
-  // Step 3 (+1): opens level-3 sections -> deepest level open -> button switches to Collapse all.
-  await toggle.click();
+  // Step 4 (+1): opens level-3 sections -> deepest level open -> expand disabled, collapse enabled.
+  await expand.click();
   await expect(page.locator("#content .note-section.collapsed")).toHaveCount(0);
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
-  await expect(toggle).toHaveAttribute("data-state", "foldCollapse");
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
 
-  // Step 4 (fold): folds back to top level.
-  await toggle.click();
+  // Shift+click collapse: folds all levels to top level in one step.
+  await collapse.click({ modifiers: ["Shift"] });
   await expect(page.locator("#content > .note-section.collapsed")).toHaveCount(
     3,
   );
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+  await expect(page.locator("#content .note-section.collapsed")).toHaveCount(5);
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeDisabled();
 
-  // Unfold back out, then test multi-H1 note 3-level cycle (fold -> +1 -> +1 -> +1 -> fold).
+  // Multi-H1 note 3-level step each way (Shift+fold -> +1 -> +1 -> +1 -> -1 -> -1 -> -1).
   await page.locator(".tab-label", { hasText: "MultiH1" }).click();
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
-  await toggle.click();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
+  await collapse.click({ modifiers: ["Shift"] });
   await expect(
     page.locator("#content > .note-section[data-level='1'].collapsed"),
   ).toHaveCount(2);
-  await toggle.click();
+  await expect(collapse).toBeDisabled();
+  await expand.click();
   await expect(
     page.locator("#content > .note-section[data-level='1'].collapsed"),
   ).toHaveCount(0);
@@ -206,31 +228,56 @@ test("normal note Read mode cycles level-by-level (fold -> +1 -> +1 -> fold), ke
   await expect(
     page.locator("#content .note-section[data-level='3'].collapsed"),
   ).toHaveCount(1);
-  await toggle.click();
+  await expand.click();
   await expect(
     page.locator("#content .note-section[data-level='2'].collapsed"),
   ).toHaveCount(0);
   await expect(
     page.locator("#content .note-section[data-level='3'].collapsed"),
   ).toHaveCount(1);
-  await toggle.click();
+  await expand.click();
   await expect(page.locator("#content .note-section.collapsed")).toHaveCount(0);
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
 
-  // Normal note Edit & Source modes disable the button; Read mode re-enables it.
+  await collapse.click();
+  await expect(
+    page.locator("#content .note-section[data-level='3'].collapsed"),
+  ).toHaveCount(1);
+  await expect(
+    page.locator("#content .note-section[data-level='2'].collapsed"),
+  ).toHaveCount(0);
+  await collapse.click();
+  await expect(
+    page.locator("#content .note-section[data-level='2'].collapsed"),
+  ).toHaveCount(1);
+  await expect(
+    page.locator("#content > .note-section[data-level='1'].collapsed"),
+  ).toHaveCount(0);
+  await collapse.click();
+  await expect(
+    page.locator("#content > .note-section[data-level='1'].collapsed"),
+  ).toHaveCount(2);
+  await expect(collapse).toBeDisabled();
+
+  // Normal note Edit & Source modes disable both buttons; Read mode re-enables.
   await page.locator('[data-mode="edit"]').click();
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
   await page.locator('[data-mode="source"]').click();
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
   await page.locator('[data-mode="read"]').click();
-  await expect(toggle).toBeEnabled();
+  await expect(expand).toBeEnabled();
 
-  // Flat note & empty Home state disable the button.
+  // Flat note & empty Home state disable both buttons.
   await page.locator(".tab-label", { hasText: "Flat" }).click();
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
   while ((await page.locator(".tab-close").count()) > 0)
     await page.locator(".tab-close").first().click();
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
 });
 
 test("index view cycles level-by-level with child pages and two subfolder levels (lazy per click), keeps focus and reading position, and disables cleanly", async ({
@@ -337,66 +384,97 @@ test("index view cycles level-by-level with child pages and two subfolder levels
     },
   });
 
-  const toggle = page.locator("#outline-fold");
+  const expand = page.locator("#outline-expand");
+  const collapse = page.locator("#outline-collapse");
   const ix = (title) =>
     page.locator("#content .ix-item").filter({
       has: page.locator(`> .ix-row > .ix-title:text-is("${title}")`),
     });
 
-  // Initial open: Level 1 open, Folder Sub1's Level-2 nested Sub2 starts closed -> sub2 NOT loaded yet.
+  // Initial open: Level 1 open, Child A (L2) open, Folder Sub1's Level-2 nested Sub2 starts closed -> sub2 NOT loaded yet.
   await expect(page.locator("#content .ix-controls")).toHaveCount(0);
   await expect(ix("Child A")).toBeVisible();
   await expect(ix("Folder Sub2")).toHaveAttribute("aria-expanded", "false");
   expect(await page.evaluate(() => window.mock.expandCalls)).toEqual(["sub1"]);
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
-  await expect(toggle).toHaveAttribute("data-state", "foldExpand");
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
 
-  // Click +1 at initial open -> opens Sub2 (lazily loads sub2) -> deepest level now open -> switches to Collapse all.
-  await toggle.click();
+  // Click +1 at initial open -> opens Sub2 (lazily loads sub2) -> deepest level now open -> expand disabled, collapse enabled.
+  await expand.click();
   await expect(ix("Deep Leaf")).toBeVisible();
   expect(await page.evaluate(() => window.mock.expandCalls)).toEqual([
     "sub1",
     "sub2",
   ]);
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
-  await expect(toggle).toHaveAttribute("data-state", "foldCollapse");
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
 
-  // Click Collapse all -> folds EVERY level (1, 2, 3), button becomes Expand one more level.
-  await toggle.click();
+  // Click -1 -> collapses ONLY Level 2 (Child A & Folder Sub2), keeping Level 1 open!
+  await collapse.click();
+  await expect(ix("Topic One")).toHaveAttribute("aria-expanded", "true");
+  await expect(ix("Folder Sub1")).toHaveAttribute("aria-expanded", "true");
+  await expect(ix("Child A")).toHaveAttribute("aria-expanded", "false");
+  await expect(ix("Folder Sub2")).toHaveAttribute("aria-expanded", "false");
+  await expect(ix("Grandchild A1")).toBeHidden();
+  await expect(ix("Deep Leaf")).toBeHidden();
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
+
+  // Click -1 again -> collapses Level 1 -> nothing open -> collapse disabled, expand enabled.
+  await collapse.click();
   await expect(ix("Topic One")).toHaveAttribute("aria-expanded", "false");
   await expect(ix("Folder Sub1")).toHaveAttribute("aria-expanded", "false");
   await expect(ix("Child A")).toBeHidden();
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeDisabled();
 
   // Step 1 (+1): opens ONLY Level 1 -> reveals Level 2 (Child A, Folder Sub2), keeping Level 3 hidden!
-  await toggle.click();
+  await expand.click();
   await expect(ix("Topic One")).toHaveAttribute("aria-expanded", "true");
   await expect(ix("Child A")).toHaveAttribute("aria-expanded", "false");
   await expect(ix("Grandchild A1")).toBeHidden();
   await expect(ix("Folder Sub2")).toHaveAttribute("aria-expanded", "false");
   await expect(ix("Deep Leaf")).toBeHidden();
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
 
-  // Step 2 (+1): opens ONLY Level 2 -> reveals Grandchild A1 & Deep Leaf -> deepest open -> Collapse all.
-  await toggle.click();
+  // Step 2 (+1): opens ONLY Level 2 -> reveals Grandchild A1 & Deep Leaf -> expand disabled.
+  await expand.click();
   await expect(ix("Grandchild A1")).toBeVisible();
   await expect(ix("Deep Leaf")).toBeVisible();
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
 
-  // Edit mode: roving tabindex & active focus move cleanly out of collapsed branches.
+  // Edit mode: roving tabindex & active focus move cleanly out of collapsed branches (both -1 step and Shift+click all).
   await page.locator('[data-mode="edit"]').click();
-  await expect(toggle).toBeEnabled();
-  await ix("Grandchild A1").focus();
-  await toggle.click();
+  await expect(collapse).toBeEnabled();
+  await ix("Grandchild A1").locator(":scope > .ix-row").click();
+  await collapse.click();
+  await expect(ix("Grandchild A1")).toBeHidden();
+  await expect(ix("Child A")).toBeVisible();
+  await expect(
+    page.locator('#content .ix-item[tabindex="0"] > .ix-row > .ix-title'),
+  ).toHaveText("Child A");
+
+  await collapse.click({ modifiers: ["Shift"] });
   await expect(ix("Child A")).toBeHidden();
   await expect(
     page.locator('#content .ix-item[tabindex="0"] > .ix-row > .ix-title'),
   ).toHaveText("Topic One");
+  await expect(collapse).toBeDisabled();
+
   await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(ix("Child A")).toBeVisible();
   await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(ix("Grandchild A1")).toBeVisible();
   await ix("Grandchild A1").focus();
+  await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(ix("Grandchild A1")).toBeHidden();
+  expect(
+    await page.evaluate(
+      () => document.activeElement?.closest(".ix-item")?.dataset.foldKey || "",
+    ),
+  ).toContain("child a.md");
   await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(ix("Child A")).toBeHidden();
   expect(
@@ -405,15 +483,17 @@ test("index view cycles level-by-level with child pages and two subfolder levels
     ),
   ).toContain("topic one");
 
-  // Source mode & flat index disable the button.
+  // Source mode & flat index disable both buttons.
   await page.locator('[data-mode="source"]').click();
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
   await page.locator(".tab-label", { hasText: "SUMMARY.md" }).click();
   await expect(page.locator("#content .ix-item")).toHaveCount(2);
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
 });
 
-test("generated root contents with > 300 rows at depth 3 refuses partial expansion and switches toggle to fold with count tooltip", async ({
+test("generated root contents with > 300 rows at depth 3 refuses partial expansion and disables expand button with count tooltip", async ({
   page,
 }) => {
   const level2Dirs = Array.from({ length: 10 }, (_, i) => `D${i + 1}`);
@@ -492,53 +572,150 @@ test("generated root contents with > 300 rows at depth 3 refuses partial expansi
   await rootSummary.hover();
   await rootSummary.locator("> .folder-index-open").click();
 
-  const toggle = page.locator("#outline-fold");
+  const expand = page.locator("#outline-expand");
+  const collapse = page.locator("#outline-collapse");
   await expect(page.locator("#content .ix-item")).toHaveCount(13); // 2 Top + 1 SmallD0 + 10 D*
-  await expect(toggle).toBeEnabled();
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
 
   // Click +1 at level 2 (next level adds 2 + 10*35 = 352 > 300 rows):
   // nothing partially expands (SmallD0 also stays closed!), no toast loop,
-  // and button switches to Collapse all with exact reason tooltip.
-  await toggle.click();
+  // expand button becomes disabled with exact reason tooltip while collapse stays enabled.
+  await expand.click();
   await expect(page.locator("#toast")).toBeHidden();
   await expect(page.locator("#content .ix-item")).toHaveCount(13);
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
-  await expect(toggle).toHaveAttribute(
+  await expect(expand).toBeDisabled();
+  await expect(expand).toHaveAttribute(
     "title",
-    "全部折叠（下一层有 352 项，请到子目录里展开）",
+    "展开一层（下一层有 352 项，请到子目录里展开）",
   );
-  await expect(toggle).toHaveAttribute("data-state", "foldCollapse");
+  await expect(collapse).toBeEnabled();
 
   // Alt+Shift+] is a clean no-op when next level is too large.
   await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(page.locator("#content .ix-item")).toHaveCount(13);
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
+  await expect(expand).toBeDisabled();
 
-  // Clicking now (in Collapse all state) folds back to Level 1 cleanly.
-  await toggle.click();
+  // Clicking collapse folds back to Level 1 cleanly.
+  await collapse.click();
   await expect(
     page.locator('#content .ix-item[aria-level="1"][aria-expanded="false"]'),
   ).toHaveCount(2);
-  await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+  await expect(expand).toBeEnabled();
+  await expect(expand).toHaveAttribute("title", "展开一层（Alt+Shift+]）");
+  await expect(collapse).toBeDisabled();
 
-  // Clicking again expands Level 1 -> Level 2, keeps Level-3 items closed & hidden (no partial open),
-  // and immediately switches back to Collapse all reason state.
-  await toggle.click();
+  // Clicking expand opens Level 1 -> Level 2, keeps Level-3 items closed & hidden (no partial open),
+  // and immediately disables expand again with the reason tooltip.
+  await expand.click();
   await expect(page.locator("#content .ix-item:visible")).toHaveCount(13);
   await expect(
     page.locator("#content .ix-item").filter({
       has: page.locator('> .ix-row > .ix-title:text-is("SmallD0")'),
     }),
   ).toHaveAttribute("aria-expanded", "false");
-  await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
-  await expect(toggle).toHaveAttribute(
+  await expect(expand).toBeDisabled();
+  await expect(expand).toHaveAttribute(
     "title",
-    "全部折叠（下一层有 352 项，请到子目录里展开）",
+    "展开一层（下一层有 352 项，请到子目录里展开）",
   );
+  await expect(collapse).toBeEnabled();
 });
 
-test("Alt+Shift+[ and Alt+Shift+] work when outline sidebar is hidden, respect disabled/deepest state, and honor English locale", async ({
+test("generated root contents under 300 rows re-expands cleanly after folding to level 1", async ({
+  page,
+}) => {
+  const mkNotes = (prefix, folderId, folderPath, count) =>
+    Array.from({ length: count }, (_, i) => ({
+      name: `${prefix}-${i + 1}.md`,
+      path: `${folderPath}/${prefix}-${i + 1}.md`,
+      directory: false,
+      title: `${prefix} ${i + 1}`,
+    }));
+  const folders = {
+    kb: {
+      folder: { id: "kb", name: "kb", path: "C:/kb" },
+      items: [
+        { name: "FolderA", path: "C:/kb/FolderA", directory: true, id: "dirA" },
+        { name: "FolderB", path: "C:/kb/FolderB", directory: true, id: "dirB" },
+        { name: "Mixed", path: "C:/kb/Mixed", directory: true, id: "mixed" },
+      ],
+    },
+    dirA: {
+      folder: { id: "dirA", name: "FolderA", path: "C:/kb/FolderA" },
+      items: mkNotes("A", "dirA", "C:/kb/FolderA", 35),
+    },
+    dirB: {
+      folder: { id: "dirB", name: "FolderB", path: "C:/kb/FolderB" },
+      items: mkNotes("B", "dirB", "C:/kb/FolderB", 35),
+    },
+    mixed: {
+      folder: { id: "mixed", name: "Mixed", path: "C:/kb/Mixed" },
+      index: { name: "_目录.md", path: "C:/kb/Mixed/_目录.md" },
+      text: "- [M1](M1.md)\n  - [M2](M2.md)\n    - [M3](M3.md)\n",
+      items: [
+        {
+          name: "_目录.md",
+          path: "C:/kb/Mixed/_目录.md",
+          directory: false,
+          index: true,
+        },
+        {
+          name: "M1.md",
+          path: "C:/kb/Mixed/M1.md",
+          directory: false,
+          title: "M1",
+        },
+        {
+          name: "M2.md",
+          path: "C:/kb/Mixed/M2.md",
+          directory: false,
+          title: "M2",
+        },
+        {
+          name: "M3.md",
+          path: "C:/kb/Mixed/M3.md",
+          directory: false,
+          title: "M3",
+        },
+      ],
+    },
+  };
+
+  await mountFoldDesk(page, {
+    folders,
+    rootFolder: { id: "kb", name: "kb", path: "C:/kb" },
+    settings: { sidebar: true, outline: true },
+  });
+
+  const rootSummary = page.locator("#tree details.folder.root > summary");
+  await rootSummary.hover();
+  await rootSummary.locator("> .folder-index-open").click();
+
+  const expand = page.locator("#outline-expand");
+  const collapse = page.locator("#outline-collapse");
+  await expect(page.locator("#content .ix-item:visible")).toHaveCount(74); // 3 top + 35 + 35 + M1
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
+
+  // Fold to level 1, then click expand: all 3 folders (71 level-2 rows) must re-open.
+  await collapse.click();
+  await expect(page.locator("#content .ix-item:visible")).toHaveCount(3);
+  await expect(
+    page.locator('#content .ix-item[aria-level="1"][aria-expanded="false"]'),
+  ).toHaveCount(3);
+  await expect(collapse).toBeDisabled();
+  await expect(expand).toBeEnabled();
+
+  await expand.click();
+  await expect(page.locator("#content .ix-item:visible")).toHaveCount(74);
+  await expect(
+    page.locator('#content .ix-item[aria-level="1"][aria-expanded="true"]'),
+  ).toHaveCount(3);
+  await expect(collapse).toBeEnabled();
+});
+
+test("Alt+Shift+[ and Alt+Shift+] step one level when outline sidebar is hidden, respect disabled/deepest state, and honor English locale", async ({
   page,
 }) => {
   await mountFoldDesk(page, {
@@ -548,10 +725,18 @@ test("Alt+Shift+[ and Alt+Shift+] work when outline sidebar is hidden, respect d
     settings: { outline: false, language: "en" },
   });
 
-  // Hidden #outline-panel: Alt+Shift+] is a no-op at deepest level; Alt+Shift+[ folds; Alt+Shift+] opens one level per press.
+  // Hidden #outline-panel: Alt+Shift+] is a no-op at deepest level; Alt+Shift+[ folds one level per press; Alt+Shift+] opens one level per press.
   await expect(page.locator("#outline-panel")).toBeHidden();
   await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(page.locator("#content .note-section.collapsed")).toHaveCount(0);
+
+  await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(page.locator("#content > .note-section.collapsed")).toHaveCount(
+    0,
+  );
+  await expect(
+    page.locator("#content .note-section[data-level='3'].collapsed"),
+  ).toHaveCount(2);
 
   await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(page.locator("#content > .note-section.collapsed")).toHaveCount(
@@ -570,24 +755,37 @@ test("Alt+Shift+[ and Alt+Shift+] work when outline sidebar is hidden, respect d
   await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(page.locator("#content .note-section.collapsed")).toHaveCount(0);
 
-  // Open #outline-panel in English locale -> English ARIA label & title match state.
+  // Open #outline-panel in English locale -> English ARIA labels & tooltips match state.
   await page.locator("#outline-toggle").click();
-  const toggle = page.locator("#outline-fold");
-  await expect(toggle).toBeVisible();
-  await expect(toggle).toHaveAttribute("aria-label", "Collapse all");
-  await expect(toggle).toHaveAttribute("title", "Collapse all (Alt+Shift+[)");
-  await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-label", "Expand one more level");
-  await expect(toggle).toHaveAttribute(
+  const expand = page.locator("#outline-expand");
+  const collapse = page.locator("#outline-collapse");
+  await expect(expand).toBeVisible();
+  await expect(collapse).toBeVisible();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeEnabled();
+  await expect(expand).toHaveAttribute("aria-label", "Expand one level");
+  await expect(expand).toHaveAttribute(
     "title",
-    "Expand one more level (Alt+Shift+])",
+    "Expand one level (Alt+Shift+])",
   );
+  await expect(collapse).toHaveAttribute("aria-label", "Collapse one level");
+  await expect(collapse).toHaveAttribute(
+    "title",
+    "Collapse one level (Alt+Shift+[; Shift+click collapses all)",
+  );
+  await collapse.click();
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeEnabled();
+  await collapse.click();
+  await expect(expand).toBeEnabled();
+  await expect(collapse).toBeDisabled();
 
   // Disabled in Edit mode of normal note.
   await page.locator('[data-mode="edit"]').click();
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
+  await expect(collapse).toBeDisabled();
   await page.keyboard.press("Alt+Shift+BracketRight");
-  await expect(toggle).toBeDisabled();
+  await expect(expand).toBeDisabled();
 });
 
 for (const theme of ["light", "dark"]) {
@@ -637,33 +835,39 @@ for (const theme of ["light", "dark"]) {
       settings: { theme, sidebar: true, outline: true },
     });
 
-    const toggle = page.locator("#outline-fold");
-    // Normal note: Collapse-all state ([-]) and Expand-one-more-level state ([+]).
-    await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
+    const expand = page.locator("#outline-expand");
+    const collapse = page.locator("#outline-collapse");
+    // Normal note: collapse enabled, expand disabled -> after Shift+collapse: expand enabled, collapse disabled.
+    await expect(expand).toBeDisabled();
+    await expect(collapse).toBeEnabled();
     await page.screenshot({
       path: `.local/fold-shots/note-collapse-${theme}.png`,
     });
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+    await collapse.click({ modifiers: ["Shift"] });
+    await expect(expand).toBeEnabled();
+    await expect(collapse).toBeDisabled();
     await page.screenshot({
       path: `.local/fold-shots/note-expand-${theme}.png`,
     });
 
-    // Index view: Collapse-all state ([-]) and Expand-one-more-level state ([+]).
+    // Index view: all 3 levels start open (expand disabled, collapse enabled) -> after Shift+collapse: expand enabled, collapse disabled.
     await page.locator(".tab-label", { hasText: "_目录.md" }).click();
-    await expect(toggle).toHaveAttribute("aria-label", "全部折叠");
+    await expect(expand).toBeDisabled();
+    await expect(collapse).toBeEnabled();
     await page.screenshot({
       path: `.local/fold-shots/index-collapse-${theme}.png`,
     });
-    await toggle.click();
-    await expect(toggle).toHaveAttribute("aria-label", "展开下一层");
+    await collapse.click({ modifiers: ["Shift"] });
+    await expect(expand).toBeEnabled();
+    await expect(collapse).toBeDisabled();
     await page.screenshot({
       path: `.local/fold-shots/index-expand-${theme}.png`,
     });
 
     if (theme === "light") {
       await page.locator(".tab-label", { hasText: "Flat.md" }).click();
-      await expect(toggle).toBeDisabled();
+      await expect(expand).toBeDisabled();
+      await expect(collapse).toBeDisabled();
       await page.screenshot({
         path: ".local/fold-shots/outline-disabled-light.png",
       });

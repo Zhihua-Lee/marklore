@@ -752,7 +752,20 @@ test("nested index expands lazily to 2 levels and supports expand-all / top-leve
     ),
   ).toHaveText(["NestedPlainDir", "Alpha 标题", "Beta 标题"]);
 
-  // Alt+Shift+[ collapses back to Level 1 cleanly.
+  // Alt+Shift+[ collapses one open level per press (level 2 -> level 1).
+  await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(ixItem(page, "进阶专题")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(ixItem(page, "随笔目录")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(ixItem(page, "第一部分 基础")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(ixItem(page, "第一部分 基础")).toHaveAttribute(
     "aria-expanded",
@@ -760,22 +773,25 @@ test("nested index expands lazily to 2 levels and supports expand-all / top-leve
   );
   await expect(ixItem(page, "进阶专题")).toBeHidden();
 
-  // Outline header toggle expands lazily one level at a time until deepest level (Inner -> 最深一页).
-  await page.getByRole("button", { name: "展开下一层" }).click();
+  // Outline header expand button expands lazily one level at a time until deepest level (Inner -> 最深一页).
+  const expandBtn = page.getByRole("button", { name: "展开一层" });
+  const collapseBtn = page.getByRole("button", { name: "折叠一层" });
+  await expandBtn.click();
   await expect(ixItem(page, "进阶专题")).toBeVisible();
   await expect(ixItem(page, "进阶专题")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
-  await page.getByRole("button", { name: "展开下一层" }).click();
+  await expandBtn.click();
   await expect(ixItem(page, "详细推导")).toBeVisible();
   await expect(ixItem(page, "底层归档")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
-  await page.getByRole("button", { name: "展开下一层" }).click();
+  await expandBtn.click();
   await expect(ixItem(page, "最深一页")).toBeVisible();
-  await expect(page.getByRole("button", { name: "全部折叠" })).toBeVisible();
+  await expect(expandBtn).toBeDisabled();
+  await expect(collapseBtn).toBeEnabled();
 
   // Fold state persists across Edit -> Read mode switch and in session tabs.
   await page.keyboard.press("Control+2");
@@ -1128,7 +1144,16 @@ test("outline lists expanded nested levels and updates as branches fold and unfo
     "写在前面",
   ]);
 
-  // Alt+Shift+[ removes expanded nested levels from outline.
+  // Alt+Shift+[ removes one open level per press from outline.
+  await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(outlineEntries).toHaveText([
+    "第一部分 基础",
+    "导言",
+    "第一节 实数系",
+    "进阶专题",
+    "随笔目录",
+    "写在前面",
+  ]);
   await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 });

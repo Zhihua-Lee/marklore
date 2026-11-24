@@ -752,7 +752,20 @@ test("nested index expands lazily to 2 levels and supports expand-all / top-leve
     ),
   ).toHaveText(["NestedPlainDir", "Alpha 标题", "Beta 标题"]);
 
-  // Alt+Shift+[ collapses back to Level 1 cleanly.
+  // Alt+Shift+[ collapses one open level per press (level 2 -> level 1).
+  await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(ixItem(page, "进阶专题")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(ixItem(page, "随笔目录")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await expect(ixItem(page, "第一部分 基础")).toHaveAttribute(
+    "aria-expanded",
+    "true",
+  );
   await page.keyboard.press("Alt+Shift+BracketLeft");
   await expect(ixItem(page, "第一部分 基础")).toHaveAttribute(
     "aria-expanded",
@@ -760,22 +773,25 @@ test("nested index expands lazily to 2 levels and supports expand-all / top-leve
   );
   await expect(ixItem(page, "进阶专题")).toBeHidden();
 
-  // Outline header toggle expands lazily one level at a time until deepest level (Inner -> 最深一页).
-  await page.getByRole("button", { name: "展开下一层" }).click();
+  // Outline header expand button expands lazily one level at a time until deepest level (Inner -> 最深一页).
+  const expandBtn = page.getByRole("button", { name: "展开一层" });
+  const collapseBtn = page.getByRole("button", { name: "折叠一层" });
+  await expandBtn.click();
   await expect(ixItem(page, "进阶专题")).toBeVisible();
   await expect(ixItem(page, "进阶专题")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
-  await page.getByRole("button", { name: "展开下一层" }).click();
+  await expandBtn.click();
   await expect(ixItem(page, "详细推导")).toBeVisible();
   await expect(ixItem(page, "底层归档")).toHaveAttribute(
     "aria-expanded",
     "false",
   );
-  await page.getByRole("button", { name: "展开下一层" }).click();
+  await expandBtn.click();
   await expect(ixItem(page, "最深一页")).toBeVisible();
-  await expect(page.getByRole("button", { name: "全部折叠" })).toBeVisible();
+  await expect(expandBtn).toBeDisabled();
+  await expect(collapseBtn).toBeEnabled();
 
   // Fold state persists across Edit -> Read mode switch and in session tabs.
   await page.keyboard.press("Control+2");
@@ -1082,6 +1098,15 @@ test("library root without index opens generated read-only contents and never sa
   await expect(ixItem(page, "导言")).toBeVisible();
   await expect(ixItem(page, "写在前面")).toBeVisible();
 
+  // Generated contents outline lists only level-1 entries even when branches expand.
+  const genOutline = page.locator("#outline .outline-entry");
+  await expect(genOutline).toHaveText(["第一部分 目录内标题", "写在前面"]);
+  await ixItem(page, "进阶专题")
+    .locator(":scope > .ix-row > .ix-twisty")
+    .click();
+  await expect(ixItem(page, "深层推导")).toBeVisible();
+  await expect(genOutline).toHaveText(["第一部分 目录内标题", "写在前面"]);
+
   // Generated view shows folder display names with zero trailing slashes.
   const folderTexts = await page
     .locator('#content .ix-item[data-kind="folder"] > .ix-row > .ix-title')
@@ -1099,37 +1124,43 @@ test("library root without index opens generated read-only contents and never sa
   expect(await page.evaluate(() => window.mock.saves)).toEqual([]);
 });
 
-test("outline lists expanded nested levels and updates as branches fold and unfold", async ({
+test("outline lists only level-one entries even as branches fold and unfold, and marks the level-one head across open children", async ({
   page,
 }) => {
   await setupConnected(page, { rootIndexed: true });
   const outlineEntries = page.locator("#outline .outline-entry");
-  await expect(outlineEntries).toHaveText([
-    "第一部分 基础",
-    "导言",
-    "第一节 实数系",
-    "进阶专题",
-    "随笔目录",
-    "写在前面",
-  ]);
+  await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 
-  // Expand Sub -> nested chapters inside Sub appear in outline.
+  // Expand Sub -> nested chapters become visible in the index without cluttering the outline.
   await ixItem(page, "进阶专题")
     .locator(":scope > .ix-row > .ix-twisty")
     .click();
-  await expect(outlineEntries).toHaveText([
-    "第一部分 基础",
-    "导言",
-    "第一节 实数系",
-    "进阶专题",
-    "深层推导",
-    "底层归档",
-    "随笔目录",
-    "写在前面",
-  ]);
+  await expect(ixItem(page, "深层推导")).toBeVisible();
+  await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 
-  // Alt+Shift+[ removes expanded nested levels from outline.
+  // Reading inside open children keeps their level-1 head marked.
+  await page.setViewportSize({ width: 1280, height: 320 });
+  await page.evaluate(() => {
+    const reader = document.querySelector("#reader");
+    const deep = [...document.querySelectorAll(".ix-item .ix-title")].find(
+      (el) => el.textContent === "深层推导",
+    );
+    const row = deep?.closest(".ix-row");
+    if (reader && row) {
+      reader.scrollTop +=
+        row.getBoundingClientRect().top -
+        reader.getBoundingClientRect().top -
+        20;
+    }
+  });
+  await expect(page.locator("#outline [aria-current='location']")).toHaveText(
+    "第一部分 基础",
+  );
+
+  // Folding and unfolding levels keeps the outline at level-1 entries only.
   await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
+  await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 });
 

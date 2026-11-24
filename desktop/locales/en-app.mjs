@@ -674,14 +674,15 @@ export default {
   改名无法重做: "Renames cannot be redone",
   "“{name}”已有修改，未移入回收站":
     "“{name}” has changes and was not moved to the Recycle Bin",
-  展开下一层: "Expand one more level",
-  全部折叠: "Collapse all",
-  "展开下一层（Alt+Shift+]）": "Expand one more level (Alt+Shift+])",
-  "全部折叠（Alt+Shift+[）": "Collapse all (Alt+Shift+[)",
-  "全部折叠（下一层有 {count} 项，请到子目录里展开）":
-    "Collapse all (next level has {count} items; open in a subfolder)",
-  "全部折叠（下一层有 {count} 项，请分别展开）":
-    "Collapse all (next level has {count} items; expand sections individually)",
+  展开一层: "Expand one level",
+  折叠一层: "Collapse one level",
+  "展开一层（Alt+Shift+]）": "Expand one level (Alt+Shift+])",
+  "折叠一层（Alt+Shift+[，Shift+点击全部折叠）":
+    "Collapse one level (Alt+Shift+[; Shift+click collapses all)",
+  "展开一层（下一层有 {count} 项，请到子目录里展开）":
+    "Expand one level (next level has {count} items; open in a subfolder)",
+  "展开一层（下一层有 {count} 项，请分别展开）":
+    "Expand one level (next level has {count} items; expand sections individually)",
   打开此目录: "Open this folder's contents",
   暂无笔记或子文件夹: "No notes or subfolders",
   自动生成的目录为只读视图: "Generated folder contents are read-only",

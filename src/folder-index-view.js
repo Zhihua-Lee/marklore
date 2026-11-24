@@ -1522,7 +1522,7 @@ export function createIndexView({
       ":scope > .ix-row > .ix-twisty, :scope > .ix-children > .ix-rail",
     ))
       control.setAttribute("aria-expanded", String(!closed));
-    foldsChanged(doc);
+    foldsChanged(doc, { domUpdated: true });
     outlineChanged();
     const info = folderOf(doc);
     if (!closed && item.dataset.childId) {
@@ -1541,27 +1541,28 @@ export function createIndexView({
       loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
     }
   }
-  const visibleCollapsedItems = () =>
-    [
+  function extremeVisibleGroup(expanded, pickMin) {
+    const matches = [
       ...host.querySelectorAll(
-        '.ix-item[aria-expanded="false"][data-fold-key]',
+        `.ix-item[aria-expanded="${expanded}"][data-fold-key]`,
       ),
     ].filter((item) => !item.parentElement.closest(".ix-item.closed"));
-  function shallowestCollapsedGroup() {
-    const closed = visibleCollapsedItems();
-    if (!closed.length) return null;
-    let minLevel = Infinity;
-    for (const item of closed) {
+    if (!matches.length) return null;
+    let targetLevel = pickMin ? Infinity : 0;
+    for (const item of matches) {
       const lv = Number(item.getAttribute("aria-level")) || 1;
-      if (lv < minLevel) minLevel = lv;
+      if (pickMin ? lv < targetLevel : lv > targetLevel) targetLevel = lv;
     }
     return {
-      level: minLevel,
-      items: closed.filter(
-        (item) => (Number(item.getAttribute("aria-level")) || 1) === minLevel,
+      level: targetLevel,
+      items: matches.filter(
+        (item) =>
+          (Number(item.getAttribute("aria-level")) || 1) === targetLevel,
       ),
     };
   }
+  const shallowestCollapsedGroup = () => extremeVisibleGroup("false", true);
+  const deepestOpenGroup = () => extremeVisibleGroup("true", false);
   function visibleDescendantsCount(groupBox) {
     let count = 0;
     for (const el of groupBox.children) {
@@ -1644,12 +1645,13 @@ export function createIndexView({
         canCollapse: false,
         tooLargeCount: null,
       };
+    const canCollapse = Boolean(deepestOpenGroup());
     const group = shallowestCollapsedGroup();
     if (!group)
       return {
         foldable: true,
         canExpand: false,
-        canCollapse: true,
+        canCollapse,
         tooLargeCount: null,
       };
     const est = estimateNextLevel(doc, group, folders.get(docKey(doc)));
@@ -1657,24 +1659,24 @@ export function createIndexView({
       return {
         foldable: true,
         canExpand: false,
-        canCollapse: true,
+        canCollapse,
         tooLargeCount: est.count,
       };
     return {
       foldable: true,
       canExpand: true,
-      canCollapse: Boolean(
-        host.querySelector('.ix-item[aria-level="1"][aria-expanded="true"]'),
-      ),
+      canCollapse,
       tooLargeCount: null,
     };
   }
-  function scrollAnchorFor(selector) {
+  function scrollAnchorFor(selector, maxLevel = Infinity) {
     const reader = scroller();
     if (!reader || reader.scrollTop <= 2) return { top0: true };
     const rRect = reader.getBoundingClientRect();
     const candidates = [...host.querySelectorAll(selector)].filter(
-      (el) => !el.parentElement.closest(".ix-item.closed"),
+      (el) =>
+        (Number(el.getAttribute("aria-level")) || 1) <= maxLevel &&
+        !el.parentElement.closest(".ix-item.closed"),
     );
     const targetEl =
       candidates.find(
@@ -1715,17 +1717,11 @@ export function createIndexView({
     const afterTop = targetEl.getBoundingClientRect().top - rRect.top;
     reader.scrollTop += afterTop - wantTop;
   }
-  function collapseLevel1() {
-    const doc = managed();
-    if (!doc) return false;
-    const anchor = scrollAnchorFor('.ix-item[aria-level="1"]');
+  function collapseItems(doc, items, anchor) {
     const st = stateOf(doc);
     st.expandToken++;
     st.tooLarge = null;
-    doc.folds = (doc.folds || []).filter(
-      (k) => !k.startsWith("ix:") && !k.startsWith("+ix:"),
-    );
-    for (const item of host.querySelectorAll(".ix-item[aria-expanded]")) {
+    for (const item of items) {
       const fKey = item.dataset.foldKey;
       const defClosed = item.dataset.defaultClosed === "true";
       setFoldKey(doc, fKey, defClosed, true);
@@ -1757,8 +1753,30 @@ export function createIndexView({
       }
     }
     restoreScrollAnchor(anchor);
-    foldsChanged(doc);
+    foldsChanged(doc, { domUpdated: true });
     outlineChanged();
+  }
+  function collapseOneLevel() {
+    const doc = managed();
+    if (!doc) return false;
+    const group = deepestOpenGroup();
+    if (!group) return false;
+    const anchor = scrollAnchorFor(".ix-item", group.level);
+    collapseItems(doc, group.items, anchor);
+    return true;
+  }
+  function collapseLevel1() {
+    const doc = managed();
+    if (!doc) return false;
+    const anchor = scrollAnchorFor('.ix-item[aria-level="1"]');
+    doc.folds = (doc.folds || []).filter(
+      (k) => !k.startsWith("ix:") && !k.startsWith("+ix:"),
+    );
+    collapseItems(
+      doc,
+      host.querySelectorAll(".ix-item[aria-expanded]"),
+      anchor,
+    );
     return true;
   }
   async function expandOneLevel() {
@@ -1805,7 +1823,6 @@ export function createIndexView({
       setFoldKey(doc, fKey, defClosed, false);
     }
     st.tooLarge = null;
-    foldsChanged(doc);
     rerender(doc);
     restoreScrollAnchor(anchor);
     if (info?.status === "ready")
@@ -1828,24 +1845,19 @@ export function createIndexView({
       if (parent.classList.contains("closed")) fold(parent, false);
     return item || null;
   }
-  // The outline's entries for the index shown: own first two levels, plus
-  // visible expanded nested chapters, by the names the rows show.
+  // The outline's entries for the index shown: its level-one entries,
+  // by the names the rows show.
   function outlineEntries() {
     const doc = getDocument();
     return [...host.querySelectorAll(".ix-item")]
-      .filter((item) => {
-        const level = Number(item.getAttribute("aria-level")) || 1;
-        const nested = item.dataset.nested === "true";
-        if (!nested && !doc?.generated) return level <= 2;
-        return level <= 3 && !item.parentElement?.closest(".ix-item.closed");
-      })
+      .filter((item) => (Number(item.getAttribute("aria-level")) || 1) === 1)
       .map((item) => ({
         key: item.dataset.ixId || null,
         nested: item.dataset.nested === "true" || Boolean(doc?.generated),
         label:
           item.querySelector(":scope > .ix-row > .ix-title")?.textContent ?? "",
         from: Number(item.dataset.from),
-        depth: (Number(item.getAttribute("aria-level")) || 1) - 1,
+        depth: 0,
         line: Number(item.dataset.line),
       }));
   }
@@ -2722,6 +2734,7 @@ export function createIndexView({
     reveal,
     outlineEntries,
     foldState,
+    collapseOneLevel,
     collapseLevel1,
     expandOneLevel,
   };

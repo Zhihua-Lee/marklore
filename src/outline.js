@@ -1,7 +1,7 @@
 // The outline panel (本文目录): the note's headings without its title (the
 // leading level-one heading that names it, markdown.js markTitle), indented
 // below the shallowest level shown; for a folder's index file, also its
-// first two levels of entries, each in its place among the headings. The
+// level-one entries, each in its place among the headings. The
 // entry of the part being read is marked (scroll-spy), and an entry clicked
 // stays marked until the reader scrolls by hand (near a note's end the
 // heading clicked may not reach the top).
@@ -9,8 +9,8 @@
 // The outline's entries: { kind: "heading" | "entry", label, from, level,
 // depth (0 for the shallowest shown), index (a heading's place in
 // `headings`, as its element's data-heading), line (an index entry's line) }.
-// `entries`: an index file's entries ({ label, from, depth, line }, depth 0
-// or 1), or null.
+// `entries`: an index file's level-one entries ({ label, from, depth, line },
+// depth 0), or null.
 export function outlineItems(headings, entries = null) {
   const items = [];
   headings.forEach((heading, index) => {
@@ -64,18 +64,122 @@ export function createOutline({
   let targets = null,
     current = null,
     pinned = null,
-    frame = 0;
+    frame = 0,
+    following = true,
+    sawOffscreen = false,
+    cameBackInView = false,
+    noteScrolled = false,
+    programmaticTop = null;
+  const SCROLL_KEYS = new Set([
+    "ArrowUp",
+    "ArrowDown",
+    "PageUp",
+    "PageDown",
+    "Home",
+    "End",
+  ]);
   const entries = () => [
     ...nav.querySelectorAll(":scope > button[data-from]:not(.outline-anchor)"),
   ];
+  function inView(element) {
+    if (!element?.isConnected) return false;
+    const box = nav.getBoundingClientRect();
+    if (!box.height) return false;
+    const own = element.getBoundingClientRect();
+    return own.top >= box.top - 1 && own.bottom <= box.bottom + 1;
+  }
+  function syncManualScroll() {
+    if (!current) {
+      if (nav.scrollTop > 0) {
+        sawOffscreen = true;
+        cameBackInView = false;
+      }
+      return;
+    }
+    if (!inView(current)) {
+      sawOffscreen = true;
+      cameBackInView = false;
+    } else if (sawOffscreen) {
+      cameBackInView = true;
+    }
+  }
+  function pauseFollowing() {
+    following = false;
+    syncManualScroll();
+  }
+  function resetFollowing() {
+    following = true;
+    sawOffscreen = false;
+    cameBackInView = false;
+    noteScrolled = false;
+  }
+  function rememberProgrammaticScroll() {
+    const target = nav.scrollTop;
+    programmaticTop = target;
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (programmaticTop === target) programmaticTop = null;
+      }),
+    );
+  }
+  for (const name of ["wheel", "touchstart"])
+    nav.addEventListener(
+      name,
+      () => {
+        programmaticTop = null;
+        pauseFollowing();
+      },
+      { passive: true },
+    );
+  nav.addEventListener(
+    "pointerdown",
+    (event) => {
+      if (event.target instanceof Element && event.target.closest("button"))
+        return;
+      programmaticTop = null;
+      pauseFollowing();
+    },
+    { passive: true },
+  );
+  nav.addEventListener(
+    "keydown",
+    (event) => {
+      const isSpace =
+        event.key === " " &&
+        !(event.target instanceof Element && event.target.closest("button"));
+      if (!SCROLL_KEYS.has(event.key) && !isSpace) return;
+      programmaticTop = null;
+      pauseFollowing();
+    },
+    { passive: true },
+  );
+  nav.addEventListener(
+    "scroll",
+    () => {
+      if (
+        programmaticTop !== null &&
+        Math.abs(nav.scrollTop - programmaticTop) <= 2
+      ) {
+        programmaticTop = null;
+        return;
+      }
+      programmaticTop = null;
+      if (!nav.childElementCount) return;
+      if (following) pauseFollowing();
+      else syncManualScroll();
+    },
+    { passive: true },
+  );
   function build(items) {
     pinned = null;
     current = null;
     targets = null;
+    resetFollowing();
     nav.toggleAttribute(
       "data-nested",
       items.some((item) => item.depth > 0),
     );
+    const before = nav.scrollTop;
     nav.replaceChildren(
       ...items.map((item) => {
         const button = document.createElement("button");
@@ -94,12 +198,18 @@ export function createOutline({
         button.dataset.from = String(item.from);
         button.style.paddingLeft = 12 + item.depth * 12 + "px";
         button.onclick = () => {
+          nav.scrollTo({ top: nav.scrollTop, behavior: "instant" });
+          rememberProgrammaticScroll();
+          resetFollowing();
           pin(button);
           go(item, button);
         };
         return button;
       }),
     );
+    nav.scrollTop = 0;
+    if (nav.scrollTop !== before) rememberProgrammaticScroll();
+    else programmaticTop = null;
     schedule();
   }
   // The same entries, at new places in the text.
@@ -111,10 +221,14 @@ export function createOutline({
     schedule();
   }
   function clear() {
+    const before = nav.scrollTop;
     nav.replaceChildren();
     nav.removeAttribute("data-nested");
     targets = null;
     current = pinned = null;
+    resetFollowing();
+    if (before > 0 && nav.scrollTop !== before) rememberProgrammaticScroll();
+    else programmaticTop = null;
   }
   // What each entry stands for on the page: its heading, or its index row.
   function resolve(buttons) {
@@ -160,6 +274,8 @@ export function createOutline({
   }
   function spy() {
     frame = 0;
+    const scrolledNote = noteScrolled;
+    noteScrolled = false;
     const buttons = entries();
     let now = null;
     if (pinned?.isConnected) now = pinned;
@@ -188,7 +304,10 @@ export function createOutline({
         );
       else now = current?.isConnected ? current : null;
     }
+    if (!following && scrolledNote && cameBackInView && inView(current))
+      resetFollowing();
     mark(now);
+    if (!following) syncManualScroll();
   }
   // The last entry whose place is above the reading line of `scroller`
   // (pairs in the order of the page).
@@ -203,26 +322,31 @@ export function createOutline({
     }
     return low ? pairs[low - 1][0] : null;
   }
-  function mark(now) {
-    if (now === current) return;
-    current?.removeAttribute("aria-current");
-    current = now;
-    if (!now) return;
-    now.setAttribute("aria-current", "location");
+  function mark(now, reveal = false) {
+    if (now !== current) {
+      current?.removeAttribute("aria-current");
+      current = now;
+      if (!now) return;
+      now.setAttribute("aria-current", "location");
+    } else if (!now || !reveal) return;
+    if (!following) return;
     // Kept in view in the panel (scrolling only the panel).
     const box = nav.getBoundingClientRect(),
       own = now.getBoundingClientRect();
     if (!box.height) return;
+    const before = nav.scrollTop;
     if (own.top < box.top) nav.scrollTop -= box.top - own.top + 8;
     else if (own.bottom > box.bottom)
       nav.scrollTop += own.bottom - box.bottom + 8;
+    if (nav.scrollTop !== before) rememberProgrammaticScroll();
   }
-  function schedule() {
+  function schedule(fromNoteScroll = false) {
+    if (fromNoteScroll) noteScrolled = true;
     if (!frame) frame = requestAnimationFrame(spy);
   }
   function pin(button) {
     pinned = button;
-    mark(button);
+    mark(button, true);
   }
   // The reader scrolls by hand: the place read decides again.
   const release = () => {

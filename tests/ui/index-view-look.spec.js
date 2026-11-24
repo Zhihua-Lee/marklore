@@ -194,12 +194,13 @@ async function mountFolderTree(
     withExcerpts = true,
     theme = "light",
     width = 1280,
+    openFolderA = false,
   } = {},
 ) {
   await page.setViewportSize({ width, height: 860 });
   await installFolio(page);
   await page.addInitScript(
-    ({ rootIndexed, withExcerpts, theme }) => {
+    ({ rootIndexed, withExcerpts, theme, openFolderA }) => {
       localStorage.setItem("folio-language", "zh");
       const files = new Map();
       const mkPages = (prefix, count, folderId, folderPath) => {
@@ -450,18 +451,20 @@ async function mountFolderTree(
           null
         );
       };
-      const incoming = rootIndexed
-        ? [files.get("C:/Lib/_目录.md")]
-        : [
-            {
-              id: "f-sample",
-              folderId: "dirA",
-              name: "FolderA/分析-01.md",
-              path: "C:/Lib/FolderA/分析-01.md",
-              text: "# 示例\n",
-              version: "v1",
-            },
-          ];
+      const incoming = openFolderA
+        ? [files.get("C:/Lib/FolderA/_目录.md")]
+        : rootIndexed
+          ? [files.get("C:/Lib/_目录.md")]
+          : [
+              {
+                id: "f-sample",
+                folderId: "dirA",
+                name: "FolderA/分析-01.md",
+                path: "C:/Lib/FolderA/分析-01.md",
+                text: "# 示例\n",
+                version: "v1",
+              },
+            ];
       window.folio = folioTest.mock({
         ready: async () => ({
           incoming,
@@ -477,7 +480,7 @@ async function mountFolderTree(
           settings: {
             language: "zh",
             theme,
-            sidebar: !rootIndexed,
+            sidebar: !rootIndexed && !openFolderA,
             outline: true,
             richEdit: true,
             editSplit: false,
@@ -548,10 +551,10 @@ async function mountFolderTree(
         read: async () => ({ unchanged: true }),
       });
     },
-    { rootIndexed, withExcerpts, theme },
+    { rootIndexed, withExcerpts, theme, openFolderA },
   );
   await page.goto("/");
-  if (!rootIndexed) {
+  if (!rootIndexed && !openFolderA) {
     const rootSummary = page.locator("#tree details.folder.root > summary");
     await rootSummary.hover();
     await rootSummary.locator("> .folder-index-open").click();
@@ -600,6 +603,7 @@ async function measureAlignment(page) {
             rail.getBoundingClientRect().width / 2 -
             (twR.left + twR.width / 2)
           : null;
+      const ts = getComputedStyle(title);
       return {
         label: title.textContent.trim(),
         level: Number(it.getAttribute("aria-level")),
@@ -607,6 +611,8 @@ async function measureAlignment(page) {
         expanded: it.getAttribute("aria-expanded"),
         missing: it.classList.contains("missing"),
         deltaY: twR.top + twR.height / 2 - (textR.top + textR.height / 2),
+        fontSize: parseFloat(ts.fontSize),
+        fontWeight: Number(ts.fontWeight),
         rowTop: rowR.top,
         rowBottom: rowR.bottom,
         rowHeight: rowR.height,
@@ -656,7 +662,8 @@ for (const opts of [
   }) => {
     await mountFolderTree(page, opts);
     // Fold to level 1 so top-level folders display page counts (e.g. "35 页").
-    await page.keyboard.press("Alt+Shift+BracketLeft");
+    await page.locator("#outline-collapse").click({ modifiers: ["Shift"] });
+    await expect(row(page, "数学分析笔记").locator(".ix-count")).toBeVisible();
     await expect(row(page, "数学分析笔记").locator(".ix-count")).toHaveText(
       "35 页",
     );
@@ -670,16 +677,39 @@ for (const opts of [
           ).toBeAttached();
         }
       }
-      // Verify folded level-1 state: both triangles level and group gap preserved cleanly.
+      // Verify folded level-1 state: equal level-1 pitch (±0.5 px), zero gap between folded entries, and equal row heights.
       const folded = await measureAlignment(page);
-      expect(folded.level1Gap).toBeGreaterThan(8);
+      expect(Math.abs(folded.level1Gap)).toBeLessThanOrEqual(0.5);
+      const l1Folded = folded.rows.filter(
+        (r) =>
+          r.level === 1 && (!r.missing || opts.width >= 800 || mode === "read"),
+      );
+      const unwrappedPitches = [];
+      for (let i = 1; i < folded.rows.length; i++) {
+        const prev = folded.rows[i - 1];
+        const curr = folded.rows[i];
+        if (
+          prev.level === 1 &&
+          curr.level === 1 &&
+          (!prev.missing || opts.width >= 800 || mode === "read")
+        )
+          unwrappedPitches.push(curr.rowTop - prev.rowTop);
+      }
+      expect(
+        Math.max(...unwrappedPitches) - Math.min(...unwrappedPitches),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.max(...l1Folded.map((r) => r.rowHeight)) -
+          Math.min(...l1Folded.map((r) => r.rowHeight)),
+      ).toBeLessThanOrEqual(0.5);
       for (const r of folded.rows) {
         expect(
           Math.abs(r.deltaY),
           `${mode} folded ${r.label}`,
         ).toBeLessThanOrEqual(1);
+        const maxExtra = r.level === 1 && !r.hasTwisty ? 7 : 6;
         if (!r.missing || opts.width >= 800 || mode === "read") {
-          expect(r.rowHeight - r.titleHeight).toBeLessThanOrEqual(6);
+          expect(r.rowHeight - r.titleHeight).toBeLessThanOrEqual(maxExtra);
         }
       }
 
@@ -696,6 +726,12 @@ for (const opts of [
       await expect(row(page, "极限定理与柯西准则")).toBeVisible();
       await ensureExpanded("极限定理与柯西准则");
       await expect(row(page, "例题：上确界计算")).toBeVisible();
+      if (opts.rootIndexed) {
+        await ensureExpanded("普通一级笔记");
+        await expect(row(page, "二级子笔记")).toBeVisible();
+        await ensureExpanded("二级子笔记");
+        await expect(row(page, "三级嵌套笔记")).toBeVisible();
+      }
       const itemA = item(page, "数学分析笔记");
       if ((await itemA.getAttribute("aria-expanded")) === "true") {
         await itemA.locator(":scope > .ix-row > .ix-twisty").click();
@@ -711,6 +747,33 @@ for (const opts of [
       expect(
         expanded.rows.some((r) => r.hasTwisty && r.expanded === "true"),
       ).toBe(true);
+      // Equal row heights per level within 0.5 px across row kinds (arrow/no-arrow, count, missing, excerpt, tools).
+      for (const lv of [1, 2, 3]) {
+        const atLv = expanded.rows.filter(
+          (r) =>
+            r.level === lv &&
+            (!r.missing || opts.width >= 800 || mode === "read"),
+        );
+        if (atLv.length >= 2) {
+          const hs = atLv.map((r) => r.rowHeight);
+          expect(
+            Math.max(...hs) - Math.min(...hs),
+            `${mode} level ${lv} heights`,
+          ).toBeLessThanOrEqual(0.5);
+        }
+      }
+      // Open group spacing appears above expanded level-1 group and after its last child.
+      const mixedRow = expanded.rows.find((r) => r.label === "混合章节");
+      const algRow = expanded.rows.find((r) => r.label === "高等代数笔记");
+      const note3Row = expanded.rows.find(
+        (r) => r.label === "例题：上确界计算",
+      );
+      const afterMixed = expanded.rows.find(
+        (r) => r.level === 1 && r.rowTop > note3Row.rowBottom,
+      );
+      expect(mixedRow.rowTop - algRow.rowBottom).toBeGreaterThan(8);
+      expect(afterMixed.rowTop - note3Row.rowBottom).toBeGreaterThan(8);
+
       for (const r of expanded.rows) {
         expect(
           Math.abs(r.deltaY),
@@ -720,15 +783,72 @@ for (const opts of [
           expect(Math.abs(r.railOffsetX)).toBeLessThanOrEqual(1);
         }
         // Normal single-line rows stay snug around their title; only wrapped missing repairs may grow.
+        const maxExtra = r.level === 1 && !r.hasTwisty ? 7 : 6;
         if (!r.missing || opts.width >= 800 || mode === "read") {
           expect(
             r.rowHeight - r.titleHeight,
             `${mode} ${r.label}`,
-          ).toBeLessThanOrEqual(6);
+          ).toBeLessThanOrEqual(maxExtra);
         }
       }
-      // Collapse back to level 1 before switching mode.
-      await page.keyboard.press("Alt+Shift+BracketLeft");
+      // Collapse all levels back to level 1 before switching mode.
+      await page.locator("#outline-collapse").click({ modifiers: ["Shift"] });
     }
   });
 }
+
+test("same typography for a page in a flat index and in a nested one, and equal folded level-1 pitch with loose notes", async ({
+  page,
+}) => {
+  // 1. Nested written root: FolderA pages at level 2 (15.2px/500), heads at level 1 (16.72px/600), non-heads at level 1 (15.2px/500).
+  await mountFolderTree(page, {
+    rootIndexed: true,
+    withExcerpts: true,
+    theme: "light",
+  });
+  const nestedMetrics = await measureAlignment(page);
+  const nestedHead = nestedMetrics.rows.find((r) => r.label === "数学分析笔记");
+  const nestedPage = nestedMetrics.rows.find((r) => r.label === "分析 第 1 节");
+  const nestedLoose = nestedMetrics.rows.find((r) => r.label === "缺失页面");
+  expect(nestedHead.fontSize).toBeCloseTo(16.72, 1);
+  expect(nestedHead.fontWeight).toBe(600);
+  expect(nestedPage.fontSize).toBeCloseTo(15.2, 1);
+  expect(nestedPage.fontWeight).toBe(500);
+  expect(nestedLoose.fontSize).toBeCloseTo(15.2, 1);
+  expect(nestedLoose.fontWeight).toBe(500);
+
+  // 2. Generated root with folders (heads) + loose root notes (non-heads): when folded, all level-1 rows have equal pitch (±0.5 px).
+  await mountFolderTree(page, {
+    rootIndexed: false,
+    withExcerpts: true,
+    theme: "light",
+  });
+  await page.locator("#outline-collapse").click({ modifiers: ["Shift"] });
+  await expect(row(page, "数学分析笔记").locator(".ix-count")).toHaveText(
+    "35 页",
+  );
+  const genFolded = await measureAlignment(page);
+  const genL1 = genFolded.rows.filter((r) => r.level === 1);
+  const genHead = genL1.find((r) => r.label === "数学分析笔记");
+  const genLoose = genL1.find((r) => r.label === "普通一级笔记");
+  expect(genHead.fontSize).toBeCloseTo(16.72, 1);
+  expect(genHead.fontWeight).toBe(600);
+  expect(genLoose.fontSize).toBeCloseTo(15.2, 1);
+  expect(genLoose.fontWeight).toBe(500);
+  const genPitches = genL1.slice(1).map((r, i) => r.rowTop - genL1[i].rowTop);
+  expect(Math.max(...genPitches) - Math.min(...genPitches)).toBeLessThanOrEqual(
+    0.5,
+  );
+
+  // 3. FolderA's own flat index: its pages have the exact same size & weight as under the root.
+  await mountFolderTree(page, {
+    rootIndexed: true,
+    withExcerpts: true,
+    theme: "light",
+    openFolderA: true,
+  });
+  const flatMetrics = await measureAlignment(page);
+  const flatPage = flatMetrics.rows.find((r) => r.label === "分析 第 1 节");
+  expect(flatPage.fontSize).toBe(nestedPage.fontSize);
+  expect(flatPage.fontWeight).toBe(nestedPage.fontWeight);
+});

@@ -3,6 +3,7 @@
 // Edit mode: a table in its scroll frame, a code block in its frame with
 // the language and the copy and wrap buttons (code-blocks.js wires those).
 import { decorateCodeBlocks } from "../code-blocks.js";
+import { tableChanged } from "../table-layout.js";
 import { t } from "../../desktop/i18n.mjs";
 import { codeLanguages } from "../highlighting.js";
 
@@ -254,16 +255,23 @@ function languageMenu(field) {
 }
 
 export class TableView {
-  constructor() {
+  constructor(node) {
     this.dom = document.createElement("div");
     this.dom.className = "table-scroll";
-    const table = document.createElement("table");
+    this.table = document.createElement("table");
     this.contentDOM = document.createElement("tbody");
-    table.append(this.contentDOM);
-    this.dom.append(table);
+    this.table.append(this.contentDOM);
+    this.dom.append(this.table);
+    this.cols = node?.firstChild?.childCount ?? 0;
   }
   update(node) {
-    return node.type.name === "table";
+    if (node.type.name !== "table") return false;
+    const cols = node.firstChild?.childCount ?? 0;
+    if (cols !== this.cols) {
+      this.cols = cols;
+      tableChanged(this.table);
+    }
+    return true;
   }
   ignoreMutation(mutation) {
     if (mutation.type === "selection") return false;

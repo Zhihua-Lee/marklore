@@ -278,6 +278,15 @@ createTabPreview({
 // First: a new width un-skips blocks before tables are measured for it.
 skipOffscreenBlocks($("#content"), $("#reader"));
 const scheduleTableLayout = watchTableLayout($("#content"), $("#reader"));
+const scheduleRichTableLayout = watchTableLayout(
+  $("#rich"),
+  $("#rich-reader"),
+  {
+    sortable: false,
+    anchor: () => richEditor.anchor(),
+    restore: (a) => richEditor.scrollTo(a),
+  },
+);
 watchSections($("#content"));
 // The outline panel (outline.js).
 const outline = createOutline({
@@ -800,6 +809,7 @@ function showRich(doc) {
       return;
     }
     if (active !== doc || !richActive(doc)) return;
+    scheduleRichTableLayout(true);
     if (currentAnchor?.id === doc.id) richEditor.scrollTo(currentAnchor.anchor);
     marks?.rendered();
   });

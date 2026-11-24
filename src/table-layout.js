@@ -50,14 +50,14 @@ export function tableChanged(table) {
 export function optimizeTable(table, beforeChange) {
   if (!table.isConnected || !table.getClientRects().length) return false;
   // Looked at again once its formulas are drawn.
-  if (table.querySelector("[data-folio-math]")) return false;
+  if (table.querySelector("[data-folio-math], .math-pending")) return false;
   settled.add(table);
   const wrapper = table.closest(".table-scroll"),
     parent = wrapper?.parentElement;
   if (
     !parent ||
     table.querySelector(
-      "table, img, pre, details, [data-folio-math], [colspan]:not([colspan='1']), [rowspan]:not([rowspan='1'])",
+      "table, img, pre, details, [data-folio-math], .math-pending, [colspan]:not([colspan='1']), [rowspan]:not([rowspan='1'])",
     )
   )
     return false;
@@ -120,41 +120,44 @@ export function optimizeTable(table, beforeChange) {
     cells.flat().reduce((sum, cell) => sum + cell.textContent.length, 0) > 50000
   )
     return false;
-  const nativeHeight = table.getBoundingClientRect().height;
-  const nativeWidths = [...rows[0].cells].map((cell) => cell.offsetWidth);
-  const probe = document.createElement("table");
-  probe.className = "table-measure";
-  probe.setAttribute("aria-hidden", "true");
-  probe.inert = true;
-  probe.style.cssText =
-    "position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;display:block;width:0;max-width:none;margin:0;";
-  const body = document.createElement("tbody"),
-    row = document.createElement("tr");
-  probe.append(body);
-  body.append(row);
-  const probes = cells.map((column) =>
-    column.map((cell) => {
-      const copy = cell.cloneNode(true);
-      copy.removeAttribute("id");
-      for (const node of copy.querySelectorAll(
-        "[id], [data-from], [data-to], [data-block-from], [data-block-to], [data-text-from], [data-text-to]",
-      )) {
-        node.removeAttribute("id");
-        for (const attribute of [...node.attributes])
-          if (attribute.name.startsWith("data-"))
-            node.removeAttribute(attribute.name);
-      }
-      for (const attribute of [...copy.attributes])
-        if (attribute.name.startsWith("data-"))
-          copy.removeAttribute(attribute.name);
-      copy.style.cssText =
-        "position:absolute;display:block;box-sizing:border-box;min-width:0;max-width:none;white-space:normal;overflow-wrap:normal;word-break:normal;width:max-content;";
-      row.append(copy);
-      return copy;
-    }),
-  );
-  wrapper.append(probe);
+  const prevContentVisibility = wrapper.style.contentVisibility;
+  wrapper.style.contentVisibility = "visible";
+  let probe;
   try {
+    const nativeHeight = table.getBoundingClientRect().height;
+    const nativeWidths = [...rows[0].cells].map((cell) => cell.offsetWidth);
+    probe = document.createElement("table");
+    probe.className = "table-measure";
+    probe.setAttribute("aria-hidden", "true");
+    probe.inert = true;
+    probe.style.cssText =
+      "position:absolute;left:0;top:0;visibility:hidden;pointer-events:none;display:block;width:0;max-width:none;margin:0;";
+    const body = document.createElement("tbody"),
+      row = document.createElement("tr");
+    probe.append(body);
+    body.append(row);
+    const probes = cells.map((column) =>
+      column.map((cell) => {
+        const copy = cell.cloneNode(true);
+        copy.removeAttribute("id");
+        for (const node of copy.querySelectorAll(
+          "[id], [data-from], [data-to], [data-block-from], [data-block-to], [data-text-from], [data-text-to]",
+        )) {
+          node.removeAttribute("id");
+          for (const attribute of [...node.attributes])
+            if (attribute.name.startsWith("data-"))
+              node.removeAttribute(attribute.name);
+        }
+        for (const attribute of [...copy.attributes])
+          if (attribute.name.startsWith("data-"))
+            copy.removeAttribute(attribute.name);
+        copy.style.cssText =
+          "position:absolute;display:block;box-sizing:border-box;min-width:0;max-width:none;white-space:normal;overflow-wrap:normal;word-break:normal;width:max-content;";
+        row.append(copy);
+        return copy;
+      }),
+    );
+    wrapper.append(probe);
     const natural = probes.map(
       (column) => Math.max(...column.map((cell) => cell.offsetWidth)) + 2,
     );
@@ -219,12 +222,21 @@ export function optimizeTable(table, beforeChange) {
     }
     return true;
   } finally {
-    probe.remove();
+    probe?.remove();
+    wrapper.style.contentVisibility = prevContentVisibility;
   }
 }
 
-export function watchTableLayout(host, scroller) {
-  wireSortableTables(host);
+export function watchTableLayout(
+  host,
+  scroller,
+  {
+    sortable = true,
+    anchor: readAnchor = () => visibleAnchor(scroller),
+    restore = (a) => restoreAnchor(scroller, a),
+  } = {},
+) {
+  if (sortable) wireSortableTables(host);
   let timer,
     idle = null,
     lastScroll = 0,
@@ -244,7 +256,7 @@ export function watchTableLayout(host, scroller) {
     // The reading line is measured only when a table actually changes: the
     // measurement hit-tests the page, and most passes find nothing to do.
     let anchor = null;
-    const keep = () => (anchor ??= visibleAnchor(scroller)),
+    const keep = () => (anchor ??= readAnchor()),
       budget = Math.max(2, Math.min(8, deadline?.timeRemaining() ?? 8)),
       tables = host.querySelectorAll(
         ".table-scroll > table:not(.table-measure)",
@@ -266,7 +278,7 @@ export function watchTableLayout(host, scroller) {
       changed = optimizeTable(tables[i], keep) || changed;
     }
     if (done) next = 0;
-    if (changed && anchor) restoreAnchor(scroller, anchor);
+    if (changed && anchor) restore(anchor);
     if (!done) scheduleBackfill();
   };
   const scheduleBackfill = () => {
@@ -293,7 +305,7 @@ export function watchTableLayout(host, scroller) {
       function work() {
         if (cursor >= pending.length || !host.getClientRects().length) return;
         let anchor = null;
-        const keep = () => (anchor ??= visibleAnchor(scroller)),
+        const keep = () => (anchor ??= readAnchor()),
           start = performance.now();
         let changed = false;
         do {
@@ -307,7 +319,7 @@ export function watchTableLayout(host, scroller) {
               changed = optimizeTable(table, keep) || changed;
           }
         } while (cursor < pending.length && performance.now() - start < 12);
-        if (changed && anchor) restoreAnchor(scroller, anchor);
+        if (changed && anchor) restore(anchor);
         if (cursor < pending.length) timer = setTimeout(work, 0);
         else {
           timer = null;
@@ -327,7 +339,7 @@ export function watchTableLayout(host, scroller) {
       start = performance.now();
     let anchor = null,
       changed = false;
-    const keep = () => (anchor ??= visibleAnchor(scroller));
+    const keep = () => (anchor ??= readAnchor());
     const tables = [
       ...host.querySelectorAll(".table-scroll > table:not(.table-measure)"),
     ]
@@ -348,7 +360,7 @@ export function watchTableLayout(host, scroller) {
       if (performance.now() - start > 12) break;
       changed = optimizeTable(table, keep) || changed;
     }
-    if (changed && anchor) restoreAnchor(scroller, anchor);
+    if (changed && anchor) restore(anchor);
   };
   new ResizeObserver(([entry]) => {
     const width = Math.round(entry.contentRect.width);
@@ -399,5 +411,8 @@ export function watchTableLayout(host, scroller) {
     for (const table of host.querySelectorAll("table")) cache.delete(table);
     schedule();
   });
-  return schedule;
+  return (immediate = false) => {
+    if (immediate && host.getClientRects().length) layoutAll();
+    schedule();
+  };
 }

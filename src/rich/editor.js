@@ -674,7 +674,7 @@ export function createRichEditor({
     image: (n) => new ImageView(n, current?.fileId),
     task_box: (n, v, g) => new TaskView(n, v, g),
     code_block: (n, v, g) => new CodeView(n, v, g),
-    table: () => new TableView(),
+    table: (n) => new TableView(n),
     column: (n) => new ColumnView(n),
   };
   const options = () => ({ fileId: current?.fileId, theme: getTheme() });

@@ -145,8 +145,13 @@ export class DrawnView {
     if (node.type === S.math_inline || node.type === S.math_display) {
       const display = node.type === S.math_display;
       dom.className = display ? "math-block rich-drawn" : "formula rich-drawn";
-      const typeset = () =>
+      const typeset = () => {
         dom.replaceChildren(formulaFragmentFor(node.attrs.tex, display));
+        if (dom.closest("table"))
+          dom.dispatchEvent(
+            new CustomEvent("folio:math-rendered", { bubbles: true }),
+          );
+      };
       if (!watcher || (!whole && !composing())) return typeset();
       const wait = document.createElement("span");
       wait.className = "math-pending";

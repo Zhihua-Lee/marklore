@@ -97,13 +97,12 @@
 #rich .soft-break {
   white-space: normal;
 }
-#rich table {
-  border-collapse: collapse;
-}
+/* tables.css sets border-collapse: separate on .table-scroll tables;
+   prosemirror-tables resets min-width to an unset variable, so match tables.css. */
 #rich td,
 #rich th {
   position: relative;
-  min-width: 3em;
+  min-width: 2.5em;
 }
 #rich .selectedCell::after {
   content: "";
@@ -190,13 +189,17 @@
 #rich .ProseMirror > * {
   contain-intrinsic-size: auto 3em;
 }
-#rich .ProseMirror > :not(.rich-current, .ProseMirror-gapcursor, ul, ol) {
+#rich
+  .ProseMirror
+  > :not(.rich-current, .ProseMirror-gapcursor, ul, ol, .table-scroll) {
   content-visibility: auto;
 }
-/* Lists too, once they have been laid out (editor.js adds the class a frame
-   after a note is put in): a long list skipped before it was ever measured
-   would stand at 3em, and the scroll bar would change as it is reached. */
-#rich.rich-lists-skip .ProseMirror > :is(ul, ol):not(.rich-current) {
+/* Lists and tables too, once they have been laid out (editor.js adds the class
+   a frame after a note is put in): skipped before measurement, they would keep
+   3em/intrinsic sizes and report wrong cell widths to watchTableLayout. */
+#rich.rich-lists-skip
+  .ProseMirror
+  > :is(ul, ol, .table-scroll):not(.rich-current) {
   content-visibility: auto;
 }
 /* Skipping contains a list: its items' margins no longer collapse through
@@ -220,6 +223,98 @@
 #rich
   .ProseMirror
   > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
   > li:first-child
   > :is(ul, ol):first-child
   > li:first-child
@@ -257,8 +352,129 @@
   > li:last-child
   > :is(ul, ol):last-child
   > li:last-child
+  > :last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
   > :last-child {
   margin-bottom: 0;
+}
+/* A leading heading (other than a lone title) starts a section in the
+   reading view (.note-section:first-child, .front-matter + .note-section),
+   so its top margin is zero; its bottom margin matches .note-section's. */
+#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child,
+#rich
+  .ProseMirror
+  > .ProseMirror-gapcursor:first-child
+  + :is(h1, h2, h3, h4, h5, h6),
+#rich
+  .ProseMirror
+  > .raw-block[data-kind="frontmatter"]:first-child
+  + :is(h1, h2, h3, h4, h5, h6),
+#rich
+  .ProseMirror
+  > .ProseMirror-gapcursor:first-child
+  + .raw-block[data-kind="frontmatter"]
+  + :is(h1, h2, h3, h4, h5, h6) {
+  margin-top: 0;
+}
+#rich .ProseMirror > :is(h2, h3, h4, h5, h6):first-child,
+#rich
+  .ProseMirror
+  > .ProseMirror-gapcursor:first-child
+  + :is(h2, h3, h4, h5, h6),
+#rich
+  .ProseMirror
+  > .raw-block[data-kind="frontmatter"]:first-child
+  + :is(h2, h3, h4, h5, h6),
+#rich
+  .ProseMirror
+  > .ProseMirror-gapcursor:first-child
+  + .raw-block[data-kind="frontmatter"]
+  + :is(h2, h3, h4, h5, h6),
+#rich .ProseMirror > h1:first-child:has(~ h1),
+#rich .ProseMirror > .ProseMirror-gapcursor:first-child + h1:has(~ h1),
+#rich
+  .ProseMirror
+  > .raw-block[data-kind="frontmatter"]:first-child
+  + h1:has(~ h1),
+#rich
+  .ProseMirror
+  > .ProseMirror-gapcursor:first-child
+  + .raw-block[data-kind="frontmatter"]
+  + h1:has(~ h1) {
+  margin-bottom: 0.65em;
 }
 /* The caret between two blocks (before or after a table, a formula...): a
    line across the note, so it is seen at once. */
@@ -291,7 +507,7 @@
 /* <details> folds: the marker before the summary folds and unfolds. */
 #rich .rich-details {
   position: relative;
-  margin: 0.6em 0;
+  margin: 1.1em 0;
   padding: 0.1em 0 0.1em 1.3em;
   border-left: 2px solid var(--line);
 }
@@ -452,6 +668,15 @@
   outline: none;
 }
 /* The note's properties (properties.js): values change in place. */
+#rich .rich-properties {
+  white-space: normal;
+}
+#rich .rich-properties .front-matter {
+  margin-bottom: 0;
+}
+#rich .rich-properties:has(> details.front-matter) {
+  margin-bottom: calc(12.5px * 1.1);
+}
 #rich .rich-properties .fm-value[role="button"] {
   cursor: text;
   border-radius: 4px;

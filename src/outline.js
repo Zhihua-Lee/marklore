@@ -32,6 +32,8 @@ export function outlineItems(headings, entries = null) {
         from: entry.from,
         depth: entry.depth,
         line: entry.line,
+        key: entry.key ?? null,
+        nested: Boolean(entry.nested),
       });
     items.sort((a, b) => a.from - b.from);
     // An entry is a step below the heading above it; before any, below the
@@ -85,6 +87,7 @@ export function createOutline({
           button.className = "outline-entry";
           button.textContent = item.label;
           button.dataset.line = String(item.line);
+          if (item.key) button.dataset.ixKey = String(item.key);
         }
         button.title = item.label;
         button.dataset.depth = String(item.depth);
@@ -130,7 +133,11 @@ export function createOutline({
         ? content.querySelector(
             `:is(h1,h2,h3,h4,h5,h6)[data-heading="${button.dataset.heading}"]`,
           )
-        : content.querySelector(
+        : (button.dataset.ixKey &&
+            content.querySelector(
+              `.ix-item[data-ix-id="${CSS.escape(button.dataset.ixKey)}"] > .ix-row`,
+            )) ||
+          content.querySelector(
             `.ix-item[data-line="${button.dataset.line}"] > .ix-row`,
           ),
     ]);

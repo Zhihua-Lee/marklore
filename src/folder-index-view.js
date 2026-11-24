@@ -20,7 +20,8 @@
 // any edit is. Prose is edited by double-clicking it (its Markdown, in place).
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { t } from "../desktop/i18n.mjs";
-import { isIndexName } from "../desktop/folder-index.mjs";
+import { folderEntry, isIndexName } from "../desktop/folder-index.mjs";
+import { compareTreeItems } from "../desktop/breadcrumb.mjs";
 import {
   fileMatches,
   safeFileName,
@@ -77,6 +78,9 @@ export function createIndexView({
   // The text of a note open in a tab (by file id), when main hands back
   // only its id.
   openText = () => null,
+  openPathText = () => null,
+  openNote = null,
+  openFolder = null,
   newNoteText = () => "",
   // Files were created in the folder: the library tree shows them.
   filesChanged = () => {},
@@ -93,24 +97,50 @@ export function createIndexView({
   canUnify = () => false,
   // An entry folded or unfolded (the note's folds are kept with its tab).
   foldsChanged = () => {},
+  outlineChanged = () => {},
 }) {
   const states = new WeakMap();
-  // Per index file: its folder's entries, and the pages' first sentences.
+  // Per index file or generated folder: its entries and first sentences.
   const folders = new Map();
+  // Lazy subfolder cache keyed by authorized folder id.
+  const subfolders = new Map();
+  let subVersion = 0;
   let lastShown = null;
 
+  const docKey = (doc) =>
+    doc?.generated ? "gen:" + doc.generated.folderId : doc?.fileId || null;
   const applies = (doc) =>
-    Boolean(doc) && isIndexName(doc.name || "") && !isDiffDocument(doc);
-  const editing = (doc) => doc.mode === "edit" && !doc.preview;
+    Boolean(doc) &&
+    !isDiffDocument(doc) &&
+    (Boolean(doc.generated) || isIndexName(doc.name || ""));
+  const editing = (doc) =>
+    doc.mode === "edit" && !doc.preview && !doc.generated;
   const stateOf = (doc) => {
     let state = states.get(doc);
-    if (!state) states.set(doc, (state = { tray: false }));
+    if (!state) states.set(doc, (state = { tray: false, expandToken: 0 }));
     return state;
   };
+  const pathLower = (p) =>
+    p ? String(p).replace(/\\/g, "/").toLowerCase() : "";
   // An entry's fold, kept with the note's section folds (doc.folds, saved
-  // with the session), by the entry's file or link.
-  const foldKey = (entry) => "ix:" + (entry.name || entry.href).toLowerCase();
-  const isFolded = (doc, entry) => (doc.folds || []).includes(foldKey(entry));
+  // with the session), by the entry's file/link and folder scope.
+  const foldKey = (entry, scope = "") =>
+    "ix:" +
+    (scope ? scope + "/" : "") +
+    (entry.name || entry.href || entry.title || "").toLowerCase();
+  const isEntryClosed = (doc, fKey, defaultClosed = false) => {
+    const folds = doc.folds || [];
+    if (folds.includes(fKey)) return true;
+    if (folds.includes("+" + fKey)) return false;
+    return defaultClosed;
+  };
+  const setFoldKey = (doc, fKey, defaultClosed, closed) => {
+    const folds = (doc.folds || []).filter(
+      (other) => other !== fKey && other !== "+" + fKey,
+    );
+    if (closed !== defaultClosed) folds.push(closed ? fKey : "+" + fKey);
+    doc.folds = folds;
+  };
   // The folder's entries by name (any letter case).
   const childOf = (info, name) =>
     name && info?.status === "ready"
@@ -139,11 +169,17 @@ export function createIndexView({
 
   // ── What is known about the folder ──
   function folderOf(doc) {
-    if (!doc.fileId || !api?.currentFolder || !api?.list) return null;
-    let info = folders.get(doc.fileId);
+    const dKey = docKey(doc);
+    if (!dKey) return null;
+    if (!doc.generated && (!api?.currentFolder || !api?.list)) return null;
+    if (doc.generated && !api?.list && !api?.folderIndexText) return null;
+    let info = folders.get(dKey);
     if (!info) {
       info = {
         status: "loading",
+        folderId: doc.generated?.folderId ?? null,
+        folderName: doc.generated?.name ?? null,
+        folderPath: doc.generated?.path ?? null,
         children: [],
         byName: new Map(),
         excerpts: new Map(),
@@ -153,27 +189,103 @@ export function createIndexView({
         checking: new Set(),
         version: 0,
       };
-      folders.set(doc.fileId, info);
+      folders.set(dKey, info);
       load(doc, info);
     }
     return info;
   }
   async function load(doc, info) {
+    const dKey = docKey(doc);
     try {
-      const folder = await api.currentFolder(doc.fileId);
-      setChildren(info, (await api.list(folder.id)) || []);
-      info.folderId = folder.id;
-      info.status = "ready";
-      // Files came or went: deeper links are asked about again.
-      info.statuses.clear();
-      info.checking.clear();
+      if (doc.generated) {
+        const res = api?.folderIndexText
+          ? await api.folderIndexText(doc.generated.folderId)
+          : null;
+        const items =
+          res?.items ?? (await api.list?.(doc.generated.folderId)) ?? [];
+        setChildren(info, items);
+        info.folderId = doc.generated.folderId;
+        info.folderPath = res?.folder?.path ?? doc.generated.path;
+        info.folderName = res?.folder?.name ?? doc.generated.name;
+        info.status = "ready";
+      } else {
+        const folder = await api.currentFolder(doc.fileId);
+        setChildren(info, (await api.list(folder.id)) || []);
+        info.folderId = folder.id;
+        info.folderPath = folder.path;
+        info.folderName = folder.name;
+        info.status = "ready";
+        // Files came or went: deeper links are asked about again.
+        info.statuses.clear();
+        info.checking.clear();
+      }
     } catch {
       // Listed before: what was known stays.
       if (info.status !== "ready") info.status = "error";
     }
-    if (folders.get(doc.fileId) !== info) return;
+    if (folders.get(dKey) !== info) return;
     info.version++;
     refresh(doc);
+  }
+  function ensureSubfolder(doc, folderId, meta = {}) {
+    if (!folderId) return null;
+    let sub = subfolders.get(folderId);
+    if (sub && !sub.stale) return sub;
+    if (!sub) {
+      sub = {
+        status: "loading",
+        folder: {
+          id: folderId,
+          name: meta.name || "",
+          path: meta.path || "",
+        },
+        index: null,
+        text: null,
+        items: [],
+        byName: new Map(),
+        stale: false,
+        promise: null,
+      };
+      subfolders.set(folderId, sub);
+    } else {
+      sub.stale = false;
+    }
+    if (sub.promise) return sub;
+    sub.promise = (async () => {
+      try {
+        const res = api?.folderIndexText
+          ? await api.folderIndexText(folderId)
+          : null;
+        if (res && typeof res === "object") {
+          sub.folder = res.folder || sub.folder;
+          sub.index = res.index || null;
+          sub.text = typeof res.text === "string" ? res.text : null;
+          sub.items = Array.isArray(res.items) ? res.items : [];
+        } else if (api?.list) {
+          const items = (await api.list(folderId)) || [];
+          const indexItem = items.find(
+            (c) => !c.directory && (c.index || isIndexName(c.name)),
+          );
+          sub.index = indexItem
+            ? { name: indexItem.name, path: indexItem.path }
+            : null;
+          sub.text = indexItem?.path ? openPathText(indexItem.path) : null;
+          sub.items = items;
+        }
+        sub.byName = new Map();
+        for (const item of sub.items)
+          if (!sub.byName.has(item.name.toLowerCase()))
+            sub.byName.set(item.name.toLowerCase(), item);
+        sub.status = "ready";
+      } catch {
+        sub.status = "error";
+      } finally {
+        sub.promise = null;
+      }
+      subVersion++;
+      if (doc && getDocument() === doc) refresh(doc);
+    })();
+    return sub;
   }
   // Shown again for what was learnt in the background, unless a title, a
   // block or a choice is being typed in the view: then once it closes.
@@ -217,33 +329,40 @@ export function createIndexView({
     info.version++;
     refresh(doc);
   }
-  // The first sentence of each listed page not read yet.
-  async function loadExcerpts(doc, info) {
-    if (!api?.preview || info.status !== "ready") return;
+  // The first sentence of each visible page not read yet (up to EXCERPT_LIMIT).
+  async function loadExcerpts(doc, info, visibleNotes = []) {
+    if (info?.status !== "ready" || (!api?.preview && !api?.previewChild))
+      return;
+    const dKey = docKey(doc);
     const wanted = [];
-    for (const entry of scanIndex(doc.text).entries) {
-      const child = childOf(info, entry.name);
-      if (!child || child.directory) continue;
-      const lower = child.name.toLowerCase();
-      if (info.asked.has(lower)) continue;
+    for (const row of visibleNotes) {
+      if (info.asked.has(row.excerptKey)) continue;
       if (info.asked.size >= EXCERPT_LIMIT) break;
-      info.asked.add(lower);
-      wanted.push([child, entry.title]);
+      info.asked.add(row.excerptKey);
+      wanted.push(row);
     }
     if (!wanted.length) return;
     let next = 0;
     const worker = async () => {
       while (next < wanted.length) {
-        const [child, title] = wanted[next++];
+        const row = wanted[next++];
         let text = "";
         try {
-          const file = await api.preview(doc.fileId, hrefFor(child.name));
+          let file = null;
+          if (row.isOwnFolder && doc.fileId && api?.preview) {
+            file = await api.preview(doc.fileId, hrefFor(row.childName));
+          } else if (api?.previewChild && row.folderId) {
+            file = await api.previewChild(row.folderId, row.childName);
+          } else if (doc.fileId && api?.preview && row.relHref) {
+            file = await api.preview(doc.fileId, row.relHref);
+          }
           // A file main knows already (opened before) comes back without
           // its text: an open tab's, else read from disk.
           text =
             typeof file?.text === "string"
               ? file.text
               : (openText(file?.id) ??
+                (row.childPath ? openPathText(row.childPath) : null) ??
                 (file?.id && api.read
                   ? (await api.read(file.id))?.text
                   : null) ??
@@ -252,15 +371,46 @@ export function createIndexView({
           /* Shown without a sentence. */
         }
         info.excerpts.set(
-          child.name.toLowerCase(),
-          noteExcerpt(typeof text === "string" ? text : "", title),
+          row.excerptKey,
+          noteExcerpt(typeof text === "string" ? text : "", row.title),
         );
       }
     };
     await Promise.all([worker(), worker(), worker(), worker()]);
-    if (folders.get(doc.fileId) !== info) return;
+    if (folders.get(dKey) !== info) return;
     info.version++;
     refresh(doc);
+  }
+  function collectVisibleNotesFromDom(doc, info) {
+    const out = [];
+    for (const item of host.querySelectorAll(".ix-item")) {
+      if (item.dataset.kind === "folder" || item.classList.contains("missing"))
+        continue;
+      if (item.parentElement?.closest(".ix-item.closed")) continue;
+      const childFile = item.dataset.childFile;
+      if (!childFile) continue;
+      const ownerFolderId =
+        item.dataset.ownerFolderId || info?.folderId || null;
+      const childPath = item.dataset.childPath || "";
+      const isOwnFolder = item.dataset.nested !== "true" && !doc.generated;
+      const excerptKey = isOwnFolder
+        ? "own:" + childFile.toLowerCase()
+        : (
+            pathLower(childPath) || ownerFolderId + "/" + childFile
+          ).toLowerCase();
+      const title =
+        item.querySelector(":scope > .ix-row > .ix-title")?.textContent ?? "";
+      out.push({
+        excerptKey,
+        folderId: ownerFolderId,
+        isOwnFolder,
+        childName: childFile,
+        childPath,
+        relHref: item.dataset.relHref || null,
+        title,
+      });
+    }
+    return out;
   }
   // "library": files were created, renamed or removed: the shown index's
   // folder is listed again (the view stays as it is until then), others
@@ -269,20 +419,26 @@ export function createIndexView({
   // large library is being read).
   function invalidate(kind = "library") {
     const doc = getDocument();
-    const shown = applies(doc) && doc.fileId ? folders.get(doc.fileId) : null;
+    const dKey = applies(doc) ? docKey(doc) : null;
+    const shownInfo = dKey ? folders.get(dKey) : null;
     if (kind === "links") {
       for (const info of folders.values()) info.stale = true;
+      for (const sub of subfolders.values()) sub.stale = true;
       return;
     }
-    for (const [id, info] of folders) if (info !== shown) folders.delete(id);
-    if (shown) load(doc, shown);
+    subfolders.clear();
+    subVersion++;
+    for (const [id, info] of folders)
+      if (info !== shownInfo) folders.delete(id);
+    if (shownInfo) load(doc, shownInfo);
   }
   // The app shows this note now (any note, every time it is shown): an
   // index shown again after notes changed reads their first sentences anew.
   function shown(doc) {
     if (doc === lastShown) return;
     lastShown = doc;
-    const info = applies(doc) && doc.fileId ? folders.get(doc.fileId) : null;
+    const dKey = applies(doc) ? docKey(doc) : null;
+    const info = dKey ? folders.get(dKey) : null;
     if (!info?.stale) return;
     info.excerpts.clear();
     info.asked.clear();
@@ -291,8 +447,10 @@ export function createIndexView({
   }
   // What the shown view depends on besides the text.
   function key(doc) {
-    const info = doc.fileId ? folders.get(doc.fileId) : null;
-    return `${doc.mode}|${doc.preview ? 1 : 0}|${info ? info.status + info.version : "-"}`;
+    const dKey = docKey(doc);
+    const info = dKey ? folders.get(dKey) : null;
+    const folds = (doc.folds || []).join(",");
+    return `${doc.mode}|${doc.preview ? 1 : 0}|${doc.generated ? doc.generated.folderId : ""}|${info ? info.status + info.version : "-"}|${subVersion}|${folds}`;
   }
 
   // ── Rendering ──
@@ -320,13 +478,89 @@ export function createIndexView({
     return m.startsWith("<") ? encodeURI(m.slice(1, -1)) : m;
   };
 
+  function controlsNode() {
+    const bar = element("div", "ix-controls");
+    bar.setAttribute("role", "toolbar");
+    bar.setAttribute("aria-label", t("目录展开层级"));
+    const expand = button("ix-control", t("展开全部"), null, "expand-all");
+    expand.tabIndex = 0;
+    const level1 = button(
+      "ix-control",
+      t("只看第一层"),
+      null,
+      "collapse-level1",
+    );
+    level1.tabIndex = 0;
+    bar.append(expand, level1);
+    return bar;
+  }
+
   function render(doc) {
-    const scan = scanIndex(doc.text);
     const info = folderOf(doc);
-    if (info?.status === "ready") {
-      loadExcerpts(doc, info);
-      loadStatuses(doc, info);
+    if (doc.generated) {
+      const syntheticText = `# ${doc.generated.name}\n\n`;
+      const result = renderDocument(
+        { ...doc, text: syntheticText },
+        { deferMath: true, interactiveTasks: true },
+      );
+      const fragment = result.fragment;
+      const context = {
+        doc,
+        scan: { entries: [], lines: [], runs: [] },
+        info,
+        edit: false,
+        state: stateOf(doc),
+        first: true,
+        visibleNotes: [],
+      };
+      if (info?.status === "ready") {
+        const items = info.children
+          .filter((c) => !c.index && !isIndexName(c.name))
+          .sort(compareTreeItems);
+        if (items.length) {
+          fragment.append(controlsNode());
+          const list = element("div", "ix-list");
+          list.setAttribute("role", "tree");
+          list.setAttribute("aria-label", t("目录中的页面"));
+          const ancestors = info.folderPath
+            ? new Set([pathLower(info.folderPath)])
+            : new Set();
+          items.forEach((child, ord) =>
+            list.append(
+              treeItemNode(context, {
+                child,
+                folderId: info.folderId,
+                folderPath: info.folderPath,
+                scope: "",
+                relPrefix: "",
+                nested: false,
+                level: 1,
+                from: syntheticText.length + ord,
+                to: syntheticText.length + ord,
+                ixId: "gen:" + child.name.toLowerCase(),
+                hidden: false,
+                ancestors,
+              }),
+            ),
+          );
+          fragment.append(list);
+          loadExcerpts(doc, info, context.visibleNotes);
+        } else {
+          fragment.append(element("p", "ix-empty", t("暂无笔记或子文件夹")));
+        }
+      }
+      const box = document.createElement("div");
+      for (const node of fragment.childNodes) box.append(node.cloneNode(true));
+      const html = box.innerHTML;
+      return {
+        ...result,
+        html,
+        fragment,
+        bytes: html.length * 12 + (result.bytes - result.html.length * 12 || 0),
+      };
     }
+
+    const scan = scanIndex(doc.text);
     // The list lines blanked (same length: every other block keeps its
     // source positions), the note rendered, the lists put in their places.
     let masked = doc.text;
@@ -357,9 +591,21 @@ export function createIndexView({
       edit: editing(doc),
       state: stateOf(doc),
       first: true,
+      visibleNotes: [],
     };
-    for (const run of scan.runs)
-      place(fragment, scan.lines[run.first].start, runNode(context, run));
+    let placedControls = false;
+    for (const run of scan.runs) {
+      const list = runNode(context, run);
+      place(fragment, scan.lines[run.first].start, list);
+      if (!placedControls && list.parentNode) {
+        list.parentNode.insertBefore(controlsNode(), list);
+        placedControls = true;
+      }
+    }
+    if (info?.status === "ready") {
+      loadExcerpts(doc, info, context.visibleNotes);
+      loadStatuses(doc, info);
+    }
     // Edit mode: HTML comments show as their source, to be edited in
     // place like any block (they render as nothing).
     if (context.edit)
@@ -475,15 +721,32 @@ export function createIndexView({
     return out;
   }
   function runNode(context, run) {
+    const { info, scan } = context;
     const list = element("div", "ix-list");
     list.setAttribute("role", "tree");
     list.setAttribute("aria-label", t("目录中的页面"));
     list.dataset.run = String(run.index);
     // Its place in the note, as other blocks have, so the place read is
     // kept when the note is shown again or the mode switched.
-    list.dataset.from = String(context.scan.lines[run.first].start);
-    list.dataset.to = String(lineEnd(context.scan, run.last));
-    for (const i of run.roots) list.append(itemNode(context, i));
+    list.dataset.from = String(scan.lines[run.first].start);
+    list.dataset.to = String(lineEnd(scan, run.last));
+    const scope = {
+      scan,
+      folderInfo: info,
+      folderId: info?.folderId ?? null,
+      folderPath: info?.folderPath ?? null,
+      scope: "",
+      relPrefix: "",
+      nested: false,
+      hidden: false,
+      levelBase: 1,
+      inheritFrom: null,
+      inheritTo: null,
+      ancestors: info?.folderPath
+        ? new Set([pathLower(info.folderPath)])
+        : new Set(),
+    };
+    for (const i of run.roots) list.append(itemNode(context, scope, i));
     return list;
   }
   // The mark beside a note whose file is named otherwise than its name: a
@@ -511,61 +774,141 @@ export function createIndexView({
       (sum, k) => sum + 1 + pagesUnder(scan, k),
       0,
     );
-  function itemNode(context, i) {
-    const { scan, info, edit, state, doc } = context;
-    const entry = scan.entries[i];
+  function resolveSubfolderChildren(subInfo) {
+    if (!subInfo || subInfo.status !== "ready") return null;
+    if (subInfo.index) {
+      const live = openPathText(subInfo.index.path) ?? subInfo.text;
+      if (typeof live === "string") {
+        const subScan = scanIndex(live);
+        const roots = subScan.runs.flatMap((run) => run.roots);
+        return { kind: "scan", sub: subInfo, scan: subScan, roots };
+      }
+    }
+    const items = subInfo.items
+      .filter((c) => !c.index && !isIndexName(c.name))
+      .sort(compareTreeItems);
+    return { kind: "items", sub: subInfo, items };
+  }
+  function countResolvedSubNodes(resolved) {
+    if (!resolved) return 0;
+    if (resolved.kind === "items") return resolved.items.length;
+    return resolved.scan.entries.length;
+  }
+  function buildItemElement(context, opts) {
+    const { info, edit, doc, visibleNotes } = context;
+    const {
+      level,
+      ixId,
+      line,
+      href,
+      from,
+      to,
+      entryTitle,
+      entryName,
+      restText = "",
+      child,
+      isFolder,
+      missing,
+      ownerFolderId,
+      ownerFolderPath,
+      relPrefix,
+      nested,
+      hidden,
+      scopeKey,
+      hasOwnChildren,
+      ownCount = 0,
+      ancestors,
+      renderOwnChildren,
+    } = opts;
     const item = element("div", "ix-item");
     item.setAttribute("role", "treeitem");
-    item.setAttribute("aria-level", String(entry.depth + 1));
-    item.dataset.line = String(entry.line);
-    item.dataset.href = entry.href;
-    item.dataset.from = String(scan.lines[entry.line].start);
-    item.dataset.to = String(lineEnd(scan, lastLine(scan, i)));
-    // One stop for Tab: the first entry (moved with the focus).
+    item.setAttribute("aria-level", String(level));
+    item.dataset.ixId = ixId;
+    item.dataset.line = String(line);
+    item.dataset.href = href;
+    item.dataset.from = String(from);
+    item.dataset.to = String(to);
+    if (nested) item.dataset.nested = "true";
+    if (ownerFolderId) item.dataset.ownerFolderId = String(ownerFolderId);
+    if (ownerFolderPath) item.dataset.ownerFolderPath = ownerFolderPath;
     item.tabIndex = context.first ? 0 : -1;
     context.first = false;
+
     const row = element("div", "ix-row");
-    const child = childOf(info, entry.name);
-    const missing = isMissing(info, entry);
     if (missing) item.classList.add("missing");
-    if (child?.directory) item.dataset.kind = "folder";
-    // An entry with pages under it folds as a section does: by its arrow,
-    // or by the guide line down from it (the rail), drawn alike.
+    if (isFolder) item.dataset.kind = "folder";
+    if (isFolder && child?.id) {
+      item.dataset.childId = String(child.id);
+      item.dataset.childName = child.name || entryName || entryTitle;
+      if (child.path) item.dataset.childPath = child.path;
+    } else if (!isFolder && child) {
+      item.dataset.childFile = child.name;
+      if (child.path) item.dataset.childPath = child.path;
+      item.dataset.relHref = relPrefix + hrefFor(child.name);
+    }
+
+    const canFollowSubfolder =
+      Boolean(isFolder && child?.id) &&
+      (!child.path || !ancestors.has(pathLower(child.path)));
+    const rawSub = canFollowSubfolder ? subfolders.get(child.id) : null;
+    const resolvedSub =
+      rawSub?.status === "ready" ? resolveSubfolderChildren(rawSub) : null;
+    const subCount = resolvedSub ? countResolvedSubNodes(resolvedSub) : 0;
+    const subfolderEmpty = resolvedSub != null && subCount === 0;
+    const subfolderError = rawSub?.status === "error";
+    const expandable =
+      hasOwnChildren ||
+      (canFollowSubfolder && !subfolderEmpty && !subfolderError);
+
+    const fKey = foldKey(
+      { name: entryName, href, title: entryTitle },
+      scopeKey,
+    );
+    // Default: two levels open on first open (level-1 entries and top-level
+    // own note hierarchies start open; level-2+ subfolders and nested
+    // subfolder items start closed and load lazily).
+    const defaultClosed =
+      level >= 2 && (nested || Boolean(doc.generated) || isFolder);
+    const closed = expandable ? isEntryClosed(doc, fKey, defaultClosed) : false;
+
     let rail = null;
-    if (entry.children.length) {
-      const closed = isFolded(doc, entry);
-      const label = t("展开或折叠 {name} 的子页", { name: entry.title });
+    if (expandable) {
+      const label = t("展开或折叠 {name} 的子页", { name: entryTitle });
       item.setAttribute("aria-expanded", String(!closed));
-      item.dataset.foldKey = foldKey(entry);
+      item.dataset.foldKey = fKey;
+      item.dataset.defaultClosed = defaultClosed ? "true" : "false";
       if (closed) item.classList.add("closed");
       const arrow = button("ix-twisty", label, " ", "fold");
       arrow.setAttribute("aria-expanded", String(!closed));
       row.append(arrow);
       rail = button("ix-rail", label, " ", "fold");
       rail.setAttribute("aria-expanded", String(!closed));
-    } else row.append(element("span", "ix-twisty-space"));
-    // A note's one name (its heading; desktop/note-names.mjs), else the
-    // entry's text. Its file is in the tooltip; a note whose file is named
-    // otherwise gets a quiet mark offering to unify them.
-    const name = child?.title || entry.title;
+    } else {
+      row.append(element("span", "ix-twisty-space"));
+    }
+
+    const isOwnFolder = !nested && !doc.generated;
+    const rowEdit = edit && isOwnFolder;
+    const name = child?.title || entryTitle;
     let title;
-    if (missing) title = element("span", "ix-title", entry.title);
+    if (missing) title = element("span", "ix-title", entryTitle);
     else {
       title = element("a", "ix-title", name);
-      title.setAttribute("href", target(entry.href));
+      title.setAttribute("href", target(href));
       title.tabIndex = -1;
-      if (edit) title.draggable = false;
+      if (rowEdit) title.draggable = false;
     }
-    const written = entry.name
-      ? entry.name + (child?.directory ? "/" : "")
-      : target(entry.href);
-    // Edit mode: a click picks the entry, a double click edits the title.
+    const written = entryName
+      ? entryName + (isFolder ? "/" : "")
+      : target(href);
     title.title =
-      (edit && !missing
+      (rowEdit && !missing
         ? t("{title}（Ctrl+单击打开，双击改标题）", { title: name })
         : name) + (written ? "\n" + written : "");
     row.append(title);
+
     if (
+      isOwnFolder &&
       canUnify() &&
       info?.folderId &&
       child &&
@@ -574,24 +917,45 @@ export function createIndexView({
       !fileMatches(child.title, child.name)
     )
       row.append(nameMark(child.name));
-    // How many pages a folded entry holds (shown only while folded).
-    if (entry.children.length) {
-      const count = pagesUnder(scan, i);
+
+    const totalCount = ownCount + subCount;
+    if (expandable && totalCount > 0) {
       row.append(
         element(
           "span",
           "ix-count",
-          count === 1 ? t("1 页") : t("{count} 页", { count }),
+          totalCount === 1 ? t("1 页") : t("{count} 页", { count: totalCount }),
         ),
       );
     }
+
+    const excerptKey = isOwnFolder
+      ? child
+        ? "own:" + child.name.toLowerCase()
+        : null
+      : child && !isFolder
+        ? (
+            pathLower(child.path) || ownerFolderId + "/" + child.name
+          ).toLowerCase()
+        : null;
+
+    if (!hidden && !isFolder && child && !child.directory && excerptKey) {
+      visibleNotes.push({
+        excerptKey,
+        folderId: ownerFolderId,
+        isOwnFolder,
+        childName: child.name,
+        childPath: child.path || "",
+        relHref: relPrefix + hrefFor(child.name),
+        title: entryTitle,
+      });
+    }
+
     if (missing) {
       row.append(element("span", "ix-missing", t("不存在")));
-      if (!doc.preview) {
+      if (!doc.preview && isOwnFolder) {
         const actions = element("span", "ix-repair");
-        // Created only in the folder itself (a deeper link: pointed
-        // elsewhere or removed).
-        if (entry.name)
+        if (entryName)
           actions.append(button("ix-text-button", t("创建"), null, "create"));
         actions.append(
           button("ix-text-button", t("改为指向…"), null, "relocate"),
@@ -600,32 +964,222 @@ export function createIndexView({
         row.append(actions);
       }
     } else {
-      const rest = entry.rest.trim();
-      const excerpt = child ? info.excerpts.get(child.name.toLowerCase()) : "";
+      const rest = restText.trim();
+      const excerpt = excerptKey ? info?.excerpts.get(excerptKey) : "";
       if (rest) row.append(element("span", "ix-rest", rest));
       else if (excerpt) row.append(element("span", "ix-excerpt", excerpt));
     }
-    if (edit) {
-      row.draggable = true;
-      const tools = element("span", "ix-tools");
-      if (info?.folderId)
-        tools.append(button("ix-tool", t("新建子页"), icon("plus"), "child"));
-      tools.append(
-        button("ix-tool", t("改标题"), icon("pencil"), "rename"),
-        button("ix-tool", t("移出目录（不删除文件）"), icon("close"), "remove"),
-      );
-      row.append(tools);
+
+    const hasOpenFolder = Boolean(isFolder && !missing && child?.id);
+    if (hasOpenFolder || rowEdit) {
+      const actions = element("span", "ix-row-actions");
+      if (hasOpenFolder)
+        actions.append(
+          button(
+            "ix-open-folder",
+            t("打开此目录"),
+            icon("open"),
+            "open-folder",
+          ),
+        );
+      if (rowEdit) {
+        row.draggable = true;
+        const tools = element("span", "ix-tools");
+        if (info?.folderId)
+          tools.append(button("ix-tool", t("新建子页"), icon("plus"), "child"));
+        tools.append(
+          button("ix-tool", t("改标题"), icon("pencil"), "rename"),
+          button(
+            "ix-tool",
+            t("移出目录（不删除文件）"),
+            icon("close"),
+            "remove",
+          ),
+        );
+        actions.append(tools);
+      }
+      row.append(actions);
     }
+
     item.append(row);
-    if (entry.children.length) {
+
+    // Lazily load expanded subfolder if not loaded yet.
+    if (!hidden && !closed && canFollowSubfolder && (!rawSub || rawSub.stale)) {
+      ensureSubfolder(doc, child.id, {
+        id: child.id,
+        name: child.name,
+        path: child.path,
+      });
+    }
+
+    if (expandable) {
       const group = element("div", "ix-children");
       group.setAttribute("role", "group");
-      // The guide line down the pages under it, a fold control itself.
       group.append(rail);
-      for (const k of entry.children) group.append(itemNode(context, k));
+      const childHidden = hidden || closed;
+      if (hasOwnChildren && renderOwnChildren)
+        renderOwnChildren(group, childHidden);
+      if (resolvedSub && subCount > 0) {
+        const nextAncestors = new Set(ancestors);
+        if (child.path) nextAncestors.add(pathLower(child.path));
+        const nextScope =
+          (scopeKey ? scopeKey + "/" : "") + child.name.toLowerCase();
+        const nextRel = relPrefix + hrefFor(child.name, true);
+        if (resolvedSub.kind === "scan") {
+          const subScope = {
+            scan: resolvedSub.scan,
+            folderInfo: resolvedSub.sub,
+            folderId: child.id,
+            folderPath: child.path || "",
+            scope: nextScope,
+            relPrefix: nextRel,
+            nested: true,
+            hidden: childHidden,
+            levelBase: level + 1,
+            inheritFrom: from,
+            inheritTo: to,
+            ancestors: nextAncestors,
+          };
+          for (const k of resolvedSub.roots)
+            group.append(itemNode(context, subScope, k));
+        } else {
+          for (const subChild of resolvedSub.items) {
+            group.append(
+              treeItemNode(context, {
+                child: subChild,
+                folderId: child.id,
+                folderPath: child.path || "",
+                scope: nextScope,
+                relPrefix: nextRel,
+                nested: true,
+                level: level + 1,
+                from,
+                to,
+                ixId: nextScope + ":N:" + subChild.name.toLowerCase(),
+                hidden: childHidden,
+                ancestors: nextAncestors,
+              }),
+            );
+          }
+        }
+      }
       item.append(group);
     }
     return item;
+  }
+  function itemNode(context, scopeCtx, i) {
+    const { info, doc } = context;
+    const {
+      scan,
+      folderInfo,
+      folderId,
+      folderPath,
+      scope,
+      relPrefix,
+      nested,
+      hidden,
+      levelBase,
+      inheritFrom,
+      inheritTo,
+      ancestors,
+    } = scopeCtx;
+    const entry = scan.entries[i];
+    const lookupInfo = nested ? folderInfo : info;
+    const child = nested
+      ? (entry.name && lookupInfo?.byName?.get(entry.name.toLowerCase())) ||
+        null
+      : childOf(info, entry.name);
+    const missing = nested
+      ? Boolean(entry.name && !child && !attachment(entry.name))
+      : isMissing(info, entry);
+    const isFolder = folderEntry(entry, (n) =>
+      Boolean(
+        (nested ? lookupInfo?.byName?.get(n.toLowerCase()) : childOf(info, n))
+          ?.directory,
+      ),
+    );
+    const level = levelBase + entry.depth;
+    const from =
+      inheritFrom != null ? inheritFrom : scan.lines[entry.line].start;
+    const to = inheritTo != null ? inheritTo : lineEnd(scan, lastLine(scan, i));
+    const ixId = nested
+      ? (scope || "sub") + ":L" + entry.line
+      : "own:" + entry.line;
+    return buildItemElement(context, {
+      level,
+      ixId,
+      line: entry.line,
+      href: entry.href,
+      from,
+      to,
+      entryTitle: entry.title,
+      entryName: entry.name,
+      restText: entry.rest,
+      child,
+      isFolder,
+      missing,
+      ownerFolderId: folderId,
+      ownerFolderPath: folderPath,
+      relPrefix,
+      nested,
+      hidden,
+      scopeKey: scope,
+      hasOwnChildren: entry.children.length > 0,
+      ownCount: pagesUnder(scan, i),
+      ancestors,
+      renderOwnChildren: (group, childHidden) => {
+        const nextCtx =
+          childHidden === hidden
+            ? scopeCtx
+            : { ...scopeCtx, hidden: childHidden };
+        for (const k of entry.children)
+          group.append(itemNode(context, nextCtx, k));
+      },
+    });
+  }
+  function treeItemNode(context, opts) {
+    const {
+      child,
+      folderId,
+      folderPath,
+      scope,
+      relPrefix,
+      nested,
+      level,
+      from,
+      to,
+      ixId,
+      hidden,
+      ancestors,
+    } = opts;
+    const isFolder = Boolean(child.directory);
+    const titleText = isFolder
+      ? child.name
+      : child.title || titleFor(child.name);
+    return buildItemElement(context, {
+      level,
+      ixId,
+      line: -1,
+      href: hrefFor(child.name, isFolder),
+      from,
+      to,
+      entryTitle: titleText,
+      entryName: child.name,
+      restText: "",
+      child,
+      isFolder,
+      missing: false,
+      ownerFolderId: folderId,
+      ownerFolderPath: folderPath,
+      relPrefix,
+      nested,
+      hidden,
+      scopeKey: scope,
+      hasOwnChildren: false,
+      ownCount: 0,
+      ancestors,
+      renderOwnChildren: null,
+    });
   }
   function footerNode({ doc, scan, info, edit, state }) {
     const footer = element("div", "ix-footer");
@@ -703,7 +1257,13 @@ export function createIndexView({
   // again, when the note changed under the view).
   function entryAt(item) {
     const doc = getDocument();
-    if (!applies(doc) || !item) return null;
+    if (
+      !applies(doc) ||
+      doc.generated ||
+      !item ||
+      item.dataset.nested === "true"
+    )
+      return null;
     const scan = scanIndex(doc.text);
     const line = Number(item.dataset.line);
     const index = scan.entries.findIndex((entry) => entry.line === line);
@@ -756,7 +1316,7 @@ export function createIndexView({
   // on the entry the change was at.
   function history(kind) {
     const doc = getDocument();
-    if (!applies(doc) || doc.preview) return false;
+    if (!applies(doc) || doc.preview || doc.generated) return false;
     const before = view.state.doc.toString();
     (kind === "redo" ? redo : undo)(view);
     const after = view.state.doc.toString();
@@ -780,12 +1340,11 @@ export function createIndexView({
       (item) => !item.parentElement.closest(".ix-item.closed"),
     );
   function fold(item, closed) {
-    const found = entryAt(item);
-    if (!found || !found.entry.children.length) return;
-    const { doc, entry } = found;
-    const key = foldKey(entry);
-    const folds = (doc.folds || []).filter((other) => other !== key);
-    doc.folds = closed ? [...folds, key] : folds;
+    const doc = managed();
+    const fKey = item?.dataset.foldKey;
+    if (!doc || !fKey || !item.hasAttribute("aria-expanded")) return;
+    const defClosed = item.dataset.defaultClosed === "true";
+    setFoldKey(doc, fKey, defClosed, closed);
     item.classList.toggle("closed", closed);
     item.setAttribute("aria-expanded", String(!closed));
     for (const control of item.querySelectorAll(
@@ -793,31 +1352,125 @@ export function createIndexView({
     ))
       control.setAttribute("aria-expanded", String(!closed));
     foldsChanged(doc);
+    outlineChanged();
+    const info = folderOf(doc);
+    if (!closed && item.dataset.childId) {
+      const subId = item.dataset.childId;
+      const sub = subfolders.get(subId);
+      if (!sub || sub.stale) {
+        ensureSubfolder(doc, subId, {
+          id: subId,
+          name: item.dataset.childName || "",
+          path: item.dataset.childPath || "",
+        });
+      } else if (info?.status === "ready") {
+        loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
+      }
+    } else if (!closed && info?.status === "ready") {
+      loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
+    }
   }
-  // The entry at a line shown: the entries folded above it unfolded.
-  function reveal(line) {
-    const item = host.querySelector(`.ix-item[data-line="${line}"]`);
+  function collapseLevel1() {
+    const doc = managed();
+    if (!doc) return;
+    stateOf(doc).expandToken++;
+    doc.folds = [];
+    for (const item of host.querySelectorAll(
+      '.ix-item[aria-level="1"][aria-expanded]',
+    )) {
+      const fKey = item.dataset.foldKey;
+      const defClosed = item.dataset.defaultClosed === "true";
+      setFoldKey(doc, fKey, defClosed, true);
+      item.classList.add("closed");
+      item.setAttribute("aria-expanded", "false");
+      for (const control of item.querySelectorAll(
+        ":scope > .ix-row > .ix-twisty, :scope > .ix-children > .ix-rail",
+      ))
+        control.setAttribute("aria-expanded", "false");
+    }
+    foldsChanged(doc);
+    outlineChanged();
+  }
+  async function expandAll() {
+    const doc = managed();
+    if (!doc) return;
+    const token = ++stateOf(doc).expandToken;
+    for (let round = 0; round < 16; round++) {
+      if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
+      const closedItems = [
+        ...host.querySelectorAll(
+          '.ix-item[aria-expanded="false"][data-fold-key]',
+        ),
+      ];
+      const toLoad = [];
+      for (const item of closedItems) {
+        const fKey = item.dataset.foldKey;
+        const defClosed = item.dataset.defaultClosed === "true";
+        setFoldKey(doc, fKey, defClosed, false);
+        if (item.dataset.childId) {
+          const sub = ensureSubfolder(doc, item.dataset.childId, {
+            id: item.dataset.childId,
+            name: item.dataset.childName || "",
+            path: item.dataset.childPath || "",
+          });
+          if (sub?.promise) toLoad.push(sub.promise);
+        }
+      }
+      for (const item of host.querySelectorAll(
+        '.ix-item[aria-expanded="true"][data-child-id]',
+      )) {
+        const sub = subfolders.get(item.dataset.childId);
+        if (sub?.promise) toLoad.push(sub.promise);
+      }
+      if (!closedItems.length && !toLoad.length) break;
+      foldsChanged(doc);
+      if (toLoad.length) {
+        await Promise.all(toLoad);
+        if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
+      }
+      rerender(doc);
+    }
+    if (getDocument() === doc && stateOf(doc).expandToken === token) {
+      const info = folderOf(doc);
+      if (info?.status === "ready")
+        loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
+      outlineChanged();
+    }
+  }
+  // The entry at a line or ixId shown: the entries folded above it unfolded.
+  function reveal(target) {
+    const item =
+      typeof target === "string"
+        ? host.querySelector(`.ix-item[data-ix-id="${CSS.escape(target)}"]`)
+        : host.querySelector(`.ix-item[data-line="${target}"]`);
     for (
-      let parent = item?.parentElement.closest(".ix-item");
+      let parent = item?.parentElement?.closest(".ix-item");
       parent;
-      parent = parent.parentElement.closest(".ix-item")
+      parent = parent.parentElement?.closest(".ix-item")
     )
       if (parent.classList.contains("closed")) fold(parent, false);
+    return item || null;
   }
-  // The outline's entries for the index shown: its first two levels, by
-  // the names the rows show ({ label, from, depth, line }).
+  // The outline's entries for the index shown: own first two levels, plus
+  // visible expanded nested chapters, by the names the rows show.
   function outlineEntries() {
-    return [
-      ...host.querySelectorAll(
-        '.ix-item:is([aria-level="1"], [aria-level="2"])',
-      ),
-    ].map((item) => ({
-      label:
-        item.querySelector(":scope > .ix-row > .ix-title")?.textContent ?? "",
-      from: Number(item.dataset.from),
-      depth: Number(item.getAttribute("aria-level")) - 1,
-      line: Number(item.dataset.line),
-    }));
+    const doc = getDocument();
+    return [...host.querySelectorAll(".ix-item")]
+      .filter((item) => {
+        const level = Number(item.getAttribute("aria-level")) || 1;
+        const nested = item.dataset.nested === "true";
+        if (!nested && !doc?.generated) return level <= 2;
+        return level <= 3 && !item.parentElement?.closest(".ix-item.closed");
+      })
+      .map((item) => ({
+        key: item.dataset.ixId || null,
+        nested: item.dataset.nested === "true" || Boolean(doc?.generated),
+        label:
+          item.querySelector(":scope > .ix-row > .ix-title")?.textContent ?? "",
+        from: Number(item.dataset.from),
+        depth: (Number(item.getAttribute("aria-level")) || 1) - 1,
+        line: Number(item.dataset.line),
+      }));
   }
   // A title typed in place: Enter or leaving the box takes it, Esc cancels.
   // An entry of a note or folder of this folder renames it (its heading,
@@ -1282,8 +1935,36 @@ export function createIndexView({
     if (child?.path && (await revealFolder(child.path))) return;
     report(t("文件夹“{name}”里没有目录文件", { name }));
   }
+  function openFolderTarget(item) {
+    const cid = item?.dataset.childId;
+    if (!cid) return;
+    const folder = {
+      id: cid,
+      name: item.dataset.childName || "",
+      path: item.dataset.childPath || "",
+    };
+    if (openFolder) return run(() => openFolder(folder))();
+  }
   function openEntry(item) {
-    if (!item || item.classList.contains("missing")) return;
+    const doc = managed();
+    if (!doc || !item || item.classList.contains("missing")) return;
+    if (item.dataset.nested === "true" || doc.generated) {
+      if (item.dataset.kind === "folder") return openFolderTarget(item);
+      const ownerId = item.dataset.ownerFolderId;
+      const fileName = item.dataset.childFile;
+      if (ownerId && fileName && openNote) {
+        return run(() =>
+          openNote({
+            folderId: ownerId,
+            name: fileName,
+            path: item.dataset.childPath || "",
+          }),
+        )();
+      }
+      const relHref = item.dataset.relHref;
+      if (relHref && doc.fileId) return run(() => open(relHref))();
+      return;
+    }
     const found = entryAt(item);
     if (!found) return;
     const href = item
@@ -1298,14 +1979,16 @@ export function createIndexView({
     if (!doc) return;
     const control = event.target.closest?.("[data-ix]");
     const item = event.target.closest?.(".ix-item");
-    // A title: Read mode opens it; Edit mode picks the entry (a double
-    // click edits the title), Ctrl+click opens it. Not the note's own
-    // link handling (a folder is opened by its index here).
+    const isNested = item?.dataset.nested === "true";
+    // A title: Read mode (or nested/generated read-only rows) opens it;
+    // Edit mode on own rows picks the entry (double click edits title),
+    // Ctrl+click opens it.
     const title = event.target.closest?.(".ix-row > a.ix-title");
     if (title && item && !control) {
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (editing(doc) && !event.ctrlKey && !event.metaKey) focusItem(item);
+      if (editing(doc) && !isNested && !event.ctrlKey && !event.metaKey)
+        focusItem(item);
       else openEntry(item);
       return;
     }
@@ -1326,11 +2009,14 @@ export function createIndexView({
     if (control) {
       event.preventDefault();
       const action = control.dataset.ix;
+      if (action === "expand-all") return run(() => expandAll())();
+      if (action === "collapse-level1") return collapseLevel1();
       if (action === "fold") {
         fold(item, !item.classList.contains("closed"));
         // The keys stay on the entry folded (no ring for a click).
         return focusItem(item, false);
       }
+      if (action === "open-folder") return openFolderTarget(item);
       if (action === "unify") {
         const info = folders.get(doc.fileId);
         const child = childOf(info, control.dataset.name);
@@ -1352,10 +2038,11 @@ export function createIndexView({
         control.setAttribute("aria-expanded", String(state.tray));
         return;
       }
+      if (doc.generated) return;
       if (action === "new") return run(() => newPage(null))();
       if (action === "add")
         return addUnlisted(control.closest(".ix-unlisted-item"));
-      if (!item) return;
+      if (!item || isNested) return;
       if (action === "child") return run(() => newPage(item))();
       if (action === "rename") return editTitle(item);
       if (action === "create") return run(() => createMissing(item))();
@@ -1366,9 +2053,9 @@ export function createIndexView({
     if (!item || event.target.closest("a, input, select, textarea")) return;
     const row = event.target.closest(".ix-row");
     if (!row) return;
-    // A click on the row beside its title: the page opens (Read mode), or
-    // the entry is picked for the keys (Edit mode).
-    if (editing(doc)) focusItem(item);
+    // A click on the row beside its title: the page opens (Read mode or
+    // nested/generated rows), or the entry is picked for the keys (Edit).
+    if (editing(doc) && !isNested) focusItem(item);
     else openEntry(item);
   });
   host.addEventListener(
@@ -1380,16 +2067,23 @@ export function createIndexView({
         event.stopPropagation();
         return;
       }
-      const inList = event.target.closest?.(".ix-list, .ix-footer");
+      const inList = event.target.closest?.(
+        ".ix-list, .ix-footer, .ix-controls",
+      );
       if (inList) {
         event.stopPropagation();
         event.preventDefault();
         const item = event.target.closest(".ix-item");
-        if (item && editing(doc) && event.target.closest(".ix-title"))
+        if (
+          item &&
+          editing(doc) &&
+          item.dataset.nested !== "true" &&
+          event.target.closest(".ix-title")
+        )
           editTitle(item);
         return;
       }
-      if (doc.preview) return;
+      if (doc.preview || doc.generated) return;
       if (editing(doc)) {
         event.stopPropagation();
         editBlock(event.target);
@@ -1424,6 +2118,7 @@ export function createIndexView({
       !event.altKey &&
       ["z", "y"].includes(key.toLowerCase()) &&
       !doc.preview &&
+      !doc.generated &&
       !event.target.closest?.("input, textarea, select") &&
       (editing(doc) || event.target.closest?.(".ix-list, .ix-footer"))
     ) {
@@ -1463,7 +2158,7 @@ export function createIndexView({
         return;
       }
     }
-    if (!editing(doc)) return;
+    if (!editing(doc) || item.dataset.nested === "true") return;
     let action = null;
     if (key === "Tab" && !event.altKey && !event.ctrlKey)
       action = event.shiftKey ? "outdent" : "indent";
@@ -1507,7 +2202,10 @@ export function createIndexView({
       return;
     }
     const row = event.target.closest?.(".ix-row, .ix-unlisted-item");
-    if (!row) return;
+    if (!row || row.closest("[data-nested='true']")) {
+      if (row) event.preventDefault();
+      return;
+    }
     dragging = row.matches(".ix-row")
       ? { item: row.parentElement }
       : { unlisted: row };
@@ -1530,7 +2228,12 @@ export function createIndexView({
   host.addEventListener("dragover", (event) => {
     if (!dragging) return;
     const row = event.target.closest?.(".ix-row");
-    if (!row || row.parentElement === dragging.item) return clearDrop();
+    if (
+      !row ||
+      row.parentElement === dragging.item ||
+      row.closest("[data-nested='true']")
+    )
+      return clearDrop();
     if (dragging.item?.contains(row)) return clearDrop();
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
@@ -1550,7 +2253,7 @@ export function createIndexView({
     dragging = null;
     clearDrop();
     autoscroll.detach(scroller());
-    if (!row) return;
+    if (!row || row.closest("[data-nested='true']")) return;
     event.preventDefault();
     const place = placeOf(event, row);
     const goal = row.parentElement;

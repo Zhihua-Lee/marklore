@@ -13,7 +13,11 @@ import {
   movedPathOf,
   unlinkTarget,
 } from "../desktop/link-rewrite.mjs";
-import { applyIndexOp, removeEntriesTo } from "../desktop/folder-index.mjs";
+import {
+  applyIndexOp,
+  isIndexName,
+  removeEntriesTo,
+} from "../desktop/folder-index.mjs";
 import { setNoteName } from "../desktop/note-names.mjs";
 import { wireSplitPane } from "./split-pane.js";
 import { createDocumentSync } from "./document-sync.js";
@@ -290,7 +294,23 @@ const outline = createOutline({
   go: (item) => {
     // An index entry: its row shown (folded entries above it unfolded),
     // not its page opened.
-    if (item.kind === "entry") indexView.reveal(item.line);
+    if (item.kind === "entry") {
+      const target = indexView.reveal(item.key ?? item.line);
+      if (target && item.nested) {
+        const reader = $("#reader");
+        const row = target.querySelector(":scope > .ix-row") || target;
+        const top =
+          row.getBoundingClientRect().top -
+          reader.getBoundingClientRect().top +
+          reader.scrollTop -
+          32;
+        reader.scrollTo({
+          top: Math.max(0, top),
+          behavior: navigationMotion(),
+        });
+        return;
+      }
+    }
     jump(item.from);
   },
 });
@@ -354,6 +374,7 @@ function run(fn) {
       );
 }
 function dirty(doc) {
+  if (!doc || doc.generated) return false;
   return doc.text !== doc.base;
 }
 function docFrom(file = {}) {
@@ -365,6 +386,7 @@ function docFrom(file = {}) {
     text: file.text || "",
     base: file.text || "",
     version: file.version || null,
+    generated: file.generated || null,
     mode: "read",
     pane: "preview",
     anchor: { from: 0, top: true },
@@ -379,8 +401,17 @@ function docFrom(file = {}) {
   };
 }
 function add(file, { activate = true, opener = null } = {}) {
-  const existing =
-    file?.id && tabs.find((t) => t.fileId === file.id || t.path === file.path);
+  const existing = file?.generated
+    ? tabs.find(
+        (t) =>
+          t.generated &&
+          t.generated.path?.toLowerCase() ===
+            String(file.generated.path || "").toLowerCase(),
+      )
+    : file?.id &&
+      tabs.find(
+        (t) => !t.generated && (t.fileId === file.id || t.path === file.path),
+      );
   if (existing) {
     if (activate) activateTab(existing);
     return existing;
@@ -600,7 +631,17 @@ indexView = createIndexView({
   report: toast,
   run,
   setMode: (mode) => setMode(mode),
-  openText: (id) => tabs.find((doc) => doc.fileId === id)?.text ?? null,
+  openText: (id) =>
+    tabs.find((doc) => !doc.generated && doc.fileId === id)?.text ?? null,
+  openPathText: (p) =>
+    tabs.find(
+      (doc) =>
+        !doc.generated &&
+        doc.path &&
+        doc.path.toLowerCase() === String(p).toLowerCase(),
+    )?.text ?? null,
+  openNote: ({ folderId, name }) => openChildNote(folderId, name),
+  openFolder: (folder) => openFolderView(folder),
   newNoteText: (name) =>
     settings.newNoteProperties
       ? templateNote(settings.propertyTemplate, {
@@ -621,6 +662,10 @@ indexView = createIndexView({
   foldsChanged: () => {
     scheduleSession();
     outline.schedule();
+  },
+  outlineChanged: () => {
+    if (active && indexView.applies(active))
+      updateOutline(active.headings || []);
   },
 });
 // Edit mode types into the note as drawn (src/rich): the editor writes the
@@ -952,6 +997,10 @@ function activateTab(doc, { revealGroup = true } = {}) {
 // note, typed into right away), so nothing comes later to move it.
 function setMode(mode, { anchor: destination, now = false } = {}) {
   if (!active || active.mode === mode) return;
+  if (active.generated && mode === "source") {
+    toast(t("自动生成的目录为只读视图"));
+    return;
+  }
   // Leaving a proposal's preview: back where the note was read before it.
   const back = proposals?.leave();
   selectionTools?.hide();
@@ -1125,10 +1174,11 @@ function updateOutline(headings) {
       : null;
   const items = outlineItems(headings, entries);
   const signature = JSON.stringify(
-    items.map(({ kind, label, id, line, depth }) => [
+    items.map(({ kind, label, id, key, line, depth }) => [
       kind,
       label,
       id,
+      key,
       line,
       depth,
     ]),
@@ -1748,6 +1798,122 @@ $("#reader").addEventListener(
   { passive: true },
 );
 
+function replaceIndexTab(doc, payload) {
+  doc.saving = false;
+  doc.closing = false;
+  sentDrafts.delete(doc.id);
+  if (payload.file) {
+    doc.generated = null;
+    doc.fileId = payload.file.id;
+    doc.path = payload.file.path;
+    doc.name = payload.file.name;
+    doc.text = payload.file.text || "";
+    doc.base = doc.text;
+    doc.version = payload.file.version || null;
+  } else {
+    doc.generated = payload.generated;
+    doc.fileId = null;
+    doc.path = payload.generated.path;
+    doc.name = payload.generated.name;
+    doc.text = `# ${payload.generated.name}\n`;
+    doc.base = doc.text;
+    doc.version = null;
+    if (doc.mode === "source") doc.mode = "read";
+  }
+  doc.epoch = 0;
+  doc.conflict = null;
+  doc.html = null;
+  doc.htmlText = null;
+  doc.indexKey = null;
+  doc.folds = [];
+  doc.details = [];
+  doc.anchor = { from: 0, top: true };
+  doc.state = stateFor(doc);
+  if (active === doc) {
+    setEditorState(doc.state);
+    $("#panes").dataset.mode = doc.mode;
+    render(false);
+    updateTabs();
+    updateModes();
+    showConflict();
+    restoreSoon(doc, doc.anchor);
+    updateHistoryButtons();
+    scheduleSession();
+    if (doc.fileId) run(() => checkDisk(doc))();
+    if (settings.sidebar) run(followCurrentFolder)();
+  } else {
+    updateTabs();
+    activateTab(doc);
+  }
+  return doc;
+}
+
+async function openChildNote(folderId, name) {
+  if (!api?.openChild || !folderId || !name) return null;
+  const file = await api.openChild(folderId, name);
+  return file ? add(file, { opener: active }) : null;
+}
+
+async function findFolderIndex(folderId) {
+  if (!folderId) return null;
+  if (api?.folderIndex) {
+    const hit = await api.folderIndex(folderId).catch(() => null);
+    if (hit) return hit;
+  }
+  if (api?.list) {
+    const items = (await api.list(folderId).catch(() => null)) || [];
+    const item = items.find(
+      (c) => !c.directory && (c.index || isIndexName(c.name)),
+    );
+    if (item) return { path: item.path, name: item.name };
+  }
+  return null;
+}
+
+async function openFolderView(folder, { replace = false } = {}) {
+  if (!folder?.id) return null;
+  const idx = await findFolderIndex(folder.id);
+  const existing = idx?.path
+    ? tabs.find(
+        (t) => !t.generated && t.path?.toLowerCase() === idx.path.toLowerCase(),
+      )
+    : tabs.find(
+        (t) =>
+          t.generated &&
+          t.generated.path?.toLowerCase() ===
+            String(folder.path || "").toLowerCase(),
+      );
+  if (existing) {
+    activateTab(existing);
+    return existing;
+  }
+  let payload;
+  if (idx && api?.openChild) {
+    const file = await api.openChild(folder.id, idx.name);
+    if (!file) return null;
+    payload = { file };
+  } else {
+    payload = {
+      generated: {
+        folderId: folder.id,
+        name: folder.name,
+        path: folder.path,
+      },
+    };
+  }
+  if (replace && active && indexView.applies(active) && !dirty(active))
+    return replaceIndexTab(active, payload);
+  return add(
+    payload.file || {
+      name: payload.generated.name,
+      path: payload.generated.path,
+      text: `# ${payload.generated.name}\n`,
+      generated: payload.generated,
+    },
+    { opener: active },
+  );
+}
+
 async function openFiles() {
   if (!api) return toast(t("请运行桌面版以访问本地文件"));
   for (const file of await api.pickFiles()) add(file);
@@ -2218,9 +2384,10 @@ async function flushSession() {
     return {
       id: t.id,
       fileId: t.fileId,
+      generatedFolderId: t.generated?.folderId || null,
       name: t.name,
       // A dirty untitled note travels once, as its draft.
-      content: t.fileId || changed ? undefined : t.text,
+      content: t.fileId || t.generated || changed ? undefined : t.text,
       mode: t.mode,
       groupId: t.groupId || null,
       pane: t.pane,
@@ -2264,8 +2431,14 @@ const commands = {
     const doc = add({ name: t("未命名.md"), text }, { opener: active });
     if (doc) editNewNote(doc);
   },
-  save: () => save(),
-  saveAs: () => save(true),
+  save: () => {
+    if (active?.generated) return toast(t("自动生成的目录为只读视图"));
+    return save();
+  },
+  saveAs: () => {
+    if (active?.generated) return toast(t("自动生成的目录为只读视图"));
+    return save(true);
+  },
   refresh: () => checkDisk(active, true),
   exportHTML: () => exportActive("html"),
   exportPDF: () => exportActive("pdf"),
@@ -2552,10 +2725,19 @@ if (api) {
     for (const entry of boot.restored || []) {
       // Retire only the exact unedited app-generated welcome. Never alter a user document.
       if (await untouchedLegacyWelcome(entry)) continue;
-      const doc = add(
-        entry.document || { name: entry.name, text: entry.content || "" },
-        { activate: false },
-      );
+      const initial = entry.generated
+        ? {
+            name: entry.generated.name,
+            path: entry.generated.path,
+            text: `# ${entry.generated.name}\n`,
+            generated: {
+              folderId: entry.generated.id,
+              name: entry.generated.name,
+              path: entry.generated.path,
+            },
+          }
+        : entry.document || { name: entry.name, text: entry.content || "" };
+      const doc = add(initial, { activate: false });
       if (!doc) break;
       doc.id = entry.id || doc.id;
       Object.assign(doc, {

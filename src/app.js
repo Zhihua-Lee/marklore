@@ -1222,13 +1222,14 @@ function render(preserve) {
 }
 let outlineSignature = "";
 function updateOutline(headings) {
-  // An index file shown as its pages: its first two levels of entries too.
+  // An index file shown as its pages: its level-one entries too.
   const entries =
     active && !proposals?.shown(active) && indexView.applies(active)
       ? indexView.outlineEntries()
       : null;
   const items = outlineItems(headings, entries);
-  const signature = JSON.stringify(
+  const signature = JSON.stringify([
+    active?.id ?? null,
     items.map(({ kind, label, id, key, line, depth }) => [
       kind,
       label,
@@ -1237,7 +1238,7 @@ function updateOutline(headings) {
       line,
       depth,
     ]),
-  );
+  ]);
   if (outlineSignature === signature) {
     // The same entries: their places in the text may have moved.
     outline.move(items);
@@ -2052,7 +2053,7 @@ for (const name of ["wheel", "pointerdown", "keydown"])
 let scrollFrame = 0;
 function scrolled() {
   lastScrollAt = performance.now();
-  outline.schedule();
+  outline.schedule(true);
   if (scrollFrame) return;
   scrollFrame = requestAnimationFrame(() => {
     scrollFrame = 0;

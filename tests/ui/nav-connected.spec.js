@@ -1098,6 +1098,15 @@ test("library root without index opens generated read-only contents and never sa
   await expect(ixItem(page, "导言")).toBeVisible();
   await expect(ixItem(page, "写在前面")).toBeVisible();
 
+  // Generated contents outline lists only level-1 entries even when branches expand.
+  const genOutline = page.locator("#outline .outline-entry");
+  await expect(genOutline).toHaveText(["第一部分 目录内标题", "写在前面"]);
+  await ixItem(page, "进阶专题")
+    .locator(":scope > .ix-row > .ix-twisty")
+    .click();
+  await expect(ixItem(page, "深层推导")).toBeVisible();
+  await expect(genOutline).toHaveText(["第一部分 目录内标题", "写在前面"]);
+
   // Generated view shows folder display names with zero trailing slashes.
   const folderTexts = await page
     .locator('#content .ix-item[data-kind="folder"] > .ix-row > .ix-title')
@@ -1115,46 +1124,43 @@ test("library root without index opens generated read-only contents and never sa
   expect(await page.evaluate(() => window.mock.saves)).toEqual([]);
 });
 
-test("outline lists expanded nested levels and updates as branches fold and unfold", async ({
+test("outline lists only level-one entries even as branches fold and unfold, and marks the level-one head across open children", async ({
   page,
 }) => {
   await setupConnected(page, { rootIndexed: true });
   const outlineEntries = page.locator("#outline .outline-entry");
-  await expect(outlineEntries).toHaveText([
-    "第一部分 基础",
-    "导言",
-    "第一节 实数系",
-    "进阶专题",
-    "随笔目录",
-    "写在前面",
-  ]);
+  await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 
-  // Expand Sub -> nested chapters inside Sub appear in outline.
+  // Expand Sub -> nested chapters become visible in the index without cluttering the outline.
   await ixItem(page, "进阶专题")
     .locator(":scope > .ix-row > .ix-twisty")
     .click();
-  await expect(outlineEntries).toHaveText([
-    "第一部分 基础",
-    "导言",
-    "第一节 实数系",
-    "进阶专题",
-    "深层推导",
-    "底层归档",
-    "随笔目录",
-    "写在前面",
-  ]);
+  await expect(ixItem(page, "深层推导")).toBeVisible();
+  await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 
-  // Alt+Shift+[ removes one open level per press from outline.
-  await page.keyboard.press("Alt+Shift+BracketLeft");
-  await expect(outlineEntries).toHaveText([
+  // Reading inside open children keeps their level-1 head marked.
+  await page.setViewportSize({ width: 1280, height: 320 });
+  await page.evaluate(() => {
+    const reader = document.querySelector("#reader");
+    const deep = [...document.querySelectorAll(".ix-item .ix-title")].find(
+      (el) => el.textContent === "深层推导",
+    );
+    const row = deep?.closest(".ix-row");
+    if (reader && row) {
+      reader.scrollTop +=
+        row.getBoundingClientRect().top -
+        reader.getBoundingClientRect().top -
+        20;
+    }
+  });
+  await expect(page.locator("#outline [aria-current='location']")).toHaveText(
     "第一部分 基础",
-    "导言",
-    "第一节 实数系",
-    "进阶专题",
-    "随笔目录",
-    "写在前面",
-  ]);
+  );
+
+  // Folding and unfolding levels keeps the outline at level-1 entries only.
   await page.keyboard.press("Alt+Shift+BracketLeft");
+  await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
+  await page.keyboard.press("Alt+Shift+BracketRight");
   await expect(outlineEntries).toHaveText(["第一部分 基础", "写在前面"]);
 });
 

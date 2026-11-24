@@ -1845,24 +1845,19 @@ export function createIndexView({
       if (parent.classList.contains("closed")) fold(parent, false);
     return item || null;
   }
-  // The outline's entries for the index shown: own first two levels, plus
-  // visible expanded nested chapters, by the names the rows show.
+  // The outline's entries for the index shown: its level-one entries,
+  // by the names the rows show.
   function outlineEntries() {
     const doc = getDocument();
     return [...host.querySelectorAll(".ix-item")]
-      .filter((item) => {
-        const level = Number(item.getAttribute("aria-level")) || 1;
-        const nested = item.dataset.nested === "true";
-        if (!nested && !doc?.generated) return level <= 2;
-        return level <= 3 && !item.parentElement?.closest(".ix-item.closed");
-      })
+      .filter((item) => (Number(item.getAttribute("aria-level")) || 1) === 1)
       .map((item) => ({
         key: item.dataset.ixId || null,
         nested: item.dataset.nested === "true" || Boolean(doc?.generated),
         label:
           item.querySelector(":scope > .ix-row > .ix-title")?.textContent ?? "",
         from: Number(item.dataset.from),
-        depth: (Number(item.getAttribute("aria-level")) || 1) - 1,
+        depth: 0,
         line: Number(item.dataset.line),
       }));
   }

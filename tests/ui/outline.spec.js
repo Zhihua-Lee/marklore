@@ -234,19 +234,15 @@ test("an empty outline says so in the interface's language", async ({
   ).toBe('"暂无标题"');
 });
 
-test("an index file's outline lists two levels of entries and scrolls to their rows", async ({
+test("an index file's outline lists level-one entries, marks the head across open children, and scrolls to their rows", async ({
   page,
 }) => {
   await setupIndex(page, { outline: true });
-  // Its title left out; two levels of entries, the appendix heading in its
-  // place with its entries under it.
+  // Only level-1 entries are listed, plus the appendix heading and its
+  // level-1 entries under it.
   await expect(entries(page)).toHaveText([
     "第一章 实数",
-    "1.1 有理数的稠密性",
-    "1.2 确界原理",
     "第二章 数列极限",
-    "2.1 收敛的定义",
-    "2.2 单调有界定理",
     "第三章 函数极限",
     "附录",
     "符号表",
@@ -255,21 +251,262 @@ test("an index file's outline lists two levels of entries and scrolls to their r
   const depths = await entries(page).evaluateAll((list) =>
     list.map((b) => b.dataset.depth),
   );
-  expect(depths).toEqual(["0", "1", "1", "0", "1", "1", "0", "0", "1", "1"]);
-  // A click scrolls to the row (folded entries above it unfolded); the page
-  // does not open.
-  await item(page, "第一章 实数")
-    .locator(":scope > .ix-row > .ix-twisty")
-    .click();
-  await expect(item(page, "第一章 实数")).toHaveClass(/closed/);
-  await entries(page).filter({ hasText: "1.2 确界原理" }).click();
-  await expect(item(page, "第一章 实数")).not.toHaveClass(/closed/);
-  await expect(row(page, "1.2 确界原理")).toBeInViewport();
+  expect(depths).toEqual(["0", "0", "0", "0", "1", "1"]);
+
+  // Reading inside open children marks their level-1 head.
+  await page.setViewportSize({ width: 1280, height: 300 });
+  await row(page, "1.2 确界原理").evaluate((el) => {
+    const reader = document.querySelector("#reader");
+    reader.scrollTop +=
+      el.getBoundingClientRect().top - reader.getBoundingClientRect().top - 20;
+  });
   await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
-    "1.2 确界原理",
+    "第一章 实数",
+  );
+
+  // Clicking a level-1 entry scrolls to its row without opening its page.
+  await entries(page).filter({ hasText: "参考书目" }).click();
+  await expect(row(page, "参考书目")).toBeInViewport();
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "参考书目",
   );
   expect(await page.evaluate(() => window.mock.opened)).toEqual([]);
   await expect(page.getByRole("tab")).toHaveCount(1);
+});
+
+async function bootMultiLong(page) {
+  const mkDoc = (id, name, prefix) => ({
+    id,
+    name,
+    path: "C:/fixture/" + name,
+    text:
+      `# ${prefix} Title\n\n` +
+      Array.from(
+        { length: 48 },
+        (_, i) =>
+          `## ${prefix} ${i + 1}\n\nParagraph 1 for ${i + 1}.\n\nParagraph 2 for ${i + 1}.\n\nParagraph 3 for ${i + 1}.\n`,
+      ).join("\n"),
+    version: "v1",
+  });
+  const docs = [mkDoc("a", "Alpha.md", "Alpha"), mkDoc("b", "Beta.md", "Beta")];
+  await installFolio(page);
+  await page.addInitScript((docs) => {
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: docs,
+        restored: [],
+        roots: [],
+        settings: { outline: true, smoothScroll: false },
+      }),
+    });
+  }, docs);
+  await page.setViewportSize({ width: 1280, height: 640 });
+  await page.goto("/");
+  await expect(outline(page).locator("button")).toHaveCount(48);
+}
+
+test("outline pauses auto-scroll on manual wheel and keyboard scroll, keeps updating aria-current, and resumes on click, tab switch, or re-entry scroll", async ({
+  page,
+}) => {
+  await bootMultiLong(page);
+  await page.getByRole("tab", { name: "Alpha.md" }).click();
+  await expect(outline(page).locator("button").first()).toHaveText("Alpha 1");
+
+  const overflow = await outline(page).evaluate(
+    (el) => el.scrollHeight - el.clientHeight,
+  );
+  expect(overflow).toBeGreaterThan(250);
+
+  const navBox = await outline(page).boundingBox();
+  const inNavView = (idx) =>
+    outline(page)
+      .locator("button")
+      .nth(idx)
+      .evaluate((el) => {
+        const nav = el.parentElement.getBoundingClientRect();
+        const own = el.getBoundingClientRect();
+        return own.top >= nav.top - 1 && own.bottom <= nav.bottom + 1;
+      });
+  const scrollReaderToHeading = async (idx) => {
+    await page.evaluate((i) => {
+      const reader = document.querySelector("#reader");
+      const h = document.querySelectorAll("#content h2")[i];
+      reader.scrollTop +=
+        h.getBoundingClientRect().top - reader.getBoundingClientRect().top - 16;
+    }, idx);
+  };
+
+  // 1. Programmatic follow keeps active entry in view (does NOT pause itself).
+  await scrollReaderToHeading(38);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 39",
+  );
+  expect(await inNavView(38)).toBe(true);
+  await scrollReaderToHeading(1);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 2",
+  );
+  expect(await inNavView(1)).toBe(true);
+
+  // 2. Manual wheel scroll on #outline pauses following while scroll-spy stays live.
+  await page.mouse.move(
+    navBox.x + navBox.width / 2,
+    navBox.y + navBox.height / 2,
+  );
+  await page.mouse.wheel(0, 700);
+  await expect
+    .poll(() => outline(page).evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(200);
+  expect(await inNavView(1)).toBe(false);
+  const pausedTop = await outline(page).evaluate((el) => el.scrollTop);
+
+  await scrollReaderToHeading(6);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 7",
+  );
+  expect(await outline(page).evaluate((el) => el.scrollTop)).toBe(pausedTop);
+
+  // Keyboard scrolling inside #outline when starting from following=true also pauses following.
+  await scrollReaderToHeading(1);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 2",
+  );
+  // First click Alpha 2 to guarantee following=true, then release pin via wheel on #reader.
+  await outline(page).locator("button").nth(1).click();
+  const rBox = await page.locator("#reader").boundingBox();
+  await page.mouse.move(rBox.x + rBox.width / 2, rBox.y + rBox.height / 2);
+  await page.mouse.wheel(0, 10);
+  await outline(page).locator("button").nth(1).focus();
+  await page.keyboard.press("PageDown");
+  await expect
+    .poll(async () =>
+      outline(page).evaluate(
+        (el) =>
+          new Promise((resolve) => {
+            const first = el.scrollTop;
+            requestAnimationFrame(() =>
+              requestAnimationFrame(() =>
+                resolve(first > 150 && el.scrollTop === first ? first : 0),
+              ),
+            );
+          }),
+      ),
+    )
+    .toBeGreaterThan(150);
+  const kbPausedTop = await outline(page).evaluate((el) => el.scrollTop);
+  await scrollReaderToHeading(3);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 4",
+  );
+  expect(await inNavView(3)).toBe(false);
+  expect(await outline(page).evaluate((el) => el.scrollTop)).toBe(kbPausedTop);
+
+  // 3a. Resume (1): clicking an outline entry keeps pin intact until manual reader scroll and resumes following.
+  const visibleIdx = await outline(page).evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const btns = [...el.querySelectorAll("button")];
+    return btns.findIndex((b) => {
+      const r = b.getBoundingClientRect();
+      return r.top >= box.top + 8 && r.bottom <= box.bottom - 8;
+    });
+  });
+  await outline(page).locator("button").nth(visibleIdx).click();
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    `Alpha ${visibleIdx + 1}`,
+  );
+  // Hand scroll on #reader releases pin, then scrolling to Alpha 2 follows in #outline.
+  await scrollReaderToHeading(1);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    `Alpha ${visibleIdx + 1}`,
+  );
+  const readerBox = await page.locator("#reader").boundingBox();
+  await page.mouse.move(
+    readerBox.x + readerBox.width / 2,
+    readerBox.y + readerBox.height / 2,
+  );
+  await page.mouse.wheel(0, -20);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 2",
+  );
+  expect(await inNavView(1)).toBe(true);
+
+  // 3b. Resume (2): switching to another tab / note resumes following.
+  await page.mouse.move(
+    navBox.x + navBox.width / 2,
+    navBox.y + navBox.height / 2,
+  );
+  await page.mouse.wheel(0, 700);
+  await expect
+    .poll(() => outline(page).evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(200);
+  await page.getByRole("tab", { name: "Beta.md" }).click();
+  await expect(outline(page).locator("button").first()).toHaveText("Beta 1");
+  await scrollReaderToHeading(40);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Beta 41",
+  );
+  expect(await inNavView(40)).toBe(true);
+  await page.getByRole("tab", { name: "Alpha.md" }).click();
+  await expect(outline(page).locator("button").first()).toHaveText("Alpha 1");
+
+  // 3c. Resume (3): scrolling note after marked entry came back into #outline's view.
+  await scrollReaderToHeading(1);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 2",
+  );
+  await page.mouse.move(
+    navBox.x + navBox.width / 2,
+    navBox.y + navBox.height / 2,
+  );
+  await page.mouse.wheel(0, 320);
+  await expect
+    .poll(() => outline(page).evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(150);
+  expect(await inNavView(1)).toBe(false);
+  expect(await inNavView(38)).toBe(false);
+  const midIdx = await outline(page).evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const btns = [...el.querySelectorAll("button")];
+    return btns.findIndex((b) => {
+      const r = b.getBoundingClientRect();
+      return r.top >= box.top + 32 && r.bottom <= box.bottom - 32;
+    });
+  });
+  expect(midIdx).toBeGreaterThan(3);
+  expect(midIdx).toBeLessThan(35);
+  // First scroll within paused zone that brings mark into #outline's view:
+  await scrollReaderToHeading(midIdx);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    `Alpha ${midIdx + 1}`,
+  );
+  // Subsequent note scroll past the viewport edge resumes auto-following:
+  await scrollReaderToHeading(38);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 39",
+  );
+  expect(await inNavView(38)).toBe(true);
+
+  // Also works when the reader manually wheels #outline back onto the marked entry, then scrolls the note.
+  await scrollReaderToHeading(1);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 2",
+  );
+  await page.mouse.move(
+    navBox.x + navBox.width / 2,
+    navBox.y + navBox.height / 2,
+  );
+  await page.mouse.wheel(0, 700);
+  await expect
+    .poll(() => outline(page).evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(200);
+  await page.mouse.wheel(0, -1000);
+  await expect.poll(() => outline(page).evaluate((el) => el.scrollTop)).toBe(0);
+  expect(await inNavView(1)).toBe(true);
+  await scrollReaderToHeading(38);
+  await expect(outline(page).locator('[aria-current="location"]')).toHaveText(
+    "Alpha 39",
+  );
+  expect(await inNavView(38)).toBe(true);
 });
 
 test("an index file's guide lines fold its entries, as section lines do", async ({

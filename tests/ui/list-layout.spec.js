@@ -253,6 +253,9 @@ const firstBlockCases = {
 test("nested lists, tables, and note first blocks match Read and Edit across themes and widths", async ({
   page,
 }) => {
+  // Every case in two themes and two widths, both modes: longer than one
+  // ordinary test on a slow runner.
+  test.setTimeout(120000);
   const composite =
     "# Parity\n\n" +
     Object.entries(parityCases)

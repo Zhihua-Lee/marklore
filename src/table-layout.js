@@ -78,11 +78,14 @@ export function optimizeTable(table, beforeChange) {
   if (!count || count > 12 || rows.some((r) => r.cells.length !== count))
     return false;
   const parentStyle = getComputedStyle(parent),
+    wrapperStyle = getComputedStyle(wrapper),
     style = getComputedStyle(table);
   const available = Math.floor(
     parent.clientWidth -
       parseFloat(parentStyle.paddingLeft) -
       parseFloat(parentStyle.paddingRight) -
+      Math.max(0, parseFloat(wrapperStyle.marginLeft) || 0) -
+      Math.max(0, parseFloat(wrapperStyle.marginRight) || 0) -
       4,
   );
   if (available < 100) return false;

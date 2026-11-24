@@ -11,6 +11,7 @@ import {
   Plugin,
 } from "prosemirror-state";
 import { formulaFragmentFor, renderMarkdown } from "../markdown.js";
+import { decorateCodeBlocks } from "../code-blocks.js";
 import { renderDiagrams } from "../diagrams.js";
 import { composing, settled } from "../composing.js";
 import { t } from "../../desktop/i18n.mjs";
@@ -117,7 +118,7 @@ export class DrawnView {
     drawn.set(this.dom, getPos);
     this.draw(node, options);
     this.dom.addEventListener("mousedown", (e) => {
-      if (e.button !== 0) return;
+      if (e.button !== 0 || e.target.closest?.(".code-copy")) return;
       e.preventDefault();
       if (PICKED.has(this.node.type)) return pressFormula(view, getPos, e);
       const pos = getPos();
@@ -191,6 +192,7 @@ export class DrawnView {
         );
         pre.append(code);
         dom.replaceChildren(pre);
+        decorateCodeBlocks(dom, { fold: false });
         renderDiagrams(dom, theme);
       } else if (kind === "html") {
         dom.innerHTML = renderMarkdown(source, fileId).html;
@@ -208,8 +210,8 @@ export class DrawnView {
   deselectNode() {
     this.dom.classList.remove("rich-picked");
   }
-  stopEvent() {
-    return false;
+  stopEvent(event) {
+    return !!event.target.closest?.(".code-copy");
   }
   ignoreMutation() {
     return true;

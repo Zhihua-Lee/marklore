@@ -32,7 +32,6 @@
     "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
 }
 :root[data-typeface="literata"] .prose {
-  line-height: 1.7;
   font-optical-sizing: auto;
   font-kerning: normal;
 }
@@ -41,14 +40,16 @@
 }
 :root[data-typeface="literata"] .prose strong {
   font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 :root[data-typeface="literata"] .prose pre {
-  line-height: 1.65;
   font-weight: var(--note-weight, 400);
+  font-variation-settings: normal;
 }
 :root[data-typeface="literata"] .prose :not(pre) > code {
   font-size: 0.82em;
-  font-weight: var(--inline-code-weight, 500);
+  font-weight: var(--inline-code-weight, 400);
+  font-variation-settings: "wght" var(--inline-code-wght, 400);
 }
 :root[data-typeface="literata"] .prose .formula > .katex {
   font-size: 1em;
@@ -71,8 +72,12 @@
 .prose strong,
 .prose b {
   font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 /* KaTeX owns math family/weight/style; never smear glyphs or override its spans. */
+.prose .katex {
+  font-variation-settings: normal;
+}
 .prose .katex .cjk_fallback {
   font-family: var(--font-note);
   /* CJK already has full-em glyphs; only Latin math needs the 1.21 optical scale. */
@@ -207,10 +212,11 @@ main {
   color: var(--accent);
 }
 #outline button {
+  min-height: 28px;
   overflow-wrap: anywhere;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-block: 7px;
+  padding-block: 4px;
   scrollbar-width: thin;
 }
 #outline .katex {
@@ -536,6 +542,7 @@ select:focus-visible {
   }
   #content.prose,
   #rich.prose {
+    --note-hpad: 40px;
     padding: 44px 12px 60px 28px;
   }
 }
@@ -668,8 +675,8 @@ body.file-drop::after {
 }
 /* Settings: a fixed title bar, section links, one scrolling pane. */
 #appearance {
-  width: min(720px, calc(100vw - 32px));
-  height: min(620px, calc(100vh - 48px));
+  width: min(640px, calc(100vw - 32px));
+  height: min(520px, calc(100vh - 48px));
   max-height: none;
   /* Not the 460 px cap of confirmation dialogs (style.css). */
   max-width: none;
@@ -683,25 +690,26 @@ body.file-drop::after {
 #appearance .settings-title {
   gap: 12px;
   margin: 0;
-  padding: 14px 14px 14px 22px;
+  padding: 10px 12px 10px 18px;
   border-bottom: 1px solid var(--line);
 }
 .settings-body {
   display: grid;
-  grid-template-columns: 172px minmax(0, 1fr);
+  grid-template-columns: 156px minmax(0, 1fr);
   min-height: 0;
 }
 .settings-nav {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 12px 8px;
+  padding: 8px 6px;
   border-right: 1px solid var(--line);
   overflow: auto;
 }
 .settings-nav button {
   text-align: left;
-  padding: 7px 10px;
+  min-height: 28px;
+  padding: 5px 10px;
   border: 0;
   border-radius: 6px;
   font-size: 13px;
@@ -719,7 +727,7 @@ body.file-drop::after {
 .settings-pane {
   position: relative;
   overflow: auto;
-  padding: 16px 22px 24px;
+  padding: 12px 18px 18px;
 }
 @media (max-width: 620px) {
   .settings-body {
@@ -750,9 +758,9 @@ body.file-drop::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 14px;
   margin: 0;
-  padding: 11px 0;
+  padding: 7px 0;
   font-size: 13px;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
@@ -850,7 +858,7 @@ body.file-drop::after {
   background: var(--hover);
 }
 #appearance fieldset {
-  margin-bottom: 26px;
+  margin-bottom: 14px;
 }
 #appearance legend {
   font-weight: 600;
@@ -915,5 +923,5 @@ body.file-drop::after {
   flex: none;
 }
 #appearance .setting select {
-  width: 200px;
+  width: 220px;
 }

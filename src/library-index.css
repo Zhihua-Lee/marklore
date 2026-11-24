@@ -9,7 +9,9 @@
 }
 #tree details.folder > summary {
   display: block;
-  padding: 6px 4px 6px 3px;
+  min-height: 26px;
+  padding: 3px 4px 3px 3px;
+  line-height: 20px;
   list-style: none;
   border-radius: 5px;
 }
@@ -47,7 +49,12 @@
 }
 /* A note: its name where a folder's name starts. */
 #tree .file {
+  min-height: 26px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  padding-right: 6px;
   padding-left: calc(3px + var(--tree-arrow) + 2px);
+  line-height: 18px;
   border-radius: 5px;
 }
 /* The row fills what its level leaves, not the whole tree's width: else the
@@ -294,14 +301,23 @@
 }
 
 /* A note's name (its heading); its file is in the tooltip. */
+#tree .file:has(> .file-title) {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
 #tree .file .file-title {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 /* In the tree, at the row's end: a click on the name opens the note. */
 #tree .file > .name-mark {
-  float: right;
-  margin: 0 0 0 4px;
+  float: none;
+  flex: none;
+  margin: 0;
 }
 /* A note whose file is named otherwise: one small ring after the name, a
    click unifying them (shared with the index view). */

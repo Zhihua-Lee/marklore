@@ -1,28 +1,51 @@
-/* Only the button sorts; the header text keeps normal text selection. */
+/* Only the button sorts; the header text keeps normal text selection.
+   Taken out of inline flow so narrow sortable headers never wrap or widen past Edit. */
+th.sortable-header {
+  position: relative;
+}
+/* Reserve the sort mark width on inline-end in Read, table-measure probes, and
+   Edit so header text never runs under the mark and Read/Edit stay aligned. */
+.table-scroll th.sortable-header,
+.prose .table-scroll th.sortable-header,
+#rich .table-scroll th {
+  padding-inline-end: calc(max(18px, 1.15em) + 8px);
+}
 .table-sort {
+  position: absolute;
+  right: 1px;
+  top: 50%;
+  transform: translateY(-50%);
   cursor: pointer;
   border: 0;
   border-radius: 4px;
   display: inline-grid;
   place-items: center;
-  min-height: 26px;
-  min-width: 26px;
-  margin-block: -3px;
-  margin-inline-start: 6px;
-  padding: 0 4px;
+  min-height: 24px;
+  min-width: 18px;
+  margin: 0;
+  padding: 0 2px;
   font: inherit;
   line-height: 1;
   color: var(--muted);
-  vertical-align: middle;
+  background: transparent;
 }
 .table-sort:hover {
-  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--table-accent, var(--accent)) 14%,
+    var(--table-paper, var(--paper))
+  );
   color: var(--ink);
 }
 th[aria-sort="ascending"] .table-sort,
 th[aria-sort="descending"] .table-sort {
   color: var(--accent);
   font-weight: 600;
+  background: color-mix(
+    in srgb,
+    var(--table-accent, var(--accent)) 10%,
+    var(--table-paper, var(--paper))
+  );
 }
 @media print {
   .table-sort {

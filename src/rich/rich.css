@@ -21,12 +21,15 @@
   padding-bottom: 30vh;
 }
 #rich .ProseMirror li > p {
-  margin: 0.15em 0;
+  margin: 0;
 }
 /* A loose list (blank lines between its items) is read with its items'
    paragraphs spaced as paragraphs (style.css): the same height here. */
 #rich .ProseMirror :is(ul, ol):not([data-tight]) > li > p {
-  margin-block: 0.4em;
+  margin-block: var(--gap-block);
+}
+#rich .ProseMirror :is(ul, ol)[data-tight] > li > p {
+  margin-block: 0;
 }
 #rich .ProseMirror li.task-item,
 #rich .ProseMirror li:has(> p > .task-list-item-checkbox:first-child) {
@@ -82,12 +85,25 @@
 }
 #rich .raw-inline[data-kind="footnote"] {
   vertical-align: super;
-  font-size: 0.7em;
+  font-size: 0.75em;
+  line-height: 0;
   color: var(--accent);
+}
+#rich .raw-block[data-kind="diagram"] {
+  margin: var(--gap-block) 0;
+}
+#rich .ProseMirror > .raw-block[data-kind="diagram"]:first-child {
+  margin-top: 0;
+}
+#rich .ProseMirror > .raw-block[data-kind="diagram"]:last-child {
+  margin-bottom: 0;
+}
+#rich .raw-block[data-kind="diagram"] > .code-block {
+  margin: 0;
 }
 #rich .raw-block[data-kind="text"] pre,
 #rich .raw-block[data-kind="frontmatter"] pre {
-  margin: 0.6em 0;
+  margin: var(--gap-block) 0;
   padding: 6px 10px;
   color: var(--muted);
   background: color-mix(in srgb, var(--reading-ink) 4%, transparent);
@@ -191,7 +207,16 @@
 }
 #rich
   .ProseMirror
-  > :not(.rich-current, .ProseMirror-gapcursor, ul, ol, .table-scroll) {
+  > :not(
+    .rich-current,
+    .ProseMirror-gapcursor,
+    ul,
+    ol,
+    .table-scroll,
+    .image-line,
+    .image-row,
+    hr
+  ) {
   content-visibility: auto;
 }
 /* Lists and tables too, once they have been laid out (editor.js adds the class
@@ -430,51 +455,104 @@
   > :last-child {
   margin-bottom: 0;
 }
-/* A leading heading (other than a lone title) starts a section in the
-   reading view (.note-section:first-child, .front-matter + .note-section),
-   so its top margin is zero; its bottom margin matches .note-section's. */
-#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6):first-child,
+/* Sections (sections.js): mirror the reading view's nested section inset,
+   non-collapsed heading-body spacing, and zeroed trailing section margins. */
+#rich .ProseMirror > [data-rich-depth="1"] {
+  --rich-depth: 1;
+}
+#rich .ProseMirror > [data-rich-depth="2"] {
+  --rich-depth: 2;
+}
+#rich .ProseMirror > [data-rich-depth="3"] {
+  --rich-depth: 3;
+}
+#rich .ProseMirror > [data-rich-depth="4"] {
+  --rich-depth: 4;
+}
+#rich .ProseMirror > [data-rich-depth="5"] {
+  --rich-depth: 5;
+}
+#rich .ProseMirror > [data-rich-depth="6"] {
+  --rich-depth: 6;
+}
+#rich .ProseMirror > [data-rich-depth] {
+  margin-left: calc(18px * var(--rich-depth, 0));
+}
+#rich .ProseMirror > hr[data-rich-depth] {
+  width: auto;
+  margin-right: 0;
+}
+#rich .ProseMirror > .table-scroll[data-rich-depth] {
+  max-width: calc(100% - 18px * var(--rich-depth, 0));
+}
 #rich
   .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + :is(h1, h2, h3, h4, h5, h6),
-#rich
+  > .table-scroll[data-rich-depth]:has(> table.reading-columns),
+:root[data-table-width="full"]
+  #rich
   .ProseMirror
-  > .raw-block[data-kind="frontmatter"]:first-child
-  + :is(h1, h2, h3, h4, h5, h6),
-#rich
-  .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + .raw-block[data-kind="frontmatter"]
-  + :is(h1, h2, h3, h4, h5, h6) {
+  > .table-scroll[data-rich-depth] {
+  width: calc(100% - 18px * var(--rich-depth, 0));
+}
+#rich .ProseMirror > h1:not([data-rich-sec-mt]) {
+  margin: 0 0 var(--gap-block);
+}
+#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt] {
+  margin-bottom: var(--gap-inner);
+}
+#rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="zero"] {
   margin-top: 0;
 }
-#rich .ProseMirror > :is(h2, h3, h4, h5, h6):first-child,
+#rich .ProseMirror > :is(h1, h2, h3)[data-rich-sec-mt="normal"] {
+  margin-top: var(--gap-section);
+}
+#rich .ProseMirror > :is(h4, h5, h6)[data-rich-sec-mt="normal"] {
+  margin-top: var(--gap-block);
+}
 #rich
   .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + :is(h2, h3, h4, h5, h6),
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="nested-first"] {
+  margin-top: var(--gap-block);
+}
+#rich .ProseMirror > :is(h1, h2, h3)[data-rich-sec-mt="after-empty"],
 #rich
   .ProseMirror
-  > .raw-block[data-kind="frontmatter"]:first-child
-  + :is(h2, h3, h4, h5, h6),
+  > :is(h4, h5, h6)[data-rich-sec-mt="after-empty"]:is(
+    [data-rich-head="1"],
+    [data-rich-head="2"],
+    [data-rich-head="3"]
+  ) {
+  margin-top: var(--gap-section);
+}
 #rich
   .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + .raw-block[data-kind="frontmatter"]
-  + :is(h2, h3, h4, h5, h6),
-#rich .ProseMirror > h1:first-child:has(~ h1),
-#rich .ProseMirror > .ProseMirror-gapcursor:first-child + h1:has(~ h1),
+  > :is(h4, h5, h6)[data-rich-sec-mt="after-empty"]:is(
+    [data-rich-head="4"],
+    [data-rich-head="5"],
+    [data-rich-head="6"]
+  ) {
+  margin-top: var(--gap-block);
+}
+#rich .ProseMirror > [data-rich-sec-first],
+#rich .ProseMirror > .image-line[data-rich-sec-first] > img:first-child,
 #rich
   .ProseMirror
-  > .raw-block[data-kind="frontmatter"]:first-child
-  + h1:has(~ h1),
+  > .image-line[data-rich-sec-first]
+  > img.ProseMirror-separator:first-child
+  + img {
+  margin-top: 0;
+}
+#rich .ProseMirror > [data-rich-sec-last],
+#rich .ProseMirror > p.image-row[data-rich-sec-last],
+#rich .ProseMirror > p.image-line[data-rich-sec-last] {
+  margin-bottom: 0;
+}
+#rich .ProseMirror > .image-line[data-rich-sec-last] > img:last-child,
 #rich
   .ProseMirror
-  > .ProseMirror-gapcursor:first-child
-  + .raw-block[data-kind="frontmatter"]
-  + h1:has(~ h1) {
-  margin-bottom: 0.65em;
+  > .image-line[data-rich-sec-last]
+  > img:not(:has(~ img:not(.ProseMirror-separator))) {
+  margin-bottom: 0;
 }
 /* The caret between two blocks (before or after a table, a formula...): a
    line across the note, so it is seen at once. */
@@ -504,21 +582,40 @@
   opacity: 0.6;
   padding: 0 1px;
 }
-/* <details> folds: the marker before the summary folds and unfolds. */
+/* <details> folds: card styling and marker matching Read mode; clicking the
+   marker before the summary folds and unfolds. */
 #rich .rich-details {
   position: relative;
-  margin: 1.1em 0;
-  padding: 0.1em 0 0.1em 1.3em;
-  border-left: 2px solid var(--line);
+  margin: var(--gap-block) 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+}
+#rich .rich-details.rich-folded:is(:hover, :focus-within),
+#rich .rich-details:has(> .rich-summary:is(:hover, :focus-visible)) {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--line));
+  box-shadow: 0 2px 9px #0000000a;
+}
+#rich .rich-details.rich-folded:is(:hover, :focus-within) {
+  background: color-mix(in srgb, var(--accent) 3%, var(--bg));
+}
+#rich
+  .rich-details.rich-folded:is(:hover, :focus-within)
+  > .rich-summary::before,
+#rich .rich-details > .rich-summary:is(:hover, :focus-visible)::before {
+  color: var(--accent);
 }
 #rich .rich-summary {
   position: relative;
-  font-weight: 600;
+  margin: 0 0 0 1.25em;
+  font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 #rich .rich-summary::before {
   content: "▾";
   position: absolute;
-  left: -1.15em;
+  left: -1.25em;
   width: 1em;
   color: var(--muted);
   cursor: pointer;
@@ -528,6 +625,20 @@
 }
 #rich .rich-folded > :not(.rich-summary) {
   display: none;
+}
+#rich .rich-details:not(.rich-folded) > :nth-child(2) {
+  margin-top: var(--gap-inner);
+}
+#rich .rich-details:not(.rich-folded) > :last-child:not(.rich-summary) {
+  margin-bottom: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  #rich .rich-details {
+    transition:
+      border-color 120ms ease,
+      background-color 120ms ease,
+      box-shadow 120ms ease;
+  }
 }
 /* An image's box: its address and its description side by side, its
    layout below (image-layout.js). */
@@ -674,8 +785,14 @@
 #rich .rich-properties .front-matter {
   margin-bottom: 0;
 }
-#rich .rich-properties:has(> details.front-matter) {
-  margin-bottom: calc(12.5px * 1.1);
+#rich .rich-properties .fm-title {
+  margin-bottom: 0;
+}
+#rich .rich-properties .fm-title:has(+ details.front-matter) {
+  margin-bottom: var(--gap-inner);
+}
+#rich .rich-properties:has(> details.front-matter, > .fm-title) {
+  margin-bottom: var(--gap-block);
 }
 #rich .rich-properties .fm-value[role="button"] {
   cursor: text;
@@ -756,7 +873,7 @@
 /* A note without properties: the fields for its first one above its first
    line, there only while they are open. */
 #rich .fm-first {
-  margin: 0 0 0.6em;
+  margin: 0 0 var(--gap-inner);
   font: 12.5px var(--font-ui);
 }
 /* The languages under the field, narrowed as one types. */

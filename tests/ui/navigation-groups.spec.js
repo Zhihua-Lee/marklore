@@ -338,7 +338,7 @@ test("details cards coordinate border, summary and marker feedback without chang
   const rect = await card.boundingBox(),
     border = await card.evaluate((el) => getComputedStyle(el).borderColor);
   const marker = await summary.evaluate(
-    (el) => getComputedStyle(el, "::marker").color,
+    (el) => getComputedStyle(el, "::before").color,
   );
   await summary.hover();
   await expect
@@ -346,7 +346,7 @@ test("details cards coordinate border, summary and marker feedback without chang
     .not.toBe(border);
   await expect
     .poll(() =>
-      summary.evaluate((el) => getComputedStyle(el, "::marker").color),
+      summary.evaluate((el) => getComputedStyle(el, "::before").color),
     )
     .not.toBe(marker);
   await expect(summary.locator("span")).toHaveCSS("color", "rgb(255, 0, 0)");

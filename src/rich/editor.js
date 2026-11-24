@@ -69,6 +69,7 @@ import {
 } from "./math.js";
 import { linkPlugins, editLink } from "./links.js";
 import { details } from "./details.js";
+import { richSections } from "./sections.js";
 import { selectionBubble } from "./bubble.js";
 import { toggleFormat, trimmed } from "./commands.js";
 import { codeColors } from "./code.js";
@@ -683,6 +684,7 @@ export function createRichEditor({
     rules,
     typing,
     details,
+    richSections,
     selectionBubble({ comment }),
     codeColors,
     imageBox,

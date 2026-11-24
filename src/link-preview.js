@@ -80,7 +80,7 @@ export function createLinkPreview({
   watchSections(article);
   function applyZoom() {
     const zoom = Math.max(50, Math.min(200, Number(getZoom()) || 100));
-    card.style.setProperty("--note-size", (16 * zoom) / 100 + "px");
+    card.style.setProperty("--note-zoom", String(zoom / 100));
     card.querySelector('[data-zoom="0"]').textContent = zoom + "%";
     card.querySelector('[data-zoom="-10"]').disabled = zoom <= 50;
     card.querySelector('[data-zoom="10"]').disabled = zoom >= 200;
@@ -187,6 +187,7 @@ export function createLinkPreview({
     title.textContent = t("链接预览");
     path.textContent = splitLink(href).target || t("当前笔记");
     status.textContent = t("正在读取…");
+    status.hidden = false;
     article.replaceChildren();
     scroller.scrollTop = 0;
     card.hidden = false;
@@ -202,9 +203,8 @@ export function createLinkPreview({
       title.textContent = doc.name;
       path.textContent = doc.path || t("未保存的笔记");
       path.title = path.textContent;
-      status.textContent = doc.draft
-        ? t("当前编辑草稿 · 未保存")
-        : t("当前文件内容");
+      status.textContent = doc.draft ? t("当前编辑草稿 · 未保存") : "";
+      status.hidden = !doc.draft;
       if (mayContainMath(doc.text) || mayContainCode(doc.text)) {
         await Promise.all([
           mayContainMath(doc.text) && loadMath(),
@@ -233,7 +233,11 @@ export function createLinkPreview({
           column < 1 ||
           column > lines[n - 1].length + 1
         ) {
-          status.textContent += t(" · 行列锚点超出文档范围，显示开头");
+          const note = t(" · 行列锚点超出文档范围，显示开头");
+          status.textContent = status.textContent
+            ? status.textContent + note
+            : note.replace(/^\s*·\s*/, "");
+          status.hidden = false;
         } else {
           const from =
             lines
@@ -255,7 +259,13 @@ export function createLinkPreview({
               scroller.getBoundingClientRect().top -
               12;
           };
-        } else status.textContent += t(" · 未找到锚点：{anchor}", { anchor });
+        } else {
+          const note = t(" · 未找到锚点：{anchor}", { anchor });
+          status.textContent = status.textContent
+            ? status.textContent + note
+            : note.replace(/^\s*·\s*/, "");
+          status.hidden = false;
+        }
       }
       requestAnimationFrame(align);
       renderDiagrams(
@@ -268,6 +278,7 @@ export function createLinkPreview({
       status.textContent = t("无法预览：{message}", {
         message: e.message || String(e),
       });
+      status.hidden = false;
     }
   }
   // A link of the note that can be previewed.

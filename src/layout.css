@@ -40,13 +40,16 @@
 }
 :root[data-typeface="literata"] .prose strong {
   font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 :root[data-typeface="literata"] .prose pre {
   font-weight: var(--note-weight, 400);
+  font-variation-settings: normal;
 }
 :root[data-typeface="literata"] .prose :not(pre) > code {
   font-size: 0.82em;
-  font-weight: var(--inline-code-weight, 500);
+  font-weight: var(--inline-code-weight, 400);
+  font-variation-settings: "wght" var(--inline-code-wght, 400);
 }
 :root[data-typeface="literata"] .prose .formula > .katex {
   font-size: 1em;
@@ -69,8 +72,12 @@
 .prose strong,
 .prose b {
   font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 /* KaTeX owns math family/weight/style; never smear glyphs or override its spans. */
+.prose .katex {
+  font-variation-settings: normal;
+}
 .prose .katex .cjk_fallback {
   font-family: var(--font-note);
   /* CJK already has full-em glyphs; only Latin math needs the 1.21 optical scale. */

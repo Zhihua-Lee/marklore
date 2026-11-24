@@ -191,9 +191,11 @@
   color: var(--reading-ink);
   font-size: calc(1em * var(--ix-title-size, 1));
   font-weight: 500;
+  font-variation-settings: normal;
 }
 .ix-list > .ix-item[aria-expanded] > .ix-row > .ix-title {
   font-weight: var(--heading-weight, 600);
+  font-variation-settings: "wght" var(--heading-weight, 600);
   letter-spacing: 0.01em;
 }
 .ix-item[aria-level="3"] > .ix-row {

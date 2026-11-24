@@ -18,6 +18,7 @@ body {
     "Microsoft YaHei",
     "PingFang SC",
     serif;
+  font-variation-settings: "wght" 400;
   letter-spacing: normal;
 }
 article {
@@ -51,6 +52,18 @@ h3 {
   font-weight: 600;
   margin: 1.55em 0 0.45em;
 }
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+strong,
+b,
+th,
+summary {
+  font-variation-settings: "wght" 600;
+}
 strong {
   font-weight: 600;
 }
@@ -74,6 +87,9 @@ p {
 }
 .formula {
   white-space: nowrap;
+}
+.formula .math-brk {
+  white-space: normal;
 }
 .formula::after {
   content: "\2060";
@@ -134,6 +150,7 @@ pre {
   overflow-wrap: anywhere;
   line-height: 1.5;
   font-size: 0.82em;
+  font-variation-settings: normal;
 }
 code {
   font-family:
@@ -192,6 +209,7 @@ summary {
 .katex {
   font-size: 1em;
   font-weight: 400;
+  font-variation-settings: normal;
   letter-spacing: normal;
 }
 .katex-display > .katex {

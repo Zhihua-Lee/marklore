@@ -52,6 +52,9 @@
     "JetBrains Mono Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
     monospace;
   --font-note: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  --note-weight: 400;
+  --note-wght: 400;
+  --strong-weight: 600;
   --heading-weight: 600;
   --motion: 140ms;
   font-family: var(--font-ui);
@@ -634,12 +637,18 @@ main[data-empty="true"] > #panes {
   line-height: 1.7;
   font-family: var(--font-note);
   font-weight: var(--note-weight, 400);
+  font-variation-settings: "wght" var(--note-wght, 400);
   overflow-wrap: anywhere;
   user-select: text;
   color: var(--reading-ink);
 }
+/* Keep inline formulas attached to following punctuation via nowrap + word
+   joiner while breaking between top-level KaTeX atoms at .math-brk. */
 .prose .formula {
   white-space: nowrap;
+}
+.prose .formula .math-brk {
+  white-space: normal;
 }
 .prose .formula::after {
   content: "\2060";
@@ -655,6 +664,7 @@ main[data-empty="true"] > #panes {
   line-height: 1.3;
   scroll-margin-top: 32px;
   font-weight: var(--heading-weight);
+  font-variation-settings: "wght" var(--heading-weight);
   color: inherit;
   letter-spacing: normal;
 }
@@ -957,6 +967,7 @@ main[data-empty="true"] > #panes {
   margin: var(--gap-block) 0;
   overflow: auto;
   line-height: 1.5;
+  font-variation-settings: normal;
   overflow-wrap: normal;
   font-size: 0.82em;
 }
@@ -974,6 +985,7 @@ main[data-empty="true"] > #panes {
   padding: 0.1em 0.3em;
   border-radius: 3px;
   font-size: 0.88em;
+  font-variation-settings: "wght" var(--inline-code-wght, 400);
 }
 .prose blockquote {
   border-left: 3px solid color-mix(in srgb, var(--accent) 42%, transparent);
@@ -1005,7 +1017,8 @@ main[data-empty="true"] > #panes {
 .prose th {
   background: var(--panel);
   text-align: left;
-  font-weight: 600;
+  font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 .prose img {
   display: block;
@@ -1029,7 +1042,8 @@ main[data-empty="true"] > #panes {
 }
 .prose summary {
   cursor: pointer;
-  font-weight: 600;
+  font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 .prose details:not(.front-matter, .fm-more) > summary {
   position: relative;
@@ -1072,6 +1086,7 @@ main[data-empty="true"] > #panes {
   font-family: var(--font-ui);
   font-size: 12.5px;
   font-weight: 400;
+  font-variation-settings: normal;
   color: var(--muted);
 }
 .prose > .front-matter + .note-section,
@@ -1089,6 +1104,7 @@ main[data-empty="true"] > #panes {
   margin-left: -6px;
   border-radius: 5px;
   font-weight: 400;
+  font-variation-settings: normal;
   list-style: none;
 }
 .prose .front-matter summary::marker {
@@ -1739,6 +1755,7 @@ dialog::backdrop {
   font-size: calc(1em * var(--heading-scale));
   line-height: 1.3;
   font-weight: var(--heading-weight);
+  font-variation-settings: "wght" var(--heading-weight);
   overflow-wrap: anywhere;
 }
 .prose .fm-title:has(+ details.front-matter) {

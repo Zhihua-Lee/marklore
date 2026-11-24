@@ -3,6 +3,13 @@
 th.sortable-header {
   position: relative;
 }
+/* Reserve the sort mark width on inline-end in Read, table-measure probes, and
+   Edit so header text never runs under the mark and Read/Edit stay aligned. */
+.table-scroll th.sortable-header,
+.prose .table-scroll th.sortable-header,
+#rich .table-scroll th {
+  padding-inline-end: calc(max(18px, 1.15em) + 8px);
+}
 .table-sort {
   position: absolute;
   right: 1px;

@@ -81,6 +81,7 @@
   color: var(--code-ink);
   font-size: 0.84em;
   font-weight: 400;
+  font-variation-settings: normal;
   line-height: 1.5;
   tab-size: 4;
 }

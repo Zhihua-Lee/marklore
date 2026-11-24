@@ -110,8 +110,8 @@ export default {
   标准: "Standard",
   适中: "Medium",
   较浓: "Darker",
-  "中文浓淡仅在系统装有可变中文字体时连续变化；未安装时 微软雅黑 / 宋体 的“适中”与“较浓”无额外中间字重":
-    "Chinese weight varies smoothly only when a variable Chinese font is installed; without one, YaHei/SimSun have no step between Medium and Darker",
+  中文仅在装有可变中文字体时变浓度:
+    "Chinese weight changes only with a variable Chinese font",
   恢复书页排版: "Reset to book layout",
   "Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。":
     "Literata and the code font are built in; Chinese text uses system fonts. Formulas keep their own font and the meaning of bold and italic.",

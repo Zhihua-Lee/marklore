@@ -609,7 +609,8 @@
 #rich .rich-summary {
   position: relative;
   margin: 0 0 0 1.25em;
-  font-weight: 600;
+  font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 #rich .rich-summary::before {
   content: "▾";

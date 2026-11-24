@@ -68,6 +68,7 @@
   background: color-mix(in srgb, var(--table-accent) 5%, var(--table-paper));
   text-align: left;
   font-weight: var(--strong-weight, 600);
+  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 .table-scroll tbody tr:last-child > td {
   border-bottom: 0;

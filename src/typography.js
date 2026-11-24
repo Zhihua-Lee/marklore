@@ -1,6 +1,5 @@
-// Keep ordinary text balanced across zoom levels and screens. `auto` adds a
-// half-step (450) on low-DPI light surfaces where ClearType stems thin out;
-// higher DPR and dark mode stay at 400 to avoid heavy/halated glyphs.
+// Target optical weight: `auto` lifts thin low-DPI light strokes (450),
+// while higher DPR and dark mode stay at 400.
 export function readingWeight({
   weight,
   dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1,
@@ -11,6 +10,11 @@ export function readingWeight({
   if ([400, 450, 500].includes(n)) return n;
   return dpr <= 1.25 && theme !== "dark" ? 450 : 400;
 }
+
+// Keep `auto` / `450` on real CSS font-weight 400 so static CJK faces stay Regular
+// and only variable fonts lift via font-variation-settings "wght"; only 500 uses 500.
+export const bodyFontWeight = (targetWeight) =>
+  targetWeight >= 500 ? 500 : 400;
 
 // Always keep strong text and headings at least 150 above body weight,
 // capping at 700 so body (<=500) and bold (>=650) never collide.

@@ -4,6 +4,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import { t } from "./i18n.mjs";
+import {
+  defaultDesktopPreferences,
+  normalizeDesktopPreferences,
+} from "./settings-schema.mjs";
 
 const execute = promisify(execFile);
 // Starts a program and leaves it running on its own. The native tests put a
@@ -180,11 +184,7 @@ export function createIntegration({
     "reg.exe",
   );
   const preferenceFile = path.join(profile, "desktop-settings.json");
-  let preferences = {
-    closeToTray: false,
-    otherFormats: false,
-    checkUpdates: false,
-  };
+  let preferences = defaultDesktopPreferences();
   async function store(change) {
     await fs.mkdir(profile, { recursive: true });
     const next = { ...preferences, ...change },
@@ -260,9 +260,7 @@ export function createIntegration({
     async load() {
       try {
         const stored = JSON.parse(await fs.readFile(preferenceFile, "utf8"));
-        preferences.closeToTray = stored?.closeToTray === true;
-        preferences.otherFormats = stored?.otherFormats === true;
-        preferences.checkUpdates = stored?.checkUpdates === true;
+        Object.assign(preferences, normalizeDesktopPreferences(stored));
       } catch (error) {
         if (error.code !== "ENOENT" && !(error instanceof SyntaxError))
           throw error;

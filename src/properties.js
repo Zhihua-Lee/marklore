@@ -380,8 +380,9 @@ export function withFront(text, yaml) {
 
 // Every line of the template is `key: value`; a value may hold {title}
 // (the note's name without .md), {date} (2026-03-14), {time} (14:32) and
-// {datetime} (2026-03-14 14:32), all in local time.
-export const DEFAULT_TEMPLATE = "title: {title}\ncreated: {datetime}\ntags: []";
+// {datetime} (2026-03-14 14:32), all in local time. The default template
+// is kept with the settings (desktop/settings-schema.mjs).
+export { DEFAULT_TEMPLATE } from "../desktop/settings-schema.mjs";
 const pad = (n, w = 2) => String(n).padStart(w, "0");
 const localDate = (d) =>
   `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;

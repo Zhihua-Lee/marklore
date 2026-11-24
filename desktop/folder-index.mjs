@@ -205,9 +205,10 @@ const escapeTitle = (title) => title.replace(/[[\]\\]/g, "\\$&");
 // The title a new entry gets: the note's name without its extension.
 export const titleFor = (name) => name.replace(/\.(md|markdown|txt)$/i, "");
 const titleOf = (name) => escapeTitle(titleFor(name));
+export const unescapeTitle = (text) => String(text).replace(/\\(.)/g, "$1");
 // Whether an entry is a folder's: its link ends in "/" or names the
 // folder's own index; otherwise as isFolder(child name) says.
-function folderEntry(entry, isFolder) {
+export function folderEntry(entry, isFolder) {
   const href = String(entry.href).trim().replace(/^<|>$/g, "");
   const target = href.split(/[\s#?]/)[0];
   if (/[\\/]$/.test(target)) return true;

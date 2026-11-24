@@ -20,7 +20,17 @@
         "file": "C:/kb/A.md",
         "target": "C:/kb/Plan.md"
       },
-      "expected": { "text": "[](Plan.md)", "count": 1 }
+      "expected": { "text": "", "count": 1 }
+    },
+    {
+      "name": "link text around an image to the same note",
+      "why": "The outer link goes, its text stays, and the image inside it (to the same note) goes too.",
+      "input": {
+        "text": "[see ![b](Plan.md)](Plan.md)",
+        "file": "C:/kb/A.md",
+        "target": "C:/kb/Plan.md"
+      },
+      "expected": { "text": "see ", "count": 1 }
     },
     {
       "name": "link text with markup",

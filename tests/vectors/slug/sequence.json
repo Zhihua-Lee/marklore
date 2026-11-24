@@ -1,5 +1,5 @@
 {
-  "about": "Anchors of a note's headings in document order: each its heading-slug, a repeat getting '-1', '-2'… by how many times that slug was given before (counted per slug, not against slugs made by numbering). input.headings → expected anchors.",
+  "about": "Anchors of a note's headings in document order: each its heading-slug, a repeat getting '-1', '-2'… numbered past any slug already given out, so no two headings share an anchor. input.headings → expected anchors.",
   "cases": [
     {
       "name": "repeats",
@@ -7,10 +7,10 @@
       "expected": ["a", "a-1", "a-2"]
     },
     {
-      "name": "a numbered slug can repeat a heading's own",
-      "why": "Pins current behaviour: the third heading gets 'a-1' like the second.",
+      "name": "a numbered slug skips one a heading already has",
+      "why": "The third heading would otherwise repeat the second's anchor.",
       "input": { "headings": ["A", "A-1", "A"] },
-      "expected": ["a", "a-1", "a-1"]
+      "expected": ["a", "a-1", "a-2"]
     },
     {
       "name": "empty headings",

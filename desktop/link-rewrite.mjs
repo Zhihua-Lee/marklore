@@ -503,18 +503,24 @@ export function unlinkTarget(text, { file, target }) {
   const dir = dirOf(file),
     want = pathKey(target);
   const edits = [];
-  for (const dest of findDestinations(text)) {
-    if (dest.kind !== "inline") continue;
-    const resolved = resolveDestination(
-      text.slice(dest.from, dest.to),
-      dest.kind,
-      dir,
-    );
-    if (!resolved || pathKey(resolved) !== want) continue;
-    const { from, to, label, image } = dest.link;
-    // A link inside another one already taken away goes with it.
+  const links = findDestinations(text)
+    .filter((dest) => {
+      if (dest.kind !== "inline") return false;
+      const resolved = resolveDestination(
+        text.slice(dest.from, dest.to),
+        dest.kind,
+        dir,
+      );
+      return resolved && pathKey(resolved) === want;
+    })
+    .map((dest) => dest.link)
+    // Outer links first: a link inside one taken away goes with it.
+    .sort((a, b) => a.from - b.from || b.to - a.to);
+  for (const { from, to, label, image } of links) {
     if (edits.some((e) => from < e.to && to > e.from)) continue;
-    edits.push({ from, to, insert: image ? "" : label });
+    // The text kept from a link loses the links inside it to the same note.
+    const kept = image ? "" : unlinkTarget(label, { file, target }).text;
+    edits.push({ from, to, insert: kept });
   }
   edits.sort((a, b) => a.from - b.from);
   let out = "",

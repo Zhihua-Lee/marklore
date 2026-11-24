@@ -86,15 +86,24 @@ pub struct Slugger {
 }
 
 impl Slugger {
+    // desktop/slug.mjs createSlugger: repeats numbered -1, -2..., skipping
+    // any slug already given out ("A", "A-1", "A" give a, a-1, a-2).
     pub fn slug(&mut self, text: &str) -> String {
-        let slug = heading_slug(text);
-        let count = self.seen.get(&slug).copied().unwrap_or(0);
-        self.seen.insert(slug.clone(), count + 1);
-        if count > 0 {
-            format!("{slug}-{count}")
-        } else {
-            slug
+        let base = heading_slug(text);
+        let mut slug = base.clone();
+        if let Some(&last) = self.seen.get(&base) {
+            let mut n = last;
+            loop {
+                n += 1;
+                slug = format!("{base}-{n}");
+                if !self.seen.contains_key(&slug) {
+                    break;
+                }
+            }
+            self.seen.insert(base, n);
         }
+        self.seen.insert(slug.clone(), 0);
+        slug
     }
 }
 
@@ -430,6 +439,11 @@ mod tests {
         let mut s = Slugger::default();
         assert_eq!(s.slug("定义"), "定义");
         assert_eq!(s.slug("定义"), "定义-1");
+        let mut s = Slugger::default();
+        assert_eq!(s.slug("A"), "a");
+        assert_eq!(s.slug("A-1"), "a-1");
+        assert_eq!(s.slug("A"), "a-2");
+        assert_eq!(s.slug("A"), "a-3");
     }
 
     #[test]

@@ -63,7 +63,8 @@ for (const theme of ["light", "dark"])
       expect(Math.abs(next.height - neighbour.height)).toBeLessThan(1);
       const last = await looks(page, "3 狄拉克符号");
       const second = await looks(page, "第二部分 波动力学");
-      expect(second.top - (last.top + last.height)).toBeGreaterThan(8);
+      expect(second.top - (last.top + last.height)).toBeGreaterThan(6);
+      expect(second.top - (last.top + last.height)).toBeLessThan(11);
       // The first sentence: muted, smaller, on one line.
       const excerpt = await row(page, "1.1 内积与范数")
         .locator(".ix-excerpt")
@@ -677,14 +678,16 @@ for (const opts of [
           ).toBeAttached();
         }
       }
-      // Verify folded level-1 state: equal level-1 pitch (±0.5 px), zero gap between folded entries, and equal row heights.
+      // Verify folded level-1 state: steady half-line (~0.5em) gap between all level-1 entries (±0.5 px), equal pitch (±0.5 px), and equal row heights.
       const folded = await measureAlignment(page);
-      expect(Math.abs(folded.level1Gap)).toBeLessThanOrEqual(0.5);
+      expect(folded.level1Gap).toBeGreaterThan(5);
+      expect(folded.level1Gap).toBeLessThan(11);
       const l1Folded = folded.rows.filter(
         (r) =>
           r.level === 1 && (!r.missing || opts.width >= 800 || mode === "read"),
       );
       const unwrappedPitches = [];
+      const unwrappedGaps = [];
       for (let i = 1; i < folded.rows.length; i++) {
         const prev = folded.rows[i - 1];
         const curr = folded.rows[i];
@@ -692,9 +695,14 @@ for (const opts of [
           prev.level === 1 &&
           curr.level === 1 &&
           (!prev.missing || opts.width >= 800 || mode === "read")
-        )
+        ) {
           unwrappedPitches.push(curr.rowTop - prev.rowTop);
+          unwrappedGaps.push(curr.rowTop - prev.rowBottom);
+        }
       }
+      expect(
+        Math.max(...unwrappedGaps) - Math.min(...unwrappedGaps),
+      ).toBeLessThanOrEqual(0.5);
       expect(
         Math.max(...unwrappedPitches) - Math.min(...unwrappedPitches),
       ).toBeLessThanOrEqual(0.5);
@@ -762,17 +770,83 @@ for (const opts of [
           ).toBeLessThanOrEqual(0.5);
         }
       }
-      // Open group spacing appears above expanded level-1 group and after its last child.
+      // Steady gap above every level-1 row matches folded gap; children stay tight.
       const mixedRow = expanded.rows.find((r) => r.label === "混合章节");
       const algRow = expanded.rows.find((r) => r.label === "高等代数笔记");
+      const note1Row = expanded.rows.find((r) => r.label === "实数完备性概述");
+      const note2Row = expanded.rows.find(
+        (r) => r.label === "极限定理与柯西准则",
+      );
       const note3Row = expanded.rows.find(
         (r) => r.label === "例题：上确界计算",
       );
       const afterMixed = expanded.rows.find(
         (r) => r.level === 1 && r.rowTop > note3Row.rowBottom,
       );
-      expect(mixedRow.rowTop - algRow.rowBottom).toBeGreaterThan(8);
-      expect(afterMixed.rowTop - note3Row.rowBottom).toBeGreaterThan(8);
+      expect(
+        Math.abs(mixedRow.rowTop - algRow.rowBottom - folded.level1Gap),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(afterMixed.rowTop - note3Row.rowBottom - folded.level1Gap),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(note1Row.rowTop - mixedRow.rowBottom),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(note2Row.rowTop - note1Row.rowBottom),
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(note3Row.rowTop - note2Row.rowBottom),
+      ).toBeLessThanOrEqual(0.5);
+
+      // Folding/unfolding Mixed shifts rows below by exact children height without moving rows above.
+      const beforeChildrenH = await item(page, "混合章节")
+        .locator(":scope > .ix-children")
+        .evaluate((el) => el.getBoundingClientRect().height);
+      await item(page, "混合章节")
+        .locator(":scope > .ix-row > .ix-twisty")
+        .click();
+      await expect(row(page, "实数完备性概述")).toBeHidden();
+      const afterFold = await measureAlignment(page);
+      for (const lbl of ["数学分析笔记", "高等代数笔记", "混合章节"]) {
+        const b = expanded.rows.find((r) => r.label === lbl);
+        const a = afterFold.rows.find((r) => r.label === lbl);
+        expect(
+          Math.abs(a.rowTop - b.rowTop),
+          `${mode} ${lbl} stationary`,
+        ).toBeLessThanOrEqual(0.5);
+      }
+      const afterFoldNext = afterFold.rows.find(
+        (r) => r.label === afterMixed.label,
+      );
+      expect(
+        Math.abs(afterMixed.rowTop - afterFoldNext.rowTop - beforeChildrenH),
+        `${mode} fold shift`,
+      ).toBeLessThanOrEqual(0.5);
+      await item(page, "混合章节")
+        .locator(":scope > .ix-row > .ix-twisty")
+        .click();
+      await expect(row(page, "例题：上确界计算")).toBeVisible();
+      const afterReopen = await measureAlignment(page);
+      const reopenChildrenH = await item(page, "混合章节")
+        .locator(":scope > .ix-children")
+        .evaluate((el) => el.getBoundingClientRect().height);
+      const afterReopenNext = afterReopen.rows.find(
+        (r) => r.label === afterMixed.label,
+      );
+      expect(
+        Math.abs(
+          afterReopenNext.rowTop - afterFoldNext.rowTop - reopenChildrenH,
+        ),
+        `${mode} unfold shift`,
+      ).toBeLessThanOrEqual(0.5);
+      expect(
+        Math.abs(
+          afterReopen.rows.find((r) => r.label === "混合章节").rowTop -
+            mixedRow.rowTop,
+        ),
+        `${mode} unfold head stationary`,
+      ).toBeLessThanOrEqual(0.5);
 
       for (const r of expanded.rows) {
         expect(
@@ -852,3 +926,30 @@ test("same typography for a page in a flat index and in a nested one, and equal 
   expect(flatPage.fontSize).toBe(nestedPage.fontSize);
   expect(flatPage.fontWeight).toBe(nestedPage.fontWeight);
 });
+
+for (const theme of ["light", "dark"]) {
+  test(`capture steady level-1 gap screenshots (${theme})`, async ({
+    page,
+  }) => {
+    await mountFolderTree(page, {
+      rootIndexed: true,
+      withExcerpts: true,
+      theme,
+      width: 1280,
+    });
+    await page.locator("#outline-collapse").click({ modifiers: ["Shift"] });
+    await expect(row(page, "数学分析笔记").locator(".ix-count")).toBeVisible();
+    await page.mouse.move(10, 10);
+    await page.screenshot({
+      path: `.local/fold-two-shots/after-steady-folded-${theme}.png`,
+    });
+    await item(page, "混合章节")
+      .locator(":scope > .ix-row > .ix-twisty")
+      .click();
+    await expect(row(page, "实数完备性概述")).toBeVisible();
+    await page.mouse.move(10, 10);
+    await page.screenshot({
+      path: `.local/fold-two-shots/after-steady-open-${theme}.png`,
+    });
+  });
+}

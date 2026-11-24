@@ -2051,7 +2051,16 @@ for (const name of ["wheel", "pointerdown", "keydown"])
     { passive: true },
   );
 let scrollFrame = 0;
-function scrolled() {
+function scrolled(event) {
+  const target = event?.target;
+  if (
+    target === view.scrollDOM &&
+    target._measureTop != null &&
+    Math.abs(target.scrollTop - target._measureTop) <= 2
+  ) {
+    target._measureTop = null;
+    return;
+  }
   lastScrollAt = performance.now();
   outline.schedule(true);
   if (scrollFrame) return;

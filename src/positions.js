@@ -280,8 +280,19 @@ function readingAnchor(host) {
       const { top, ...anchor } = hit;
       return { ...anchor, y: top === undefined ? 32 : top - rect.top };
     }
-    const block = document.elementFromPoint(x, y)?.closest("[data-from]");
-    if (block && host.contains(block)) visibleBlock = block;
+    const hitEl = document.elementFromPoint(x, y);
+    const block = hitEl?.closest("[data-from]");
+    // Container elements such as .ix-list, ul/ol/blockquote, or the child rail
+    // around nested .ix-item entries carry an outer data-from for reconciliation;
+    // when y lands in their inter-row gap, fall through to firstBelow().
+    if (
+      block &&
+      host.contains(block) &&
+      !block.classList.contains("ix-list") &&
+      !(block.classList.contains("ix-item") && !hitEl.closest(".ix-row")) &&
+      !(block.matches?.("ul, ol, blockquote") && hitEl === block)
+    )
+      visibleBlock = block;
   }
   if (visibleBlock?.getClientRects().length) {
     const box = visibleBlock.getBoundingClientRect();
@@ -328,10 +339,16 @@ function firstBelow(host, y) {
     for (let i = lo; i < kids.length; i++) {
       const el = kids[i];
       if (!shown(el)) continue;
-      if (el.hasAttribute("data-from"))
-        return { el, r: el.getBoundingClientRect() };
+      if (el.matches?.(DRAWN)) return { el, r: el.getBoundingClientRect() };
+      if (el.classList?.contains("ix-item")) {
+        const row = el.querySelector(":scope > .ix-row");
+        if (row && shown(row) && row.getBoundingClientRect().bottom > y)
+          return { el, r: el.getBoundingClientRect() };
+      }
       const inner = within(el);
       if (inner) return inner;
+      if (el.hasAttribute("data-from"))
+        return { el, r: el.getBoundingClientRect() };
     }
     return null;
   }

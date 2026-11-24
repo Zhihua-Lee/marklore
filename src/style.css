@@ -696,6 +696,90 @@ main[data-empty="true"] > #panes {
   > li:first-child
   > :is(ul, ol):first-child
   > li:first-child
+  > :first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
+  > :is(ul, ol):first-child
+  > li:first-child
   > :first-child {
   margin-top: 0;
 }
@@ -721,6 +805,75 @@ main[data-empty="true"] > #panes {
   > li:last-child,
 :is(.prose, .section-body)
   > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child,
+:is(.prose, .section-body)
+  > :is(ul, ol)
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
+  > li:last-child
+  > :is(ul, ol):last-child
   > li:last-child
   > :is(ul, ol):last-child
   > li:last-child

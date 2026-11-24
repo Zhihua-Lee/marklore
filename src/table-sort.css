@@ -1,16 +1,19 @@
 /* Only the button sorts; the header text keeps normal text selection. */
 .table-sort {
   cursor: pointer;
+  border: 0;
   border-radius: 4px;
   display: inline-grid;
   place-items: center;
   min-height: 26px;
   min-width: 26px;
+  margin-block: -3px;
   margin-inline-start: 6px;
   padding: 0 4px;
   font: inherit;
+  line-height: 1;
   color: var(--muted);
-  vertical-align: baseline;
+  vertical-align: middle;
 }
 .table-sort:hover {
   background: color-mix(in srgb, var(--accent) 12%, transparent);

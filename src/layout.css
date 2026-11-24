@@ -534,7 +534,8 @@ select:focus-visible {
     width: 212px;
     box-shadow: 6px 0 18px #0001;
   }
-  #content.prose {
+  #content.prose,
+  #rich.prose {
     padding: 44px 12px 60px 28px;
   }
 }

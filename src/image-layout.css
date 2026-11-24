@@ -82,11 +82,12 @@ article img:not([width]),
 /* In the editor, the spaces between the images (white space a flex row
    drops once it collapses) and what ProseMirror puts around images at a
    line's ends take no room in a row. */
-#rich .image-row {
+#rich .image-row,
+#rich .image-line {
   white-space: normal;
 }
-#rich .image-row > img.ProseMirror-separator,
-#rich .image-row > br {
+#rich :is(.image-row, .image-line) > img.ProseMirror-separator,
+#rich :is(.image-row, .image-line) > br {
   display: none !important;
 }
 .columns > .column > p:first-child > img,

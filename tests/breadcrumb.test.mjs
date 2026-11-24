@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { buildBreadcrumb, matchingRoot } from "../desktop/breadcrumb.mjs";
+import { FileStore } from "../desktop/files.mjs";
 
 const LIB = "C:/Notes/Calculus";
 const roots = [{ id: "r1", name: "微积分", path: LIB, indexName: "_目录.md" }];
@@ -276,4 +280,74 @@ test("deepest matching root wins when roots overlap", () => {
   const inner = { id: "r2", name: "Sub", path: "C:/Vault/Sub" };
   const matched = matchingRoot([outer, inner], "C:/Vault/Sub/note.md");
   assert.equal(matched.id, "r2");
+});
+
+test("FileStore resolves folderIndexText, previewChild and live disk breadcrumbs", async () => {
+  const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "folio-crumb-"));
+  try {
+    const lib = path.join(tmp, "Lib");
+    const part = path.join(lib, "Part1");
+    const outside = path.join(tmp, "Outside");
+    await fs.mkdir(part, { recursive: true });
+    await fs.mkdir(outside, { recursive: true });
+    await fs.writeFile(
+      path.join(lib, "_目录.md"),
+      "# Library\n\n- [First Part](Part1/_目录.md)\n- [Intro](Intro.md)\n",
+    );
+    await fs.writeFile(
+      path.join(lib, "Intro.md"),
+      "# Library Intro\n\nHello.\n",
+    );
+    await fs.writeFile(
+      path.join(part, "_目录.md"),
+      "# Part One\n\n- [Chapter A](A.md)\n  - [Detail](Detail.md)\n- [Chapter B](B.md)\n",
+    );
+    await fs.writeFile(path.join(part, "A.md"), "# Alpha Title\n\nBody.\n");
+    await fs.writeFile(
+      path.join(part, "Detail.md"),
+      "# Deep Detail\n\nBody.\n",
+    );
+    await fs.writeFile(path.join(part, "B.md"), "# Beta Title\n\nBody.\n");
+    await fs.writeFile(path.join(outside, "Free.md"), "# Outside\n\nBody.\n");
+
+    const store = new FileStore();
+    const rootDir = await store.directory(lib);
+    const partDir = await store.directory(part);
+    store.roots = [rootDir.path];
+
+    const rootInfo = await store.folderIndexText(rootDir.id);
+    assert.equal(rootInfo.index.name, "_目录.md");
+    assert.match(rootInfo.text, /First Part/);
+
+    const previewed = await store.previewChild(partDir.id, "Detail.md");
+    assert.match(previewed.text, /# Deep Detail/);
+    await assert.rejects(() => store.previewChild(partDir.id, "../Intro.md"));
+
+    const openedDetail = await store.open(path.join(part, "Detail.md"));
+    const noteCrumb = await store.breadcrumb({ fileId: openedDetail.id });
+    assert.deepEqual(
+      noteCrumb.segments.map((s) => `${s.kind}:${s.name}:${s.clickable}`),
+      [
+        "root:Lib:true",
+        "folder:Part1:true",
+        "note:Alpha Title:true",
+        "note:Deep Detail:false",
+      ],
+    );
+    assert.deepEqual(
+      noteCrumb.segments[2].siblings.map((s) => s.name),
+      ["Alpha Title", "Beta Title"],
+    );
+
+    const folderCrumb = await store.breadcrumb({ folderId: partDir.id });
+    assert.deepEqual(
+      folderCrumb.segments.map((s) => `${s.kind}:${s.name}:${s.current}`),
+      ["root:Lib:false", "folder:Part1:true"],
+    );
+
+    const openedOut = await store.open(path.join(outside, "Free.md"));
+    assert.equal(await store.breadcrumb({ fileId: openedOut.id }), null);
+  } finally {
+    await fs.rm(tmp, { recursive: true, force: true });
+  }
 });

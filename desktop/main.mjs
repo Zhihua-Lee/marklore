@@ -1351,6 +1351,7 @@ else {
         return { ...result, changed: plan.notes.length };
       });
       api("folderIndex", (id) => files.folderIndex(id));
+      api("folderIndexText", (id) => files.folderIndexText(id));
       api("lastMove", () => noteMoves.last());
       api("undoMove", async (drafts) => {
         const result = await noteMoves.undo({
@@ -1448,6 +1449,8 @@ else {
       });
       api("read", (id, version) => files.read(id, version));
       api("preview", (id, href) => files.preview(id, href));
+      api("previewChild", (id, name) => files.previewChild(id, name));
+      api("breadcrumb", (query) => files.breadcrumb(query));
       // Links from other notes in the library to this one: where each comes
       // from, in what sentence, and an href (relative to this note) that
       // opens the source at the link (#L12C5).
@@ -1620,6 +1623,11 @@ else {
           return {
             ...tab,
             path: tab.fileId ? files.file(tab.fileId).path : null,
+            generatedPath:
+              tab.generatedFolderId &&
+              files.directories.has(tab.generatedFolderId)
+                ? files.folderPath(tab.generatedFolderId)
+                : null,
           };
         });
         draftCache.clear();
@@ -1755,11 +1763,18 @@ else {
         const restored = [];
         for (const tab of (old.tabs || []).slice(0, 100)) {
           try {
+            let generated = null;
+            if (tab.generatedPath && !tab.path) {
+              generated = await files.directory(tab.generatedPath);
+              if (!(await fs.stat(generated.path)).isDirectory())
+                throw Error(t("未授权的文件夹"));
+            }
             restored.push({
               ...tab,
               document: tab.path
                 ? await openFile(tab.path, { remember: false })
                 : null,
+              ...(generated ? { generated } : {}),
             });
           } catch {
             if (typeof tab.draft === "string")

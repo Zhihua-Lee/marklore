@@ -1830,11 +1830,12 @@ function replaceIndexTab(doc, payload) {
     doc.base = doc.text;
     doc.version = payload.file.version || null;
   } else {
+    const title = payload.generated.title || payload.generated.name;
     doc.generated = payload.generated;
     doc.fileId = null;
     doc.path = payload.generated.path;
-    doc.name = payload.generated.name;
-    doc.text = `# ${payload.generated.name}\n`;
+    doc.name = title;
+    doc.text = `# ${title}\n`;
     doc.base = doc.text;
     doc.version = null;
     if (doc.mode === "source") doc.mode = "read";
@@ -1882,15 +1883,15 @@ async function updateBreadcrumb() {
     breadcrumb?.clear();
     return;
   }
+  const drafts = tabs
+    .filter(
+      (t) => !t.generated && t.path && dirty(t) && isIndexName(t.name || ""),
+    )
+    .map((t) => ({ path: t.path, text: t.text }));
   let query = null;
   if (doc.generated?.folderId) {
-    query = { folderId: doc.generated.folderId };
+    query = { folderId: doc.generated.folderId, drafts };
   } else if (doc.fileId) {
-    const drafts = tabs
-      .filter(
-        (t) => !t.generated && t.path && dirty(t) && isIndexName(t.name || ""),
-      )
-      .map((t) => ({ path: t.path, text: t.text }));
     const title = isIndexName(doc.name || "")
       ? null
       : (leadingHeading(doc.text)?.title ?? null);
@@ -1903,6 +1904,20 @@ async function updateBreadcrumb() {
   const data = await api.breadcrumb(query).catch(() => null);
   if (epoch !== breadcrumbEpoch || active !== doc || !settings.showBreadcrumb)
     return;
+  if (doc.generated) {
+    const leafName = data?.segments?.at(-1)?.name;
+    if (
+      leafName &&
+      (doc.generated.title !== leafName || doc.name !== leafName)
+    ) {
+      doc.generated = { ...doc.generated, title: leafName };
+      doc.name = leafName;
+      doc.text = `# ${leafName}\n`;
+      doc.base = doc.text;
+      updateTabs();
+      render(false);
+    }
+  }
   breadcrumb?.render(data);
 }
 breadcrumb = createBreadcrumb({
@@ -1913,7 +1928,12 @@ breadcrumb = createBreadcrumb({
   onOpenFolder: (target) =>
     run(() =>
       openFolderView(
-        { id: target.folderId, name: target.name, path: target.path },
+        {
+          id: target.folderId,
+          name: target.name,
+          title: target.name,
+          path: target.path,
+        },
         { replace: Boolean(active && indexView.applies(active)) },
       ),
     )(),
@@ -1970,17 +1990,20 @@ async function openFolderView(folder, { replace = false } = {}) {
       generated: {
         folderId: folder.id,
         name: folder.name,
+        title: folder.title || folder.name,
         path: folder.path,
       },
     };
   }
   if (replace && active && indexView.applies(active) && !dirty(active))
     return replaceIndexTab(active, payload);
+  const genTitle =
+    payload.generated?.title || payload.generated?.name || folder.name;
   return add(
     payload.file || {
-      name: payload.generated.name,
+      name: genTitle,
       path: payload.generated.path,
-      text: `# ${payload.generated.name}\n`,
+      text: `# ${genTitle}\n`,
       generated: payload.generated,
     },
     { opener: active },

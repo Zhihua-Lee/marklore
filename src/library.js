@@ -562,11 +562,13 @@ export function createLibrary({
   }
   // The row of this path in the rebuilt tree (its folders load a moment
   // later), focused.
+  const rowPath = (el) =>
+    el?.matches("summary") ? el.parentElement.dataset.path : el?.title;
   async function focusRow(path) {
     for (let i = 0; i < 40; i++) {
       const again = [
         ...$("#tree").querySelectorAll("button.file, details.folder > summary"),
-      ].find((el) => el.title === path);
+      ].find((el) => rowPath(el) === path);
       if (again) return again.focus();
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
@@ -644,7 +646,7 @@ export function createLibrary({
         changeIndex(
           folderInfo(folderEl),
           { kind: "shift", ref: item.dataset.indexName, step: up ? -1 : 1 },
-          item.title,
+          rowPath(item),
         ),
       )();
       return;
@@ -656,7 +658,7 @@ export function createLibrary({
         other.dataset.indexName,
         up ? "before" : "after",
       );
-      await focusRow(item.title);
+      await focusRow(rowPath(item));
     })();
   });
   // Alt+Shift+→ makes a note the child page of the note above it, Alt+Shift+←
@@ -688,7 +690,7 @@ export function createLibrary({
       const changed = await changeIndex(
         folderInfo(folderOf(item)),
         { kind: indent ? "indent" : "outdent", ref: item.dataset.indexName },
-        item.title,
+        rowPath(item),
       );
       if (changed === false)
         report(indent ? t("上面没有可作为上级的笔记") : t("已在最上一层"));
@@ -704,7 +706,10 @@ export function createLibrary({
     details.dataset.name = entry.name;
     const summary = document.createElement("summary");
     summary.textContent = entry.name;
-    summary.title = entry.path;
+    summary.title =
+      entry.title && entry.title !== entry.name
+        ? `${entry.title}\n${entry.path}`
+        : entry.path;
     details.append(summary);
     markExcluded(details, excludedNow());
     // A folder with an index file: a button on its row (shown on hover and

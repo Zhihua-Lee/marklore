@@ -21,7 +21,7 @@
 import { isolateHistory, undo, redo } from "@codemirror/commands";
 import { t } from "../desktop/i18n.mjs";
 import { folderEntry, isIndexName } from "../desktop/folder-index.mjs";
-import { compareTreeItems } from "../desktop/breadcrumb.mjs";
+import { compareTreeItems, folderDisplayName } from "../desktop/breadcrumb.mjs";
 import {
   fileMatches,
   safeFileName,
@@ -498,7 +498,8 @@ export function createIndexView({
   function render(doc) {
     const info = folderOf(doc);
     if (doc.generated) {
-      const syntheticText = `# ${doc.generated.name}\n\n`;
+      const headingTitle = doc.generated.title || doc.generated.name;
+      const syntheticText = `# ${headingTitle}\n\n`;
       const result = renderDocument(
         { ...doc, text: syntheticText },
         { deferMath: true, interactiveTasks: true },
@@ -804,6 +805,7 @@ export function createIndexView({
       from,
       to,
       entryTitle,
+      entryLabel = null,
       entryName,
       restText = "",
       child,
@@ -837,15 +839,6 @@ export function createIndexView({
     const row = element("div", "ix-row");
     if (missing) item.classList.add("missing");
     if (isFolder) item.dataset.kind = "folder";
-    if (isFolder && child?.id) {
-      item.dataset.childId = String(child.id);
-      item.dataset.childName = child.name || entryName || entryTitle;
-      if (child.path) item.dataset.childPath = child.path;
-    } else if (!isFolder && child) {
-      item.dataset.childFile = child.name;
-      if (child.path) item.dataset.childPath = child.path;
-      item.dataset.relHref = relPrefix + hrefFor(child.name);
-    }
 
     const canFollowSubfolder =
       Boolean(isFolder && child?.id) &&
@@ -860,10 +853,29 @@ export function createIndexView({
       hasOwnChildren ||
       (canFollowSubfolder && !subfolderEmpty && !subfolderError);
 
-    const fKey = foldKey(
-      { name: entryName, href, title: entryTitle },
-      scopeKey,
-    );
+    const isOwnFolder = !nested && !doc.generated;
+    const rowEdit = edit && isOwnFolder;
+    const name = isFolder
+      ? folderDisplayName({
+          folderName: child?.name || entryName || "",
+          parentEntryText: line >= 0 ? (entryLabel ?? entryTitle) : null,
+          indexHeading: child?.title ?? null,
+          indexText: rawSub?.text ?? null,
+        })
+      : child?.title || entryTitle;
+
+    if (isFolder && child?.id) {
+      item.dataset.childId = String(child.id);
+      item.dataset.childName = child.name || entryName || name;
+      item.dataset.childTitle = name;
+      if (child.path) item.dataset.childPath = child.path;
+    } else if (!isFolder && child) {
+      item.dataset.childFile = child.name;
+      if (child.path) item.dataset.childPath = child.path;
+      item.dataset.relHref = relPrefix + hrefFor(child.name);
+    }
+
+    const fKey = foldKey({ name: entryName, href, title: name }, scopeKey);
     // Default: two levels open on first open (level-1 entries and top-level
     // own note hierarchies start open; level-2+ subfolders and nested
     // subfolder items start closed and load lazily).
@@ -873,7 +885,7 @@ export function createIndexView({
 
     let rail = null;
     if (expandable) {
-      const label = t("展开或折叠 {name} 的子页", { name: entryTitle });
+      const label = t("展开或折叠 {name} 的子页", { name });
       item.setAttribute("aria-expanded", String(!closed));
       item.dataset.foldKey = fKey;
       item.dataset.defaultClosed = defaultClosed ? "true" : "false";
@@ -887,11 +899,8 @@ export function createIndexView({
       row.append(element("span", "ix-twisty-space"));
     }
 
-    const isOwnFolder = !nested && !doc.generated;
-    const rowEdit = edit && isOwnFolder;
-    const name = child?.title || entryTitle;
     let title;
-    if (missing) title = element("span", "ix-title", entryTitle);
+    if (missing) title = element("span", "ix-title", name);
     else {
       title = element("a", "ix-title", name);
       title.setAttribute("href", target(href));
@@ -1113,6 +1122,7 @@ export function createIndexView({
       from,
       to,
       entryTitle: entry.title,
+      entryLabel: entry.label,
       entryName: entry.name,
       restText: entry.rest,
       child,
@@ -1154,7 +1164,10 @@ export function createIndexView({
     } = opts;
     const isFolder = Boolean(child.directory);
     const titleText = isFolder
-      ? child.name
+      ? folderDisplayName({
+          folderName: child.name,
+          indexHeading: child.title ?? null,
+        })
       : child.title || titleFor(child.name);
     return buildItemElement(context, {
       level,
@@ -1164,6 +1177,7 @@ export function createIndexView({
       from,
       to,
       entryTitle: titleText,
+      entryLabel: null,
       entryName: child.name,
       restText: "",
       child,
@@ -1219,12 +1233,13 @@ export function createIndexView({
           row.dataset.name = child.name;
           row.dataset.directory = String(Boolean(child.directory));
           if (child.directory) row.dataset.kind = "folder";
-          const link = element(
-            "a",
-            "ix-title",
-            // A note by its name (its heading), as everywhere.
-            child.title || child.name + (child.directory ? "/" : ""),
-          );
+          const displayText = child.directory
+            ? folderDisplayName({
+                folderName: child.name,
+                indexHeading: child.title ?? null,
+              })
+            : child.title || child.name;
+          const link = element("a", "ix-title", displayText);
           link.setAttribute("href", hrefFor(child.name, child.directory));
           link.title = child.title
             ? child.title + "\n" + child.name
@@ -1941,6 +1956,7 @@ export function createIndexView({
     const folder = {
       id: cid,
       name: item.dataset.childName || "",
+      title: item.dataset.childTitle || item.dataset.childName || "",
       path: item.dataset.childPath || "",
     };
     if (openFolder) return run(() => openFolder(folder))();

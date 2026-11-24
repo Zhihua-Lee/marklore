@@ -1,19 +1,23 @@
 /* Quiet single-line breadcrumb above notes and index views inside a library.
    Identical box geometry above #content and #rich keeps the title fixed
-   when switching between Read and Edit modes. */
+   when switching between Read and Edit modes. Smaller and quieter than
+   the note's own properties line so the two never compete. */
 .note-breadcrumb {
   box-sizing: border-box;
   max-width: 760px;
   margin: 0 auto;
-  padding: 46px 48px 4px 32px;
+  padding: 40px 48px 6px 32px;
   display: flex;
   align-items: center;
   flex-wrap: nowrap;
-  gap: 1px;
+  gap: 0;
   overflow: hidden;
-  color: var(--muted);
-  font: 400 12px/20px var(--font-ui);
+  color: color-mix(in srgb, var(--reading-ink) 45%, var(--reading-paper));
+  font: 400 11px/20px var(--font-ui);
   user-select: none;
+}
+:root[data-theme="dark"] .note-breadcrumb {
+  color: color-mix(in srgb, var(--reading-ink) 48%, var(--reading-paper));
 }
 :root[data-wide="true"] .note-breadcrumb {
   max-width: none;
@@ -22,16 +26,16 @@
   display: none;
 }
 .note-breadcrumb:not([hidden]) + .prose {
-  padding-top: 8px;
+  padding-top: 16px;
 }
 @media (max-width: 1000px) {
   #panes[data-mode="edit"]:not([data-rich="on"]) .note-breadcrumb {
-    padding: 16px 30px 4px;
+    padding: 14px 30px 6px;
   }
   #panes[data-mode="edit"]:not([data-rich="on"])
     .note-breadcrumb:not([hidden])
     + .prose {
-    padding-top: 8px;
+    padding-top: 14px;
   }
 }
 
@@ -44,8 +48,36 @@
 }
 .bc-sep {
   flex: none;
-  margin: 0 4px;
-  opacity: 0.55;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 20px;
+  opacity: 0.52;
+}
+.bc-sep-btn {
+  box-sizing: border-box;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
+  min-height: 0;
+  margin: 0 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  line-height: 20px;
+  cursor: pointer;
+  opacity: 0.72;
+}
+.bc-sep-btn:hover,
+.bc-sep-btn:focus-visible,
+.bc-sep-btn[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+  opacity: 1;
 }
 .bc-link,
 .bc-current {
@@ -76,47 +108,18 @@
 }
 .bc-current {
   padding: 0 2px;
-  color: color-mix(in srgb, var(--reading-ink) 74%, var(--reading-paper));
+  border-radius: 4px;
+  color: color-mix(in srgb, var(--reading-ink) 58%, var(--reading-paper));
+}
+:root[data-theme="dark"] .bc-current {
+  color: color-mix(in srgb, var(--reading-ink) 62%, var(--reading-paper));
 }
 .bc-item:first-child > .bc-current {
   padding-left: 0;
 }
-.bc-chevron {
-  position: relative;
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 20px;
-  min-height: 0;
-  margin: 0 0 0 1px;
-  padding: 0;
-  border: 0;
-  border-radius: 4px;
-  background: none;
-  color: inherit;
-  cursor: pointer;
-}
-.bc-chevron::after {
-  content: "";
-  display: block;
-  width: 5px;
-  height: 5px;
-  margin-top: -2px;
-  border-right: 1.3px solid currentColor;
-  border-bottom: 1.3px solid currentColor;
-  transform: rotate(45deg);
-  opacity: 0.72;
-}
-.bc-chevron:hover,
-.bc-chevron:focus-visible,
-.bc-chevron[aria-expanded="true"] {
-  background: var(--hover);
-  color: var(--ink);
-}
-.bc-chevron[aria-expanded="true"]::after {
-  opacity: 1;
+.bc-current:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 1px;
 }
 
 .breadcrumb-menu {
@@ -127,8 +130,22 @@
 .breadcrumb-menu .bc-menu-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   width: 100%;
+}
+.breadcrumb-menu .bc-menu-icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  opacity: 0.78;
+}
+.breadcrumb-menu .bc-menu-icon .ui-icon {
+  width: 13px;
+  height: 13px;
 }
 .breadcrumb-menu .bc-menu-label {
   flex: 1 1 auto;
@@ -136,9 +153,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.breadcrumb-menu .bc-menu-kind {
-  color: var(--muted);
 }
 .breadcrumb-menu .bc-menu-mark {
   flex: none;

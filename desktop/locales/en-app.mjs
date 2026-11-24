@@ -96,8 +96,9 @@ export default {
   完成: "Done",
   阅读排版: "Reading typography",
   正文字体: "Body font",
-  "Literata / 思源黑体": "Literata / Source Han Sans",
-  思源黑体: "Source Han Sans",
+  "Literata + 思源黑体（微软雅黑）":
+    "Literata + Source Han Sans (Microsoft YaHei)",
+  "思源黑体（或微软雅黑）": "Source Han Sans (or Microsoft YaHei)",
   "Arial / 微软雅黑": "Arial / Microsoft YaHei",
   "Cambria / 宋体": "Cambria / SimSun",
   字号: "Text size",
@@ -105,11 +106,12 @@ export default {
   重置字号: "Reset text size",
   放大字号: "Increase text size",
   正文浓度: "Text weight",
-  自然: "Natural",
+  "自动（按屏幕）": "Auto (by screen)",
   标准: "Standard",
   适中: "Medium",
   较浓: "Darker",
-  浓: "Dark",
+  "中文浓淡仅在系统装有可变中文字体时连续变化；未安装时 微软雅黑 / 宋体 的“适中”与“较浓”无额外中间字重":
+    "Chinese weight varies smoothly only when a variable Chinese font is installed; without one, YaHei/SimSun have no step between Medium and Darker",
   恢复书页排版: "Reset to book layout",
   "Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。":
     "Literata and the code font are built in; Chinese text uses system fonts. Formulas keep their own font and the meaning of bold and italic.",
@@ -316,8 +318,8 @@ export default {
   主题与语言: "Theme & language",
   布局与侧栏: "Layout & sidebars",
   导航与滚动: "Navigation & scrolling",
-  "Literata 与自然浓度，保留字号和布局":
-    "Literata at natural weight; keeps text size and layout",
+  "Literata 与自动浓度，保留字号和布局":
+    "Literata at auto weight; keeps text size and layout",
   "Markdown 文件关联": "Markdown files",
   书页排版: "Book typography",
   "仅 Windows 打包版可用": "Only in the packaged Windows app",

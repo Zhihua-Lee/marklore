@@ -1,6 +1,6 @@
 import { t } from "../desktop/i18n.mjs";
 import { icon } from "./icons.js";
-import { readingWeight } from "./typography.js";
+import { readingWeight, emphasisWeight } from "./typography.js";
 import { desktopSettingsMarkup } from "./desktop-settings.js";
 import { aiSettingsMarkup } from "./ai-settings.js";
 const $ = (selector) => document.querySelector(selector);
@@ -35,11 +35,11 @@ export const appearanceMarkup = `
   <nav class="settings-nav" aria-label="${t("设置分类")}">${sections.map(([id, label]) => `<button type="button" data-section="${id}">${label}</button>`).join("")}</nav>
   <div class="settings-pane">
   <fieldset id="settings-reading"><legend>${t("阅读排版")}</legend>
-    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata / 思源黑体")}</option><option value="balanced">${t("思源黑体")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
+    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（微软雅黑）")}</option><option value="balanced">${t("思源黑体（或微软雅黑）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
-    ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自然")}</option><option value="400">${t("标准")}</option><option value="450">${t("适中")}</option><option value="500">${t("较浓")}</option><option value="600">${t("浓")}</option></select>`)}
+    ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="400">${t("标准")}</option><option value="450">${t("适中")}</option><option value="500">${t("较浓")}</option></select>`, t("中文浓淡仅在系统装有可变中文字体时连续变化；未安装时 微软雅黑 / 宋体 的“适中”与“较浓”无额外中间字重"))}
     ${row("cjk-emphasis", t("中文旁的粗体与斜体"), '<input id="cjk-emphasis" type="checkbox" class="switch">', t("**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号"))}
-    <div class="setting"><span class="setting-text"><span>${t("书页排版")}</span><small>${t("Literata 与自然浓度，保留字号和布局")}</small></span><span class="setting-actions"><button id="reading-preset" type="button">${t("恢复")}</button></span></div>
+    <div class="setting"><span class="setting-text"><span>${t("书页排版")}</span><small>${t("Literata 与自动浓度，保留字号和布局")}</small></span><span class="setting-actions"><button id="reading-preset" type="button">${t("恢复")}</button></span></div>
   </fieldset>
   <fieldset id="settings-theme"><legend>${t("主题与语言")}</legend>
     ${row("color-theme", t("界面颜色"), `<select id="color-theme"><option value="light">${t("浅色")}</option><option value="dark">${t("深色")}</option></select><button id="theme" class="icon" aria-label="${t("切换深浅主题")}" title="${t("切换深浅主题")}">${icon("theme")}</button>`)}
@@ -95,18 +95,17 @@ export function applyAppearance(settings) {
   root.dataset.tableWidth = settings.tableWidth;
   root.style.setProperty("--navigation-size", settings.navigationSize + "px");
   root.style.setProperty("--tab-size", settings.tabSize + "px");
-  const weight = readingWeight(settings);
+  const weight = readingWeight({
+    weight: settings.weight,
+    dpr: typeof devicePixelRatio === "number" ? devicePixelRatio : 1,
+    theme: settings.theme,
+  });
+  const boldWeight = String(emphasisWeight(weight));
   root.style.setProperty("--note-weight", String(weight));
-  root.style.setProperty(
-    "--strong-weight",
-    String(Math.max(600, weight + 100)),
-  );
+  root.style.setProperty("--strong-weight", boldWeight);
   root.style.setProperty("--inline-code-weight", String(weight));
   // Real font weights only. A weight jump should never make all math bold.
-  root.style.setProperty(
-    "--heading-weight",
-    String(Math.max(600, weight + 100)),
-  );
+  root.style.setProperty("--heading-weight", boldWeight);
   for (const [id, visible, side] of [
     ["library-panel", settings.sidebar, settings.librarySide],
     ["outline-panel", settings.outline, settings.outlineSide],

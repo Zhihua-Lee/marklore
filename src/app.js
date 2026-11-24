@@ -2725,8 +2725,12 @@ function applySettings() {
     document.documentElement.dataset.theme !== settings.theme;
   document.documentElement.dataset.theme = settings.theme;
   document.documentElement.style.setProperty(
-    "--note-size",
-    ((settings.typeface === "literata" ? 16 : 18) * settings.zoom) / 100 + "px",
+    "--typeface-scale",
+    settings.typeface === "literata" ? "1" : "1.125",
+  );
+  document.documentElement.style.setProperty(
+    "--note-zoom",
+    String(settings.zoom / 100),
   );
   document.documentElement.style.setProperty("--split", settings.split + "%");
   // Edit mode with or without the source pane (Settings → Editing).
@@ -2756,6 +2760,22 @@ function applySettings() {
     richEditor?.redraw();
   }
 }
+function watchDevicePixelRatio() {
+  let stop = null;
+  const listen = () => {
+    stop?.();
+    const mq = window.matchMedia?.(`(resolution: ${devicePixelRatio}dppx)`);
+    if (!mq) return;
+    const onChange = () => {
+      applyAppearance(settings);
+      listen();
+    };
+    mq.addEventListener("change", onChange, { once: true });
+    stop = () => mq.removeEventListener("change", onChange);
+  };
+  listen();
+}
+watchDevicePixelRatio();
 function changeSettings(patch) {
   if ("language" in patch && patch.language !== settings.language) {
     // The interface is built once in its language: save tabs and drafts

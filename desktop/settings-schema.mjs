@@ -146,9 +146,11 @@ export function normalizeSettings(saved = {}) {
     : "hover";
   settings.navigationSize = clamp(settings.navigationSize, 10, 14, 12);
   settings.tabSize = clamp(settings.tabSize, 10, 13, 11);
-  settings.weight = [400, 450, 500, 600].includes(Number(settings.weight))
+  settings.weight = [400, 450, 500].includes(Number(settings.weight))
     ? Number(settings.weight)
-    : "auto";
+    : Number(settings.weight) === 600
+      ? 500
+      : "auto";
   settings.librarySide = settings.librarySide === "right" ? "right" : "left";
   settings.outlineSide = settings.outlineSide === "left" ? "left" : "right";
   settings.theme = settings.theme === "dark" ? "dark" : "light";

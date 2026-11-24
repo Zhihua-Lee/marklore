@@ -1,0 +1,41 @@
+{
+  "about": "The entries whose link leads to a path (absolute; compared without regard to letter case and separators) taken out, their sub-items moving up a level. input: { text, file (the index), target } → expected text or null when none does.",
+  "cases": [
+    {
+      "name": "one entry with sub-items",
+      "input": {
+        "text": "- [a](a.md)\n  - [b](b.md)\n- [c](c.md)\n",
+        "file": "C:/kb/_目录.md",
+        "target": "c:\\KB\\a.md"
+      },
+      "expected": "- [b](b.md)\n- [c](c.md)\n"
+    },
+    {
+      "name": "two entries to one target",
+      "input": {
+        "text": "- [a](a.md)\n- [x](x.md)\n- [a again](./A.md)\n",
+        "file": "C:/kb/_目录.md",
+        "target": "C:/kb/a.md"
+      },
+      "expected": "- [x](x.md)\n"
+    },
+    {
+      "name": "a deeper target",
+      "input": {
+        "text": "- [a](a.md)\n- [d](deep/d.md)\n",
+        "file": "C:/kb/_目录.md",
+        "target": "C:/kb/deep/d.md"
+      },
+      "expected": "- [a](a.md)\n"
+    },
+    {
+      "name": "none",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "file": "C:/kb/_目录.md",
+        "target": "C:/kb/z.md"
+      },
+      "expected": null
+    }
+  ]
+}

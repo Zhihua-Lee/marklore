@@ -1,0 +1,93 @@
+{
+  "about": "A Myers diff of two lists of strings: the operations turning a into b, each ['=', item], ['-', item] or ['+', item]. Where several shortest diffs exist, the vectors give the one the classic greedy Myers search finds (on diagonal k at distance d, x comes from diagonal k+1 when k = -d, or k ≠ d and V[k-1] < V[k+1], otherwise from diagonal k-1 plus one), traced back from the end; a port must give the same, as reviews show them. input: { a, b } → expected.",
+  "cases": [
+    {
+      "name": "same",
+      "input": { "a": ["a", "b"], "b": ["a", "b"] },
+      "expected": [
+        ["=", "a"],
+        ["=", "b"]
+      ]
+    },
+    {
+      "name": "replace one",
+      "input": { "a": ["a", "b", "c"], "b": ["a", "x", "c"] },
+      "expected": [
+        ["=", "a"],
+        ["-", "b"],
+        ["+", "x"],
+        ["=", "c"]
+      ]
+    },
+    {
+      "name": "insert",
+      "input": { "a": ["a", "c"], "b": ["a", "b", "c"] },
+      "expected": [
+        ["=", "a"],
+        ["+", "b"],
+        ["=", "c"]
+      ]
+    },
+    {
+      "name": "delete",
+      "input": { "a": ["a", "b", "c"], "b": ["a", "c"] },
+      "expected": [
+        ["=", "a"],
+        ["-", "b"],
+        ["=", "c"]
+      ]
+    },
+    {
+      "name": "both empty",
+      "input": { "a": [], "b": [] },
+      "expected": []
+    },
+    {
+      "name": "from empty",
+      "input": { "a": [], "b": ["x", "y"] },
+      "expected": [
+        ["+", "x"],
+        ["+", "y"]
+      ]
+    },
+    {
+      "name": "to empty",
+      "input": { "a": ["x", "y"], "b": [] },
+      "expected": [
+        ["-", "x"],
+        ["-", "y"]
+      ]
+    },
+    {
+      "name": "moved line",
+      "input": { "a": ["a", "b", "c"], "b": ["c", "a", "b"] },
+      "expected": [
+        ["+", "c"],
+        ["=", "a"],
+        ["=", "b"],
+        ["-", "c"]
+      ]
+    },
+    {
+      "name": "repeats",
+      "input": { "a": ["a", "b", "a", "b"], "b": ["b", "a", "b", "a"] },
+      "expected": [
+        ["-", "a"],
+        ["=", "b"],
+        ["=", "a"],
+        ["=", "b"],
+        ["+", "a"]
+      ]
+    },
+    {
+      "name": "words",
+      "input": { "a": ["Send", " ", "it"], "b": ["Mail", " ", "it"] },
+      "expected": [
+        ["-", "Send"],
+        ["+", "Mail"],
+        ["=", " "],
+        ["=", "it"]
+      ]
+    }
+  ]
+}

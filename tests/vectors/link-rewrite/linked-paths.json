@@ -1,0 +1,39 @@
+{
+  "about": "The paths a note's relative links lead to (decoded, resolved against its folder, '/' between parts), in text order. input: { text, file } → expected [string].",
+  "cases": [
+    {
+      "name": "inline and reference",
+      "input": {
+        "text": "[a](x.md) `[b](y.md)` [c]: <z w.md>\n\n[d]: q%20r.md\n",
+        "file": "C:/kb/n/A.md"
+      },
+      "expected": ["C:/kb/n/x.md", "C:/kb/n/q r.md"]
+    },
+    {
+      "name": "up and dot",
+      "input": {
+        "text": "[a](../up.md) [b](./sub/b.md) ![i](img/p.png)",
+        "file": "C:/kb/n/A.md"
+      },
+      "expected": ["C:/kb/up.md", "C:/kb/n/sub/b.md", "C:/kb/n/img/p.png"]
+    },
+    {
+      "name": "skipped kinds",
+      "input": {
+        "text": "[w](https://x.test) [h](#h) [abs](/a.md) [bad](%ZZ.md)",
+        "file": "C:/kb/A.md"
+      },
+      "expected": []
+    },
+    {
+      "name": "html",
+      "input": { "text": "<img src=\"p%20q.png\">", "file": "/home/u/A.md" },
+      "expected": ["/home/u/p q.png"]
+    },
+    {
+      "name": "escaped parenthesis",
+      "input": { "text": "[p](a\\(1\\).md)", "file": "C:/kb/A.md" },
+      "expected": ["C:/kb/a(1).md"]
+    }
+  ]
+}

@@ -1,0 +1,638 @@
+{
+  "about": "A note's links written again after notes, folders or files moved or were renamed, and after headings were renamed. input: { text, file (where the note is after the moves), from? (where it was; default file), moves: [[old, new]] (paths of notes, folders, files; the longest old path that contains a link's target applies), anchors?: [{ file, from, to }] (a heading of `file` renamed: links to it with the anchor `from`, letter case aside, get `to`) }. Paths are 'C:/…', 'C:\\…', '/…' or '//server/share/…', compared without regard to letter case. Inline links and images, reference definitions (not footnotes) and the href/src of <a>, <img>, <source>, <video>, <audio>, <iframe>, <embed> are rewritten relative to the note's folder; what is around the path stays as written: #anchor, ?query, title, angle brackets, a leading './', a trailing '/', and the encoding (a path written with %20 gets %20 for spaces; one with percent-encoded non-ASCII gets non-ASCII encoded; '%', '#', '?', control characters, '<' and '>' always encoded; '(' and ')' encoded in a bare inline destination). A link whose target did not move, in a note that did not move, keeps its path exactly (only its anchor may change). Left alone: links in fenced or indented code, code spans and HTML comments; web addresses and anything with a scheme (a drive letter reads as one); absolute paths; a destination that does not percent-decode; a target that would be on another drive. expected: { text, count (destinations changed) }.",
+  "cases": [
+    {
+      "name": "a renamed note, the rest byte for byte",
+      "input": {
+        "text": "See [the plan](Plan.md) and [other](Other.md).\n\n![pic](assets/a.png)\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "See [the plan](Roadmap.md) and [other](Other.md).\n\n![pic](assets/a.png)\n",
+        "count": 1
+      }
+    },
+    {
+      "name": "no links",
+      "input": {
+        "text": "No links here.\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "No links here.\n", "count": 0 }
+    },
+    {
+      "name": "anchor, title, angle brackets, dot slash",
+      "input": {
+        "text": "[a](Plan.md#goals) [b](./Plan.md 'T') [c](<Plan.md#x> \"Title\")",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "[a](Roadmap.md#goals) [b](./Roadmap.md 'T') [c](<Roadmap.md#x> \"Title\")",
+        "count": 3
+      }
+    },
+    {
+      "name": "query and an anchor in the note",
+      "input": {
+        "text": "[q](Plan.md?x=1) [s](#top)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[q](Roadmap.md?x=1) [s](#top)", "count": 1 }
+    },
+    {
+      "name": "line and column anchor",
+      "input": {
+        "text": "[l](Plan.md#L40C5)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[l](Roadmap.md#L40C5)", "count": 1 }
+    },
+    {
+      "name": "up and across",
+      "input": {
+        "text": "[p](../notes/Plan.md)",
+        "file": "C:/kb/other/A.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/archive/2024/Plan.md"]]
+      },
+      "expected": { "text": "[p](../archive/2024/Plan.md)", "count": 1 }
+    },
+    {
+      "name": "down",
+      "input": {
+        "text": "[p](notes/Plan.md)",
+        "file": "C:/kb/Top.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/archive/2024/Plan.md"]]
+      },
+      "expected": { "text": "[p](archive/2024/Plan.md)", "count": 1 }
+    },
+    {
+      "name": "into the same folder",
+      "input": {
+        "text": "[p](../../notes/Plan.md)",
+        "file": "C:/kb/archive/2024/Sibling.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/archive/2024/Plan.md"]]
+      },
+      "expected": { "text": "[p](Plan.md)", "count": 1 }
+    },
+    {
+      "name": "percent-encoded spaces and parentheses",
+      "input": {
+        "text": "[p](My%20Plan.md)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/My Plan.md", "C:/kb/Our plan (v2).md"]]
+      },
+      "expected": { "text": "[p](Our%20plan%20%28v2%29.md)", "count": 1 }
+    },
+    {
+      "name": "angle brackets keep plain spaces",
+      "input": {
+        "text": "[p](<My Plan.md>)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/My Plan.md", "C:/kb/Our plan (v2).md"]]
+      },
+      "expected": { "text": "[p](<Our plan (v2).md>)", "count": 1 }
+    },
+    {
+      "name": "angle brackets with %20",
+      "input": {
+        "text": "[p](<My%20Plan.md>)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/My Plan.md", "C:/kb/Our plan (v2).md"]]
+      },
+      "expected": { "text": "[p](<Our%20plan%20(v2).md>)", "count": 1 }
+    },
+    {
+      "name": "a literal percent and hash are encoded",
+      "input": {
+        "text": "[p](My%20Plan.md)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/My Plan.md", "C:/kb/50% #1.md"]]
+      },
+      "expected": { "text": "[p](50%25%20%231.md)", "count": 1 }
+    },
+    {
+      "name": "plain cjk stays plain",
+      "input": {
+        "text": "[计划](笔记/计划.md)",
+        "file": "C:/kb/首页.md",
+        "moves": [["C:/kb/笔记/计划.md", "C:/kb/归档/计划 一.md"]]
+      },
+      "expected": { "text": "[计划](归档/计划%20一.md)", "count": 1 }
+    },
+    {
+      "name": "encoded cjk stays encoded",
+      "input": {
+        "text": "[计划](%E7%AC%94%E8%AE%B0/%E8%AE%A1%E5%88%92.md)",
+        "file": "C:/kb/首页.md",
+        "moves": [["C:/kb/笔记/计划.md", "C:/kb/归档/计划 一.md"]]
+      },
+      "expected": {
+        "text": "[计划](%E5%BD%92%E6%A1%A3/%E8%AE%A1%E5%88%92%20%E4%B8%80.md)",
+        "count": 1
+      }
+    },
+    {
+      "name": "reference definitions, images and html",
+      "input": {
+        "text": "Read [the plan][p] and ![chart](Plan.md).\n\n[p]: Plan.md#top \"The plan\"\n   [q]: <Plan.md>\n[^n]: Plan.md is a footnote, not a link.\n<a href=\"Plan.md\">x</a> <img src='Plan.md' alt=\"\">",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "Read [the plan][p] and ![chart](Roadmap.md).\n\n[p]: Roadmap.md#top \"The plan\"\n   [q]: <Roadmap.md>\n[^n]: Plan.md is a footnote, not a link.\n<a href=\"Roadmap.md\">x</a> <img src='Roadmap.md' alt=\"\">",
+        "count": 5
+      }
+    },
+    {
+      "name": "code blocks, code spans and comments",
+      "input": {
+        "text": "Use `[x](Plan.md)` in text.\n\n```md\n[x](Plan.md)\n```\n\n~~~\n[x](Plan.md)\n~~~\n<!-- [x](Plan.md) -->\nReal: [x](Plan.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "Use `[x](Plan.md)` in text.\n\n```md\n[x](Plan.md)\n```\n\n~~~\n[x](Plan.md)\n~~~\n<!-- [x](Plan.md) -->\nReal: [x](Roadmap.md)",
+        "count": 1
+      }
+    },
+    {
+      "name": "letter case of the link",
+      "input": {
+        "text": "[p](plan.MD)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[p](Roadmap.md)", "count": 1 }
+    },
+    {
+      "name": "a change of letter case only",
+      "input": {
+        "text": "[p](plan.md)",
+        "file": "C:/kb/notes/A.md",
+        "moves": [["c:\\KB\\notes\\plan.md", "C:\\kb\\notes\\Plan.md"]]
+      },
+      "expected": { "text": "[p](Plan.md)", "count": 1 }
+    },
+    {
+      "name": "backslashes and drive letter case",
+      "input": {
+        "text": "[p](../Notes/Plan.md)",
+        "file": "c:\\kb\\other\\A.md",
+        "moves": [["C:/KB/notes", "C:/KB/Journal"]]
+      },
+      "expected": { "text": "[p](../Journal/Plan.md)", "count": 1 }
+    },
+    {
+      "name": "a renamed folder",
+      "input": {
+        "text": "[a](Topics/a.md) [i](Topics/_目录.md) [f](Topics/) [x](Topicsx/a.md) ![](Topics/assets/p.png) [g](Topics)",
+        "file": "C:/kb/Home.md",
+        "moves": [["C:/kb/Topics", "C:/kb/Subjects"]]
+      },
+      "expected": {
+        "text": "[a](Subjects/a.md) [i](Subjects/_目录.md) [f](Subjects/) [x](Topicsx/a.md) ![](Subjects/assets/p.png) [g](Subjects)",
+        "count": 5
+      }
+    },
+    {
+      "name": "a moved note's own links",
+      "input": {
+        "text": "![img](assets/a.png) [sib](Sibling.md#h) [up](../Top.md)\n[web](https://example.com) [abs](C:/x.md) [root](/x.md) [self](#s) [me](Plan.md#s)\n[ref]: ./assets/b.png",
+        "from": "C:/kb/notes/Plan.md",
+        "file": "C:/kb/archive/Plan.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/archive/Plan.md"]]
+      },
+      "expected": {
+        "text": "![img](../notes/assets/a.png) [sib](../notes/Sibling.md#h) [up](../Top.md)\n[web](https://example.com) [abs](C:/x.md) [root](/x.md) [self](#s) [me](Plan.md#s)\n[ref]: ../notes/assets/b.png",
+        "count": 3
+      }
+    },
+    {
+      "name": "moved together with what it links to",
+      "input": {
+        "text": "[sib](Sibling.md) ![](assets/a.png)",
+        "from": "C:/kb/notes/Plan.md",
+        "file": "C:/kb/archive/Plan.md",
+        "moves": [
+          ["C:/kb/notes/Plan.md", "C:/kb/archive/Plan.md"],
+          ["C:/kb/notes/Sibling.md", "C:/kb/archive/Sibling.md"],
+          ["C:/kb/notes/assets", "C:/kb/archive/assets"]
+        ]
+      },
+      "expected": { "text": "[sib](Sibling.md) ![](assets/a.png)", "count": 0 }
+    },
+    {
+      "name": "a moved note's link to its own folder",
+      "input": {
+        "text": "[here](./) [dot](.)",
+        "from": "C:/kb/notes/Plan.md",
+        "file": "C:/kb/archive/Plan.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/archive/Plan.md"]]
+      },
+      "expected": { "text": "[here](../notes/) [dot](../notes)", "count": 2 }
+    },
+    {
+      "name": "a dot slash link moved up",
+      "input": {
+        "text": "[p](./Plan.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/Plan.md"]]
+      },
+      "expected": { "text": "[p](../Plan.md)", "count": 1 }
+    },
+    {
+      "name": "the most specific move applies",
+      "input": {
+        "text": "[x](A/x.md) [y](A/y.md)",
+        "file": "C:/kb/Home.md",
+        "moves": [
+          ["C:/kb/A", "C:/kb/B"],
+          ["C:/kb/A/x.md", "C:/kb/C/x.md"]
+        ]
+      },
+      "expected": { "text": "[x](C/x.md) [y](B/y.md)", "count": 2 }
+    },
+    {
+      "name": "nested image link",
+      "input": {
+        "text": "[![badge](Plan.md)](Plan.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[![badge](Roadmap.md)](Roadmap.md)", "count": 2 }
+    },
+    {
+      "name": "parentheses in the destination",
+      "input": {
+        "text": "[p](a(1).md)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/a(1).md", "C:/kb/b(2).md"]]
+      },
+      "expected": { "text": "[p](b%282%29.md)", "count": 1 }
+    },
+    {
+      "name": "title on the next line",
+      "input": {
+        "text": "[p](Plan.md\n\"over a line\")",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[p](Roadmap.md\n\"over a line\")", "count": 1 }
+    },
+    {
+      "name": "not decodable",
+      "input": {
+        "text": "[p](Plan%ZZ.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[p](Plan%ZZ.md)", "count": 0 }
+    },
+    {
+      "name": "escaped bracket and unclosed link",
+      "input": {
+        "text": "\\[p](Plan.md) [q](Plan.md",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "\\[p](Plan.md) [q](Plan.md", "count": 0 }
+    },
+    {
+      "name": "posix paths",
+      "input": {
+        "text": "[p](Plan.md)",
+        "file": "/home/u/kb/A.md",
+        "moves": [["/home/u/kb/Plan.md", "/home/u/kb/B.md"]]
+      },
+      "expected": { "text": "[p](B.md)", "count": 1 }
+    },
+    {
+      "name": "unc paths",
+      "input": {
+        "text": "[p](Plan.md)",
+        "file": "//srv/share/kb/A.md",
+        "moves": [["\\\\srv\\share\\kb\\Plan.md", "//srv/share/kb/B.md"]]
+      },
+      "expected": { "text": "[p](B.md)", "count": 1 }
+    },
+    {
+      "name": "another drive",
+      "input": {
+        "text": "[p](Plan.md)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/Plan.md", "D:/kb/Plan.md"]]
+      },
+      "expected": { "text": "[p](Plan.md)", "count": 0 }
+    },
+    {
+      "name": "fence in a quote",
+      "input": {
+        "text": "> ```\n> [x](Plan.md)\n> ```\n> [y](Plan.md)\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "> ```\n> [x](Plan.md)\n> ```\n> [y](Roadmap.md)\n",
+        "count": 1
+      }
+    },
+    {
+      "name": "fence in a list item",
+      "input": {
+        "text": "- item\n\n    ```\n    [x](Plan.md)\n    ```\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "- item\n\n    ```\n    [x](Plan.md)\n    ```\n",
+        "count": 0
+      }
+    },
+    {
+      "name": "indented code after a paragraph",
+      "input": {
+        "text": "Text.\n\n    [x](Plan.md)\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "Text.\n\n    [x](Plan.md)\n", "count": 0 }
+    },
+    {
+      "name": "a list item's indented paragraph",
+      "input": {
+        "text": "- a\n\n    [x](Plan.md)\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "- a\n\n    [x](Roadmap.md)\n", "count": 1 }
+    },
+    {
+      "name": "code span over two lines",
+      "input": {
+        "text": "`a\n[x](Plan.md)` b\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "`a\n[x](Plan.md)` b\n", "count": 0 }
+    },
+    {
+      "name": "stray backtick",
+      "input": {
+        "text": "x`y `[z](Plan.md)`\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "x`y `[z](Roadmap.md)`\n", "count": 1 }
+    },
+    {
+      "name": "escaped parentheses",
+      "input": {
+        "text": "[p](a\\(1\\).md)",
+        "file": "C:/kb/A.md",
+        "moves": [["C:/kb/a(1).md", "C:/kb/b.md"]]
+      },
+      "expected": { "text": "[p](b.md)", "count": 1 }
+    },
+    {
+      "name": "definition over two lines",
+      "input": {
+        "text": "[p]:\n  Plan.md 'T'\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[p]:\n  Roadmap.md 'T'\n", "count": 1 }
+    },
+    {
+      "name": "'>' inside an html attribute",
+      "input": {
+        "text": "<img alt=\"a > b\" src=\"Plan.md\">",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "<img alt=\"a > b\" src=\"Roadmap.md\">",
+        "count": 1
+      }
+    },
+    {
+      "name": "other html tags",
+      "input": {
+        "text": "<video src=\"Plan.md\"></video><source src=\"Plan.md\"><audio src=\"Plan.md\"></audio><iframe src=\"Plan.md\"></iframe><embed src=\"Plan.md\"><link href=\"Plan.md\">",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "<video src=\"Roadmap.md\"></video><source src=\"Roadmap.md\"><audio src=\"Roadmap.md\"></audio><iframe src=\"Roadmap.md\"></iframe><embed src=\"Roadmap.md\"><link href=\"Plan.md\">",
+        "count": 5
+      }
+    },
+    {
+      "name": "html with an encoded space",
+      "input": {
+        "text": "<a href=\"My%20Plan.md\">x</a>",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/My Plan.md", "C:/kb/notes/Our Plan.md"]]
+      },
+      "expected": { "text": "<a href=\"Our%20Plan.md\">x</a>", "count": 1 }
+    },
+    {
+      "name": "windows line endings",
+      "input": {
+        "text": "[p](Plan.md)\r\n[q](Plan.md)\r\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "[p](Roadmap.md)\r\n[q](Roadmap.md)\r\n",
+        "count": 2
+      }
+    },
+    {
+      "name": "fence info with a backtick is no fence",
+      "input": {
+        "text": "```a`b\n[x](Plan.md)\n```\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "```a`b\n[x](Roadmap.md)\n```\n", "count": 1 }
+    },
+    {
+      "name": "unclosed fence hides the rest",
+      "input": {
+        "text": "```\n[x](Plan.md)\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "```\n[x](Plan.md)\n", "count": 0 }
+    },
+    {
+      "name": "label over two lines",
+      "input": {
+        "text": "[multi\nline](Plan.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[multi\nline](Roadmap.md)", "count": 1 }
+    },
+    {
+      "name": "label across a blank line is no link",
+      "input": {
+        "text": "[multi\n\nline](Plan.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[multi\n\nline](Plan.md)", "count": 0 }
+    },
+    {
+      "name": "empty destination",
+      "input": {
+        "text": "[x]() [y](<>)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[x]() [y](<>)", "count": 0 }
+    },
+    {
+      "name": "link in a table and a heading",
+      "input": {
+        "text": "# See [p](Plan.md)\n\n| a | [p](Plan.md) |\n|---|---|\n",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "# See [p](Roadmap.md)\n\n| a | [p](Roadmap.md) |\n|---|---|\n",
+        "count": 2
+      }
+    },
+    {
+      "name": "autolink is left alone",
+      "input": {
+        "text": "<Plan.md> <https://x.test/Plan.md>",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "<Plan.md> <https://x.test/Plan.md>", "count": 0 }
+    },
+    {
+      "name": "link with a title in parentheses",
+      "input": {
+        "text": "[p](Plan.md (title))",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": { "text": "[p](Roadmap.md (title))", "count": 1 }
+    },
+    {
+      "name": "comment over lines",
+      "input": {
+        "text": "<!--\n[x](Plan.md)\n-->\n[y](Plan.md)",
+        "file": "C:/kb/notes/Index.md",
+        "moves": [["C:/kb/notes/Plan.md", "C:/kb/notes/Roadmap.md"]]
+      },
+      "expected": {
+        "text": "<!--\n[x](Plan.md)\n-->\n[y](Roadmap.md)",
+        "count": 1
+      }
+    },
+    {
+      "name": "an anchor follows a renamed heading",
+      "input": {
+        "text": "[a](旧.md#旧) [b](%E6%97%A7.md#%E6%97%A7) [c](旧.md#别处) [d](其他.md#旧)",
+        "file": "C:/kb/其他.md",
+        "moves": [["C:/kb/旧.md", "C:/kb/新.md"]],
+        "anchors": [{ "file": "C:/kb/新.md", "from": "旧", "to": "新" }]
+      },
+      "expected": {
+        "text": "[a](新.md#新) [b](%E6%96%B0.md#%E6%96%B0) [c](新.md#别处) [d](其他.md#旧)",
+        "count": 3
+      }
+    },
+    {
+      "name": "only the anchor changes: the path as written",
+      "input": {
+        "text": "[a](./sub/../旧.md#旧 \"t\")",
+        "file": "C:/kb/x.md",
+        "anchors": [{ "file": "C:/kb/旧.md", "from": "旧", "to": "新" }]
+      },
+      "expected": { "text": "[a](./sub/../旧.md#新 \"t\")", "count": 1 }
+    },
+    {
+      "name": "the note's own anchors",
+      "input": {
+        "text": "[top](#旧) [x](#其他)",
+        "file": "C:/kb/新.md",
+        "from": "C:/kb/旧.md",
+        "moves": [["C:/kb/旧.md", "C:/kb/新.md"]],
+        "anchors": [{ "file": "C:/kb/新.md", "from": "旧", "to": "新" }]
+      },
+      "expected": { "text": "[top](#新) [x](#其他)", "count": 1 }
+    },
+    {
+      "name": "anchor letter case",
+      "input": {
+        "text": "[a](Doc.md#Intro) [b](Doc.md#INTRO)",
+        "file": "C:/kb/x.md",
+        "anchors": [
+          { "file": "C:/kb/Doc.md", "from": "intro", "to": "overview" }
+        ]
+      },
+      "expected": {
+        "text": "[a](Doc.md#overview) [b](Doc.md#overview)",
+        "count": 2
+      }
+    },
+    {
+      "name": "anchor with a space in angle brackets",
+      "input": {
+        "text": "[a](<Doc.md#old>) [b](Doc.md#old)",
+        "file": "C:/kb/x.md",
+        "anchors": [{ "file": "C:/kb/Doc.md", "from": "old", "to": "new name" }]
+      },
+      "expected": {
+        "text": "[a](<Doc.md#new%20name>) [b](Doc.md#new%20name)",
+        "count": 2
+      }
+    },
+    {
+      "name": "an anchor in the note, angle brackets",
+      "input": {
+        "text": "[a](<#old>)",
+        "file": "C:/kb/x.md",
+        "anchors": [{ "file": "C:/kb/x.md", "from": "old", "to": "new" }]
+      },
+      "expected": { "text": "[a](<#new>)", "count": 1 }
+    },
+    {
+      "name": "an anchor written encoded gets an encoded one",
+      "input": {
+        "text": "[a](#%E6%97%A7)",
+        "file": "C:/kb/x.md",
+        "anchors": [{ "file": "C:/kb/x.md", "from": "旧", "to": "新" }]
+      },
+      "expected": { "text": "[a](#%E6%96%B0)", "count": 1 }
+    },
+    {
+      "name": "html anchor",
+      "input": {
+        "text": "<a href=\"Doc.md#old\">x</a>",
+        "file": "C:/kb/x.md",
+        "anchors": [{ "file": "C:/kb/Doc.md", "from": "old", "to": "a (b)" }]
+      },
+      "expected": { "text": "<a href=\"Doc.md#a%20(b)\">x</a>", "count": 1 }
+    },
+    {
+      "name": "a reference definition's anchor",
+      "input": {
+        "text": "[r]: Doc.md#old\n",
+        "file": "C:/kb/x.md",
+        "anchors": [{ "file": "C:/kb/Doc.md", "from": "old", "to": "new" }]
+      },
+      "expected": { "text": "[r]: Doc.md#new\n", "count": 1 }
+    }
+  ]
+}

@@ -1,0 +1,171 @@
+{
+  "about": "A heading's Markdown as plain text: code spans and formulas ($…$, $$…$$, \\(…\\)) keep their inner text as written; images, HTML tags and comments go; links keep their text; emphasis markers (**, __, ~~, ==, and * or _ at a word's edge) go; a backslash before ASCII punctuation goes; runs of white space become one space; the result is trimmed. input.markdown → expected string.",
+  "cases": [
+    {
+      "name": "formula and strong",
+      "input": { "markdown": "关于 $x^2$ 的**性质**" },
+      "expected": "关于 x^2 的性质"
+    },
+    {
+      "name": "link, code and tag",
+      "input": { "markdown": "[链接](a.md) 与 `code` 与 <b>粗</b>" },
+      "expected": "链接 与 code 与 粗"
+    },
+    {
+      "name": "escapes and emphasis",
+      "input": { "markdown": "a\\*b\\_c *斜体* snake_case" },
+      "expected": "a*b_c 斜体 snake_case"
+    },
+    {
+      "name": "dollar amounts are no formula",
+      "why": "A closing $ followed by a digit does not close a formula.",
+      "input": { "markdown": "价格 $5 和 $6" },
+      "expected": "价格 $5 和 $6"
+    },
+    {
+      "name": "image goes",
+      "input": { "markdown": "![图](a.png)标题" },
+      "expected": "标题"
+    },
+    {
+      "name": "code keeps markup characters",
+      "input": { "markdown": "用 `<div>` 和 `a*b*c`" },
+      "expected": "用 <div> 和 a*b*c"
+    },
+    {
+      "name": "formula keeps stars",
+      "input": { "markdown": "$a_1 * b_2$ 的**和**" },
+      "expected": "a_1 * b_2 的和"
+    },
+    {
+      "name": "code keeps underscores",
+      "input": { "markdown": "`__init__` 方法" },
+      "expected": "__init__ 方法"
+    },
+    {
+      "name": "reference link",
+      "input": { "markdown": "[ref link][r] text" },
+      "expected": "ref link text"
+    },
+    {
+      "name": "strike and mark",
+      "input": { "markdown": "~~struck~~ ==marked==" },
+      "expected": "struck marked"
+    },
+    {
+      "name": "underscore emphasis",
+      "input": { "markdown": "_under_ and __strong__" },
+      "expected": "under and strong"
+    },
+    {
+      "name": "intraword underscores stay",
+      "input": { "markdown": "a_b_c" },
+      "expected": "a_b_c"
+    },
+    {
+      "name": "paren formula",
+      "input": { "markdown": "\\(x+y\\) inline" },
+      "expected": "x+y inline"
+    },
+    {
+      "name": "display formula",
+      "input": { "markdown": "$$E=mc^2$$ block" },
+      "expected": "E=mc^2 block"
+    },
+    {
+      "name": "comment goes",
+      "input": { "markdown": "<!-- comment -->Visible" },
+      "expected": "Visible"
+    },
+    {
+      "name": "entities stay as written",
+      "input": { "markdown": "Tom &amp; Jerry" },
+      "expected": "Tom &amp; Jerry"
+    },
+    {
+      "name": "white space collapses",
+      "input": { "markdown": "Multiple   spaces\tand tabs" },
+      "expected": "Multiple spaces and tabs"
+    },
+    {
+      "name": "double backtick code",
+      "input": { "markdown": "``code with ` backtick``" },
+      "expected": "code with ` backtick"
+    },
+    {
+      "name": "dollar then space is no formula",
+      "input": { "markdown": "$ not math $" },
+      "expected": "$ not math $"
+    },
+    {
+      "name": "formula followed by a digit is none",
+      "input": { "markdown": "$x$5" },
+      "expected": "$x$5"
+    },
+    {
+      "name": "escaped dollar",
+      "input": { "markdown": "a\\$b" },
+      "expected": "a$b"
+    },
+    {
+      "name": "unclosed strong",
+      "input": { "markdown": "**unclosed" },
+      "expected": "unclosed"
+    },
+    {
+      "name": "lone star between spaces stays",
+      "input": { "markdown": "a * b" },
+      "expected": "a * b"
+    },
+    {
+      "name": "nul character goes",
+      "input": { "markdown": "a\u0000b" },
+      "expected": "ab"
+    },
+    {
+      "name": "autolink stays",
+      "input": { "markdown": "<https://example.com>" },
+      "expected": "<https://example.com>"
+    },
+    {
+      "name": "code inside link text",
+      "input": { "markdown": "[link with `code`](x.md)" },
+      "expected": "link with code"
+    },
+    {
+      "name": "formula inside strong",
+      "input": { "markdown": "**$a*b$**" },
+      "expected": "a*b"
+    },
+    {
+      "name": "footnote reference stays",
+      "input": { "markdown": "Footnote[^1]" },
+      "expected": "Footnote[^1]"
+    },
+    {
+      "name": "emoji and emphasis",
+      "input": { "markdown": "Emoji 😀 _x_" },
+      "expected": "Emoji 😀 x"
+    },
+    {
+      "name": "tag with attributes",
+      "input": { "markdown": "<span class=\"a\">Text</span>" },
+      "expected": "Text"
+    },
+    {
+      "name": "self-closing tag",
+      "input": { "markdown": "Line<br/>break" },
+      "expected": "Linebreak"
+    },
+    {
+      "name": "backslash before a letter stays",
+      "input": { "markdown": "C:\\Users" },
+      "expected": "C:\\Users"
+    },
+    {
+      "name": "empty",
+      "input": { "markdown": "" },
+      "expected": ""
+    }
+  ]
+}

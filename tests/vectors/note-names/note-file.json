@@ -1,0 +1,50 @@
+{
+  "about": "Which files are notes (.md .markdown .mdown .mkd .txt, any case) and a note's name without its extension. input.name → expected { note, base }.",
+  "cases": [
+    {
+      "name": "md",
+      "input": { "name": "a.md" },
+      "expected": { "note": true, "base": "a" }
+    },
+    {
+      "name": "markdown upper case",
+      "input": { "name": "a.MARKDOWN" },
+      "expected": { "note": true, "base": "a" }
+    },
+    {
+      "name": "mdown",
+      "input": { "name": "a.mdown" },
+      "expected": { "note": true, "base": "a" }
+    },
+    {
+      "name": "mkd",
+      "input": { "name": "a.mkd" },
+      "expected": { "note": true, "base": "a" }
+    },
+    {
+      "name": "txt",
+      "input": { "name": "a.txt" },
+      "expected": { "note": true, "base": "a" }
+    },
+    {
+      "name": "image",
+      "input": { "name": "a.png" },
+      "expected": { "note": false, "base": "a.png" }
+    },
+    {
+      "name": "backup",
+      "input": { "name": "a.md.bak" },
+      "expected": { "note": false, "base": "a.md.bak" }
+    },
+    {
+      "name": "folder",
+      "input": { "name": "folder" },
+      "expected": { "note": false, "base": "folder" }
+    },
+    {
+      "name": "two extensions",
+      "input": { "name": "a.markdown.md" },
+      "expected": { "note": true, "base": "a.markdown" }
+    }
+  ]
+}

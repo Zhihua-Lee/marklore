@@ -1,0 +1,40 @@
+{
+  "about": "The file name for a note: safe-base of the name plus the extension (default '.md'), or '' when the base is empty. input: { name, ext?, max? } → expected string.",
+  "cases": [
+    {
+      "name": "plain",
+      "input": { "name": "1.2 映射" },
+      "expected": "1.2 映射.md"
+    },
+    {
+      "name": "empty",
+      "input": { "name": "" },
+      "expected": ""
+    },
+    {
+      "name": "only spaces",
+      "input": { "name": "   " },
+      "expected": ""
+    },
+    {
+      "name": "other extension",
+      "input": { "name": "笔记", "ext": ".markdown" },
+      "expected": "笔记.markdown"
+    },
+    {
+      "name": "reserved",
+      "input": { "name": "CON" },
+      "expected": "CON_.md"
+    },
+    {
+      "name": "cut",
+      "input": { "name": "abcdef", "max": 3 },
+      "expected": "abc.md"
+    },
+    {
+      "name": "forbidden characters",
+      "input": { "name": "Q1/Q2: plan?" },
+      "expected": "Q1／Q2： plan？.md"
+    }
+  ]
+}

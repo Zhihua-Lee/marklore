@@ -1,0 +1,78 @@
+{
+  "about": "A proposal's note name ('<library>/<path inside it>') after its file moved: the library's folder is the old file's path less as many parts as the name has after the library (compared without regard to letter case); the new name is the library and the new file's path from that folder, '/' between parts. Kept as it was when the old path does not end in those parts or the new file is not in that folder. Paths are Windows paths here. input: { note, file, next } → expected string.",
+  "platform": "win32",
+  "cases": [
+    {
+      "name": "renamed in place",
+      "input": {
+        "note": "Notes/Plan.md",
+        "file": "C:\\Users\\me\\Notes\\Plan.md",
+        "next": "C:\\Users\\me\\Notes\\Roadmap.md"
+      },
+      "expected": "Notes/Roadmap.md"
+    },
+    {
+      "name": "moved into a subfolder",
+      "input": {
+        "note": "Notes/Plan.md",
+        "file": "C:\\Users\\me\\Notes\\Plan.md",
+        "next": "C:\\Users\\me\\Notes\\2026\\Plan.md"
+      },
+      "expected": "Notes/2026/Plan.md"
+    },
+    {
+      "name": "letter case of the old path",
+      "input": {
+        "note": "Notes/sub/plan.md",
+        "file": "c:\\users\\me\\notes\\Sub\\Plan.md",
+        "next": "C:\\Users\\me\\notes\\Plan.md"
+      },
+      "expected": "Notes/Plan.md"
+    },
+    {
+      "name": "moved out of the library",
+      "input": {
+        "note": "Notes/Plan.md",
+        "file": "C:\\Users\\me\\Notes\\Plan.md",
+        "next": "D:\\Other\\Plan.md"
+      },
+      "expected": "Notes/Plan.md"
+    },
+    {
+      "name": "moved to the library's folder itself",
+      "input": {
+        "note": "Notes/Plan.md",
+        "file": "C:\\Users\\me\\Notes\\Plan.md",
+        "next": "C:\\Users\\me\\Notes"
+      },
+      "expected": "Notes/Plan.md"
+    },
+    {
+      "name": "name does not match the path",
+      "input": {
+        "note": "Notes/Other.md",
+        "file": "C:\\Users\\me\\Notes\\Plan.md",
+        "next": "C:\\Users\\me\\Notes\\X.md"
+      },
+      "expected": "Notes/Other.md"
+    },
+    {
+      "name": "library alone",
+      "input": {
+        "note": "Notes",
+        "file": "C:\\Users\\me\\Notes\\Plan.md",
+        "next": "C:\\Users\\me\\Notes\\X.md"
+      },
+      "expected": "Notes"
+    },
+    {
+      "name": "forward slashes in paths",
+      "input": {
+        "note": "Notes/Plan.md",
+        "file": "C:/Users/me/Notes/Plan.md",
+        "next": "C:/Users/me/Notes/a/b.md"
+      },
+      "expected": "Notes/a/b.md"
+    }
+  ]
+}

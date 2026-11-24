@@ -1,0 +1,121 @@
+{
+  "about": "The front matter's 'title' (key 'title', \"title\" or 'title', at the start of a line, case-sensitive; the first one): { line, end: its last line, value } or null when there is none. A value may be plain (a ' #' comment left out), double-quoted (\\\" and \\\\ unescaped), single-quoted ('' for '), a block scalar (| keeps line breaks, > joins lines with spaces; blank lines are dropped) or continue on indented lines below (joined with spaces). input.text → expected.",
+  "cases": [
+    {
+      "name": "double quoted with escapes",
+      "input": { "text": "---\ntitle: \"a \\\"b\\\"\"\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "a \"b\"" }
+    },
+    {
+      "name": "quoted key and comment",
+      "input": { "text": "---\n\"title\": 甲 # 注释\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "甲" }
+    },
+    {
+      "name": "single quoted key",
+      "input": { "text": "---\n'title': 乙\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "乙" }
+    },
+    {
+      "name": "folded block",
+      "input": { "text": "---\ntitle: >-\n  长的\n  标题\ntags: [a]\n---\n" },
+      "expected": { "line": 2, "end": 4, "value": "长的 标题" }
+    },
+    {
+      "name": "literal block",
+      "input": { "text": "---\ntitle: |\n  a\n  b\n---\n" },
+      "expected": { "line": 2, "end": 4, "value": "a\nb" }
+    },
+    {
+      "name": "folded block with a blank line",
+      "why": "Blank lines are dropped, so this reads 'a b' where YAML reads 'a\\nb'.",
+      "input": { "text": "---\ntitle: >\n  a\n\n  b\n---\n" },
+      "expected": { "line": 2, "end": 5, "value": "a b" }
+    },
+    {
+      "name": "value on the lines below",
+      "input": { "text": "---\ntitle:\n  多行\n  标题\n---\n" },
+      "expected": { "line": 2, "end": 4, "value": "多行 标题" }
+    },
+    {
+      "name": "single quoted value",
+      "input": { "text": "---\ntitle: 'it''s'\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "it's" }
+    },
+    {
+      "name": "comment needs a space",
+      "input": { "text": "---\ntitle: a#b\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "a#b" }
+    },
+    {
+      "name": "comment after a space",
+      "input": { "text": "---\ntitle: plain # note\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "plain" }
+    },
+    {
+      "name": "empty value",
+      "input": { "text": "---\ntitle: \n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "" }
+    },
+    {
+      "name": "not the first key",
+      "input": { "text": "---\nauthor: x\ntitle: 第二\n---\n" },
+      "expected": { "line": 3, "end": 3, "value": "第二" }
+    },
+    {
+      "name": "bom",
+      "input": { "text": "﻿---\ntitle: B\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "B" }
+    },
+    {
+      "name": "windows line endings",
+      "input": { "text": "---\r\ntitle: CRLF\r\n---\r\n" },
+      "expected": { "line": 2, "end": 2, "value": "CRLF" }
+    },
+    {
+      "name": "flow sequence read as text",
+      "input": { "text": "---\ntitle: [a, b]\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "[a, b]" }
+    },
+    {
+      "name": "indented key is not it",
+      "input": { "text": "---\n  title: indented\n---\n" },
+      "expected": null
+    },
+    {
+      "name": "first of two",
+      "input": { "text": "---\ntitle: one\ntitle: two\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "one" }
+    },
+    {
+      "name": "unterminated quote is plain",
+      "input": { "text": "---\ntitle: \"open\n---\n" },
+      "expected": { "line": 2, "end": 2, "value": "\"open" }
+    },
+    {
+      "name": "closed by dots",
+      "input": { "text": "---\ntitle: x\n...\n" },
+      "expected": { "line": 2, "end": 2, "value": "x" }
+    },
+    {
+      "name": "upper case key is not it",
+      "input": { "text": "---\nTitle: 大写\n---\n" },
+      "expected": null
+    },
+    {
+      "name": "no front matter",
+      "input": { "text": "# Title\n" },
+      "expected": null
+    },
+    {
+      "name": "front matter not closed",
+      "input": { "text": "---\ntitle: x\n" },
+      "expected": null
+    },
+    {
+      "name": "title only in the body",
+      "input": { "text": "---\na: 1\n---\ntitle: x\n" },
+      "expected": null
+    }
+  ]
+}

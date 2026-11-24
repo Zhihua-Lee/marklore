@@ -1,0 +1,65 @@
+{
+  "about": "A unified diff from before to after for the source view of a proposal: '--- a/<name>', '+++ b/<name>' (name defaults to 'note.md'), then hunks with three lines of context; changed lines closer than 2 × 3 unchanged lines share a hunk. Lines are split at '\\n'; the lines both texts share at their start and end are left out of the Myers diff. A hunk header gives a count only when it is not 1 ('@@ -3 +3,2 @@'); a count of 0 gives the line before. '' when the texts are the same; otherwise the diff ends with '\\n'. input: { before, after, name? } → expected string.",
+  "cases": [
+    {
+      "name": "two hunks",
+      "input": {
+        "before": "line 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 15\nline 16\nline 17\nline 18\nline 19\nline 20",
+        "after": "line 1\nline 2\nline three\nline 4\nline 5\nline 6\nline 7\nline 8\nline 9\nline 10\nline 11\nline 12\nline 13\nline 14\nline 16\nline 17\nline 18\nline 19\nline 20",
+        "name": "a.md"
+      },
+      "expected": "--- a/a.md\n+++ b/a.md\n@@ -1,6 +1,6 @@\n line 1\n line 2\n-line 3\n+line three\n line 4\n line 5\n line 6\n@@ -12,7 +12,6 @@\n line 12\n line 13\n line 14\n-line 15\n line 16\n line 17\n line 18\n"
+    },
+    {
+      "name": "same",
+      "input": { "before": "same", "after": "same" },
+      "expected": ""
+    },
+    {
+      "name": "from empty",
+      "input": { "before": "", "after": "new\n", "name": "n.md" },
+      "expected": "--- a/n.md\n+++ b/n.md\n@@ -1 +1,2 @@\n+new\n \n"
+    },
+    {
+      "name": "to empty",
+      "input": { "before": "old\n", "after": "" },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1,2 +1 @@\n-old\n \n"
+    },
+    {
+      "name": "nearby changes share a hunk",
+      "input": {
+        "before": "a\nb\nc\nd\ne\nf\ng\nh\ni\n",
+        "after": "A\nb\nc\nd\ne\nf\nG\nh\ni\n"
+      },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1,10 +1,10 @@\n-a\n+A\n b\n c\n d\n e\n f\n-g\n+G\n h\n i\n \n"
+    },
+    {
+      "name": "changes seven lines apart",
+      "input": {
+        "before": "a\nb\nc\nd\ne\nf\ng\nh\ni\nj\n",
+        "after": "A\nb\nc\nd\ne\nf\ng\nH\ni\nj\n"
+      },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1,4 +1,4 @@\n-a\n+A\n b\n c\n d\n@@ -5,7 +5,7 @@\n e\n f\n g\n-h\n+H\n i\n j\n \n"
+    },
+    {
+      "name": "insert a line in the middle",
+      "input": { "before": "a\nb\nc", "after": "a\nb\nx\nc" },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1,3 +1,4 @@\n a\n b\n+x\n c\n"
+    },
+    {
+      "name": "delete the only line",
+      "input": { "before": "x", "after": "" },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1 +1 @@\n-x\n+\n"
+    },
+    {
+      "name": "windows line endings are part of lines",
+      "input": { "before": "a\r\nb", "after": "a\r\nc" },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1,2 +1,2 @@\n a\r\n-b\n+c\n"
+    },
+    {
+      "name": "no line end at the end",
+      "input": { "before": "a\nb", "after": "a\nb\n" },
+      "expected": "--- a/note.md\n+++ b/note.md\n@@ -1,2 +1,3 @@\n a\n b\n+\n"
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "about": "Whether a path is a folder or inside it (path-key of both compared). input: { path, folder } → expected boolean.",
+  "cases": [
+    {
+      "name": "inside, any case and separator",
+      "input": { "path": "C:/KB/a/b.md", "folder": "c:\\kb\\a" },
+      "expected": true
+    },
+    {
+      "name": "prefix is not inside",
+      "input": { "path": "C:/kb/ab.md", "folder": "C:/kb/a" },
+      "expected": false
+    },
+    {
+      "name": "the folder itself",
+      "input": { "path": "C:/kb/a/", "folder": "C:/kb/a" },
+      "expected": true
+    },
+    {
+      "name": "root folder",
+      "input": { "path": "C:/kb/a.md", "folder": "C:/" },
+      "expected": true
+    },
+    {
+      "name": "other drive",
+      "input": { "path": "D:/kb/a.md", "folder": "C:/kb" },
+      "expected": false
+    },
+    {
+      "name": "posix",
+      "input": { "path": "/home/u/kb/a.md", "folder": "/home/u" },
+      "expected": true
+    }
+  ]
+}

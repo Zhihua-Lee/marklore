@@ -1,0 +1,46 @@
+{
+  "about": "The same name with a number, for a name already taken: ' (n)' before a note extension (.md .markdown .mdown .mkd .txt, any case), or at the end of any other name. input: { name, n } → expected string.",
+  "cases": [
+    {
+      "name": "note",
+      "input": { "name": "映射.md", "n": 2 },
+      "expected": "映射 (2).md"
+    },
+    {
+      "name": "folder",
+      "input": { "name": "文件夹", "n": 3 },
+      "expected": "文件夹 (3)"
+    },
+    {
+      "name": "text note",
+      "input": { "name": "a.txt", "n": 2 },
+      "expected": "a (2).txt"
+    },
+    {
+      "name": "markdown extension",
+      "input": { "name": "a.markdown", "n": 10 },
+      "expected": "a (10).markdown"
+    },
+    {
+      "name": "upper case extension",
+      "input": { "name": "a.MD", "n": 2 },
+      "expected": "a (2).MD"
+    },
+    {
+      "name": "numbered already",
+      "input": { "name": "x (2).md", "n": 3 },
+      "expected": "x (2) (3).md"
+    },
+    {
+      "name": "not a note extension",
+      "why": "Only note extensions are kept at the end.",
+      "input": { "name": "Archive.tar.gz", "n": 2 },
+      "expected": "Archive.tar.gz (2)"
+    },
+    {
+      "name": "image",
+      "input": { "name": "Image.png", "n": 2 },
+      "expected": "Image.png (2)"
+    }
+  ]
+}

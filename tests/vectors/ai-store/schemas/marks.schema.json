@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai/marks/<key>.json",
+  "description": "The owner's marks on one note. The file's name is the first 16 hexadecimal digits of the SHA-256 of the note's absolute path in lower case (UTF-8), then '.json' (see ai-store/marks-file). The app adds, edits and removes marks; the MCP server records on a mark the proposal that answers it or the AI's reply; a background run records itself. Every change takes the file's lock (a folder '<file>.lock', taken over after 10 seconds) and writes the file whole. A mark whose proposal is accepted is removed. When the note is renamed or moved its marks move to the new path's file (merged by id); when it goes to the Recycle Bin the file moves to marks/trashed/.",
+  "type": "object",
+  "properties": {
+    "file": {
+      "description": "Absolute path of the note.",
+      "type": "string",
+      "minLength": 1
+    },
+    "marks": {
+      "type": "array",
+      "maxItems": 500,
+      "items": { "$ref": "#/$defs/mark" }
+    }
+  },
+  "required": ["file", "marks"],
+  "additionalProperties": false,
+  "$defs": {
+    "time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "mark": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "Made as proposal ids are (marks carried over from the comments of earlier versions keep their ids).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "quote": {
+          "description": "The passage, as it was in the note (see comment-anchors).",
+          "type": "string",
+          "maxLength": 1000
+        },
+        "prefix": {
+          "description": "Up to 32 UTF-16 code units of the note just before the quote (the page may send up to 100).",
+          "type": "string",
+          "maxLength": 100
+        },
+        "suffix": {
+          "description": "Up to 32 UTF-16 code units of the note just after the quote.",
+          "type": "string",
+          "maxLength": 100
+        },
+        "text": {
+          "description": "What the owner wants of the AI about it, trimmed; '' when nothing.",
+          "type": "string",
+          "maxLength": 5000
+        },
+        "created": { "$ref": "#/$defs/time" },
+        "proposal": {
+          "description": "The proposal that answers it (proposals/<id>.json).",
+          "type": "string"
+        },
+        "run": {
+          "description": "The background run working on it (runs/<id>.json), while it runs.",
+          "type": "string"
+        },
+        "answer": {
+          "description": "The AI's reply (reply_mark); removed when the owner asks anew.",
+          "type": "object",
+          "properties": {
+            "by": {
+              "description": "The assistant (MCP client name).",
+              "type": "string"
+            },
+            "text": { "type": "string", "minLength": 1 },
+            "at": { "$ref": "#/$defs/time" }
+          },
+          "required": ["by", "text", "at"],
+          "additionalProperties": false
+        },
+        "earlier": {
+          "description": "The exchange so far when the owner asked anew after a reply: the last ten turns, oldest first.",
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "properties": {
+              "by": {
+                "description": "'owner', or the assistant that replied.",
+                "type": "string"
+              },
+              "text": { "type": "string" }
+            },
+            "required": ["by", "text"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": ["id", "quote", "prefix", "suffix", "text", "created"],
+      "additionalProperties": false
+    }
+  }
+}

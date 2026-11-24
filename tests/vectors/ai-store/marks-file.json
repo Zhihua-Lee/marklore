@@ -1,0 +1,26 @@
+{
+  "about": "The name of a note's marks file in ai/marks: the first 16 hexadecimal digits of the SHA-256 of the note's absolute path (resolved, Windows separators) in lower case, as UTF-8, then '.json'. Any letter case and either separator give the same file. input.file → expected [the file name].",
+  "platform": "win32",
+  "cases": [
+    {
+      "name": "a note",
+      "input": { "file": "C:\\Users\\me\\Notes\\Plan.md" },
+      "expected": ["2da1197d1224a5b1.json"]
+    },
+    {
+      "name": "letter case",
+      "input": { "file": "c:\\USERS\\ME\\notes\\plan.MD" },
+      "expected": ["2da1197d1224a5b1.json"]
+    },
+    {
+      "name": "forward slashes",
+      "input": { "file": "C:/Users/me/Notes/Plan.md" },
+      "expected": ["2da1197d1224a5b1.json"]
+    },
+    {
+      "name": "cjk path",
+      "input": { "file": "D:\\笔记\\第一章.md" },
+      "expected": ["43dc2abcd0c65799.json"]
+    }
+  ]
+}

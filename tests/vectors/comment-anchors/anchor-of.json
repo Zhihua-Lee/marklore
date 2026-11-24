@@ -1,0 +1,79 @@
+{
+  "about": "A mark's place in a note: the quote (the text from `from` to `to`), with up to 32 UTF-16 code units before it (prefix) and after it (suffix). input: { text, from, to } → expected { quote, prefix, suffix }.",
+  "cases": [
+    {
+      "name": "the second of two",
+      "input": {
+        "text": "Alpha beta.\n\nThe proof holds.\n\nAgain: the proof holds.\n",
+        "from": { "line": 5, "column": 8 },
+        "to": { "line": 5, "column": 23 }
+      },
+      "expected": {
+        "quote": "the proof holds",
+        "prefix": "beta.\n\nThe proof holds.\n\nAgain: ",
+        "suffix": ".\n"
+      }
+    },
+    {
+      "name": "at the start",
+      "input": {
+        "text": "Alpha beta.\n\nThe proof holds.\n\nAgain: the proof holds.\n",
+        "from": { "line": 1, "column": 1 },
+        "to": { "line": 1, "column": 6 }
+      },
+      "expected": {
+        "quote": "Alpha",
+        "prefix": "",
+        "suffix": " beta.\n\nThe proof holds.\n\nAgain:"
+      }
+    },
+    {
+      "name": "at the end",
+      "input": {
+        "text": "Alpha beta.\n\nThe proof holds.\n\nAgain: the proof holds.\n",
+        "from": { "line": 5, "column": 18 },
+        "to": { "line": 6, "column": 1 }
+      },
+      "expected": {
+        "quote": "holds.\n",
+        "prefix": " proof holds.\n\nAgain: the proof ",
+        "suffix": ""
+      }
+    },
+    {
+      "name": "long context is cut to 32",
+      "input": {
+        "text": "01234567890123456789012345678901234567890123456789QUOTEabcdefghijabcdefghijabcdefghijabcdefghijabcdefghij",
+        "from": { "line": 1, "column": 51 },
+        "to": { "line": 1, "column": 56 }
+      },
+      "expected": {
+        "quote": "QUOTE",
+        "prefix": "89012345678901234567890123456789",
+        "suffix": "abcdefghijabcdefghijabcdefghijab"
+      }
+    },
+    {
+      "name": "cjk",
+      "input": {
+        "text": "第一段。\n\n这里是要标记的句子。后面还有文字。",
+        "from": { "line": 3, "column": 4 },
+        "to": { "line": 3, "column": 10 }
+      },
+      "expected": {
+        "quote": "要标记的句子",
+        "prefix": "第一段。\n\n这里是",
+        "suffix": "。后面还有文字。"
+      }
+    },
+    {
+      "name": "empty selection",
+      "input": {
+        "text": "abc",
+        "from": { "line": 1, "column": 2 },
+        "to": { "line": 1, "column": 2 }
+      },
+      "expected": { "quote": "", "prefix": "a", "suffix": "bc" }
+    }
+  ]
+}

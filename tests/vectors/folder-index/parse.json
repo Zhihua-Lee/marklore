@@ -1,0 +1,506 @@
+{
+  "about": "An index file's entries: list items ('-', '*', '+', or 1–9 digits then '.' or ')'; then spaces or tabs) whose text starts with a link [text](destination); the destination may be in angle brackets, hold balanced parentheses and a title. Lines in front matter (from a first line '---' to the next '---' or '...'), fenced code and HTML comments hold none. indent: the columns before the marker (a tab to the next multiple of 4); content: the column where the item's text starts. An entry's parent is the nearest entry above whose content column it reaches (indent ≥ that content), in the same list: any other non-blank line ends the list (blank lines do not). input.text → expected { bom, eol ('\\r\\n' when the text has one, else '\\n'), entries: [{ line, indent, content, marker, text (as written, escapes kept), href (as written), parent (index in entries, from 0, or null) }] }.",
+  "cases": [
+    {
+      "name": "nested bullets",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n"
+      },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 5,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "Intro",
+            "href": "Intro.md",
+            "parent": null
+          },
+          {
+            "line": 6,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "Detail",
+            "href": "Detail%20one.md",
+            "parent": 0
+          },
+          {
+            "line": 7,
+            "indent": 4,
+            "content": 6,
+            "marker": "-",
+            "text": "Deeper",
+            "href": "深入.md",
+            "parent": 1
+          },
+          {
+            "line": 8,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "Topics",
+            "href": "Topics/_目录.md",
+            "parent": null
+          },
+          {
+            "line": 9,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "Inner",
+            "href": "Topics/Inner/_目录.md",
+            "parent": 3
+          },
+          {
+            "line": 10,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "Missing",
+            "href": "Gone.md",
+            "parent": null
+          },
+          {
+            "line": 11,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "Last",
+            "href": "Last.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "numbered and tabs",
+      "input": {
+        "text": "1. [a](a.md)\n   1. [b](b.md)\n2. [c](c.md)\n\t- [d](d.md)\n"
+      },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 3,
+            "marker": "1.",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 2,
+            "indent": 3,
+            "content": 6,
+            "marker": "1.",
+            "text": "b",
+            "href": "b.md",
+            "parent": 0
+          },
+          {
+            "line": 3,
+            "indent": 0,
+            "content": 3,
+            "marker": "2.",
+            "text": "c",
+            "href": "c.md",
+            "parent": null
+          },
+          {
+            "line": 4,
+            "indent": 4,
+            "content": 6,
+            "marker": "-",
+            "text": "d",
+            "href": "d.md",
+            "parent": 2
+          }
+        ]
+      }
+    },
+    {
+      "name": "parenthesis numbers",
+      "input": { "text": "1) [a](a.md)\n2) [b](b.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 3,
+            "marker": "1)",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 2,
+            "indent": 0,
+            "content": 3,
+            "marker": "2)",
+            "text": "b",
+            "href": "b.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "star and plus bullets",
+      "input": { "text": "* [a](a.md)\n+ [b](b.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "*",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 2,
+            "indent": 0,
+            "content": 2,
+            "marker": "+",
+            "text": "b",
+            "href": "b.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "front matter, comments and code hold none",
+      "input": {
+        "text": "---\n- [Front](front.md)\n---\n- [A](a.md)\n\n<!--\n- [Hidden](hidden.md)\n-->\n```\n- [Code](code.md)\n```\n~~~~\n- [Tilde](t.md)\n~~~~\nSome prose.\n  - [B](b.md)\n"
+      },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 4,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "A",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 16,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "B",
+            "href": "b.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "one-line comment",
+      "input": { "text": "- [a](a.md)\n<!-- - [x](x.md) -->\n  - [b](b.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 3,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "b",
+            "href": "b.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "blank lines keep the list",
+      "input": { "text": "- [a](a.md)\n\n  - [b](b.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 3,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "b",
+            "href": "b.md",
+            "parent": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "a plain item ends the list",
+      "why": "Any non-blank line that is no entry, list items included, ends nesting.",
+      "input": { "text": "- [a](a.md)\n- plain item\n  - [b](b.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 3,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "b",
+            "href": "b.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "bom and windows line endings",
+      "input": { "text": "﻿- [a](a.md)\r\n  - [b](b.md)\r\n" },
+      "expected": {
+        "bom": true,
+        "eol": "\r\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 2,
+            "indent": 2,
+            "content": 4,
+            "marker": "-",
+            "text": "b",
+            "href": "b.md",
+            "parent": 0
+          }
+        ]
+      }
+    },
+    {
+      "name": "angle brackets, parentheses and titles",
+      "input": {
+        "text": "- [P (1)](<My page (1).md>)\n- [Q](a(b).md \"see (v2)\")\n- [R](<x y.md> \"t\")\n"
+      },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "P (1)",
+            "href": "<My page (1).md>",
+            "parent": null
+          },
+          {
+            "line": 2,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "Q",
+            "href": "a(b).md \"see (v2)\"",
+            "parent": null
+          },
+          {
+            "line": 3,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "R",
+            "href": "<x y.md> \"t\"",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "escaped brackets in the text",
+      "input": { "text": "- [A \\[draft\\]](a.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "A \\[draft\\]",
+            "href": "a.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "text after the link",
+      "input": { "text": "- [a](a.md) — the first\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "ten digits are no marker",
+      "input": { "text": "1234567890. [a](a.md)\n" },
+      "expected": { "bom": false, "eol": "\n", "entries": [] }
+    },
+    {
+      "name": "no space after the marker",
+      "input": { "text": "1.[a](a.md)\n-[b](b.md)\n" },
+      "expected": { "bom": false, "eol": "\n", "entries": [] }
+    },
+    {
+      "name": "link not first",
+      "input": { "text": "- see [a](a.md)\n" },
+      "expected": { "bom": false, "eol": "\n", "entries": [] }
+    },
+    {
+      "name": "wide numbers",
+      "input": {
+        "text": "100. [a](a.md)\n     - [b](b.md)\n    - [c](c.md)\n"
+      },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 0,
+            "content": 5,
+            "marker": "100.",
+            "text": "a",
+            "href": "a.md",
+            "parent": null
+          },
+          {
+            "line": 2,
+            "indent": 5,
+            "content": 7,
+            "marker": "-",
+            "text": "b",
+            "href": "b.md",
+            "parent": 0
+          },
+          {
+            "line": 3,
+            "indent": 4,
+            "content": 6,
+            "marker": "-",
+            "text": "c",
+            "href": "c.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "indented four at the top",
+      "input": { "text": "    - [x](x.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 1,
+            "indent": 4,
+            "content": 6,
+            "marker": "-",
+            "text": "x",
+            "href": "x.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "empty",
+      "input": { "text": "" },
+      "expected": { "bom": false, "eol": "\n", "entries": [] }
+    },
+    {
+      "name": "fence with a longer close",
+      "input": { "text": "```\n- [x](x.md)\n````\n- [y](y.md)\n" },
+      "expected": {
+        "bom": false,
+        "eol": "\n",
+        "entries": [
+          {
+            "line": 4,
+            "indent": 0,
+            "content": 2,
+            "marker": "-",
+            "text": "y",
+            "href": "y.md",
+            "parent": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "fence with text after the close is still open",
+      "input": { "text": "```\n- [x](x.md)\n``` not closed\n- [y](y.md)\n" },
+      "expected": { "bom": false, "eol": "\n", "entries": [] }
+    }
+  ]
+}

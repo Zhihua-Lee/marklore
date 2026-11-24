@@ -1,0 +1,80 @@
+{
+  "about": "A text's words for a word diff: runs of white space; runs of letters, digits and '_' (any script but Han, Hiragana, Katakana and Hangul); and every other character on its own (a CJK character, a punctuation mark, an emoji). input.text → expected [string].",
+  "cases": [
+    {
+      "name": "english",
+      "input": { "text": "Send it on Friday." },
+      "expected": ["Send", " ", "it", " ", "on", " ", "Friday", "."]
+    },
+    {
+      "name": "chinese",
+      "input": { "text": "今天天气很好。" },
+      "expected": ["今", "天", "天", "气", "很", "好", "。"]
+    },
+    {
+      "name": "mixed",
+      "input": { "text": "用 Rust 写的GPUI界面" },
+      "expected": ["用", " ", "Rust", " ", "写", "的", "GPUI", "界", "面"]
+    },
+    {
+      "name": "japanese",
+      "input": { "text": "ひらがなとカタカナ" },
+      "expected": ["ひ", "ら", "が", "な", "と", "カ", "タ", "カ", "ナ"]
+    },
+    {
+      "name": "korean",
+      "input": { "text": "한국어 문장" },
+      "expected": ["한", "국", "어", " ", "문", "장"]
+    },
+    {
+      "name": "digits and underscore",
+      "input": { "text": "x_1 = 42" },
+      "expected": ["x_1", " ", "=", " ", "42"]
+    },
+    {
+      "name": "emoji",
+      "input": { "text": "a😀b" },
+      "expected": ["a", "😀", "b"]
+    },
+    {
+      "name": "line breaks",
+      "input": { "text": "a\n\nb" },
+      "expected": ["a", "\n\n", "b"]
+    },
+    {
+      "name": "accents",
+      "input": { "text": "café naïve" },
+      "expected": ["café", " ", "naïve"]
+    },
+    {
+      "name": "punctuation runs",
+      "input": { "text": "...!!" },
+      "expected": [".", ".", ".", "!", "!"]
+    },
+    {
+      "name": "empty",
+      "input": { "text": "" },
+      "expected": []
+    },
+    {
+      "name": "markdown",
+      "input": { "text": "**bold** [link](a.md)" },
+      "expected": [
+        "*",
+        "*",
+        "bold",
+        "*",
+        "*",
+        " ",
+        "[",
+        "link",
+        "]",
+        "(",
+        "a",
+        ".",
+        "md",
+        ")"
+      ]
+    }
+  ]
+}

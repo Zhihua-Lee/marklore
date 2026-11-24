@@ -1,0 +1,53 @@
+{
+  "about": "A note's inline links and images to a target taken away: a link keeps its text, an image goes; a link inside one already taken away goes with it. Reference definitions and HTML stay. input: { text, file, target } → expected { text, count }.",
+  "cases": [
+    {
+      "name": "links and an image",
+      "input": {
+        "text": "See [the plan](Plan.md#goals), ![chart](Plan.md) and [other](Other.md).\n`[x](Plan.md)`\n[r]: Plan.md\n",
+        "file": "C:/kb/notes/A.md",
+        "target": "c:\\KB\\notes\\plan.md"
+      },
+      "expected": {
+        "text": "See the plan,  and [other](Other.md).\n`[x](Plan.md)`\n[r]: Plan.md\n",
+        "count": 2
+      }
+    },
+    {
+      "name": "nested image in a link",
+      "input": {
+        "text": "[![b](Plan.md)](Plan.md)",
+        "file": "C:/kb/A.md",
+        "target": "C:/kb/Plan.md"
+      },
+      "expected": { "text": "[](Plan.md)", "count": 1 }
+    },
+    {
+      "name": "link text with markup",
+      "input": {
+        "text": "[**bold** `x`](Plan.md)",
+        "file": "C:/kb/A.md",
+        "target": "C:/kb/Plan.md"
+      },
+      "expected": { "text": "**bold** `x`", "count": 1 }
+    },
+    {
+      "name": "html stays",
+      "input": {
+        "text": "<a href=\"Plan.md\">x</a>",
+        "file": "C:/kb/A.md",
+        "target": "C:/kb/Plan.md"
+      },
+      "expected": { "text": "<a href=\"Plan.md\">x</a>", "count": 0 }
+    },
+    {
+      "name": "another target",
+      "input": {
+        "text": "[a](a.md)",
+        "file": "C:/kb/A.md",
+        "target": "C:/kb/b.md"
+      },
+      "expected": { "text": "[a](a.md)", "count": 0 }
+    }
+  ]
+}

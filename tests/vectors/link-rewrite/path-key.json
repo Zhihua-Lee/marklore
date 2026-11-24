@@ -1,0 +1,45 @@
+{
+  "about": "A path as a key: '\\' as '/', '.' parts dropped, '..' parts applied, empty parts dropped, lower case, the root kept ('c:', '//server/share', or '' for a POSIX path), then '/' and the parts. input.path → expected string.",
+  "cases": [
+    {
+      "name": "windows",
+      "input": { "path": "C:\\KB\\Notes\\A.md" },
+      "expected": "c:/kb/notes/a.md"
+    },
+    {
+      "name": "dots",
+      "input": { "path": "C:/kb/./a/../b.md" },
+      "expected": "c:/kb/b.md"
+    },
+    {
+      "name": "trailing slash",
+      "input": { "path": "C:/kb/" },
+      "expected": "c:/kb"
+    },
+    {
+      "name": "posix",
+      "input": { "path": "/Home/U/a.md" },
+      "expected": "/home/u/a.md"
+    },
+    {
+      "name": "unc",
+      "input": { "path": "\\\\Server\\Share\\a.md" },
+      "expected": "//server/share/a.md"
+    },
+    {
+      "name": "drive only",
+      "input": { "path": "C:" },
+      "expected": "c:/"
+    },
+    {
+      "name": "relative",
+      "input": { "path": "a/b.md" },
+      "expected": "/a/b.md"
+    },
+    {
+      "name": "above the root",
+      "input": { "path": "C:/../a.md" },
+      "expected": "c:/a.md"
+    }
+  ]
+}

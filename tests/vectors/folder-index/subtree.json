@@ -1,0 +1,53 @@
+{
+  "about": "A child's entry and the entries under it that name children, in order: [{ name, title (escapes undone), parent (the name of the nearest entry above it that names a child, null for the first) }], each child once; [] when it is not listed. input: { text, ref } → expected.",
+  "cases": [
+    {
+      "name": "nested with a deeper link between",
+      "input": {
+        "text": "- [a](a.md)\n  - [Own \\[1\\]](b.md)\n    - [gone](deep/x.md)\n      - [c](c.md)\n  - [d](d.md)\n- [e](e.md)\n",
+        "ref": "a.md"
+      },
+      "expected": [
+        { "name": "a.md", "title": "a", "parent": null },
+        { "name": "b.md", "title": "Own [1]", "parent": "a.md" },
+        { "name": "c.md", "title": "c", "parent": "b.md" },
+        { "name": "d.md", "title": "d", "parent": "a.md" }
+      ]
+    },
+    {
+      "name": "a leaf",
+      "input": {
+        "text": "- [a](a.md)\n  - [Own \\[1\\]](b.md)\n    - [gone](deep/x.md)\n      - [c](c.md)\n  - [d](d.md)\n- [e](e.md)\n",
+        "ref": "e.md"
+      },
+      "expected": [{ "name": "e.md", "title": "e", "parent": null }]
+    },
+    {
+      "name": "not listed",
+      "input": {
+        "text": "- [a](a.md)\n  - [Own \\[1\\]](b.md)\n    - [gone](deep/x.md)\n      - [c](c.md)\n  - [d](d.md)\n- [e](e.md)\n",
+        "ref": "zzz.md"
+      },
+      "expected": []
+    },
+    {
+      "name": "a child listed twice counts once",
+      "input": {
+        "text": "- [a](a.md)\n  - [b](b.md)\n  - [b again](B.md)\n",
+        "ref": "a.md"
+      },
+      "expected": [
+        { "name": "a.md", "title": "a", "parent": null },
+        { "name": "b.md", "title": "b", "parent": "a.md" }
+      ]
+    },
+    {
+      "name": "by line",
+      "input": {
+        "text": "- [x](deep/x.md)\n  - [y](y.md)\n",
+        "ref": { "line": 1 }
+      },
+      "expected": [{ "name": "y.md", "title": "y", "parent": null }]
+    }
+  ]
+}

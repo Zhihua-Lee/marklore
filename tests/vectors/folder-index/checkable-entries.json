@@ -1,0 +1,36 @@
+{
+  "about": "The entries that can be missing, as the index view shows them: each entry whose link is a relative path, once per target (paths compared without regard to letter case): a child of the index's folder that is a note, a folder link (ending in '/') or a name without an extension (an attachment is never shown missing), or a note linked deeper or outside. input: { text, file (the index's absolute path) } → expected [{ line, name (child name or null), target (absolute path, '/' between parts) }].",
+  "cases": [
+    {
+      "name": "notes, folders, attachments, deeper and outside",
+      "input": {
+        "text": "- [a](a.md)\n- [Sub](Sub/)\n- [Box](Box)\n- [pic](pic.png)\n- [deep](deep/x.md)\n- [up](../up.md)\n- [web](https://example.com/a.md)\n- [again](A.md)\n- [deep pic](deep/p.png)\n- [index](T/_目录.md)\n",
+        "file": "C:/kb/notes/_目录.md"
+      },
+      "expected": [
+        { "line": 1, "name": "a.md", "target": "C:/kb/notes/a.md" },
+        { "line": 2, "name": "Sub", "target": "C:/kb/notes/Sub" },
+        { "line": 3, "name": "Box", "target": "C:/kb/notes/Box" },
+        { "line": 5, "name": null, "target": "C:/kb/notes/deep/x.md" },
+        { "line": 6, "name": null, "target": "C:/kb/up.md" },
+        { "line": 10, "name": "T", "target": "C:/kb/notes/T/_目录.md" }
+      ]
+    },
+    {
+      "name": "angle brackets and encoding",
+      "input": {
+        "text": "- [a](<My page.md>)\n- [b](My%20page.md)\n- [c](%E8%AE%A1%E5%88%92.md#x)\n",
+        "file": "C:/kb/_目录.md"
+      },
+      "expected": [
+        { "line": 1, "name": "My page.md", "target": "C:/kb/My page.md" },
+        { "line": 3, "name": "计划.md", "target": "C:/kb/计划.md" }
+      ]
+    },
+    {
+      "name": "posix paths",
+      "input": { "text": "- [a](a.md)\n", "file": "/home/u/kb/SUMMARY.md" },
+      "expected": [{ "line": 1, "name": "a.md", "target": "/home/u/kb/a.md" }]
+    }
+  ]
+}

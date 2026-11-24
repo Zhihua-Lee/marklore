@@ -1,0 +1,737 @@
+{
+  "about": "One operation on an index's text, as the tree and the index view ask for it. Only the lines moved or changed are touched: bullets, indentation, line endings and a byte order mark stay. An entry is named by its child's name (child-name, letter case aside; the first entry naming it) or by { line } (for any entry, including one whose link names no child). input: { text, op } → expected new text, or null when nothing changes or it is not possible. Operations (kind):\n- move { ref, target, place: before | after | into, folder }: the entry with its sub-list put before or after the target (and its sub-list), or into it as its last sub-item (indented as the target's sub-items are, else to the target's text column; in a tab-nested index with a tab). Not into itself or its own sub-list. A child not listed yet gets a new entry '<marker> [title](href)' (marker: a bullet as the target's, or the next number in a numbered list; title: entry-title; href: href with folder).\n- insert { name, folder, title, under, after }: a new entry for a child not listed: as the last sub-item of 'under', right after 'after' (and its sub-items), or after the last top-level entry; in a file without entries, a '- ' list at the end after a blank line. A title given is used (brackets and backslashes escaped).\n- remove { ref, subtree }: the entry's line; its sub-items move up a level into its place, or go with it (subtree).\n- indent { ref, folders }: the entry (with its sub-items) becomes the last sub-item of the entry before it at its level. Only notes nest: neither entry may be a folder's (link ending in '/', a link to a folder's index, or a child named in 'folders').\n- outdent { ref }: the entry (with its sub-items) goes right after its parent's sub-list, at the parent's level.\n- shift { ref, step }: past the entry before (step < 0) or after (otherwise) at its level.\n- rename { from, to, title }: links to the child follow (every link in the file, anchors, angle brackets and encoding kept); with title, each entry naming the child gets it; without, an entry whose text was the old entry-title gets the new one.\n- retitle { ref, title }: the entry's text set (trimmed, white space collapsed, brackets and backslashes escaped); a blank title is refused.",
+  "cases": [
+    {
+      "name": "move after, with its sub-list",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "Last.md",
+          "place": "after"
+        }
+      },
+      "expected": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n"
+    },
+    {
+      "name": "move a sub-page out before",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "深入.md",
+          "target": "Intro.md",
+          "place": "before"
+        }
+      },
+      "expected": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Deeper](深入.md)\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n"
+    },
+    {
+      "name": "move into: last sub-page",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Last.md",
+          "target": "Intro.md",
+          "place": "into"
+        }
+      },
+      "expected": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n  - [Last](Last.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n"
+    },
+    {
+      "name": "move into an entry without sub-items",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "Last.md",
+          "place": "into"
+        }
+      },
+      "expected": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n  - [Intro](Intro.md)\n    - [Detail](Detail%20one.md)\n      - [Deeper](深入.md)\n"
+    },
+    {
+      "name": "move into a numbered entry",
+      "input": {
+        "text": "1. [a](a.md)\n2. [b](b.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "b.md",
+          "target": "a.md",
+          "place": "into"
+        }
+      },
+      "expected": "1. [a](a.md)\n   2. [b](b.md)\n"
+    },
+    {
+      "name": "move onto itself",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "Intro.md",
+          "place": "after"
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "move into its own sub-list",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "深入.md",
+          "place": "into"
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "move to where it is",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "Topics",
+          "place": "before"
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "move to a target not listed",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "Nope.md",
+          "place": "before"
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "move a child not listed, without folder",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "New.md",
+          "target": "Last.md",
+          "place": "after"
+        }
+      },
+      "expected": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n- [New](New.md)\n"
+    },
+    {
+      "name": "move a child not listed: new entry, encoded, line endings and bom kept",
+      "input": {
+        "text": "﻿- [a](a.md)\r\n- [b](b.md)\r\n",
+        "op": {
+          "kind": "move",
+          "ref": "New page (2).md",
+          "target": "a.md",
+          "place": "after",
+          "folder": false
+        }
+      },
+      "expected": "﻿- [a](a.md)\r\n- [New page (2)](New%20page%20%282%29.md)\r\n- [b](b.md)\r\n"
+    },
+    {
+      "name": "move a new folder before a numbered entry",
+      "input": {
+        "text": "1. [a](a.md)\n2. [b](b.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Sub",
+          "target": "b.md",
+          "place": "before",
+          "folder": true
+        }
+      },
+      "expected": "1. [a](a.md)\n2. [Sub](Sub/)\n2. [b](b.md)\n"
+    },
+    {
+      "name": "move a new child into a numbered entry",
+      "input": {
+        "text": "1. [a](a.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "n.md",
+          "target": "a.md",
+          "place": "into"
+        }
+      },
+      "expected": "1. [a](a.md)\n   1. [n](n.md)\n"
+    },
+    {
+      "name": "move by line",
+      "input": {
+        "text": "- [x](deep/x.md)\n- [a](a.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": { "line": 1 },
+          "target": "a.md",
+          "place": "after"
+        }
+      },
+      "expected": "- [a](a.md)\n- [x](deep/x.md)\n"
+    },
+    {
+      "name": "move with an unknown place",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "Intro.md",
+          "target": "Last.md",
+          "place": "over"
+        }
+      },
+      "expected": null
+    },
+    {
+      "name": "move before a numbered entry, sub-items stay under",
+      "input": {
+        "text": "1. [B](b.md)\n- [A](a.md)\n  - [A1](a1.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "a.md",
+          "target": "b.md",
+          "place": "before"
+        }
+      },
+      "expected": "- [A](a.md)\n  - [A1](a1.md)\n1. [B](b.md)\n"
+    },
+    {
+      "name": "move into an entry nested with tabs",
+      "input": {
+        "text": "- [A](a.md)\n\t100. [X](x.md)\n- [Z](z.md)\n",
+        "op": {
+          "kind": "move",
+          "ref": "z.md",
+          "target": "x.md",
+          "place": "into"
+        }
+      },
+      "expected": "- [A](a.md)\n\t100. [X](x.md)\n\t\t - [Z](z.md)\n"
+    },
+    {
+      "name": "insert under",
+      "input": {
+        "text": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n\nAfter.\n",
+        "op": { "kind": "insert", "name": "New.md", "under": "a.md" }
+      },
+      "expected": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n  - [New](New.md)\n- [b](b.md)\n\nAfter.\n"
+    },
+    {
+      "name": "insert after",
+      "input": {
+        "text": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n\nAfter.\n",
+        "op": { "kind": "insert", "name": "New.md", "after": "a.md" }
+      },
+      "expected": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [New](New.md)\n- [b](b.md)\n\nAfter.\n"
+    },
+    {
+      "name": "insert a folder at the end",
+      "input": {
+        "text": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n\nAfter.\n",
+        "op": { "kind": "insert", "name": "Sub dir", "folder": true }
+      },
+      "expected": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n- [Sub dir](Sub%20dir/)\n\nAfter.\n"
+    },
+    {
+      "name": "insert one listed already",
+      "input": {
+        "text": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n\nAfter.\n",
+        "op": { "kind": "insert", "name": "a1.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "insert under one not listed",
+      "input": {
+        "text": "# T\n\nIntro text.\n\n- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n\nAfter.\n",
+        "op": { "kind": "insert", "name": "x.md", "under": "nope.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "insert into a file without a list",
+      "input": {
+        "text": "﻿# T\r\n\r\nNotes.\r\n",
+        "op": { "kind": "insert", "name": "计划.md" }
+      },
+      "expected": "﻿# T\r\n\r\nNotes.\r\n\r\n- [计划](计划.md)\r\n"
+    },
+    {
+      "name": "insert into an empty file",
+      "input": { "text": "", "op": { "kind": "insert", "name": "a.md" } },
+      "expected": "- [a](a.md)\n"
+    },
+    {
+      "name": "insert into a file of blank lines",
+      "input": { "text": "\n\n\n", "op": { "kind": "insert", "name": "a.md" } },
+      "expected": "- [a](a.md)\n"
+    },
+    {
+      "name": "insert into a numbered list",
+      "input": {
+        "text": "1. [a](a.md)\n2. [b](b.md)\n",
+        "op": { "kind": "insert", "name": "c.md" }
+      },
+      "expected": "1. [a](a.md)\n2. [b](b.md)\n3. [c](c.md)\n"
+    },
+    {
+      "name": "insert under, tab-nested",
+      "input": {
+        "text": "* [a](a.md)\n\t* [x](x.md)\n",
+        "op": { "kind": "insert", "name": "y.md", "under": "a.md" }
+      },
+      "expected": "* [a](a.md)\n\t* [x](x.md)\n\t* [y](y.md)\n"
+    },
+    {
+      "name": "insert under a wide number in a tab-nested index",
+      "input": {
+        "text": "- [A](a.md)\n\t100. [X](x.md)\n",
+        "op": { "kind": "insert", "name": "y.md", "under": "x.md" }
+      },
+      "expected": "- [A](a.md)\n\t100. [X](x.md)\n\t\t 1. [y](y.md)\n"
+    },
+    {
+      "name": "insert with a title of its own",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "insert", "name": "n.md", "title": "Notes [draft]" }
+      },
+      "expected": "- [a](a.md)\n- [Notes \\[draft\\]](n.md)\n"
+    },
+    {
+      "name": "insert with an empty title",
+      "why": "Pins current behaviour: an empty title is written as given.",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "insert", "name": "n.md", "title": "" }
+      },
+      "expected": "- [a](a.md)\n- [](n.md)\n"
+    },
+    {
+      "name": "insert a name needing encoding",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "insert", "name": "50% [x] #1?.md" }
+      },
+      "expected": "- [a](a.md)\n- [50% \\[x\\] #1?](50%25%20%5Bx%5D%20%231%3F.md)\n"
+    },
+    {
+      "name": "insert a markdown and a text note",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "insert", "name": "b.markdown" }
+      },
+      "expected": "- [a](a.md)\n- [b](b.markdown)\n"
+    },
+    {
+      "name": "insert without a name",
+      "input": { "text": "- [a](a.md)\n", "op": { "kind": "insert" } },
+      "expected": null
+    },
+    {
+      "name": "insert after the last, numbered with parenthesis",
+      "input": {
+        "text": "1) [a](a.md)\n",
+        "op": { "kind": "insert", "name": "b.md", "after": "a.md" }
+      },
+      "expected": "1) [a](a.md)\n2) [b](b.md)\n"
+    },
+    {
+      "name": "remove: sub-items move up",
+      "input": {
+        "text": "- [a](a.md)\n    - [b](b.md)\n        - [c](c.md)\n    - [d](d.md)\n- [e](e.md)\n",
+        "op": { "kind": "remove", "ref": "a.md" }
+      },
+      "expected": "- [b](b.md)\n    - [c](c.md)\n- [d](d.md)\n- [e](e.md)\n"
+    },
+    {
+      "name": "remove with its subtree",
+      "input": {
+        "text": "- [a](a.md)\n    - [b](b.md)\n        - [c](c.md)\n    - [d](d.md)\n- [e](e.md)\n",
+        "op": { "kind": "remove", "ref": "a.md", "subtree": true }
+      },
+      "expected": "- [e](e.md)\n"
+    },
+    {
+      "name": "remove a leaf",
+      "input": {
+        "text": "- [a](a.md)\n    - [b](b.md)\n        - [c](c.md)\n    - [d](d.md)\n- [e](e.md)\n",
+        "op": { "kind": "remove", "ref": "c.md" }
+      },
+      "expected": "- [a](a.md)\n    - [b](b.md)\n    - [d](d.md)\n- [e](e.md)\n"
+    },
+    {
+      "name": "remove one not listed",
+      "input": {
+        "text": "- [a](a.md)\n    - [b](b.md)\n        - [c](c.md)\n    - [d](d.md)\n- [e](e.md)\n",
+        "op": { "kind": "remove", "ref": "zzz.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "remove by line",
+      "input": {
+        "text": "- [x](deep/x.md)\n- [a](a.md)\n",
+        "op": { "kind": "remove", "ref": { "line": 1 } }
+      },
+      "expected": "- [a](a.md)\n"
+    },
+    {
+      "name": "remove by a line that is no entry",
+      "input": {
+        "text": "# T\n- [a](a.md)\n",
+        "op": { "kind": "remove", "ref": { "line": 1 } }
+      },
+      "expected": null
+    },
+    {
+      "name": "remove, a tab past the width taken away",
+      "input": {
+        "text": "- [P](p.md)\n  - [C](c.md)\n\t- [G](g.md)\n",
+        "op": { "kind": "remove", "ref": "p.md" }
+      },
+      "expected": "- [C](c.md)\n  - [G](g.md)\n"
+    },
+    {
+      "name": "remove keeps windows line endings",
+      "input": {
+        "text": "- [a](a.md)\r\n- [b](b.md)\r\n",
+        "op": { "kind": "remove", "ref": "a.md" }
+      },
+      "expected": "- [b](b.md)\r\n"
+    },
+    {
+      "name": "indent under the one before",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "indent", "ref": "b.md" }
+      },
+      "expected": "- [a](a.md)\n  - [a1](a1.md)\n  - [b](b.md)\n    - [b1](b1.md)\n- [c](c.md)\n"
+    },
+    {
+      "name": "indent the first at its level",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "indent", "ref": "a.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "indent the first sub-item",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "indent", "ref": "a1.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "indent under a folder",
+      "input": {
+        "text": "- [Sub](Sub/)\n- [n](n.md)\n- [Box](Box)\n- [m](m.md)\n",
+        "op": { "kind": "indent", "ref": "n.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "a folder linked without a slash nests unless named in folders",
+      "input": {
+        "text": "- [Sub](Sub/)\n- [n](n.md)\n- [Box](Box)\n- [m](m.md)\n",
+        "op": { "kind": "indent", "ref": "Box" }
+      },
+      "expected": "- [Sub](Sub/)\n- [n](n.md)\n  - [Box](Box)\n- [m](m.md)\n"
+    },
+    {
+      "name": "indent a folder named in folders",
+      "input": {
+        "text": "- [Sub](Sub/)\n- [n](n.md)\n- [Box](Box)\n- [m](m.md)\n",
+        "op": { "kind": "indent", "ref": "Box", "folders": ["box"] }
+      },
+      "expected": null
+    },
+    {
+      "name": "indent under a folder named in folders",
+      "input": {
+        "text": "- [Sub](Sub/)\n- [n](n.md)\n- [Box](Box)\n- [m](m.md)\n",
+        "op": { "kind": "indent", "ref": "m.md", "folders": ["Box"] }
+      },
+      "expected": null
+    },
+    {
+      "name": "indent by line",
+      "input": {
+        "text": "- [a](a.md)\n- [b](b.md)\n",
+        "op": { "kind": "indent", "ref": { "line": 2 } }
+      },
+      "expected": "- [a](a.md)\n  - [b](b.md)\n"
+    },
+    {
+      "name": "indent beside a numbered entry",
+      "input": {
+        "text": "1. [B](b.md)\n- [A](a.md)\n  - [A1](a1.md)\n",
+        "op": { "kind": "indent", "ref": "a.md" }
+      },
+      "expected": "1. [B](b.md)\n   - [A](a.md)\n     - [A1](a1.md)\n"
+    },
+    {
+      "name": "indent under a folder's index link",
+      "input": {
+        "text": "- [T](T/_目录.md)\n- [n](n.md)\n",
+        "op": { "kind": "indent", "ref": "n.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "outdent",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "outdent", "ref": "a1.md" }
+      },
+      "expected": "- [a](a.md)\n- [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n"
+    },
+    {
+      "name": "outdent a top-level entry",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "outdent", "ref": "c.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "outdent, a tab past the width taken away",
+      "input": {
+        "text": "- [P](p.md)\n  - [C](c.md)\n\t- [G](g.md)\n",
+        "op": { "kind": "outdent", "ref": "c.md" }
+      },
+      "expected": "- [P](p.md)\n- [C](c.md)\n  - [G](g.md)\n"
+    },
+    {
+      "name": "outdent from the middle of a sub-list",
+      "input": {
+        "text": "- [a](a.md)\n    - [b](b.md)\n        - [c](c.md)\n    - [d](d.md)\n- [e](e.md)\n",
+        "op": { "kind": "outdent", "ref": "b.md" }
+      },
+      "expected": "- [a](a.md)\n    - [d](d.md)\n- [b](b.md)\n    - [c](c.md)\n- [e](e.md)\n"
+    },
+    {
+      "name": "shift up",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "shift", "ref": "b.md", "step": -1 }
+      },
+      "expected": "- [b](b.md)\n  - [b1](b1.md)\n- [a](a.md)\n  - [a1](a1.md)\n- [c](c.md)\n"
+    },
+    {
+      "name": "shift down",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "shift", "ref": "a.md", "step": 1 }
+      },
+      "expected": "- [b](b.md)\n  - [b1](b1.md)\n- [a](a.md)\n  - [a1](a1.md)\n- [c](c.md)\n"
+    },
+    {
+      "name": "shift the last down",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "shift", "ref": "c.md", "step": 1 }
+      },
+      "expected": null
+    },
+    {
+      "name": "shift the first up",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "shift", "ref": "a.md", "step": -1 }
+      },
+      "expected": null
+    },
+    {
+      "name": "shift with step 0 goes down",
+      "why": "Pins current behaviour: any step not below 0 moves down.",
+      "input": {
+        "text": "- [a](a.md)\n  - [a1](a1.md)\n- [b](b.md)\n  - [b1](b1.md)\n- [c](c.md)\n",
+        "op": { "kind": "shift", "ref": "a.md", "step": 0 }
+      },
+      "expected": "- [b](b.md)\n  - [b1](b1.md)\n- [a](a.md)\n  - [a1](a1.md)\n- [c](c.md)\n"
+    },
+    {
+      "name": "shift a sub-item within its level",
+      "input": {
+        "text": "- [a](a.md)\n  - [x](x.md)\n  - [y](y.md)\n",
+        "op": { "kind": "shift", "ref": "y.md", "step": -1 }
+      },
+      "expected": "- [a](a.md)\n  - [y](y.md)\n  - [x](x.md)\n"
+    },
+    {
+      "name": "rename: links follow, the old title with them",
+      "input": {
+        "text": "# Index\r\n\r\nSee [plan](Old%20plan.md#goals) above.\r\n\r\n- [Old plan](Old%20plan.md)\r\n  - [My own title](<Old plan.md>)\r\n- [Topics](Topics/_目录.md)\r\n- [Other](Other.md)\r\n",
+        "op": { "kind": "rename", "from": "Old plan.md", "to": "新计划 (2).md" }
+      },
+      "expected": "# Index\r\n\r\nSee [plan](新计划%20%282%29.md#goals) above.\r\n\r\n- [新计划 (2)](新计划%20%282%29.md)\r\n  - [My own title](<新计划 (2).md>)\r\n- [Topics](Topics/_目录.md)\r\n- [Other](Other.md)\r\n"
+    },
+    {
+      "name": "rename a folder linked by its index",
+      "input": {
+        "text": "# Index\r\n\r\nSee [plan](Old%20plan.md#goals) above.\r\n\r\n- [Old plan](Old%20plan.md)\r\n  - [My own title](<Old plan.md>)\r\n- [Topics](Topics/_目录.md)\r\n- [Other](Other.md)\r\n",
+        "op": { "kind": "rename", "from": "Topics", "to": "Subjects" }
+      },
+      "expected": "# Index\r\n\r\nSee [plan](Old%20plan.md#goals) above.\r\n\r\n- [Old plan](Old%20plan.md)\r\n  - [My own title](<Old plan.md>)\r\n- [Subjects](Subjects/_目录.md)\r\n- [Other](Other.md)\r\n"
+    },
+    {
+      "name": "rename one not listed",
+      "input": {
+        "text": "# Index\r\n\r\nSee [plan](Old%20plan.md#goals) above.\r\n\r\n- [Old plan](Old%20plan.md)\r\n  - [My own title](<Old plan.md>)\r\n- [Topics](Topics/_目录.md)\r\n- [Other](Other.md)\r\n",
+        "op": { "kind": "rename", "from": "Nope.md", "to": "X.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "rename letter case",
+      "input": {
+        "text": "- [other](other.md)\n",
+        "op": { "kind": "rename", "from": "other.md", "to": "Other.md" }
+      },
+      "expected": "- [Other](Other.md)\n"
+    },
+    {
+      "name": "rename with a title",
+      "input": {
+        "text": "- [第一章：集合与映射](第一章_集合与映射.md)\n  - [映射](1.2%20映射.md#定义)\n",
+        "op": {
+          "kind": "rename",
+          "from": "1.2 映射.md",
+          "to": "1.2 映射与函数.md",
+          "title": "1.2 映射与函数"
+        }
+      },
+      "expected": "- [第一章：集合与映射](第一章_集合与映射.md)\n  - [1.2 映射与函数](1.2%20映射与函数.md#定义)\n"
+    },
+    {
+      "name": "rename: the same file, a new title",
+      "input": {
+        "text": "- [第一章：集合与映射](第一章_集合与映射.md)\n",
+        "op": {
+          "kind": "rename",
+          "from": "第一章_集合与映射.md",
+          "to": "第一章_集合与映射.md",
+          "title": "第一章 [集合]"
+        }
+      },
+      "expected": "- [第一章 \\[集合\\]](第一章_集合与映射.md)\n"
+    },
+    {
+      "name": "rename without a title keeps an own title",
+      "input": {
+        "text": "- [映射](1.2%20映射.md#定义)\n",
+        "op": { "kind": "rename", "from": "1.2 映射.md", "to": "映射2.md" }
+      },
+      "expected": "- [映射](映射2.md#定义)\n"
+    },
+    {
+      "name": "rename with a title: every entry naming it",
+      "input": {
+        "text": "- [a](a.md)\n- [b](b.md)\n  - [again](a.md)\n",
+        "op": { "kind": "rename", "from": "a.md", "to": "z.md", "title": "Zed" }
+      },
+      "expected": "- [Zed](z.md)\n- [b](b.md)\n  - [Zed](z.md)\n"
+    },
+    {
+      "name": "rename a folder linked with a slash",
+      "input": {
+        "text": "- [Box](Box/)\n",
+        "op": { "kind": "rename", "from": "Box", "to": "Crate" }
+      },
+      "expected": "- [Crate](Crate/)\n"
+    },
+    {
+      "name": "rename with a blank title is a plain rename",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "rename", "from": "a.md", "to": "b.md", "title": "  " }
+      },
+      "expected": "- [b](b.md)\n"
+    },
+    {
+      "name": "rename without from",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "rename", "to": "b.md" }
+      },
+      "expected": null
+    },
+    {
+      "name": "retitle",
+      "input": {
+        "text": "- [a](a.md)\n- [b](b.md)\n",
+        "op": { "kind": "retitle", "ref": "b.md", "title": "B [1]" }
+      },
+      "expected": "- [a](a.md)\n- [B \\[1\\]](b.md)\n"
+    },
+    {
+      "name": "retitle blank",
+      "input": {
+        "text": "- [a](a.md)\n- [b](b.md)\n",
+        "op": { "kind": "retitle", "ref": "b.md", "title": "  " }
+      },
+      "expected": null
+    },
+    {
+      "name": "retitle collapses white space",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "retitle", "ref": "a.md", "title": "  New\t title " }
+      },
+      "expected": "- [New title](a.md)\n"
+    },
+    {
+      "name": "retitle the same",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "retitle", "ref": "a.md", "title": "a" }
+      },
+      "expected": null
+    },
+    {
+      "name": "retitle by line, link kept",
+      "input": {
+        "text": "- [x](deep/x.md \"t\")\n",
+        "op": { "kind": "retitle", "ref": { "line": 1 }, "title": "X" }
+      },
+      "expected": "- [X](deep/x.md \"t\")\n"
+    },
+    {
+      "name": "retitle with a backslash",
+      "input": {
+        "text": "- [a](a.md)\n",
+        "op": { "kind": "retitle", "ref": "a.md", "title": "a\\b" }
+      },
+      "expected": "- [a\\\\b](a.md)\n"
+    },
+    {
+      "name": "unknown kind",
+      "input": { "text": "- [a](a.md)\n", "op": { "kind": "nope" } },
+      "expected": null
+    },
+    {
+      "name": "no kind",
+      "input": { "text": "- [a](a.md)\n", "op": {} },
+      "expected": null
+    }
+  ]
+}

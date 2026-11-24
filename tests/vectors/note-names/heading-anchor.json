@@ -1,0 +1,40 @@
+{
+  "about": "The anchor of a note's leading heading as the renderer gives it: HTML tags taken out of the Markdown, then slug/heading-slug. input.markdown → expected string.",
+  "cases": [
+    {
+      "name": "cjk",
+      "input": { "markdown": "第一章：集合与映射" },
+      "expected": "第一章集合与映射"
+    },
+    {
+      "name": "tags",
+      "input": { "markdown": "Road <em>map</em>" },
+      "expected": "road-map"
+    },
+    {
+      "name": "words",
+      "input": { "markdown": "Hello World" },
+      "expected": "hello-world"
+    },
+    {
+      "name": "numbered",
+      "input": { "markdown": "1.2 映射" },
+      "expected": "12-映射"
+    },
+    {
+      "name": "tag around punctuation",
+      "input": { "markdown": "A <b>&</b> B" },
+      "expected": "a-b"
+    },
+    {
+      "name": "empty",
+      "input": { "markdown": "" },
+      "expected": "section"
+    },
+    {
+      "name": "markup is not taken out",
+      "input": { "markdown": "**Bold** `code`" },
+      "expected": "bold-code"
+    }
+  ]
+}

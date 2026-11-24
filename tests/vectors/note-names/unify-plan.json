@@ -1,0 +1,242 @@
+{
+  "about": "'Unify names' for a folder: for each note (.md .markdown .mdown .mkd; not hidden, not the folder's index), visited in the folder's order (names compared as zh-CN collation, numbers in names by value), one name for its file, its index entry, its heading and its front-matter title. The name is the leading heading's plain text, or for a note without one, its index entry's text (escapes undone, as plain-title) or its file's base name. The file name is safe-base of it (cap: 120 UTF-16 units, less in a deep folder: 250 minus the folder path's length, the extension's and 6, never under 20; the vectors keep names short) plus the note's extension; a file already named so (letter case aside), or with its numbered form, keeps its name; otherwise the first free one of 'Name.md', 'Name (2).md'… (names taken: the folder's entries, letter case aside, updated as the plan goes). input: { files: { 'path/in/folder': text, 'folder/': '' }, deep?, only? (one note's file name) }. expected: the notes with a change, each { note (its path in the folder), title, to (new file name or null), heading (the heading to write, for a note without one, or null), entry ({ from, to } or null), front ({ from, to } or null) }. Texts are read as the app reads notes (byte order mark and \\r\\n as \\n).",
+  "cases": [
+    {
+      "name": "heading differs from the file name",
+      "input": {
+        "files": { "第一章_集合与映射.md": "# 第一章：集合与映射\n" }
+      },
+      "expected": [
+        {
+          "note": "第一章_集合与映射.md",
+          "title": "第一章：集合与映射",
+          "to": "第一章：集合与映射.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "named after its heading already",
+      "input": { "files": { "第二章 极限.md": "# 第二章 极限\n" } },
+      "expected": []
+    },
+    {
+      "name": "letter case only is no change",
+      "input": { "files": { "plan.md": "# Plan\n" } },
+      "expected": []
+    },
+    {
+      "name": "no heading, no index: the file name",
+      "input": { "files": { "无标题.md": "只有正文\n" } },
+      "expected": [
+        {
+          "note": "无标题.md",
+          "title": "无标题",
+          "to": null,
+          "heading": "无标题",
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "no heading, index entry text",
+      "input": {
+        "files": {
+          "_目录.md": "- [第一节 \\[草稿\\]](a.md)\n",
+          "a.md": "正文\n"
+        }
+      },
+      "expected": [
+        {
+          "note": "a.md",
+          "title": "第一节 [草稿]",
+          "to": "第一节 [草稿].md",
+          "heading": "第一节 [草稿]",
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "entry text and front title follow the heading",
+      "input": {
+        "files": {
+          "_目录.md": "- [旧的条目](n.md)\n",
+          "n.md": "---\ntitle: 旧的标题\n---\n# 新名\n"
+        }
+      },
+      "expected": [
+        {
+          "note": "n.md",
+          "title": "新名",
+          "to": "新名.md",
+          "heading": null,
+          "entry": { "from": "旧的条目", "to": "新名" },
+          "front": { "from": "旧的标题", "to": "新名" }
+        }
+      ]
+    },
+    {
+      "name": "two notes with one name",
+      "input": { "files": { "a.md": "# Same\n", "b.md": "# Same\n" } },
+      "expected": [
+        {
+          "note": "a.md",
+          "title": "Same",
+          "to": "Same.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        },
+        {
+          "note": "b.md",
+          "title": "Same",
+          "to": "Same (2).md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "numbered form is kept",
+      "input": {
+        "files": { "Same.md": "# Same\n", "Same (2).md": "# Same\n" }
+      },
+      "expected": []
+    },
+    {
+      "name": "forbidden characters in the heading",
+      "input": { "files": { "x.md": "# A: B / C?\n" } },
+      "expected": [
+        {
+          "note": "x.md",
+          "title": "A: B / C?",
+          "to": "A： B ／ C？.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "index, hidden and other files are left out",
+      "input": {
+        "files": {
+          "SUMMARY.md": "# Summary\n",
+          ".hidden.md": "# Hidden\n",
+          "notes.txt": "# Text\n",
+          "pic.png": "",
+          "k.markdown": "# Kept\n"
+        }
+      },
+      "expected": [
+        {
+          "note": "k.markdown",
+          "title": "Kept",
+          "to": "Kept.markdown",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "only one note",
+      "input": {
+        "files": { "a.md": "# A1\n", "b.md": "# B1\n" },
+        "only": "B.MD"
+      },
+      "expected": [
+        {
+          "note": "b.md",
+          "title": "B1",
+          "to": "B1.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "subfolders with deep",
+      "input": {
+        "files": { "a.md": "# A1\n", "sub/": "", "sub/b.md": "# B1\n" },
+        "deep": true
+      },
+      "expected": [
+        {
+          "note": "a.md",
+          "title": "A1",
+          "to": "A1.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        },
+        {
+          "note": "sub/b.md",
+          "title": "B1",
+          "to": "B1.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "subfolders without deep",
+      "input": {
+        "files": { "a.md": "# A1\n", "sub/": "", "sub/b.md": "# B1\n" }
+      },
+      "expected": [
+        {
+          "note": "a.md",
+          "title": "A1",
+          "to": "A1.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "numbers in names sort by value",
+      "input": { "files": { "10.md": "# Same\n", "9.md": "# Same\n" } },
+      "expected": [
+        {
+          "note": "9.md",
+          "title": "Same",
+          "to": "Same.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        },
+        {
+          "note": "10.md",
+          "title": "Same",
+          "to": "Same (2).md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    },
+    {
+      "name": "windows line endings and bom",
+      "input": { "files": { "x.md": "﻿# Title\r\n\r\nBody\r\n" } },
+      "expected": [
+        {
+          "note": "x.md",
+          "title": "Title",
+          "to": "Title.md",
+          "heading": null,
+          "entry": null,
+          "front": null
+        }
+      ]
+    }
+  ]
+}

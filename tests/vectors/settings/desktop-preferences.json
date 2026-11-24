@@ -1,0 +1,71 @@
+{
+  "about": "The desktop preferences (desktop-settings.json in the profile folder, Windows integration): closeToTray, otherFormats and checkUpdates, each on only when stored as true; other keys are dropped. A missing file or one that is not JSON reads as all off. input.stored → expected.",
+  "cases": [
+    {
+      "name": "nothing",
+      "input": { "stored": null },
+      "expected": {
+        "closeToTray": false,
+        "otherFormats": false,
+        "checkUpdates": false
+      }
+    },
+    {
+      "name": "all on",
+      "input": {
+        "stored": {
+          "closeToTray": true,
+          "otherFormats": true,
+          "checkUpdates": true
+        }
+      },
+      "expected": {
+        "closeToTray": true,
+        "otherFormats": true,
+        "checkUpdates": true
+      }
+    },
+    {
+      "name": "truthy is not true",
+      "input": {
+        "stored": {
+          "closeToTray": "true",
+          "otherFormats": 1,
+          "checkUpdates": "yes"
+        }
+      },
+      "expected": {
+        "closeToTray": false,
+        "otherFormats": false,
+        "checkUpdates": false
+      }
+    },
+    {
+      "name": "unknown keys dropped",
+      "input": { "stored": { "closeToTray": true, "theme": "dark" } },
+      "expected": {
+        "closeToTray": true,
+        "otherFormats": false,
+        "checkUpdates": false
+      }
+    },
+    {
+      "name": "not an object",
+      "input": { "stored": "on" },
+      "expected": {
+        "closeToTray": false,
+        "otherFormats": false,
+        "checkUpdates": false
+      }
+    },
+    {
+      "name": "a list",
+      "input": { "stored": [true, true] },
+      "expected": {
+        "closeToTray": false,
+        "otherFormats": false,
+        "checkUpdates": false
+      }
+    }
+  ]
+}

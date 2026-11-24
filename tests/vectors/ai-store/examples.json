@@ -1,0 +1,851 @@
+{
+  "about": "Values checked against the JSON Schemas in ai-store/schemas (draft 2020-12): the files Marklore and its MCP server share in the 'ai' folder of the data folder. input: { schema (file name without '.schema.json'), value } → expected: whether the value is valid.",
+  "cases": [
+    {
+      "name": "access",
+      "input": {
+        "schema": "access",
+        "value": {
+          "libraries": [{ "path": "C:\\Users\\me\\Notes" }],
+          "excluded": ["C:\\Users\\me\\Notes\\Private"]
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "access, nothing open",
+      "input": {
+        "schema": "access",
+        "value": { "libraries": [], "excluded": [] }
+      },
+      "expected": true
+    },
+    {
+      "name": "access, posix and unc",
+      "input": {
+        "schema": "access",
+        "value": {
+          "libraries": [{ "path": "/Users/me/Notes" }],
+          "excluded": ["\\\\server\\share\\x", "/Users/me/Notes/.git"]
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "access, relative excluded path",
+      "input": {
+        "schema": "access",
+        "value": { "libraries": [], "excluded": ["Notes/Private"] }
+      },
+      "expected": false
+    },
+    {
+      "name": "access, library as a string",
+      "input": {
+        "schema": "access",
+        "value": { "libraries": ["C:\\Notes"], "excluded": [] }
+      },
+      "expected": false
+    },
+    {
+      "name": "access, missing excluded",
+      "input": { "schema": "access", "value": { "libraries": [] } },
+      "expected": false
+    },
+    {
+      "name": "context with a selection",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "selection": { "text": "Send it", "from": 8 },
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "context without a selection",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "selection": null,
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "context, selection place unknown",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "selection": { "text": "x", "from": null },
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "context, no note",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": null,
+          "closed": false,
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "context, a note closed to AI",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": null,
+          "closed": true,
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "context, empty selection text",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "selection": { "text": "", "from": 0 },
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "context, no time",
+      "input": {
+        "schema": "context",
+        "value": { "file": null, "closed": false }
+      },
+      "expected": false
+    },
+    {
+      "name": "context, closed with a file",
+      "input": {
+        "schema": "context",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "closed": true,
+          "at": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal, pending",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "edit proposal, answering marks",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending",
+          "marks": ["mabc1235-0a1b2c"],
+          "run": "mabc9999-123456"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "edit proposal, decided edit by edit",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [
+            { "old_text": "on Friday", "new_text": "on Thursday" },
+            { "old_text": "Ask Ana.", "new_text": "Ask Ana Lee." }
+          ],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "accepted",
+          "results": ["accepted", "rejected"],
+          "reasons": [null, "Keep it short."],
+          "ownerNote": "Thanks.",
+          "saved": false,
+          "decided": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "edit proposal, failed",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "failed",
+          "error": "The owner moved this note to the Recycle Bin.",
+          "decided": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "note proposal",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "note",
+          "client": "codex",
+          "session": null,
+          "summary": "Ideas",
+          "note": "Notes/Ideas.md",
+          "file": "/Users/me/Notes/Ideas.md",
+          "text": "# Ideas\n",
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "note proposal, accepted",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "note",
+          "client": "codex",
+          "session": null,
+          "summary": "Ideas",
+          "note": "Notes/Ideas.md",
+          "file": "/Users/me/Notes/Ideas.md",
+          "text": "# Ideas\n",
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "accepted",
+          "saved": true,
+          "decided": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "lapsed is never stored",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "lapsed"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal without edits",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal, empty old text",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "", "new_text": "x" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal, carriage return",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "a\r\nb", "new_text": "c" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal, short version",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "abc",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal, bad id",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "Proposal-1",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "edit proposal, 51 edits",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [
+            { "old_text": "a0", "new_text": "b" },
+            { "old_text": "a1", "new_text": "b" },
+            { "old_text": "a2", "new_text": "b" },
+            { "old_text": "a3", "new_text": "b" },
+            { "old_text": "a4", "new_text": "b" },
+            { "old_text": "a5", "new_text": "b" },
+            { "old_text": "a6", "new_text": "b" },
+            { "old_text": "a7", "new_text": "b" },
+            { "old_text": "a8", "new_text": "b" },
+            { "old_text": "a9", "new_text": "b" },
+            { "old_text": "a10", "new_text": "b" },
+            { "old_text": "a11", "new_text": "b" },
+            { "old_text": "a12", "new_text": "b" },
+            { "old_text": "a13", "new_text": "b" },
+            { "old_text": "a14", "new_text": "b" },
+            { "old_text": "a15", "new_text": "b" },
+            { "old_text": "a16", "new_text": "b" },
+            { "old_text": "a17", "new_text": "b" },
+            { "old_text": "a18", "new_text": "b" },
+            { "old_text": "a19", "new_text": "b" },
+            { "old_text": "a20", "new_text": "b" },
+            { "old_text": "a21", "new_text": "b" },
+            { "old_text": "a22", "new_text": "b" },
+            { "old_text": "a23", "new_text": "b" },
+            { "old_text": "a24", "new_text": "b" },
+            { "old_text": "a25", "new_text": "b" },
+            { "old_text": "a26", "new_text": "b" },
+            { "old_text": "a27", "new_text": "b" },
+            { "old_text": "a28", "new_text": "b" },
+            { "old_text": "a29", "new_text": "b" },
+            { "old_text": "a30", "new_text": "b" },
+            { "old_text": "a31", "new_text": "b" },
+            { "old_text": "a32", "new_text": "b" },
+            { "old_text": "a33", "new_text": "b" },
+            { "old_text": "a34", "new_text": "b" },
+            { "old_text": "a35", "new_text": "b" },
+            { "old_text": "a36", "new_text": "b" },
+            { "old_text": "a37", "new_text": "b" },
+            { "old_text": "a38", "new_text": "b" },
+            { "old_text": "a39", "new_text": "b" },
+            { "old_text": "a40", "new_text": "b" },
+            { "old_text": "a41", "new_text": "b" },
+            { "old_text": "a42", "new_text": "b" },
+            { "old_text": "a43", "new_text": "b" },
+            { "old_text": "a44", "new_text": "b" },
+            { "old_text": "a45", "new_text": "b" },
+            { "old_text": "a46", "new_text": "b" },
+            { "old_text": "a47", "new_text": "b" },
+            { "old_text": "a48", "new_text": "b" },
+            { "old_text": "a49", "new_text": "b" },
+            { "old_text": "a50", "new_text": "b" }
+          ],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "note proposal with edits",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "note",
+          "client": "codex",
+          "session": null,
+          "summary": "Ideas",
+          "note": "Notes/Ideas.md",
+          "file": "/Users/me/Notes/Ideas.md",
+          "text": "# Ideas\n",
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "proposal, unknown status",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "maybe"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "proposal, summary too long",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "proposal, a mark listed twice",
+      "input": {
+        "schema": "proposal",
+        "value": {
+          "kind": "edit",
+          "client": "claude-code",
+          "session": "mabc0000-ffffff",
+          "summary": "Thursday",
+          "note": "Notes/Plan.md",
+          "file": "C:\\Users\\me\\Notes\\Plan.md",
+          "version": "0123456789abcdef",
+          "edits": [{ "old_text": "on Friday", "new_text": "on Thursday" }],
+          "id": "mabc1234-0a1b2c",
+          "created": "2026-11-23T08:30:00.000Z",
+          "status": "pending",
+          "marks": ["a", "a"]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "marks",
+      "input": {
+        "schema": "marks",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "marks": [
+            {
+              "id": "mabc1235-0a1b2c",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z"
+            }
+          ]
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "marks, none",
+      "input": {
+        "schema": "marks",
+        "value": { "file": "C:\\Notes\\Plan.md", "marks": [] }
+      },
+      "expected": true
+    },
+    {
+      "name": "marks, answered and asked again",
+      "input": {
+        "schema": "marks",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "marks": [
+            {
+              "id": "mabc1235-0a1b2c",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z",
+              "proposal": "mabc1236-0a1b2c"
+            },
+            {
+              "id": "m2",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z",
+              "answer": {
+                "by": "claude-code",
+                "text": "Ana Lee?",
+                "at": "2026-11-23T08:30:00.000Z"
+              }
+            },
+            {
+              "id": "m3",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z",
+              "earlier": [
+                { "by": "owner", "text": "Who?" },
+                { "by": "codex", "text": "Ana Lee?" }
+              ],
+              "run": "mabc9999-123456"
+            }
+          ]
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "marks, no file",
+      "input": {
+        "schema": "marks",
+        "value": {
+          "marks": [
+            {
+              "id": "mabc1235-0a1b2c",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z"
+            }
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "mark without a quote",
+      "input": {
+        "schema": "marks",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "marks": [
+            {
+              "id": "mabc1235-0a1b2c",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z"
+            }
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "mark, answer without time",
+      "input": {
+        "schema": "marks",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "marks": [
+            {
+              "id": "mabc1235-0a1b2c",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z",
+              "answer": { "by": "codex", "text": "x" }
+            }
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "mark, eleven earlier turns",
+      "input": {
+        "schema": "marks",
+        "value": {
+          "file": "C:\\Notes\\Plan.md",
+          "marks": [
+            {
+              "id": "mabc1235-0a1b2c",
+              "quote": "on Friday",
+              "prefix": "# Plan\n\nSend it ",
+              "suffix": ".\n\nAsk Ana.\n",
+              "text": "Can this be earlier?",
+              "created": "2026-11-23T08:30:00.000Z",
+              "earlier": [
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" },
+                { "by": "owner", "text": "x" }
+              ]
+            }
+          ]
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "run, running",
+      "input": {
+        "schema": "run",
+        "value": {
+          "client": "claude-code",
+          "marks": [{ "id": "m1", "file": "C:\\Notes\\Plan.md" }],
+          "id": "mabc1234-0a1b2c",
+          "started": "2026-11-23T08:30:00.000Z",
+          "status": "running",
+          "pid": 4321
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "run, done",
+      "input": {
+        "schema": "run",
+        "value": {
+          "client": "claude-code",
+          "marks": [{ "id": "m1", "file": "C:\\Notes\\Plan.md" }],
+          "id": "mabc1234-0a1b2c",
+          "started": "2026-11-23T08:30:00.000Z",
+          "status": "done",
+          "pid": 4321,
+          "finished": "2026-11-23T08:30:00.000Z",
+          "result": "Answered both.",
+          "dismissed": true
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "run, failed",
+      "input": {
+        "schema": "run",
+        "value": {
+          "client": "claude-code",
+          "marks": [{ "id": "m1", "file": "C:\\Notes\\Plan.md" }],
+          "id": "mabc1234-0a1b2c",
+          "started": "2026-11-23T08:30:00.000Z",
+          "status": "failed",
+          "pid": null,
+          "finished": "2026-11-23T08:30:00.000Z",
+          "error": "Interrupted."
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "run, no marks",
+      "input": {
+        "schema": "run",
+        "value": {
+          "client": "claude-code",
+          "marks": [],
+          "id": "mabc1234-0a1b2c",
+          "started": "2026-11-23T08:30:00.000Z",
+          "status": "running"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "run, other client",
+      "input": {
+        "schema": "run",
+        "value": {
+          "client": "codex",
+          "marks": [{ "id": "m1", "file": "x" }],
+          "id": "mabc1234-0a1b2c",
+          "started": "2026-11-23T08:30:00.000Z",
+          "status": "running"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "session",
+      "input": {
+        "schema": "session",
+        "value": {
+          "id": "mabc1234-0a1b2c",
+          "client": "claude-code",
+          "cwd": "C:\\Users\\me\\project",
+          "folder": "project",
+          "pid": 4321,
+          "push": true,
+          "started": "2026-11-23T08:30:00.000Z",
+          "active": "2026-11-23T08:30:00.000Z",
+          "alive": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": true
+    },
+    {
+      "name": "session, no heartbeat",
+      "input": {
+        "schema": "session",
+        "value": {
+          "id": "mabc1234-0a1b2c",
+          "client": "codex",
+          "cwd": "/home/me/p",
+          "folder": "p",
+          "pid": 4321,
+          "push": false,
+          "started": "2026-11-23T08:30:00.000Z",
+          "active": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": false
+    },
+    {
+      "name": "session, time without zone",
+      "input": {
+        "schema": "session",
+        "value": {
+          "id": "mabc1234-0a1b2c",
+          "client": "codex",
+          "cwd": "/home/me/p",
+          "folder": "p",
+          "pid": 4321,
+          "push": false,
+          "started": "2026-11-23T08:30:00",
+          "active": "2026-11-23T08:30:00.000Z",
+          "alive": "2026-11-23T08:30:00.000Z"
+        }
+      },
+      "expected": false
+    }
+  ]
+}

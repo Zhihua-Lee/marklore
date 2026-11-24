@@ -1,0 +1,305 @@
+{
+  "about": "A note's name is its leading level-1 heading: the first block after the front matter (a first line '---', at least one line, then '---' or '...'), when that block is an ATX heading '# ' (up to three spaces before '#', a closing run of '#' after a space dropped) or a one-line paragraph underlined with '='. input.text: the note (a byte order mark is ignored). expected: null when there is none, or { raw: the heading's Markdown, trimmed; title: its plain text (see plain-title); line: its line; setext: underlined with '=' }. A heading whose plain text is empty is none.",
+  "cases": [
+    {
+      "name": "atx heading",
+      "input": { "text": "# 集合与映射\n\n正文" },
+      "expected": {
+        "raw": "集合与映射",
+        "title": "集合与映射",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "after front matter, bom and spaces, closing hashes",
+      "input": { "text": "﻿---\ntitle: x\n---\n\n#   第一章：极限  #\n" },
+      "expected": {
+        "raw": "第一章：极限",
+        "title": "第一章：极限",
+        "line": 5,
+        "setext": false
+      }
+    },
+    {
+      "name": "setext heading",
+      "input": { "text": "Setext\n===\n" },
+      "expected": {
+        "raw": "Setext",
+        "title": "Setext",
+        "line": 1,
+        "setext": true
+      }
+    },
+    {
+      "name": "something else first",
+      "why": "Only the first block counts.",
+      "input": { "text": "正文\n\n# 后来的标题" },
+      "expected": null
+    },
+    {
+      "name": "level 2 is not a name",
+      "input": { "text": "## 二级" },
+      "expected": null
+    },
+    {
+      "name": "empty heading",
+      "input": { "text": "#\n" },
+      "expected": null
+    },
+    {
+      "name": "no space after hash",
+      "input": { "text": "#标签" },
+      "expected": null
+    },
+    {
+      "name": "empty note",
+      "input": { "text": "" },
+      "expected": null
+    },
+    {
+      "name": "only white space",
+      "input": { "text": "   \n\t\n" },
+      "expected": null
+    },
+    {
+      "name": "three spaces before hash",
+      "input": { "text": "   # Indented three" },
+      "expected": {
+        "raw": "Indented three",
+        "title": "Indented three",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "four spaces are code",
+      "input": { "text": "    # Four spaces" },
+      "expected": null
+    },
+    {
+      "name": "tab before hash is code",
+      "input": { "text": "\t# Tab" },
+      "expected": null
+    },
+    {
+      "name": "closing hashes",
+      "input": { "text": "# Title #" },
+      "expected": {
+        "raw": "Title",
+        "title": "Title",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "closing hashes and trailing spaces",
+      "input": { "text": "# Title ##   " },
+      "expected": {
+        "raw": "Title",
+        "title": "Title",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "hash inside a word stays",
+      "why": "A closing run needs a space before it.",
+      "input": { "text": "# C#" },
+      "expected": { "raw": "C#", "title": "C#", "line": 1, "setext": false }
+    },
+    {
+      "name": "escaped closing hash",
+      "input": { "text": "# Issue \\#" },
+      "expected": {
+        "raw": "Issue \\#",
+        "title": "Issue #",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "tab after hash",
+      "input": { "text": "#\tTab title" },
+      "expected": {
+        "raw": "Tab title",
+        "title": "Tab title",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "blank lines before it",
+      "input": { "text": "\n\n\n# After blank lines" },
+      "expected": {
+        "raw": "After blank lines",
+        "title": "After blank lines",
+        "line": 4,
+        "setext": false
+      }
+    },
+    {
+      "name": "front matter closed by dots",
+      "input": { "text": "---\ntitle: x\n...\n# H\n" },
+      "expected": { "raw": "H", "title": "H", "line": 4, "setext": false }
+    },
+    {
+      "name": "front matter never closed",
+      "why": "Without a closing line there is no front matter, and the first block is a thematic break.",
+      "input": { "text": "---\ntitle: x\n# H\n" },
+      "expected": null
+    },
+    {
+      "name": "empty front matter is none",
+      "why": "Front matter needs at least one line between its fences.",
+      "input": { "text": "---\n---\n# 标题\n" },
+      "expected": null
+    },
+    {
+      "name": "windows line endings",
+      "input": { "text": "# Title\r\n\r\nBody\r\n" },
+      "expected": {
+        "raw": "Title",
+        "title": "Title",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "two-line paragraph underlined",
+      "why": "Only a one-line paragraph is read as a setext name.",
+      "input": { "text": "Line one\nLine two\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "spaced equals are no underline",
+      "input": { "text": "Title\n= = =\n" },
+      "expected": null
+    },
+    {
+      "name": "underline indented and spaced",
+      "input": { "text": "Title\n   ===   \n" },
+      "expected": {
+        "raw": "Title",
+        "title": "Title",
+        "line": 1,
+        "setext": true
+      }
+    },
+    {
+      "name": "list item underlined",
+      "input": { "text": "- item\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "quote underlined",
+      "input": { "text": "> quote\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "numbered item underlined",
+      "input": { "text": "1. one\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "numbered with parenthesis underlined",
+      "input": { "text": "1) one\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "table row underlined",
+      "input": { "text": "| a | b |\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "fence underlined",
+      "input": { "text": "```\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "hash line underlined",
+      "input": { "text": "#hashtag\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "indented code underlined",
+      "input": { "text": "    code\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "tab code underlined",
+      "input": { "text": "\tcode\n===\n" },
+      "expected": null
+    },
+    {
+      "name": "setext level 2 is not a name",
+      "input": { "text": "Title\n---\n" },
+      "expected": null
+    },
+    {
+      "name": "setext with leading spaces",
+      "input": { "text": "  Title\n===\n" },
+      "expected": {
+        "raw": "Title",
+        "title": "Title",
+        "line": 1,
+        "setext": true
+      }
+    },
+    {
+      "name": "atx wins over an underline below",
+      "input": { "text": "# Title\n===\n" },
+      "expected": {
+        "raw": "Title",
+        "title": "Title",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "emphasis in the heading",
+      "input": { "text": "# **Bold** title" },
+      "expected": {
+        "raw": "**Bold** title",
+        "title": "Bold title",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "formula in the heading",
+      "input": { "text": "# $x^2$" },
+      "expected": { "raw": "$x^2$", "title": "x^2", "line": 1, "setext": false }
+    },
+    {
+      "name": "image only is empty",
+      "input": { "text": "# ![img](a.png)" },
+      "expected": null
+    },
+    {
+      "name": "tags only are empty",
+      "input": { "text": "# <span></span>" },
+      "expected": null
+    },
+    {
+      "name": "emoji",
+      "input": { "text": "# 😀 Smile" },
+      "expected": {
+        "raw": "😀 Smile",
+        "title": "😀 Smile",
+        "line": 1,
+        "setext": false
+      }
+    },
+    {
+      "name": "bom then setext",
+      "input": { "text": "﻿Name\n====\n" },
+      "expected": { "raw": "Name", "title": "Name", "line": 1, "setext": true }
+    },
+    {
+      "name": "front matter then setext",
+      "input": { "text": "---\na: 1\n---\nName\n=\n" },
+      "expected": { "raw": "Name", "title": "Name", "line": 4, "setext": true }
+    }
+  ]
+}

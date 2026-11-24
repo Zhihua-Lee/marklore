@@ -1,0 +1,137 @@
+{
+  "about": "A mark found again after the note changed: of the quote's occurrences (overlapping ones too), the one whose surroundings match best, scored by how many characters (UTF-16 code units) just before it equal the end of the prefix plus how many just after it equal the start of the suffix (each over at most 32 units); on a tie, the first. null when the quote is empty or gone. input: { text, anchor: { quote, prefix?, suffix? } } → expected { from, to } or null.",
+  "cases": [
+    {
+      "name": "after edits elsewhere, the right one of two",
+      "input": {
+        "text": "# New title\n\nGamma beta.\n\nThe proof holds.\n\nAgain: the proof holds.\n",
+        "anchor": {
+          "quote": "the proof holds",
+          "prefix": "\n\nAgain: ",
+          "suffix": ".\n"
+        }
+      },
+      "expected": {
+        "from": { "line": 7, "column": 8 },
+        "to": { "line": 7, "column": 23 }
+      }
+    },
+    {
+      "name": "letter case matters",
+      "input": {
+        "text": "Alpha beta.\n\nThe proof holds.\n\nAgain: the proof holds.\n",
+        "anchor": {
+          "quote": "The proof holds",
+          "prefix": "Alpha beta.\n\n",
+          "suffix": ".\n\nAgain: the proof hol"
+        }
+      },
+      "expected": {
+        "from": { "line": 3, "column": 1 },
+        "to": { "line": 3, "column": 16 }
+      }
+    },
+    {
+      "name": "gone",
+      "input": {
+        "text": "gone",
+        "anchor": { "quote": "the proof holds", "prefix": "", "suffix": "" }
+      },
+      "expected": null
+    },
+    {
+      "name": "empty quote",
+      "input": {
+        "text": "Alpha beta.\n\nThe proof holds.\n\nAgain: the proof holds.\n",
+        "anchor": { "quote": "" }
+      },
+      "expected": null
+    },
+    {
+      "name": "no context: the first",
+      "input": { "text": "x a x a x", "anchor": { "quote": "a" } },
+      "expected": {
+        "from": { "line": 1, "column": 3 },
+        "to": { "line": 1, "column": 4 }
+      }
+    },
+    {
+      "name": "suffix decides",
+      "input": {
+        "text": "a1 a2 a3",
+        "anchor": { "quote": "a", "suffix": "3" }
+      },
+      "expected": {
+        "from": { "line": 1, "column": 7 },
+        "to": { "line": 1, "column": 8 }
+      }
+    },
+    {
+      "name": "prefix decides",
+      "input": {
+        "text": "1a 2a 3a",
+        "anchor": { "quote": "a", "prefix": "2" }
+      },
+      "expected": {
+        "from": { "line": 1, "column": 5 },
+        "to": { "line": 1, "column": 6 }
+      }
+    },
+    {
+      "name": "tie: the first",
+      "input": { "text": "xa xa", "anchor": { "quote": "a", "prefix": "x" } },
+      "expected": {
+        "from": { "line": 1, "column": 2 },
+        "to": { "line": 1, "column": 3 }
+      }
+    },
+    {
+      "name": "overlapping occurrences",
+      "input": {
+        "text": "aaaa",
+        "anchor": { "quote": "aa", "prefix": "a", "suffix": "a" }
+      },
+      "expected": {
+        "from": { "line": 1, "column": 2 },
+        "to": { "line": 1, "column": 4 }
+      }
+    },
+    {
+      "name": "prefix only partly matches",
+      "input": {
+        "text": "one cat. two cat.",
+        "anchor": { "quote": "cat", "prefix": "xx two " }
+      },
+      "expected": {
+        "from": { "line": 1, "column": 14 },
+        "to": { "line": 1, "column": 17 }
+      }
+    },
+    {
+      "name": "cjk",
+      "input": {
+        "text": "前文。要找的句子。中间。要找的句子。后文。",
+        "anchor": {
+          "quote": "要找的句子",
+          "prefix": "中间。",
+          "suffix": "。后"
+        }
+      },
+      "expected": {
+        "from": { "line": 1, "column": 13 },
+        "to": { "line": 1, "column": 18 }
+      }
+    },
+    {
+      "name": "emoji before the quote",
+      "input": {
+        "text": "😀😀 target",
+        "anchor": { "quote": "target", "prefix": "😀 " }
+      },
+      "expected": {
+        "from": { "line": 1, "column": 4 },
+        "to": { "line": 1, "column": 10 }
+      }
+    }
+  ]
+}

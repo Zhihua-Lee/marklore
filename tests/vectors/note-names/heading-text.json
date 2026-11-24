@@ -1,0 +1,45 @@
+{
+  "about": "A name written as a heading's Markdown that reads back as the same name: white space collapsed and trimmed, and a closing run of '#' (at the start or after a space) escaped. input.name → expected string.",
+  "cases": [
+    {
+      "name": "closing hash",
+      "input": { "name": "Issue #" },
+      "expected": "Issue \\#"
+    },
+    {
+      "name": "closing hashes",
+      "input": { "name": "C ##" },
+      "expected": "C \\#\\#"
+    },
+    {
+      "name": "hash starting a word stays",
+      "input": { "name": "#tag" },
+      "expected": "#tag"
+    },
+    {
+      "name": "only hashes",
+      "input": { "name": "##" },
+      "expected": "\\#\\#"
+    },
+    {
+      "name": "white space",
+      "input": { "name": "  spaced   out  " },
+      "expected": "spaced out"
+    },
+    {
+      "name": "hash after a letter stays",
+      "input": { "name": "a#" },
+      "expected": "a#"
+    },
+    {
+      "name": "line break",
+      "input": { "name": "Line\nbreak" },
+      "expected": "Line break"
+    },
+    {
+      "name": "hash in the middle stays",
+      "input": { "name": "Title # with hash" },
+      "expected": "Title # with hash"
+    }
+  ]
+}

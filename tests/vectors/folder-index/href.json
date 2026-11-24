@@ -1,0 +1,45 @@
+{
+  "about": "A link to a child as index files write it: '%', white space, '(', ')', '<', '>', '[', ']', '#', '?' percent-encoded (UTF-8, upper-case hex), other text as is, '/' after a folder. input: { name, folder? } → expected string.",
+  "cases": [
+    {
+      "name": "space",
+      "input": { "name": "A plan.md" },
+      "expected": "A%20plan.md"
+    },
+    {
+      "name": "folder",
+      "input": { "name": "Sub folder", "folder": true },
+      "expected": "Sub%20folder/"
+    },
+    {
+      "name": "cjk stays",
+      "input": { "name": "计划.md" },
+      "expected": "计划.md"
+    },
+    {
+      "name": "percent, brackets, hash",
+      "input": { "name": "50% [x] #1.md" },
+      "expected": "50%25%20%5Bx%5D%20%231.md"
+    },
+    {
+      "name": "parentheses and angle brackets",
+      "input": { "name": "a (1) <b>.md" },
+      "expected": "a%20%281%29%20%3Cb%3E.md"
+    },
+    {
+      "name": "question mark",
+      "input": { "name": "why?.md" },
+      "expected": "why%3F.md"
+    },
+    {
+      "name": "ideographic space",
+      "input": { "name": "a　b.md" },
+      "expected": "a%E3%80%80b.md"
+    },
+    {
+      "name": "tab",
+      "input": { "name": "a\tb.md" },
+      "expected": "a%09b.md"
+    }
+  ]
+}

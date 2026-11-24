@@ -1,0 +1,227 @@
+{
+  "about": "The note with its name set. input: { text, heading?, title?, insert? }. heading: the leading heading's new name (written as heading-text; an ATX heading keeps its indentation and loses a closing run of '#'; a setext heading keeps its form unless the new name would read as a list item, quote, table, heading, fence or code, then it becomes '# name'); a note without a leading heading gets '# heading' after its front matter only with insert (blank lines there replaced by the heading and one blank line). title: the front matter's existing 'title' set (written plain when YAML reads it back the same, otherwise double-quoted); a title is never added. Line endings and a byte order mark stay. expected: the new text, or null when nothing changes.",
+  "cases": [
+    {
+      "name": "heading and title, windows line endings",
+      "input": {
+        "text": "---\r\ntitle: 旧名\r\ntags: [a]\r\n---\r\n\r\n# 旧名\r\n\r\n正文\r\n",
+        "heading": "新名: 一",
+        "title": "新名: 一"
+      },
+      "expected": "---\r\ntitle: \"新名: 一\"\r\ntags: [a]\r\n---\r\n\r\n# 新名: 一\r\n\r\n正文\r\n"
+    },
+    {
+      "name": "nothing changes",
+      "input": { "text": "# A\n", "heading": "A", "title": "A" },
+      "expected": null
+    },
+    {
+      "name": "setext keeps its form",
+      "input": { "text": "A\n===\n", "heading": "B" },
+      "expected": "B\n===\n"
+    },
+    {
+      "name": "setext keeps its indentation",
+      "input": { "text": "  Old\n===\n", "heading": "New" },
+      "expected": "  New\n===\n"
+    },
+    {
+      "name": "no heading, not inserted",
+      "input": { "text": "正文\n", "heading": "名字" },
+      "expected": null
+    },
+    {
+      "name": "inserted after front matter",
+      "input": {
+        "text": "---\na: 1\n---\n正文\n",
+        "heading": "名字",
+        "insert": true
+      },
+      "expected": "---\na: 1\n---\n# 名字\n\n正文\n"
+    },
+    {
+      "name": "inserted into an empty note",
+      "input": { "text": "", "heading": "空", "insert": true },
+      "expected": "# 空\n"
+    },
+    {
+      "name": "inserted into a blank line",
+      "input": { "text": "\n", "heading": "x", "insert": true },
+      "expected": "# x\n"
+    },
+    {
+      "name": "inserted, blank lines after front matter",
+      "input": {
+        "text": "---\na: 1\n---\n\n\n正文\n",
+        "heading": "名字",
+        "insert": true
+      },
+      "expected": "---\na: 1\n---\n# 名字\n\n正文\n"
+    },
+    {
+      "name": "inserted before text without a line end",
+      "input": { "text": "正文", "heading": "名字", "insert": true },
+      "expected": "# 名字\n\n正文"
+    },
+    {
+      "name": "inserted, windows line endings",
+      "input": { "text": "正文\r\n", "heading": "名字", "insert": true },
+      "expected": "# 名字\r\n\r\n正文\r\n"
+    },
+    {
+      "name": "bom kept",
+      "input": { "text": "﻿# 甲\n", "heading": "乙" },
+      "expected": "﻿# 乙\n"
+    },
+    {
+      "name": "bom kept when inserting",
+      "input": { "text": "﻿正文\n", "heading": "名", "insert": true },
+      "expected": "﻿# 名\n\n正文\n"
+    },
+    {
+      "name": "indented atx keeps its indentation",
+      "input": { "text": "   # Old\n", "heading": "New" },
+      "expected": "   # New\n"
+    },
+    {
+      "name": "closing hashes go",
+      "input": { "text": "# Old ##\n", "heading": "New" },
+      "expected": "# New\n"
+    },
+    {
+      "name": "trailing hash escaped",
+      "input": { "text": "# 旧\n", "heading": "Issue #" },
+      "expected": "# Issue \\#\n"
+    },
+    {
+      "name": "trailing hashes escaped",
+      "input": { "text": "# 旧\n", "heading": "C ##" },
+      "expected": "# C \\#\\#\n"
+    },
+    {
+      "name": "setext to a list item becomes atx",
+      "input": { "text": "旧名\n===\n\n正文\n", "heading": "1. 概述" },
+      "expected": "# 1. 概述\n\n正文\n"
+    },
+    {
+      "name": "setext to a bullet becomes atx",
+      "input": { "text": "旧名\n===\n", "heading": "- 笔记" },
+      "expected": "# - 笔记\n"
+    },
+    {
+      "name": "setext to a quote becomes atx",
+      "input": { "text": "旧\n===\n", "heading": "> q" },
+      "expected": "# > q\n"
+    },
+    {
+      "name": "title only",
+      "input": { "text": "---\ntitle: 旧\n---\n# 旧\n", "title": "新" },
+      "expected": "---\ntitle: 新\n---\n# 旧\n"
+    },
+    {
+      "name": "title with a comment",
+      "input": { "text": "---\ntitle: 旧 # 注释\n---\n# 旧\n", "title": "新" },
+      "expected": "---\ntitle: 新\n---\n# 旧\n"
+    },
+    {
+      "name": "block title becomes one line",
+      "input": {
+        "text": "---\ntitle: |\n  旧\n  名\ntags: [a]\n---\n# 旧名\n",
+        "heading": "新名",
+        "title": "新名"
+      },
+      "expected": "---\ntitle: 新名\ntags: [a]\n---\n# 新名\n"
+    },
+    {
+      "name": "upper case key is no title",
+      "input": { "text": "---\nTitle: 大写\n---\n", "title": "新" },
+      "expected": null
+    },
+    {
+      "name": "no title is added",
+      "input": { "text": "# A\n", "title": "B" },
+      "expected": null
+    },
+    {
+      "name": "title the same",
+      "input": { "text": "---\ntitle: A\n---\n", "title": "A" },
+      "expected": null
+    },
+    {
+      "name": "title yes is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "yes" },
+      "expected": "---\ntitle: \"yes\"\n---\n"
+    },
+    {
+      "name": "title number is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "123" },
+      "expected": "---\ntitle: \"123\"\n---\n"
+    },
+    {
+      "name": "title float is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "1.5e3" },
+      "expected": "---\ntitle: \"1.5e3\"\n---\n"
+    },
+    {
+      "name": "title null is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "null" },
+      "expected": "---\ntitle: \"null\"\n---\n"
+    },
+    {
+      "name": "title tilde is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "~" },
+      "expected": "---\ntitle: \"~\"\n---\n"
+    },
+    {
+      "name": "title starting with hash is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "#tag" },
+      "expected": "---\ntitle: \"#tag\"\n---\n"
+    },
+    {
+      "name": "title starting with dash is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "- x" },
+      "expected": "---\ntitle: \"- x\"\n---\n"
+    },
+    {
+      "name": "title starting with at is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "@at" },
+      "expected": "---\ntitle: \"@at\"\n---\n"
+    },
+    {
+      "name": "title with trailing space is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "end " },
+      "expected": "---\ntitle: \"end \"\n---\n"
+    },
+    {
+      "name": "title with space hash is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "a #b" },
+      "expected": "---\ntitle: \"a #b\"\n---\n"
+    },
+    {
+      "name": "title with quotes inside is plain",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "say \"hi\"" },
+      "expected": "---\ntitle: say \"hi\"\n---\n"
+    },
+    {
+      "name": "title in single quotes is quoted",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "'single'" },
+      "expected": "---\ntitle: \"'single'\"\n---\n"
+    },
+    {
+      "name": "title with backslash and quote",
+      "input": { "text": "---\ntitle: a\n---\n", "title": "\"C:\\x\"" },
+      "expected": "---\ntitle: \"\\\"C:\\\\x\\\"\"\n---\n"
+    },
+    {
+      "name": "nothing asked",
+      "input": { "text": "# A\n" },
+      "expected": null
+    },
+    {
+      "name": "empty heading name",
+      "why": "Pins current behaviour: the heading's text is emptied (callers never pass an empty name).",
+      "input": { "text": "# Old\n", "heading": "" },
+      "expected": "# \n"
+    }
+  ]
+}

@@ -1,0 +1,239 @@
+{
+  "about": "An AI proposal's edits placed in a note: each old_text (\\r\\n and \\r read as \\n, as is new_text) must occur in the note exactly once (occurrences may overlap). The note's text is as the app reads notes: \\n line endings, no byte order mark. input: { text, edits: [{ old_text, new_text? (missing: '') }] }. expected: { changes: [{ at, old, insert }] in note order, order: for each change the index (from 0) of its edit, result: the note with the changes made } or { error: { edit (index from 0), reason, count? } }: the first edit with a problem, in the order given: empty (no old text), unchanged (old = new), missing, ambiguous (count: how many times it occurs); then overlap (an edit starting inside the one before it in the note; it names the later one).",
+  "cases": [
+    {
+      "name": "found once each, note order",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          { "old_text": "Second", "new_text": "Last" },
+          {
+            "old_text": "First paragraph.",
+            "new_text": "First paragraph, longer."
+          }
+        ]
+      },
+      "expected": {
+        "changes": [
+          {
+            "at": { "line": 3, "column": 1 },
+            "old": "First paragraph.",
+            "insert": "First paragraph, longer."
+          },
+          {
+            "at": { "line": 5, "column": 1 },
+            "old": "Second",
+            "insert": "Last"
+          }
+        ],
+        "order": [1, 0],
+        "result": "# Title\n\nFirst paragraph, longer.\n\nLast paragraph.\n"
+      }
+    },
+    {
+      "name": "missing",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": "Third", "new_text": "x" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "missing" } }
+    },
+    {
+      "name": "ambiguous",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": "paragraph", "new_text": "x" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "ambiguous", "count": 2 } }
+    },
+    {
+      "name": "empty",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": "", "new_text": "x" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "empty" } }
+    },
+    {
+      "name": "unchanged",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": "Title", "new_text": "Title" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "unchanged" } }
+    },
+    {
+      "name": "overlap",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          { "old_text": "First paragraph", "new_text": "A" },
+          { "old_text": "paragraph.\n\nSecond", "new_text": "B" }
+        ]
+      },
+      "expected": { "error": { "edit": 1, "reason": "overlap" } }
+    },
+    {
+      "name": "touching edits are allowed",
+      "input": {
+        "text": "abcd",
+        "edits": [
+          { "old_text": "ab", "new_text": "x" },
+          { "old_text": "cd", "new_text": "y" }
+        ]
+      },
+      "expected": {
+        "changes": [
+          { "at": { "line": 1, "column": 1 }, "old": "ab", "insert": "x" },
+          { "at": { "line": 1, "column": 3 }, "old": "cd", "insert": "y" }
+        ],
+        "order": [0, 1],
+        "result": "xy"
+      }
+    },
+    {
+      "name": "windows line endings in an edit",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          { "old_text": "Title\r\n\r\nFirst", "new_text": "Name\r\n\r\nFirst" }
+        ]
+      },
+      "expected": {
+        "changes": [
+          {
+            "at": { "line": 1, "column": 3 },
+            "old": "Title\n\nFirst",
+            "insert": "Name\n\nFirst"
+          }
+        ],
+        "order": [0],
+        "result": "# Name\n\nFirst paragraph.\n\nSecond paragraph.\n"
+      }
+    },
+    {
+      "name": "old carriage return alone",
+      "input": {
+        "text": "a\nb",
+        "edits": [{ "old_text": "a\rb", "new_text": "c" }]
+      },
+      "expected": {
+        "changes": [
+          { "at": { "line": 1, "column": 1 }, "old": "a\nb", "insert": "c" }
+        ],
+        "order": [0],
+        "result": "c"
+      }
+    },
+    {
+      "name": "unchanged after line endings",
+      "input": {
+        "text": "a\nb",
+        "edits": [{ "old_text": "a\r\nb", "new_text": "a\nb" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "unchanged" } }
+    },
+    {
+      "name": "no new text deletes",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": "Second paragraph.\n" }]
+      },
+      "expected": {
+        "changes": [
+          {
+            "at": { "line": 5, "column": 1 },
+            "old": "Second paragraph.\n",
+            "insert": ""
+          }
+        ],
+        "order": [0],
+        "result": "# Title\n\nFirst paragraph.\n\n"
+      }
+    },
+    {
+      "name": "null old text is empty",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": null, "new_text": "x" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "empty" } }
+    },
+    {
+      "name": "overlapping occurrences count",
+      "input": {
+        "text": "aaa",
+        "edits": [{ "old_text": "aa", "new_text": "b" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "ambiguous", "count": 2 } }
+    },
+    {
+      "name": "the first problem wins",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          { "old_text": "Title", "new_text": "T" },
+          { "old_text": "Nope", "new_text": "x" },
+          { "old_text": "", "new_text": "y" }
+        ]
+      },
+      "expected": { "error": { "edit": 1, "reason": "missing" } }
+    },
+    {
+      "name": "cjk and emoji positions",
+      "input": {
+        "text": "第一行😀\n第二行 😀 结束\n",
+        "edits": [
+          { "old_text": "😀 结束", "new_text": "完" },
+          { "old_text": "第一", "new_text": "首" }
+        ]
+      },
+      "expected": {
+        "changes": [
+          { "at": { "line": 1, "column": 1 }, "old": "第一", "insert": "首" },
+          { "at": { "line": 2, "column": 5 }, "old": "😀 结束", "insert": "完" }
+        ],
+        "order": [1, 0],
+        "result": "首行😀\n第二行 完\n"
+      }
+    },
+    {
+      "name": "windows line endings in the note are not matched",
+      "why": "The note's text is expected with \\n line endings (as the app reads notes); a \\r\\n left in it is not matched by an edit's \\n.",
+      "input": {
+        "text": "a\r\nb\r\n",
+        "edits": [{ "old_text": "a\nb", "new_text": "c" }]
+      },
+      "expected": { "error": { "edit": 0, "reason": "missing" } }
+    },
+    {
+      "name": "insert at the end of a line",
+      "input": {
+        "text": "one\ntwo\n",
+        "edits": [{ "old_text": "one\n", "new_text": "one!\n" }]
+      },
+      "expected": {
+        "changes": [
+          {
+            "at": { "line": 1, "column": 1 },
+            "old": "one\n",
+            "insert": "one!\n"
+          }
+        ],
+        "order": [0],
+        "result": "one!\ntwo\n"
+      }
+    },
+    {
+      "name": "overlap named by the later edit in the note",
+      "input": {
+        "text": "abcdef",
+        "edits": [
+          { "old_text": "cde", "new_text": "X" },
+          { "old_text": "abc", "new_text": "Y" }
+        ]
+      },
+      "expected": { "error": { "edit": 0, "reason": "overlap" } }
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "about": "Whether a file name is the one a note of this title gets, letter case aside (then the tree shows the title alone): its base (without a note extension) equals the title, or the title's safe-base, or, for a base of at least 20 UTF-16 units shorter than the title's safe-base, the title's safe-base cut to the base's length. input: { title, file } → expected boolean.",
+  "cases": [
+    {
+      "name": "same",
+      "input": { "title": "第一章：极限", "file": "第一章：极限.md" },
+      "expected": true
+    },
+    {
+      "name": "safe form",
+      "input": { "title": "A: B", "file": "A： B.md" },
+      "expected": true
+    },
+    {
+      "name": "letter case",
+      "input": { "title": "Plan", "file": "plan.md" },
+      "expected": true
+    },
+    {
+      "name": "upper case extension",
+      "input": { "title": "Plan", "file": "PLAN.MD" },
+      "expected": true
+    },
+    {
+      "name": "other form",
+      "input": {
+        "title": "第一章：集合与映射",
+        "file": "第一章_集合与映射.md"
+      },
+      "expected": false
+    },
+    {
+      "name": "numbered is not the same",
+      "input": { "title": "映射", "file": "映射 (2).md" },
+      "expected": false
+    },
+    {
+      "name": "slash",
+      "input": { "title": "A/B", "file": "A／B.md" },
+      "expected": true
+    },
+    {
+      "name": "slash as underscore",
+      "input": { "title": "A/B", "file": "A_B.md" },
+      "expected": false
+    },
+    {
+      "name": "trailing dot",
+      "input": { "title": "End.", "file": "End.md" },
+      "expected": true
+    },
+    {
+      "name": "reserved",
+      "input": { "title": "CON", "file": "CON_.md" },
+      "expected": true
+    },
+    {
+      "name": "text note",
+      "input": { "title": "Plan", "file": "Plan.txt" },
+      "expected": true
+    },
+    {
+      "name": "long title cut at 120",
+      "input": {
+        "title": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题",
+        "file": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题.md"
+      },
+      "expected": true
+    },
+    {
+      "name": "long title cut at 37",
+      "input": {
+        "title": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题",
+        "file": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长.md"
+      },
+      "expected": true
+    },
+    {
+      "name": "long title cut at 20",
+      "why": "20 UTF-16 units is the shortest cut a long name is given.",
+      "input": {
+        "title": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题",
+        "file": "很长的标题很长的标题很长的标题很长的标题.md"
+      },
+      "expected": true
+    },
+    {
+      "name": "long title cut at 19",
+      "input": {
+        "title": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题",
+        "file": "很长的标题很长的标题很长的标题很长的标.md"
+      },
+      "expected": false
+    },
+    {
+      "name": "long title, short other name",
+      "input": {
+        "title": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题",
+        "file": "很长的标题.md"
+      },
+      "expected": false
+    },
+    {
+      "name": "short title is no cut",
+      "input": { "title": "短", "file": "短短.md" },
+      "expected": false
+    }
+  ]
+}

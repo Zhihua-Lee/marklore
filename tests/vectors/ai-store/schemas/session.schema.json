@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai/sessions/<id>.json",
+  "description": "One running MCP server (one assistant session), written when it starts and every minute after (the heartbeat), removed when it stops. A session whose 'alive' (or 'active') is more than 150 seconds old, or whose process is gone, is no longer counted; its file is removed once 1500 seconds old.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{6,20}-[a-f0-9]{6}$"
+    },
+    "client": {
+      "description": "The assistant (MCP client name).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "cwd": {
+      "description": "The folder the assistant works in.",
+      "type": "string"
+    },
+    "folder": { "description": "The last part of cwd.", "type": "string" },
+    "pid": { "type": "integer" },
+    "push": {
+      "description": "Whether the server pushes review results into the session (Claude Code).",
+      "type": "boolean"
+    },
+    "started": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "active": {
+      "description": "The last tool call (or the start).",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "alive": {
+      "description": "The last heartbeat.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  },
+  "required": [
+    "id",
+    "client",
+    "cwd",
+    "folder",
+    "pid",
+    "push",
+    "started",
+    "active",
+    "alive"
+  ],
+  "additionalProperties": false
+}

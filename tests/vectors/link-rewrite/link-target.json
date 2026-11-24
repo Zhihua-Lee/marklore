@@ -1,0 +1,55 @@
+{
+  "about": "Where a link written in a note leads: an absolute path ('/' between parts, decoded, without #anchor or ?query), or null for a web address, an absolute path, an anchor or a destination that does not decode. input: { href, file } → expected string or null.",
+  "cases": [
+    {
+      "name": "up with encoding and anchor",
+      "input": { "href": "../Topics/a%20b.md#x", "file": "C:/kb/notes/A.md" },
+      "expected": "C:/kb/Topics/a b.md"
+    },
+    {
+      "name": "web address",
+      "input": { "href": "https://example.com", "file": "C:/kb/A.md" },
+      "expected": null
+    },
+    {
+      "name": "anchor",
+      "input": { "href": "#top", "file": "C:/kb/A.md" },
+      "expected": null
+    },
+    {
+      "name": "angle brackets",
+      "input": { "href": "<My page.md>", "file": "C:/kb/A.md" },
+      "expected": "C:/kb/My page.md"
+    },
+    {
+      "name": "query",
+      "input": { "href": "a.md?x=1", "file": "C:/kb/A.md" },
+      "expected": "C:/kb/a.md"
+    },
+    {
+      "name": "backslashes in the note's path",
+      "input": { "href": "sub/a.md", "file": "C:\\kb\\A.md" },
+      "expected": "C:/kb/sub/a.md"
+    },
+    {
+      "name": "above the root stays at the root",
+      "input": { "href": "../../../a.md", "file": "C:/kb/A.md" },
+      "expected": "C:/a.md"
+    },
+    {
+      "name": "unc",
+      "input": { "href": "a.md", "file": "//srv/share/A.md" },
+      "expected": "//srv/share/a.md"
+    },
+    {
+      "name": "not decodable",
+      "input": { "href": "a%ZZ.md", "file": "C:/kb/A.md" },
+      "expected": null
+    },
+    {
+      "name": "white space around",
+      "input": { "href": "  a.md  ", "file": "C:/kb/A.md" },
+      "expected": "C:/kb/a.md"
+    }
+  ]
+}

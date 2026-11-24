@@ -1,0 +1,35 @@
+{
+  "about": "A folder's index file among its entry names: '_目录.md', else 'SUMMARY.md', each matched without regard to letter case (the name as listed is returned); null when neither is there. input.names → expected string or null.",
+  "cases": [
+    {
+      "name": "summary in lower case",
+      "input": { "names": ["a.md", "summary.md"] },
+      "expected": "summary.md"
+    },
+    {
+      "name": "_目录.md first",
+      "input": { "names": ["SUMMARY.md", "_目录.md"] },
+      "expected": "_目录.md"
+    },
+    {
+      "name": "none",
+      "input": { "names": ["a.md"] },
+      "expected": null
+    },
+    {
+      "name": "empty folder",
+      "input": { "names": [] },
+      "expected": null
+    },
+    {
+      "name": "upper case extension",
+      "input": { "names": ["_目录.MD"] },
+      "expected": "_目录.MD"
+    },
+    {
+      "name": "readme is no index",
+      "input": { "names": ["README.md", "index.md"] },
+      "expected": null
+    }
+  ]
+}

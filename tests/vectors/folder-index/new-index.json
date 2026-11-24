@@ -1,0 +1,43 @@
+{
+  "about": "A new index for a folder: '# title', a blank line, then '- [title](href)' for each child in the order given (a folder with its own index is linked to it: 'Folder/_目录.md'), and a final line end. input: { title, children: [{ name, folder?, index? }], eol? } → expected text.",
+  "cases": [
+    {
+      "name": "folders and notes",
+      "input": {
+        "title": "Notes",
+        "children": [
+          { "name": "Sub", "folder": true, "index": "_目录.md" },
+          { "name": "Box", "folder": true },
+          { "name": "A plan.md" },
+          { "name": "计划.md" }
+        ]
+      },
+      "expected": "# Notes\n\n- [Sub](Sub/_目录.md)\n- [Box](Box/)\n- [A plan](A%20plan.md)\n- [计划](计划.md)\n"
+    },
+    {
+      "name": "no children",
+      "input": { "title": "Empty", "children": [] },
+      "expected": "# Empty\n\n"
+    },
+    {
+      "name": "windows line endings",
+      "input": {
+        "title": "W",
+        "children": [{ "name": "a.md" }],
+        "eol": "\r\n"
+      },
+      "expected": "# W\r\n\r\n- [a](a.md)\r\n"
+    },
+    {
+      "name": "names needing escapes",
+      "input": {
+        "title": "T",
+        "children": [
+          { "name": "[x] (1).md" },
+          { "name": "My Sub", "folder": true, "index": "SUMMARY.md" }
+        ]
+      },
+      "expected": "# T\n\n- [\\[x\\] (1)](%5Bx%5D%20%281%29.md)\n- [My Sub](My%20Sub/SUMMARY.md)\n"
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai/access.json",
+  "description": "The library folders the owner opened to AI and the folders left out of search. The app writes it whole (written to a temporary name, then renamed over the old file) when the session is saved; the MCP server reads it on every call. A missing file, a file that is not JSON, or a field that is not an array reads as no libraries and nothing excluded.",
+  "type": "object",
+  "properties": {
+    "libraries": {
+      "description": "The ticked library folders that are in the library now, in the library's order.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "description": "Absolute path of the folder as the app has it.",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      }
+    },
+    "excluded": {
+      "description": "Folders left out of search and backlinks (the settings' searchExclude, normalised: absolute paths, each once ignoring letter case and separators, at most 200).",
+      "type": "array",
+      "maxItems": 200,
+      "items": { "$ref": "#/$defs/absolute" }
+    }
+  },
+  "required": ["libraries", "excluded"],
+  "additionalProperties": false,
+  "$defs": {
+    "absolute": {
+      "description": "A drive path (C:\\ or C:/), a network share (\\\\server), or a POSIX root (/Users), at most 1024 characters.",
+      "type": "string",
+      "maxLength": 1024,
+      "pattern": "^(?:[A-Za-z]:[\\\\/]|[\\\\/]{2}[^\\\\/]|/(?![\\\\/]))"
+    }
+  }
+}

@@ -1,0 +1,130 @@
+{
+  "about": "The lines a review's changes touch (changes from proposal-edits/revisions of the edits): each change widened to whole lines in both texts; a change starting on a line the hunk before reaches joins it; each hunk's old and new lines diffed (Myers). input: { text, edits } → expected [{ changes (indexes from 0), old: [first line, last line], new: [first, last], rows: [[kind, line, old line number or null, new line number or null]] }].",
+  "cases": [
+    {
+      "name": "one line changed",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [{ "old_text": "Second", "new_text": "Last" }]
+      },
+      "expected": [
+        {
+          "changes": [0],
+          "old": [5, 5],
+          "new": [5, 5],
+          "rows": [
+            ["-", "Second paragraph.", 5, null],
+            ["+", "Last paragraph.", null, 5]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "two changes on one line",
+      "input": {
+        "text": "a b c\nd\n",
+        "edits": [
+          { "old_text": "a", "new_text": "A" },
+          { "old_text": "c", "new_text": "C" }
+        ]
+      },
+      "expected": [
+        {
+          "changes": [0, 1],
+          "old": [1, 1],
+          "new": [1, 1],
+          "rows": [
+            ["-", "a b c", 1, null],
+            ["+", "A b C", null, 1]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "two changes on separate lines",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          { "old_text": "Title", "new_text": "Heading" },
+          { "old_text": "Second", "new_text": "Last" }
+        ]
+      },
+      "expected": [
+        {
+          "changes": [0],
+          "old": [1, 1],
+          "new": [1, 1],
+          "rows": [
+            ["-", "# Title", 1, null],
+            ["+", "# Heading", null, 1]
+          ]
+        },
+        {
+          "changes": [1],
+          "old": [5, 5],
+          "new": [5, 5],
+          "rows": [
+            ["-", "Second paragraph.", 5, null],
+            ["+", "Last paragraph.", null, 5]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a line inserted",
+      "input": {
+        "text": "a\nb\n",
+        "edits": [{ "old_text": "a\n", "new_text": "a\nnew\n" }]
+      },
+      "expected": [
+        {
+          "changes": [0],
+          "old": [2, 2],
+          "new": [2, 3],
+          "rows": [
+            ["+", "new", null, 2],
+            ["=", "b", 2, 3]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a line removed",
+      "input": {
+        "text": "a\nb\nc\n",
+        "edits": [{ "old_text": "b\n", "new_text": "" }]
+      },
+      "expected": [
+        {
+          "changes": [0],
+          "old": [2, 3],
+          "new": [2, 2],
+          "rows": [
+            ["-", "b", 2, null],
+            ["=", "c", 3, 2]
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a change over lines",
+      "input": {
+        "text": "one\ntwo\nthree\n",
+        "edits": [{ "old_text": "one\ntwo", "new_text": "uno\ndos" }]
+      },
+      "expected": [
+        {
+          "changes": [0],
+          "old": [1, 2],
+          "new": [1, 2],
+          "rows": [
+            ["-", "one", 1, null],
+            ["-", "two", 2, null],
+            ["+", "uno", null, 1],
+            ["+", "dos", null, 2]
+          ]
+        }
+      ]
+    }
+  ]
+}

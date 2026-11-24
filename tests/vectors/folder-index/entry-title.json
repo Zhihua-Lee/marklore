@@ -1,0 +1,36 @@
+{
+  "about": "The title a new entry gets: the name without '.md', '.markdown' or '.txt' (any case). input.name → expected string.",
+  "cases": [
+    {
+      "name": "md",
+      "input": { "name": "Plan.md" },
+      "expected": "Plan"
+    },
+    {
+      "name": "markdown upper case",
+      "input": { "name": "Plan.MARKDOWN" },
+      "expected": "Plan"
+    },
+    {
+      "name": "txt",
+      "input": { "name": "Plan.txt" },
+      "expected": "Plan"
+    },
+    {
+      "name": "mdown keeps its extension",
+      "why": "Only .md, .markdown and .txt are taken off here (a note may also be .mdown or .mkd).",
+      "input": { "name": "Plan.mdown" },
+      "expected": "Plan.mdown"
+    },
+    {
+      "name": "folder",
+      "input": { "name": "Topics" },
+      "expected": "Topics"
+    },
+    {
+      "name": "two dots",
+      "input": { "name": "1.2 映射.md" },
+      "expected": "1.2 映射"
+    }
+  ]
+}

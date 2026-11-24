@@ -1,0 +1,181 @@
+{
+  "about": "A note's name (plain text) as the base of a file name Windows accepts: \\ / : * ? \" < > | as their full-width forms (＼ ／ ： ＊ ？ ＂ ＜ ＞ ｜); runs of white space as one space; C0 control characters and DEL removed; trimmed; leading dots as full-width dots (．); cut to at most `max` UTF-16 code units (as Windows counts a name; default 120) without splitting a character; then trailing dots and spaces removed; a reserved device name (CON, PRN, AUX, NUL, COM0-9, LPT0-9, any case, before the first dot) gets '_' after it. '' when nothing is left. input: { name, max? } → expected string.",
+  "cases": [
+    {
+      "name": "forbidden characters",
+      "input": { "name": "第一章: 集合/映射 <定义> \"A|B\"?*" },
+      "expected": "第一章： 集合／映射 ＜定义＞ ＂A｜B＂？＊"
+    },
+    {
+      "name": "backslash",
+      "input": { "name": "a\\b" },
+      "expected": "a＼b"
+    },
+    {
+      "name": "trailing dots and spaces",
+      "input": { "name": "结尾的点. . " },
+      "expected": "结尾的点"
+    },
+    {
+      "name": "leading dot",
+      "input": { "name": ".隐藏" },
+      "expected": "．隐藏"
+    },
+    {
+      "name": "leading dots",
+      "input": { "name": "...leading" },
+      "expected": "．．．leading"
+    },
+    {
+      "name": "only dots",
+      "input": { "name": ".." },
+      "expected": "．．"
+    },
+    {
+      "name": "one dot",
+      "input": { "name": "." },
+      "expected": "．"
+    },
+    {
+      "name": "dot between spaces",
+      "input": { "name": " . " },
+      "expected": "．"
+    },
+    {
+      "name": "reserved name",
+      "input": { "name": "CON" },
+      "expected": "CON_"
+    },
+    {
+      "name": "reserved name with extension",
+      "input": { "name": "nul.txt" },
+      "expected": "nul_.txt"
+    },
+    {
+      "name": "reserved com",
+      "input": { "name": "com1" },
+      "expected": "com1_"
+    },
+    {
+      "name": "reserved com0",
+      "input": { "name": "com0" },
+      "expected": "com0_"
+    },
+    {
+      "name": "reserved lpt9",
+      "input": { "name": "LPT9" },
+      "expected": "LPT9_"
+    },
+    {
+      "name": "reserved aux with two dots",
+      "input": { "name": "aux.tar.gz" },
+      "expected": "aux_.tar.gz"
+    },
+    {
+      "name": "reserved prefix is not reserved",
+      "input": { "name": "Console" },
+      "expected": "Console"
+    },
+    {
+      "name": "reserved word with space is not",
+      "input": { "name": "CON 1" },
+      "expected": "CON 1"
+    },
+    {
+      "name": "tab and control character",
+      "input": { "name": "a\tb\u0001c" },
+      "expected": "a bc"
+    },
+    {
+      "name": "control characters only",
+      "input": { "name": "\u0001\u001f" },
+      "expected": ""
+    },
+    {
+      "name": "only spaces",
+      "input": { "name": "   " },
+      "expected": ""
+    },
+    {
+      "name": "ideographic spaces",
+      "input": { "name": "　全角空格　" },
+      "expected": "全角空格"
+    },
+    {
+      "name": "inner spaces collapse",
+      "input": { "name": "a  b" },
+      "expected": "a b"
+    },
+    {
+      "name": "trailing dot",
+      "input": { "name": "a." },
+      "expected": "a"
+    },
+    {
+      "name": "trailing dot and space mixed",
+      "input": { "name": "a. ." },
+      "expected": "a"
+    },
+    {
+      "name": "unc-like name",
+      "input": { "name": "\\\\server\\share" },
+      "expected": "＼＼server＼share"
+    },
+    {
+      "name": "long cjk name",
+      "input": {
+        "name": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字"
+      },
+      "expected": "字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字字"
+    },
+    {
+      "name": "long name, cut at 37",
+      "input": {
+        "name": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题",
+        "max": 37
+      },
+      "expected": "很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长的标题很长"
+    },
+    {
+      "name": "astral characters are not split",
+      "why": "Each emoji is two UTF-16 units: 60 fit in 120.",
+      "input": {
+        "name": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      },
+      "expected": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    },
+    {
+      "name": "astral after one letter",
+      "input": {
+        "name": "a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+      },
+      "expected": "a😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀"
+    },
+    {
+      "name": "cut then trailing dot removed",
+      "input": { "name": "abc. def", "max": 4 },
+      "expected": "abc"
+    },
+    {
+      "name": "cut then trailing space removed",
+      "input": { "name": "abcd efgh", "max": 5 },
+      "expected": "abcd"
+    },
+    {
+      "name": "cut leaving a reserved name",
+      "why": "The '_' is added after the cut, so the result can be one unit longer than max.",
+      "input": { "name": "nul ab", "max": 3 },
+      "expected": "nul_"
+    },
+    {
+      "name": "max of one",
+      "input": { "name": "名字", "max": 1 },
+      "expected": "名"
+    },
+    {
+      "name": "plain name",
+      "input": { "name": "1.2 映射" },
+      "expected": "1.2 映射"
+    }
+  ]
+}

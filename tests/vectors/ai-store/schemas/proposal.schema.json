@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai/proposals/<id>.json",
+  "description": "One AI proposal: edits to a note, or a new note. The MCP server creates the file (named by its id); the app decides it; the assistant that made it may withdraw it. A change is made under a lock (a folder '<file>.lock' beside it, made atomically, taken over after 10 seconds) and only while the proposal is pending and not lapsed. A pending proposal whose 'created' is 14 days or more in the past is lapsed: no longer offered, never decided (the file keeps 'pending'; readers derive 'lapsed'). Decided and lapsed proposals are removed 30 days after 'decided' (or 'created').",
+  "oneOf": [
+    { "$ref": "#/$defs/editProposal" },
+    { "$ref": "#/$defs/noteProposal" }
+  ],
+  "$defs": {
+    "id": {
+      "description": "Milliseconds since 1970 in base 36, '-', six random hexadecimal digits.",
+      "type": "string",
+      "pattern": "^[a-z0-9]{6,20}-[a-f0-9]{6}$"
+    },
+    "time": {
+      "description": "ISO 8601, UTC, as JavaScript's toISOString writes it.",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "status": {
+      "description": "pending until decided; accepted (an edit proposal: when any edit was), rejected, withdrawn (by the assistant that made it) or failed (the note or its place is no longer open to AI, or the note went to the Recycle Bin).",
+      "enum": ["pending", "accepted", "rejected", "withdrawn", "failed"]
+    },
+    "client": {
+      "description": "The assistant that made it: the MCP client's name, cut to 100 characters, 'unknown' when it gave none.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "session": {
+      "description": "The id of the assistant session (sessions/<id>.json) that made it, or null for a server without one (a background run).",
+      "anyOf": [{ "$ref": "#/$defs/id" }, { "type": "null" }]
+    },
+    "summary": {
+      "description": "One line for the owner, trimmed.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 300
+    },
+    "noteName": {
+      "description": "'<library>/<path inside it>' with '/' between parts; follows the note when it is renamed or moved while pending.",
+      "type": "string",
+      "minLength": 1
+    },
+    "file": {
+      "description": "Absolute path of the note (for a new note: the file to create).",
+      "type": "string",
+      "minLength": 1
+    },
+    "error": {
+      "description": "Why it failed, for the AI (at most 500 characters when the app gives it).",
+      "type": "string"
+    },
+    "ownerNote": {
+      "description": "The owner's note on the whole proposal, trimmed.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2000
+    },
+    "editProposal": {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "edit" },
+        "id": { "$ref": "#/$defs/id" },
+        "created": { "$ref": "#/$defs/time" },
+        "decided": { "$ref": "#/$defs/time" },
+        "status": { "$ref": "#/$defs/status" },
+        "client": { "$ref": "#/$defs/client" },
+        "session": { "$ref": "#/$defs/session" },
+        "run": {
+          "description": "The background run (runs/<id>.json) whose assistant made it.",
+          "$ref": "#/$defs/id"
+        },
+        "marks": {
+          "description": "The ids of the owner's marks on this note that it answers, each once.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 100 }
+        },
+        "summary": { "$ref": "#/$defs/summary" },
+        "note": { "$ref": "#/$defs/noteName" },
+        "file": { "$ref": "#/$defs/file" },
+        "version": {
+          "description": "The note's version when proposed: the first 16 hexadecimal digits of the SHA-256 of its bytes on disk.",
+          "type": "string",
+          "pattern": "^[0-9a-f]{16}$"
+        },
+        "edits": {
+          "description": "Each replaces old_text, which occurs exactly once in the note (see proposal-edits/locate), by new_text. Line endings are \\n.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": "object",
+            "properties": {
+              "old_text": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[^\\r]*$"
+              },
+              "new_text": { "type": "string", "pattern": "^[^\\r]*$" }
+            },
+            "required": ["old_text", "new_text"],
+            "additionalProperties": false
+          }
+        },
+        "results": {
+          "description": "Each edit's decision, in the order of 'edits', once the owner decided any edit on its own or the whole review.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": { "enum": ["pending", "accepted", "rejected"] }
+        },
+        "reasons": {
+          "description": "The owner's reason for each edit (trimmed), in the order of 'edits', null where none; present only when at least one is given.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 50,
+          "items": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "ownerNote": { "$ref": "#/$defs/ownerNote" },
+        "saved": {
+          "description": "Once accepted: whether every accepted edit is on disk (false when accepted into a note with unsaved changes).",
+          "type": "boolean"
+        },
+        "error": { "$ref": "#/$defs/error" }
+      },
+      "required": [
+        "kind",
+        "id",
+        "created",
+        "status",
+        "client",
+        "summary",
+        "note",
+        "file",
+        "version",
+        "edits"
+      ],
+      "additionalProperties": false
+    },
+    "noteProposal": {
+      "type": "object",
+      "properties": {
+        "kind": { "const": "note" },
+        "id": { "$ref": "#/$defs/id" },
+        "created": { "$ref": "#/$defs/time" },
+        "decided": { "$ref": "#/$defs/time" },
+        "status": { "$ref": "#/$defs/status" },
+        "client": { "$ref": "#/$defs/client" },
+        "session": { "$ref": "#/$defs/session" },
+        "summary": { "$ref": "#/$defs/summary" },
+        "note": { "$ref": "#/$defs/noteName" },
+        "file": { "$ref": "#/$defs/file" },
+        "text": {
+          "description": "The new note's Markdown, line endings \\n.",
+          "type": "string",
+          "pattern": "^[^\\r]*$"
+        },
+        "ownerNote": { "$ref": "#/$defs/ownerNote" },
+        "saved": { "type": "boolean" },
+        "error": { "$ref": "#/$defs/error" }
+      },
+      "required": [
+        "kind",
+        "id",
+        "created",
+        "status",
+        "client",
+        "summary",
+        "note",
+        "file",
+        "text"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

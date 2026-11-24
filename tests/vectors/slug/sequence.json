@@ -1,0 +1,36 @@
+{
+  "about": "Anchors of a note's headings in document order: each its heading-slug, a repeat getting '-1', '-2'… by how many times that slug was given before (counted per slug, not against slugs made by numbering). input.headings → expected anchors.",
+  "cases": [
+    {
+      "name": "repeats",
+      "input": { "headings": ["A", "A", "A"] },
+      "expected": ["a", "a-1", "a-2"]
+    },
+    {
+      "name": "a numbered slug can repeat a heading's own",
+      "why": "Pins current behaviour: the third heading gets 'a-1' like the second.",
+      "input": { "headings": ["A", "A-1", "A"] },
+      "expected": ["a", "a-1", "a-1"]
+    },
+    {
+      "name": "empty headings",
+      "input": { "headings": ["", "!!!"] },
+      "expected": ["section", "section-1"]
+    },
+    {
+      "name": "letter case",
+      "input": { "headings": ["Intro", "intro"] },
+      "expected": ["intro", "intro-1"]
+    },
+    {
+      "name": "space and hyphen",
+      "input": { "headings": ["a b", "a-b"] },
+      "expected": ["a-b", "a-b-1"]
+    },
+    {
+      "name": "cjk",
+      "input": { "headings": ["概述", "定义", "概述"] },
+      "expected": ["概述", "定义", "概述-1"]
+    }
+  ]
+}

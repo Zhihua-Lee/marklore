@@ -1,0 +1,282 @@
+{
+  "about": "What each change does, word by word, for the review. A change's kept start and end are found in whole words (a run of letters is never split: Friday → Thursday is one word replaced) and never inside a character's two UTF-16 units; inside, the words (proposal-edits/words) of the old and new text are diffed (Myers) and runs of changed words with only white space between them form one piece; a piece without the white space it keeps at its ends. A change of more than 1200 words in all is one piece. input: { text, edits } → expected [{ oldAt, removed, at, added, pieces: [same] }].",
+  "cases": [
+    {
+      "name": "one word",
+      "input": {
+        "text": "It is Friday.",
+        "edits": [{ "old_text": "Friday", "new_text": "Thursday" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 7 },
+          "removed": "Friday",
+          "at": { "line": 1, "column": 7 },
+          "added": "Thursday",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 7 },
+              "removed": "Friday",
+              "at": { "line": 1, "column": 7 },
+              "added": "Thursday"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "changed words with only spaces between are one piece",
+      "input": {
+        "text": "Send it on Friday to Ana.",
+        "edits": [
+          {
+            "old_text": "Send it on Friday to Ana.",
+            "new_text": "Mail it by Thursday to Ana."
+          }
+        ]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 1 },
+          "removed": "Send it on Friday",
+          "at": { "line": 1, "column": 1 },
+          "added": "Mail it by Thursday",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 1 },
+              "removed": "Send",
+              "at": { "line": 1, "column": 1 },
+              "added": "Mail"
+            },
+            {
+              "oldAt": { "line": 1, "column": 9 },
+              "removed": "on Friday",
+              "at": { "line": 1, "column": 9 },
+              "added": "by Thursday"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "two separate words",
+      "input": {
+        "text": "one two three four",
+        "edits": [
+          {
+            "old_text": "one two three four",
+            "new_text": "uno two three cuatro"
+          }
+        ]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 1 },
+          "removed": "one two three four",
+          "at": { "line": 1, "column": 1 },
+          "added": "uno two three cuatro",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 1 },
+              "removed": "one",
+              "at": { "line": 1, "column": 1 },
+              "added": "uno"
+            },
+            {
+              "oldAt": { "line": 1, "column": 15 },
+              "removed": "four",
+              "at": { "line": 1, "column": 15 },
+              "added": "cuatro"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "chinese characters one by one",
+      "input": {
+        "text": "今天天气很好。",
+        "edits": [
+          { "old_text": "今天天气很好。", "new_text": "明天天气不好。" }
+        ]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 1 },
+          "removed": "今天天气很",
+          "at": { "line": 1, "column": 1 },
+          "added": "明天天气不",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 1 },
+              "removed": "今",
+              "at": { "line": 1, "column": 1 },
+              "added": "明"
+            },
+            {
+              "oldAt": { "line": 1, "column": 5 },
+              "removed": "很",
+              "at": { "line": 1, "column": 5 },
+              "added": "不"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "insertion only",
+      "input": {
+        "text": "a b",
+        "edits": [{ "old_text": "a b", "new_text": "a new b" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 3 },
+          "removed": "",
+          "at": { "line": 1, "column": 3 },
+          "added": "new ",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 3 },
+              "removed": "",
+              "at": { "line": 1, "column": 3 },
+              "added": "new "
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deletion only",
+      "input": {
+        "text": "a old b",
+        "edits": [{ "old_text": "a old b", "new_text": "a b" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 3 },
+          "removed": "old ",
+          "at": { "line": 1, "column": 3 },
+          "added": "",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 3 },
+              "removed": "old ",
+              "at": { "line": 1, "column": 3 },
+              "added": ""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "emoji not split",
+      "input": {
+        "text": "x😀y",
+        "edits": [{ "old_text": "x😀y", "new_text": "x😁y" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 2 },
+          "removed": "😀",
+          "at": { "line": 1, "column": 2 },
+          "added": "😁",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 2 },
+              "removed": "😀",
+              "at": { "line": 1, "column": 2 },
+              "added": "😁"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "two changes",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          { "old_text": "Title", "new_text": "Heading" },
+          { "old_text": "Second paragraph.", "new_text": "Last paragraph." }
+        ]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 3 },
+          "removed": "Title",
+          "at": { "line": 1, "column": 3 },
+          "added": "Heading",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 3 },
+              "removed": "Title",
+              "at": { "line": 1, "column": 3 },
+              "added": "Heading"
+            }
+          ]
+        },
+        {
+          "oldAt": { "line": 5, "column": 1 },
+          "removed": "Second",
+          "at": { "line": 5, "column": 1 },
+          "added": "Last",
+          "pieces": [
+            {
+              "oldAt": { "line": 5, "column": 1 },
+              "removed": "Second",
+              "at": { "line": 5, "column": 1 },
+              "added": "Last"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "line break added",
+      "input": {
+        "text": "a b",
+        "edits": [{ "old_text": "a b", "new_text": "a\nb" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 2 },
+          "removed": " ",
+          "at": { "line": 1, "column": 2 },
+          "added": "\n",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 2 },
+              "removed": " ",
+              "at": { "line": 1, "column": 2 },
+              "added": "\n"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "letters around a word kept whole",
+      "input": {
+        "text": "prefix",
+        "edits": [{ "old_text": "prefix", "new_text": "prefixes" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 1 },
+          "removed": "prefix",
+          "at": { "line": 1, "column": 1 },
+          "added": "prefixes",
+          "pieces": [
+            {
+              "oldAt": { "line": 1, "column": 1 },
+              "removed": "prefix",
+              "at": { "line": 1, "column": 1 },
+              "added": "prefixes"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

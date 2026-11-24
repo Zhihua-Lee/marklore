@@ -1,0 +1,71 @@
+{
+  "about": "Where a path is after moves ([[old, new]], the longest old path containing it applies; letter case and separators aside): the new path, then the rest of the path joined with the new path's separator ('\\' when the new path has one, or has no '/' and the old path had '\\'); the path unchanged when no move applies. input: { path, moves } → expected string.",
+  "cases": [
+    {
+      "name": "inside a moved folder",
+      "input": {
+        "path": "c:\\KB\\topics\\a\\b.md",
+        "moves": [["C:\\kb\\Topics", "C:\\kb\\Subjects"]]
+      },
+      "expected": "C:\\kb\\Subjects\\a\\b.md"
+    },
+    {
+      "name": "the folder itself",
+      "input": {
+        "path": "C:\\kb\\Topics",
+        "moves": [["C:\\kb\\Topics", "C:\\kb\\Subjects"]]
+      },
+      "expected": "C:\\kb\\Subjects"
+    },
+    {
+      "name": "a sibling with the same prefix",
+      "input": {
+        "path": "C:\\kb\\Topicsx\\a.md",
+        "moves": [["C:\\kb\\Topics", "C:\\kb\\Subjects"]]
+      },
+      "expected": "C:\\kb\\Topicsx\\a.md"
+    },
+    {
+      "name": "posix",
+      "input": {
+        "path": "/home/u/kb/a.md",
+        "moves": [["/home/u/kb/a.md", "/home/u/kb/b.md"]]
+      },
+      "expected": "/home/u/kb/b.md"
+    },
+    {
+      "name": "forward slashes",
+      "input": {
+        "path": "C:/kb/Topics/a.md",
+        "moves": [["C:/kb/Topics", "C:/kb/S"]]
+      },
+      "expected": "C:/kb/S/a.md"
+    },
+    {
+      "name": "new path with a trailing separator",
+      "input": { "path": "C:/kb/T/a.md", "moves": [["C:/kb/T", "C:/kb/S/"]] },
+      "expected": "C:/kb/S/a.md"
+    },
+    {
+      "name": "the most specific move",
+      "input": {
+        "path": "C:/kb/A/x.md",
+        "moves": [
+          ["C:/kb/A", "C:/kb/B"],
+          ["C:/kb/A/x.md", "C:/kb/C/x.md"]
+        ]
+      },
+      "expected": "C:/kb/C/x.md"
+    },
+    {
+      "name": "another drive",
+      "input": { "path": "D:/kb/A/x.md", "moves": [["C:/kb/A", "C:/kb/B"]] },
+      "expected": "D:/kb/A/x.md"
+    },
+    {
+      "name": "no moves",
+      "input": { "path": "C:/kb/a.md", "moves": [] },
+      "expected": "C:/kb/a.md"
+    }
+  ]
+}

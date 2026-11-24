@@ -1,0 +1,136 @@
+{
+  "about": "The folder child an index link names: the link's destination (in angle brackets, or up to the first white space), without '#…' or '?…', percent-decoded (kept as written when it does not decode), split at '/' or '\\' ignoring empty and '.' parts: one part is the child; two parts where the second is an index file name are the folder (its own index). null for anything else: a scheme ('https:', also 'C:'), an absolute path, '..', a deeper path, nothing. input.href → expected string or null.",
+  "cases": [
+    {
+      "name": "percent-encoded space",
+      "input": { "href": "Detail%20one.md" },
+      "expected": "Detail one.md"
+    },
+    {
+      "name": "angle brackets",
+      "input": { "href": "<My page.md>" },
+      "expected": "My page.md"
+    },
+    {
+      "name": "angle brackets and title",
+      "input": { "href": "<My page.md> \"t\"" },
+      "expected": "My page.md"
+    },
+    {
+      "name": "dot slash and anchor",
+      "input": { "href": "./a.md#part" },
+      "expected": "a.md"
+    },
+    {
+      "name": "title",
+      "input": { "href": "a.md \"title\"" },
+      "expected": "a.md"
+    },
+    {
+      "name": "folder index",
+      "input": { "href": "Topics/_目录.md" },
+      "expected": "Topics"
+    },
+    {
+      "name": "folder summary",
+      "input": { "href": "Topics/SUMMARY.md" },
+      "expected": "Topics"
+    },
+    {
+      "name": "folder with slash",
+      "input": { "href": "Topics/" },
+      "expected": "Topics"
+    },
+    {
+      "name": "folder with dot slash",
+      "input": { "href": "./Topics/" },
+      "expected": "Topics"
+    },
+    {
+      "name": "backslash",
+      "input": { "href": "Topics\\_目录.md" },
+      "expected": "Topics"
+    },
+    {
+      "name": "double slash",
+      "input": { "href": "Topics//_目录.md" },
+      "expected": "Topics"
+    },
+    {
+      "name": "deeper index",
+      "input": { "href": "Topics/Inner/_目录.md" },
+      "expected": null
+    },
+    {
+      "name": "deeper page",
+      "input": { "href": "Topics/page.md" },
+      "expected": null
+    },
+    {
+      "name": "up",
+      "input": { "href": "../up.md" },
+      "expected": null
+    },
+    {
+      "name": "web address",
+      "input": { "href": "https://example.com/a.md" },
+      "expected": null
+    },
+    {
+      "name": "mailto",
+      "input": { "href": "mailto:a@example.com" },
+      "expected": null
+    },
+    {
+      "name": "drive letter reads as a scheme",
+      "input": { "href": "C:/x.md" },
+      "expected": null
+    },
+    {
+      "name": "absolute",
+      "input": { "href": "/abs.md" },
+      "expected": null
+    },
+    {
+      "name": "empty",
+      "input": { "href": "" },
+      "expected": null
+    },
+    {
+      "name": "anchor only",
+      "input": { "href": "#anchor" },
+      "expected": null
+    },
+    {
+      "name": "query only",
+      "input": { "href": "?q" },
+      "expected": null
+    },
+    {
+      "name": "dot slash only",
+      "input": { "href": "./" },
+      "expected": null
+    },
+    {
+      "name": "encoded cjk",
+      "input": { "href": "%E7%9B%AE.md" },
+      "expected": "目.md"
+    },
+    {
+      "name": "bad encoding kept",
+      "input": { "href": "bad%ZZ.md" },
+      "expected": "bad%ZZ.md"
+    },
+    {
+      "name": "encoded slash splits",
+      "why": "Decoding comes before splitting, so an encoded '/' separates parts.",
+      "input": { "href": "a%2Fb.md" },
+      "expected": null
+    },
+    {
+      "name": "query",
+      "input": { "href": "a.md?x=1" },
+      "expected": "a.md"
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ai/context.json",
+  "description": "What the owner is looking at in Marklore, for the AI's get_context: written by the app whenever it changes (only when the value differs from the last one written), read by the MCP server when asked. Either a note open to AI with its selection, or no note.",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "file": {
+          "description": "Absolute path of the note open in Marklore, inside a library open to AI.",
+          "type": "string",
+          "minLength": 1
+        },
+        "selection": {
+          "description": "The text selected in it, or null when nothing (or only white space) is selected.",
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "description": "The selected text, cut to 20000 UTF-16 code units.",
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 20000
+                },
+                "from": {
+                  "description": "Where the selection starts in the note's text as the editor holds it, in UTF-16 code units; null when unknown. A reader checks the text is there and otherwise searches for it.",
+                  "type": ["integer", "null"],
+                  "minimum": 0
+                }
+              },
+              "required": ["text", "from"],
+              "additionalProperties": false
+            }
+          ]
+        },
+        "at": { "$ref": "#/$defs/time" }
+      },
+      "required": ["file", "selection", "at"],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "file": { "type": "null" },
+        "closed": {
+          "description": "True when a note is open but not in a library open to AI.",
+          "type": "boolean"
+        },
+        "at": { "$ref": "#/$defs/time" }
+      },
+      "required": ["file", "closed", "at"],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "time": {
+      "description": "When it was written (ISO 8601, UTC).",
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    }
+  }
+}

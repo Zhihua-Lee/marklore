@@ -1,0 +1,184 @@
+{
+  "about": "Every link destination the rewrite rules see, in text order: inline links and images ([text](dest \"title\"), the destination possibly on the next line), reference definitions ([label]: dest, also in quotes, the destination possibly on the next line; not footnotes) and href/src of <a>, <img>, <source>, <video>, <audio>, <iframe>, <embed>. Not in fenced or indented code (also inside quotes and list items), code spans (within one paragraph) or HTML comments. input.text → expected [{ text (the destination as written, angle brackets included), kind (inline | reference | html), at, link? (inline only: the whole link, '!' included for an image), image? }].",
+  "cases": [
+    {
+      "name": "inline, code span, definitions",
+      "input": {
+        "text": "[a](x.md) `[b](y.md)` [c]: <z w.md>\n\n[d]: q%20r.md\n"
+      },
+      "expected": [
+        {
+          "text": "x.md",
+          "kind": "inline",
+          "at": { "line": 1, "column": 5 },
+          "link": "[a](x.md)",
+          "image": false
+        },
+        {
+          "text": "q%20r.md",
+          "kind": "reference",
+          "at": { "line": 3, "column": 6 }
+        }
+      ]
+    },
+    {
+      "name": "image and link",
+      "input": { "text": "![alt](p.png) and [t](a.md \"T\")" },
+      "expected": [
+        {
+          "text": "p.png",
+          "kind": "inline",
+          "at": { "line": 1, "column": 8 },
+          "link": "![alt](p.png)",
+          "image": true
+        },
+        {
+          "text": "a.md",
+          "kind": "inline",
+          "at": { "line": 1, "column": 23 },
+          "link": "[t](a.md \"T\")",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "nested image in a link",
+      "input": { "text": "[![b](i.png)](a.md)" },
+      "expected": [
+        {
+          "text": "i.png",
+          "kind": "inline",
+          "at": { "line": 1, "column": 7 },
+          "link": "![b](i.png)",
+          "image": true
+        },
+        {
+          "text": "a.md",
+          "kind": "inline",
+          "at": { "line": 1, "column": 15 },
+          "link": "[![b](i.png)](a.md)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "html attributes",
+      "input": {
+        "text": "<a href='a.md' title=\"x\">x</a><img alt=\"a > b\" src=\"b.png\">"
+      },
+      "expected": [
+        { "text": "a.md", "kind": "html", "at": { "line": 1, "column": 10 } },
+        { "text": "b.png", "kind": "html", "at": { "line": 1, "column": 53 } }
+      ]
+    },
+    {
+      "name": "empty attribute",
+      "input": { "text": "<a href=\"\">x</a>" },
+      "expected": []
+    },
+    {
+      "name": "definition in a quote",
+      "input": { "text": "> [r]: a.md\n" },
+      "expected": [
+        {
+          "text": "a.md",
+          "kind": "reference",
+          "at": { "line": 1, "column": 8 }
+        }
+      ]
+    },
+    {
+      "name": "footnote is no definition",
+      "input": { "text": "[^1]: a.md\n" },
+      "expected": []
+    },
+    {
+      "name": "escaped bracket",
+      "input": { "text": "\\[a](a.md) [b](b.md)" },
+      "expected": [
+        {
+          "text": "b.md",
+          "kind": "inline",
+          "at": { "line": 1, "column": 16 },
+          "link": "[b](b.md)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "escaped image bang",
+      "input": { "text": "\\![a](a.md)" },
+      "expected": [
+        {
+          "text": "a.md",
+          "kind": "inline",
+          "at": { "line": 1, "column": 7 },
+          "link": "[a](a.md)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "emoji before the link",
+      "input": { "text": "😀😀 [a](a.md)" },
+      "expected": [
+        {
+          "text": "a.md",
+          "kind": "inline",
+          "at": { "line": 1, "column": 8 },
+          "link": "[a](a.md)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "cjk lines",
+      "input": { "text": "第一行\n第二行 [链接](笔记.md)\n" },
+      "expected": [
+        {
+          "text": "笔记.md",
+          "kind": "inline",
+          "at": { "line": 2, "column": 10 },
+          "link": "[链接](笔记.md)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "destination with spaces is no link",
+      "input": { "text": "[a](my file.md)" },
+      "expected": []
+    },
+    {
+      "name": "angle destination with spaces",
+      "input": { "text": "[a](<my file.md>)" },
+      "expected": [
+        {
+          "text": "<my file.md>",
+          "kind": "inline",
+          "at": { "line": 1, "column": 5 },
+          "link": "[a](<my file.md>)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "indented code",
+      "input": { "text": "Para.\n\n    [a](a.md)\n\nAfter [b](b.md)" },
+      "expected": [
+        {
+          "text": "b.md",
+          "kind": "inline",
+          "at": { "line": 5, "column": 11 },
+          "link": "[b](b.md)",
+          "image": false
+        }
+      ]
+    },
+    {
+      "name": "title in single quotes over a blank line is no link",
+      "input": { "text": "[a](a.md 'x\n\ny')" },
+      "expected": []
+    }
+  ]
+}

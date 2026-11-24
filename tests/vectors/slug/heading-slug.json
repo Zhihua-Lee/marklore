@@ -1,0 +1,141 @@
+{
+  "about": "A heading's anchor: lower case (Unicode default case mapping), every character that is not a letter, a number (any script), white space, '_' or '-' removed, trimmed, runs of white space as one '-'; 'section' when nothing is left. Combining marks are not letters, so decomposed accents go (no normalisation is applied). input.text → expected string.",
+  "cases": [
+    {
+      "name": "words",
+      "input": { "text": "Hello World" },
+      "expected": "hello-world"
+    },
+    {
+      "name": "trimmed",
+      "input": { "text": "  Leading and trailing  " },
+      "expected": "leading-and-trailing"
+    },
+    {
+      "name": "punctuation",
+      "input": { "text": "Hello, World!" },
+      "expected": "hello-world"
+    },
+    {
+      "name": "cjk with full-width colon",
+      "input": { "text": "第一章：集合与映射" },
+      "expected": "第一章集合与映射"
+    },
+    {
+      "name": "number with dot",
+      "input": { "text": "1.2 映射" },
+      "expected": "12-映射"
+    },
+    {
+      "name": "underscore and hyphen kept",
+      "input": { "text": "snake_case and kebab-case" },
+      "expected": "snake_case-and-kebab-case"
+    },
+    {
+      "name": "latin accents",
+      "input": { "text": "Ünïcödé Çase" },
+      "expected": "ünïcödé-çase"
+    },
+    {
+      "name": "greek",
+      "input": { "text": "Ελληνικά Κεφάλαιο" },
+      "expected": "ελληνικά-κεφάλαιο"
+    },
+    {
+      "name": "greek final sigma",
+      "input": { "text": "ΣΑΣ" },
+      "expected": "σας"
+    },
+    {
+      "name": "cyrillic",
+      "input": { "text": "Привет мир" },
+      "expected": "привет-мир"
+    },
+    {
+      "name": "japanese",
+      "input": { "text": "日本語の見出し" },
+      "expected": "日本語の見出し"
+    },
+    {
+      "name": "korean",
+      "input": { "text": "한국어 제목" },
+      "expected": "한국어-제목"
+    },
+    {
+      "name": "emoji goes",
+      "input": { "text": "emoji 😀 face" },
+      "expected": "emoji-face"
+    },
+    {
+      "name": "empty",
+      "input": { "text": "" },
+      "expected": "section"
+    },
+    {
+      "name": "punctuation only",
+      "input": { "text": "!!!" },
+      "expected": "section"
+    },
+    {
+      "name": "tabs and spaces",
+      "input": { "text": "A  B\tC" },
+      "expected": "a-b-c"
+    },
+    {
+      "name": "c plus plus",
+      "input": { "text": "C++ & C#" },
+      "expected": "c-c"
+    },
+    {
+      "name": "superscript digit",
+      "input": { "text": "x² squared" },
+      "expected": "x²-squared"
+    },
+    {
+      "name": "dotted capital i",
+      "why": "Lower case of U+0130 is 'i' plus a combining dot, which goes.",
+      "input": { "text": "İstanbul" },
+      "expected": "istanbul"
+    },
+    {
+      "name": "sharp s",
+      "input": { "text": "Straße" },
+      "expected": "straße"
+    },
+    {
+      "name": "leading dashes kept",
+      "input": { "text": "--leading dashes" },
+      "expected": "--leading-dashes"
+    },
+    {
+      "name": "spaced dash",
+      "input": { "text": "a - b" },
+      "expected": "a---b"
+    },
+    {
+      "name": "full-width hyphen goes",
+      "input": { "text": "Full－width" },
+      "expected": "fullwidth"
+    },
+    {
+      "name": "arabic digits",
+      "input": { "text": "١٢٣ Arabic" },
+      "expected": "١٢٣-arabic"
+    },
+    {
+      "name": "composed accent",
+      "input": { "text": "café" },
+      "expected": "café"
+    },
+    {
+      "name": "decomposed accent",
+      "input": { "text": "café" },
+      "expected": "cafe"
+    },
+    {
+      "name": "ideographic space",
+      "input": { "text": "中文　标题" },
+      "expected": "中文-标题"
+    }
+  ]
+}

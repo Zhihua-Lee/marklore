@@ -1,0 +1,102 @@
+{
+  "about": "The folder's children in the index's order: each entry whose link names a child (child-name) that exists (input.children, compared without regard to letter case; the existing name is given), each child once (its first entry), depth counting only the shown entries above it. input: { text, children } → expected [{ name, depth }].",
+  "cases": [
+    {
+      "name": "nested, folder and missing",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "children": [
+          "Intro.md",
+          "Detail one.md",
+          "深入.md",
+          "Topics",
+          "Last.md"
+        ]
+      },
+      "expected": [
+        { "name": "Intro.md", "depth": 0 },
+        { "name": "Detail one.md", "depth": 1 },
+        { "name": "深入.md", "depth": 2 },
+        { "name": "Topics", "depth": 0 },
+        { "name": "Last.md", "depth": 0 }
+      ]
+    },
+    {
+      "name": "a child linked twice shows once",
+      "input": {
+        "text": "- [a](a.md)\n- [b](b.md)\n  - [a again](a.md)\n",
+        "children": ["a.md", "b.md"]
+      },
+      "expected": [
+        { "name": "a.md", "depth": 0 },
+        { "name": "b.md", "depth": 0 }
+      ]
+    },
+    {
+      "name": "under a missing entry",
+      "input": {
+        "text": "- [x](x.md)\n  - [gone](gone.md)\n    - [y](y.md)\n",
+        "children": ["x.md", "y.md"]
+      },
+      "expected": [
+        { "name": "x.md", "depth": 0 },
+        { "name": "y.md", "depth": 1 }
+      ]
+    },
+    {
+      "name": "numbered and tabs",
+      "input": {
+        "text": "1. [a](a.md)\n   1. [b](b.md)\n2. [c](c.md)\n\t- [d](d.md)\n",
+        "children": ["a.md", "b.md", "c.md", "d.md"]
+      },
+      "expected": [
+        { "name": "a.md", "depth": 0 },
+        { "name": "b.md", "depth": 1 },
+        { "name": "c.md", "depth": 0 },
+        { "name": "d.md", "depth": 1 }
+      ]
+    },
+    {
+      "name": "letter case",
+      "input": {
+        "text": "- [a](A.MD)\n- [b](b.md)\n",
+        "children": ["a.md", "B.md"]
+      },
+      "expected": [
+        { "name": "a.md", "depth": 0 },
+        { "name": "B.md", "depth": 0 }
+      ]
+    },
+    {
+      "name": "prose between lists",
+      "input": {
+        "text": "- [a](a.md)\n\nText.\n\n  - [b](b.md)\n",
+        "children": ["a.md", "b.md"]
+      },
+      "expected": [
+        { "name": "a.md", "depth": 0 },
+        { "name": "b.md", "depth": 0 }
+      ]
+    },
+    {
+      "name": "folder by slash and by index",
+      "input": {
+        "text": "- [S](Sub/)\n  - [n](n.md)\n- [T](T/SUMMARY.md)\n",
+        "children": ["Sub", "n.md", "T"]
+      },
+      "expected": [
+        { "name": "Sub", "depth": 0 },
+        { "name": "n.md", "depth": 1 },
+        { "name": "T", "depth": 0 }
+      ]
+    },
+    {
+      "name": "nothing exists",
+      "input": {
+        "text": "# Section\n\n<!-- Order as in the notebook. -->\n\n- [Intro](Intro.md)\n  - [Detail](Detail%20one.md)\n    - [Deeper](深入.md)\n- [Topics](Topics/_目录.md)\n  - [Inner](Topics/Inner/_目录.md)\n- [Missing](Gone.md)\n- [Last](Last.md)\n",
+        "children": []
+      },
+      "expected": []
+    }
+  ]
+}

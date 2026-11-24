@@ -1,0 +1,71 @@
+{
+  "about": "A proposal lapses when it is still pending 14 days (14 × 86 400 000 ms) or more after it was created; a decided one never does. input: { proposal: { status, created }, now } → expected boolean.",
+  "cases": [
+    {
+      "name": "fresh",
+      "input": {
+        "proposal": {
+          "status": "pending",
+          "created": "2026-11-01T00:00:00.000Z"
+        },
+        "now": "2026-11-02T00:00:00.000Z"
+      },
+      "expected": false
+    },
+    {
+      "name": "one millisecond short of 14 days",
+      "input": {
+        "proposal": {
+          "status": "pending",
+          "created": "2026-11-01T00:00:00.000Z"
+        },
+        "now": "2026-11-14T23:59:59.999Z"
+      },
+      "expected": false
+    },
+    {
+      "name": "exactly 14 days",
+      "input": {
+        "proposal": {
+          "status": "pending",
+          "created": "2026-11-01T00:00:00.000Z"
+        },
+        "now": "2026-11-15T00:00:00.000Z"
+      },
+      "expected": true
+    },
+    {
+      "name": "long ago",
+      "input": {
+        "proposal": {
+          "status": "pending",
+          "created": "2026-01-01T00:00:00.000Z"
+        },
+        "now": "2026-11-15T00:00:00.000Z"
+      },
+      "expected": true
+    },
+    {
+      "name": "decided never lapses",
+      "input": {
+        "proposal": {
+          "status": "accepted",
+          "created": "2026-01-01T00:00:00.000Z"
+        },
+        "now": "2026-11-15T00:00:00.000Z"
+      },
+      "expected": false
+    },
+    {
+      "name": "withdrawn never lapses",
+      "input": {
+        "proposal": {
+          "status": "withdrawn",
+          "created": "2026-01-01T00:00:00.000Z"
+        },
+        "now": "2026-11-15T00:00:00.000Z"
+      },
+      "expected": false
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+{
+  "about": "Where the note differs after the edits (located as in proposal-edits/locate): each change without what it keeps at its start and its end (compared character by character, in UTF-16 code units). input: { text, edits } → expected [{ oldAt, removed (text taken from the note), at (in the new text), added (text put there) }]; a pure deletion has added ''.",
+  "cases": [
+    {
+      "name": "kept start and end left out; a deletion",
+      "input": {
+        "text": "# Title\n\nFirst paragraph.\n\nSecond paragraph.\n",
+        "edits": [
+          {
+            "old_text": "First paragraph.",
+            "new_text": "First short paragraph."
+          },
+          { "old_text": "Second paragraph.\n", "new_text": "" }
+        ]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 3, "column": 7 },
+          "removed": "",
+          "at": { "line": 3, "column": 7 },
+          "added": "short "
+        },
+        {
+          "oldAt": { "line": 5, "column": 1 },
+          "removed": "Second paragraph.\n",
+          "at": { "line": 5, "column": 1 },
+          "added": ""
+        }
+      ]
+    },
+    {
+      "name": "whole word replaced",
+      "input": {
+        "text": "It is Friday.",
+        "edits": [{ "old_text": "Friday", "new_text": "Thursday" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 7 },
+          "removed": "Fri",
+          "at": { "line": 1, "column": 7 },
+          "added": "Thurs"
+        }
+      ]
+    },
+    {
+      "name": "shared letters inside words",
+      "input": {
+        "text": "It is Friday.",
+        "edits": [{ "old_text": "is Friday", "new_text": "is Thursday" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 7 },
+          "removed": "Fri",
+          "at": { "line": 1, "column": 7 },
+          "added": "Thurs"
+        }
+      ]
+    },
+    {
+      "name": "pure insertion",
+      "input": {
+        "text": "ab",
+        "edits": [{ "old_text": "ab", "new_text": "aXb" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 2 },
+          "removed": "",
+          "at": { "line": 1, "column": 2 },
+          "added": "X"
+        }
+      ]
+    },
+    {
+      "name": "cjk",
+      "input": {
+        "text": "今天天气很好。",
+        "edits": [{ "old_text": "天气很好", "new_text": "天气不好" }]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 5 },
+          "removed": "很",
+          "at": { "line": 1, "column": 5 },
+          "added": "不"
+        }
+      ]
+    },
+    {
+      "name": "second change shifted by the first",
+      "input": {
+        "text": "aaa\nbbb\n",
+        "edits": [
+          { "old_text": "aaa", "new_text": "aaaa" },
+          { "old_text": "bbb", "new_text": "bxb" }
+        ]
+      },
+      "expected": [
+        {
+          "oldAt": { "line": 1, "column": 4 },
+          "removed": "",
+          "at": { "line": 1, "column": 4 },
+          "added": "a"
+        },
+        {
+          "oldAt": { "line": 2, "column": 2 },
+          "removed": "b",
+          "at": { "line": 2, "column": 2 },
+          "added": "x"
+        }
+      ]
+    }
+  ]
+}

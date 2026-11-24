@@ -345,6 +345,15 @@ function firstBelow(host, y) {
         if (row && shown(row) && row.getBoundingClientRect().bottom > y)
           return { el, r: el.getBoundingClientRect() };
       }
+      // A block is the anchor itself; only an index view's list and an entry
+      // whose row is above the reading line are looked into, since the line
+      // falls in the gaps between their rows.
+      if (
+        el.hasAttribute("data-from") &&
+        !el.classList.contains("ix-list") &&
+        !el.classList.contains("ix-item")
+      )
+        return { el, r: el.getBoundingClientRect() };
       const inner = within(el);
       if (inner) return inner;
       if (el.hasAttribute("data-from"))

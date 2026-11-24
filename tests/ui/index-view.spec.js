@@ -65,7 +65,7 @@ test("Read mode: the list as rows, the rest of the note as written", async ({
   await expect(tray.locator(".ix-unlisted-item").first()).toBeHidden();
   await tray.locator(".ix-unlisted-toggle").click();
   await expect(tray.locator(".ix-unlisted-item")).toHaveText([
-    "图片/",
+    "图片",
     "习题课 3.md",
     "期中复习.md",
   ]);
@@ -331,7 +331,7 @@ test("files not in the index are added at the end, or dragged in place", async (
   );
   // A folder dragged under a chapter.
   const goal = row(page, "第三章 函数极限");
-  await tray.locator(".ix-unlisted-item", { hasText: "图片/" }).dragTo(goal, {
+  await tray.locator(".ix-unlisted-item", { hasText: "图片" }).dragTo(goal, {
     targetPosition: { x: 40, y: (await goal.boundingBox()).height / 2 },
   });
   text = await saved(page);

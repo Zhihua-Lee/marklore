@@ -30,7 +30,7 @@ async function setupConnected(
       ].join("\n");
 
       const part1Index = [
-        "# 第一部分 基础",
+        "# 第一部分 目录内标题",
         "",
         "- [导言](Intro.md)",
         "- [第一节 实数系](Section1.md)",
@@ -310,11 +310,51 @@ async function setupConnected(
 
       const byFileId = new Map([...files.values()].map((f) => [f.id, f]));
 
-      function listForDir(dirId) {
+      function indexHeading(text) {
+        if (typeof text !== "string") return null;
+        const m = /^#\s+(.+?)(?:\s+#+)?\s*$/m.exec(
+          text.replace(/^---[\s\S]*?---\s*/, ""),
+        );
+        return m ? m[1].trim() : null;
+      }
+
+      function parentEntryTitles(dir) {
+        const ixPath = dir?.childFiles?.find((p) => p.endsWith("/_目录.md"));
+        const ixFile = ixPath ? files.get(ixPath) : null;
+        const map = new Map();
+        if (!ixFile) return map;
+        for (const line of ixFile.text.split(/\r?\n/)) {
+          const m = /^-\s+\[([^\]]+)\]\(([^)]+)\)/.exec(line.trim());
+          if (!m) continue;
+          const target = decodeURIComponent(m[2]).replace(
+            /\/(?:_目录\.md)?$/,
+            "",
+          );
+          if (!map.has(target)) map.set(target, m[1].trim());
+        }
+        return map;
+      }
+
+      function dirIndexHeading(dir) {
+        const ixPath = dir?.childFiles?.find((p) => p.endsWith("/_目录.md"));
+        const ixFile = ixPath ? files.get(ixPath) : null;
+        return ixFile ? indexHeading(ixFile.text) : null;
+      }
+
+      function dirDisplayName(dir, parentDir = null) {
+        if (parentDir) {
+          const entry = parentEntryTitles(parentDir).get(dir.name);
+          if (entry) return entry;
+        }
+        return dirIndexHeading(dir) || dir.name;
+      }
+
+      function listForDir(dirId, { includeUnlistedHeadings = false } = {}) {
         const dir = dirs.get(dirId);
         if (!dir) return [];
         const ixPath = dir.childFiles.find((p) => p.endsWith("/_目录.md"));
         const ixFile = ixPath ? files.get(ixPath) : null;
+        const entryTitles = parentEntryTitles(dir);
         const out = [];
         if (ixFile) {
           out.push({
@@ -327,12 +367,18 @@ async function setupConnected(
         }
         const dirChildren = dir.childDirs.map((cid) => {
           const d = dirs.get(cid);
+          const parentTitle = entryTitles.get(d.name);
+          const ownHeading = includeUnlistedHeadings
+            ? dirIndexHeading(d)
+            : null;
+          const title = parentTitle || ownHeading;
           return {
             id: d.id,
             name: d.name,
             path: d.path,
             parent: dir.id,
             directory: true,
+            ...(title ? { title } : {}),
           };
         });
         const noteChildren = dir.childFiles
@@ -385,7 +431,7 @@ async function setupConnected(
         if (child.directory) {
           return {
             kind: "folder",
-            name: child.name,
+            name: child.title || dirDisplayName(dirs.get(child.id), dir),
             path: child.path,
             folderId: child.id,
             indexName: null,
@@ -405,9 +451,9 @@ async function setupConnected(
       }
 
       function siblingsForDirChild(parentDir, childKey, onlyTopLevel = true) {
-        const items = listForDir(parentDir.id).filter(
-          (i) => !i.index && (!onlyTopLevel || i.depth !== 1),
-        );
+        const items = listForDir(parentDir.id, {
+          includeUnlistedHeadings: true,
+        }).filter((i) => !i.index && (!onlyTopLevel || i.depth !== 1));
         return items.map((item) => siblingItem(item, parentDir, childKey));
       }
 
@@ -429,7 +475,7 @@ async function setupConnected(
         const segments = [];
         segments.push({
           kind: "root",
-          name: chain[0].name,
+          name: dirDisplayName(chain[0], null),
           path: chain[0].path,
           folderId: chain[0].id,
           clickable: isNote || chain.length > 1,
@@ -443,7 +489,7 @@ async function setupConnected(
           const isCur = !isNote && i === chain.length - 1;
           segments.push({
             kind: "folder",
-            name: folder.name,
+            name: dirDisplayName(folder, parent),
             path: folder.path,
             folderId: folder.id,
             clickable: !isCur,
@@ -546,11 +592,17 @@ async function setupConnected(
           if (!dir) return null;
           const ixPath = dir.childFiles.find((p) => p.endsWith("/_目录.md"));
           const ixFile = ixPath ? files.get(ixPath) : null;
+          const ownTitle = ixFile ? indexHeading(ixFile.text) : null;
           return {
-            folder: { id: dir.id, name: dir.name, path: dir.path },
+            folder: {
+              id: dir.id,
+              name: dir.name,
+              ...(ownTitle ? { title: ownTitle } : {}),
+              path: dir.path,
+            },
             index: ixFile ? { name: ixFile.name, path: ixFile.path } : null,
             text: ixFile ? ixFile.text : null,
-            items: listForDir(id),
+            items: listForDir(id, { includeUnlistedHeadings: true }),
           };
         },
         currentFolder: async (fileId) => {
@@ -787,35 +839,70 @@ test("breadcrumbs connect index views upward and notes with sibling switcher and
     initialFile: "C:/Lib/Part1/Sub/_目录.md",
   });
 
-  // Index view breadcrumb shows 微积分 › Part1 › Sub (last segment non-clickable).
+  // Index view breadcrumb shows unified folder display names, only › separators (no ⌄ chevron), and no trailing slashes.
   const readCrumb = page.locator("#breadcrumb-read");
   await expect(readCrumb).toBeVisible();
+  await expect(readCrumb.locator(".bc-chevron")).toHaveCount(0);
   await expect(readCrumb.locator(".bc-link, .bc-current")).toHaveText([
-    "微积分",
-    "Part1",
-    "Sub",
+    "微积分知识库",
+    "第一部分 基础",
+    "进阶专题",
   ]);
-  await expect(readCrumb.locator(".bc-current")).toHaveText("Sub");
+  await expect(readCrumb.locator(".bc-current")).toHaveText("进阶专题");
 
-  // Sibling chevron on Part1 opens dropdown in root index order.
-  await readCrumb.locator(".bc-item").nth(1).locator(".bc-chevron").click();
+  // Sibling separator button is at least 20 px wide and opens dropdown via click or ArrowDown.
+  const part1Sep = readCrumb.locator(".bc-sep-btn").first();
+  const sepBox = await part1Sep.boundingBox();
+  expect(sepBox.width).toBeGreaterThanOrEqual(20);
+  await part1Sep.focus();
+  await page.keyboard.press("ArrowDown");
   const menu = page.locator("#breadcrumb-menu");
   await expect(menu).toBeVisible();
   await expect(menu.locator('[role="menuitem"] .bc-menu-label')).toHaveText([
-    "Part1/",
+    "第一部分 基础",
     "写在前面",
   ]);
   await expect(
     menu.locator('[role="menuitem"][aria-current="true"]'),
-  ).toContainText("Part1");
+  ).toContainText("第一部分 基础");
 
-  // Escape closes menu; click Part1 segment navigates upward in the same index tab.
+  // Library tree keeps showing disk folder name while its tooltip holds the display name.
+  const part1Tree = page.locator(
+    '#tree details.folder[data-path="C:/Lib/Part1"] > summary',
+  );
+  await expect(part1Tree).toHaveText(/Part1/);
+  await expect(part1Tree).toHaveAttribute(
+    "title",
+    "第一部分 基础\nC:/Lib/Part1",
+  );
+
+  // Escape closes menu and restores focus; segment Enter opens target in same index tab.
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
+  await expect(part1Sep).toBeFocused();
   await expect(page.getByRole("tab")).toHaveCount(1);
-  await readCrumb.getByRole("button", { name: "Part1", exact: true }).click();
-  await expect(page.locator("#content h1")).toHaveText("第一部分 基础");
+  const part1Seg = readCrumb.getByRole("button", {
+    name: "第一部分 基础",
+    exact: true,
+  });
+  await part1Seg.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#content h1")).toHaveText("第一部分 目录内标题");
   await expect(page.getByRole("tab")).toHaveCount(1);
+
+  // Current leaf segment also has a trailing › button when it has siblings (e.g. 第一部分 基础).
+  const rootLeafSep = readCrumb.locator(".bc-sep-btn").first();
+  await rootLeafSep.hover();
+  await expect(menu).toBeVisible();
+  await expect(menu.locator('[role="menuitem"] .bc-menu-label')).toHaveText([
+    "第一部分 基础",
+    "写在前面",
+  ]);
+  // Clicking a hover-opened › pins/keeps it rather than closing right away.
+  await rootLeafSep.click();
+  await expect(menu).toBeVisible();
+  await rootLeafSep.click();
+  await expect(menu).toBeHidden();
 });
 
 test("note breadcrumb lists nested parent pages, preserves Read/Edit title alignment, respects setting and hides outside library", async ({
@@ -830,23 +917,45 @@ test("note breadcrumb lists nested parent pages, preserves Read/Edit title align
 
   const readCrumb = page.locator("#breadcrumb-read");
   await expect(readCrumb).toBeVisible();
+  await expect(readCrumb.locator(".bc-chevron")).toHaveCount(0);
   await expect(readCrumb.locator(".bc-link, .bc-current")).toHaveText([
-    "微积分",
-    "Part1",
+    "微积分知识库",
+    "第一部分 基础",
     "第一节 实数系",
     "详细推导",
   ]);
   await expect(readCrumb.locator(".bc-current")).toHaveText("详细推导");
 
-  // Sibling chevron on parent page 第一节 实数系 jumps sideways.
-  await readCrumb.locator(".bc-item").nth(2).locator(".bc-chevron").click();
+  // Breadcrumb uses clearly smaller and quieter typography than the properties line.
+  const vsFm = await page.evaluate(() => {
+    const bc = getComputedStyle(document.querySelector("#breadcrumb-read"));
+    const fm = getComputedStyle(
+      document.querySelector("#content .front-matter"),
+    );
+    return {
+      bcSize: parseFloat(bc.fontSize),
+      fmSize: parseFloat(fm.fontSize),
+      bcColor: bc.color,
+      fmColor: fm.color,
+    };
+  });
+  expect(vsFm.bcSize).toBeLessThan(vsFm.fmSize);
+  expect(vsFm.bcColor).not.toBe(vsFm.fmColor);
+
+  // Sibling separator on parent page 第一节 实数系 jumps sideways and lists folders without slashes.
+  const secSep = readCrumb.locator(".bc-sep-btn").nth(1);
+  await secSep.click();
   const menu = page.locator("#breadcrumb-menu");
   await expect(menu.locator('[role="menuitem"] .bc-menu-label')).toHaveText([
     "导言",
     "第一节 实数系",
-    "Sub/",
-    "Plain/",
+    "进阶专题",
+    "随笔目录",
   ]);
+  await expect(menu).not.toContainText("/");
+  await expect(
+    menu.locator('[role="menuitem"][data-kind="folder"] .bc-menu-icon svg'),
+  ).toHaveCount(2);
   await menu.getByRole("menuitem", { name: "导言" }).click();
   await expect(page.locator("#content h1")).toHaveText("导言");
   await page.getByRole("tab", { name: "Detail.md" }).click();
@@ -957,9 +1066,17 @@ test("library root without index opens generated read-only contents and never sa
   await openBtn.click();
 
   await expect(page.locator("#content h1")).toHaveText("微积分");
-  await expect(ixItem(page, "Part1")).toBeVisible();
+  await expect(ixItem(page, "第一部分 目录内标题")).toBeVisible();
   await expect(ixItem(page, "导言")).toBeVisible();
   await expect(ixItem(page, "写在前面")).toBeVisible();
+
+  // Generated view shows folder display names with zero trailing slashes.
+  const folderTexts = await page
+    .locator('#content .ix-item[data-kind="folder"] > .ix-row > .ix-title')
+    .allTextContents();
+  expect(folderTexts).toContain("第一部分 目录内标题");
+  expect(folderTexts).not.toContain("Part1");
+  for (const label of folderTexts) expect(label).not.toMatch(/\/$/);
 
   // Generated view is read-only even in Edit mode and refuses writing any index file.
   await page.keyboard.press("Control+2");
@@ -1021,7 +1138,7 @@ for (const theme of ["light", "dark"]) {
       path: `.local/nav-shots/index-nested-${theme}.png`,
     });
 
-    // 2. Note with breadcrumb and open siblings dropdown
+    // 2. Note with breadcrumb and properties line (light / dark)
     await setupConnected(page, {
       rootIndexed: true,
       initialFile: "C:/Lib/Part1/Detail.md",
@@ -1029,11 +1146,16 @@ for (const theme of ["light", "dark"]) {
     });
     const readCrumb = page.locator("#breadcrumb-read");
     await expect(readCrumb).toBeVisible();
-    await readCrumb.locator(".bc-item").nth(2).locator(".bc-chevron").click();
-    await expect(page.locator("#breadcrumb-menu")).toBeVisible();
     await page.screenshot({
       path: `.local/nav-shots/note-breadcrumb-${theme}.png`,
     });
+    if (theme === "dark") {
+      await readCrumb.locator(".bc-sep-btn").nth(1).click();
+      await expect(page.locator("#breadcrumb-menu")).toBeVisible();
+      await page.screenshot({
+        path: `.local/nav-shots/sibling-menu-dark.png`,
+      });
+    }
 
     // 3. Generated library root contents view
     await setupConnected(page, {

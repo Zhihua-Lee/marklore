@@ -36,7 +36,7 @@ import { markdown } from "@codemirror/lang-markdown";
 import { renderDocument } from "./document-render.js";
 import { createIncrementalRender } from "./incremental-render.js";
 import { isDiffDocument } from "./diff-view.js";
-import { createIndexView } from "./folder-index-view.js";
+import { createIndexView, indexHistoryExtension } from "./folder-index-view.js";
 import {
   splitFront,
   withFront,
@@ -434,6 +434,7 @@ function stateFor(doc) {
       editorSearch,
       editingHighlight,
       editingKeys,
+      indexHistoryExtension,
       // A diff is plain text in the editor; only notes read as Markdown.
       ...(isDiffDocument(doc) ? [] : [markdown()]),
       EditorView.lineWrapping,
@@ -584,7 +585,12 @@ editingKeys = wireEditing({
   rich: { target: richTarget },
   addProperty: () => addProperty(),
   // An index file's undo and redo keep the keys on its entries.
-  history: (action) => indexView.applies(active) && indexView.history(action),
+  history: (action) =>
+    indexView.applies(active) &&
+    active.mode !== "source" &&
+    !active.preview &&
+    !active.generated &&
+    indexView.history(action),
 });
 imageInsertion = createImageInsertion({
   view,
@@ -621,6 +627,7 @@ selectionTools = createSelectionTools({
     !isDiffDocument(doc) &&
     !doc.preview &&
     (doc.mode === "edit" || (doc.mode === "read" && settings.readingFormat)),
+  skipHistory: (doc) => indexView.applies(doc) && doc.mode !== "source",
   render: () => {
     clearTimeout(renderingTimer);
     render(true);
@@ -665,7 +672,12 @@ indexView = createIndexView({
     return revealPath(path);
   },
   // An entry's title edited in the view renames the note (src/library.js).
-  renameNote: (args) => renameTo(args),
+  renameNote: (args) =>
+    syncMovesWithHistory(() => renameTo({ ...args, focus: false })),
+  undoRename: () => syncMovesWithHistory(() => undoMove()),
+  canUndoRename: () => lastMoveInfo(),
+  trashNewPage,
+  recreateNewPage,
   unifyNote: (args) => unifyNote(args),
   canUnify: () => Boolean(api?.planUnify),
   foldsChanged: () => {
@@ -1354,6 +1366,76 @@ async function closeTab(doc) {
     doc.closing = false;
   }
 }
+const preserveHistoryDocs = new WeakSet();
+async function syncMovesWithHistory(fn) {
+  const clean = tabs.filter((d) => d.fileId && !dirty(d));
+  for (const d of clean) preserveHistoryDocs.add(d);
+  try {
+    const res = await fn();
+    await Promise.all(
+      clean
+        .filter((d) => tabs.includes(d) && d.fileId && !dirty(d))
+        .map((d) => checkDisk(d)),
+    );
+    return res;
+  } finally {
+    for (const d of clean) preserveHistoryDocs.delete(d);
+  }
+}
+async function trashNewPage({ folderId, name, initialText, fileId, path }) {
+  if (!folderId || !name) return { trashed: false };
+  const norm = (s) =>
+    String(s ?? "")
+      .replace(/\r\n/g, "\n")
+      .trimEnd();
+  let childPath = path || null;
+  let childId = fileId || null;
+  let diskText = null;
+  if (api?.previewChild) {
+    const info = await api.previewChild(folderId, name).catch(() => null);
+    if (!info) return { trashed: false, missing: true };
+    childId ||= info.id || null;
+    childPath ||= info.path || null;
+    if (typeof info.text === "string") diskText = info.text;
+    else if (childId && api?.read) {
+      const readRes = await api.read(childId).catch(() => null);
+      if (readRes && typeof readRes.text === "string") diskText = readRes.text;
+    }
+  }
+  const open = tabs.find(
+    (doc) =>
+      !doc.generated &&
+      ((childId && doc.fileId === childId) ||
+        (childPath && doc.path && samePath(doc.path, childPath))),
+  );
+  if (open && (dirty(open) || norm(open.text) !== norm(initialText)))
+    return { trashed: false, modified: true };
+  if (diskText != null && norm(diskText) !== norm(initialText))
+    return { trashed: false, modified: true };
+  if (!api?.trashEntry) return { trashed: false };
+  const res = await api.trashEntry(folderId, name, { unlist: false });
+  const trashedPath = res?.path || childPath;
+  for (const doc of [...tabs])
+    if (
+      doc !== active &&
+      !dirty(doc) &&
+      ((trashedPath && doc.path && samePath(doc.path, trashedPath)) ||
+        (childId && doc.fileId === childId))
+    )
+      await closeTab(doc);
+  return { trashed: true, path: trashedPath };
+}
+async function recreateNewPage({ folderId, name, initialText }) {
+  if (!folderId || !name || !api?.createEntry) return { created: false };
+  if (api?.previewChild) {
+    const exists = await api.previewChild(folderId, name).catch(() => null);
+    if (exists) return { created: false, exists: true };
+  }
+  const made = await api.createEntry(folderId, name, "note", initialText, {
+    list: false,
+  });
+  return { created: true, made };
+}
 const { save, checkDisk, showConflict } = createDocumentSync({
   api,
   tabs,
@@ -1367,6 +1449,22 @@ const { save, checkDisk, showConflict } = createDocumentSync({
     setEditorState(stateFor(doc));
     render(false);
     restore(doc);
+  },
+  applyDisk: (doc, file, prevText) => {
+    if (!preserveHistoryDocs.has(doc)) return false;
+    const current = doc === active;
+    if (!current && !doc.state) return false;
+    doc.text = prevText;
+    replaceDraft(doc, file.text, { history: false });
+    doc.base = file.text;
+    if (current) {
+      clearTimeout(renderingTimer);
+      render(false);
+      restore(doc);
+    }
+    updateTabs();
+    updateStatus();
+    return true;
   },
   updateStatus,
   updateTabs,
@@ -2026,6 +2124,8 @@ const {
   repairLink,
   revealPath,
   renameTo,
+  undoMove,
+  lastMoveInfo,
   unifyNote,
   nameSaved,
 } = createLibrary({
@@ -2689,6 +2789,23 @@ document.addEventListener("keydown", (e) => {
   }
   if (!(e.ctrlKey || e.metaKey)) return;
   const key = e.key.toLowerCase();
+  if (
+    !e.defaultPrevented &&
+    !e.altKey &&
+    (key === "z" || (key === "y" && !e.shiftKey)) &&
+    indexView.applies(active) &&
+    active.mode !== "source" &&
+    !active.preview &&
+    !active.generated &&
+    !e.target.closest?.(
+      "input, textarea, select, [contenteditable], .cm-editor",
+    )
+  ) {
+    e.preventDefault();
+    e.stopPropagation();
+    indexView.history(key === "y" || e.shiftKey ? "redo" : "undo");
+    return;
+  }
   // Ctrl+Shift+F: search the library, file names and note text.
   if (key === "f" && e.shiftKey && !e.altKey) {
     e.preventDefault();

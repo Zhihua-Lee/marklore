@@ -11,6 +11,7 @@ export function createDocumentSync({
   conflictBar,
   capture,
   redisplay,
+  applyDisk = null,
   updateStatus,
   updateTabs,
   changed,
@@ -94,16 +95,29 @@ export function createDocumentSync({
   function loadFromDisk(doc, file) {
     const current = doc === getActive();
     if (current) capture();
+    const prevText = doc.text;
     doc.text = file.text;
     doc.base = file.text;
     doc.version = file.version;
     doc.epoch++;
     doc.htmlText = null;
+    if (applyDisk?.(doc, file, prevText)) return;
     doc.state = null;
     if (current) redisplay(doc);
   }
-  async function checkDisk(doc = getActive(), manual = false) {
-    if (!api || !doc?.fileId || doc.checking || doc.saving) return;
+  const checking = new WeakMap();
+  function checkDisk(doc = getActive(), manual = false) {
+    if (!api || !doc?.fileId || doc.saving) return Promise.resolve();
+    const activeCheck = checking.get(doc);
+    if (activeCheck) return activeCheck;
+    const task = runCheckDisk(doc, manual).finally(() => {
+      if (checking.get(doc) === task) checking.delete(doc);
+      doc.checking = false;
+    });
+    checking.set(doc, task);
+    return task;
+  }
+  async function runCheckDisk(doc, manual) {
     doc.checking = true;
     const epoch = doc.epoch,
       text = doc.text;
@@ -141,8 +155,6 @@ export function createDocumentSync({
     } catch (e) {
       if (manual || doc === getActive())
         report(t("保留当前内容：{message}", { message: e.message }));
-    } finally {
-      doc.checking = false;
     }
   }
   function showConflict() {

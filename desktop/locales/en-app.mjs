@@ -671,6 +671,9 @@ export default {
   "文件夹“{name}”里没有目录文件": "The folder “{name}” has no index file",
   "{title}（Ctrl+单击打开，双击改标题）":
     "{title} (Ctrl+click to open, double-click to edit the title)",
+  改名无法重做: "Renames cannot be redone",
+  "“{name}”已有修改，未移入回收站":
+    "“{name}” has changes and was not moved to the Recycle Bin",
   展开全部: "Expand all",
   只看第一层: "First level only",
   目录展开层级: "Contents depth",

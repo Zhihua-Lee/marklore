@@ -1726,6 +1726,15 @@ function finishHtml(
     target.dataset.editTo = String(block.to);
     target.dataset.editKind = block.kind;
   }
+  for (const p of template.content.querySelectorAll("p")) {
+    if (
+      !p.textContent.trim() &&
+      p.children.length > 0 &&
+      [...p.children].every((el) => el.matches("a[id], a[name]"))
+    ) {
+      p.classList.add("anchor-only");
+    }
+  }
   return { template, fragment: template.content, deferred };
 }
 // The note's sections, and what renderMarkdown returns.

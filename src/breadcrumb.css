@@ -4,7 +4,7 @@
    the note's own properties line so the two never compete. */
 .note-breadcrumb {
   box-sizing: border-box;
-  max-width: 760px;
+  max-width: var(--note-column, 760px);
   margin: 0 auto;
   padding: 40px 48px 6px 32px;
   display: flex;

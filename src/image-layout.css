@@ -29,7 +29,7 @@ article img:not([width]),
   justify-content: center;
   align-items: flex-start;
   gap: 12px 1.9%;
-  margin: 20px 0;
+  margin: var(--gap-block, 0.95em) 0;
   container: image-row / inline-size;
   break-inside: avoid;
 }
@@ -62,7 +62,7 @@ article img:not([width]),
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 0 4%;
-  margin: 1em 0;
+  margin: var(--gap-block, 0.95em) 0;
   container: columns / inline-size;
 }
 .columns > .column {

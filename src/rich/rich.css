@@ -448,23 +448,59 @@
 }
 /* Sections (sections.js): mirror the reading view's nested section inset,
    non-collapsed heading-body spacing, and zeroed trailing section margins. */
-#rich .ProseMirror > [style*="--rich-depth"] {
+#rich .ProseMirror > [data-rich-depth="1"] {
+  --rich-depth: 1;
+}
+#rich .ProseMirror > [data-rich-depth="2"] {
+  --rich-depth: 2;
+}
+#rich .ProseMirror > [data-rich-depth="3"] {
+  --rich-depth: 3;
+}
+#rich .ProseMirror > [data-rich-depth="4"] {
+  --rich-depth: 4;
+}
+#rich .ProseMirror > [data-rich-depth="5"] {
+  --rich-depth: 5;
+}
+#rich .ProseMirror > [data-rich-depth="6"] {
+  --rich-depth: 6;
+}
+#rich .ProseMirror > [data-rich-head="1"] {
+  --rich-head-mb: calc(0.65 * 1.85 * var(--note-size));
+}
+#rich .ProseMirror > [data-rich-head="2"] {
+  --rich-head-mb: calc(0.65 * 1.5 * var(--note-size));
+}
+#rich .ProseMirror > [data-rich-head="3"] {
+  --rich-head-mb: calc(0.65 * 1.25 * var(--note-size));
+}
+#rich .ProseMirror > [data-rich-head="4"] {
+  --rich-head-mb: calc(0.65 * 1.1 * var(--note-size));
+}
+#rich .ProseMirror > [data-rich-head="5"] {
+  --rich-head-mb: calc(0.65 * 1 * var(--note-size));
+}
+#rich .ProseMirror > [data-rich-head="6"] {
+  --rich-head-mb: calc(0.65 * 0.95 * var(--note-size));
+}
+#rich .ProseMirror > [data-rich-depth] {
   margin-left: calc(18px * var(--rich-depth, 0));
 }
-#rich .ProseMirror > hr[style*="--rich-depth"] {
+#rich .ProseMirror > hr[data-rich-depth] {
   width: auto;
   margin-right: 0;
 }
-#rich .ProseMirror > .table-scroll[style*="--rich-depth"] {
+#rich .ProseMirror > .table-scroll[data-rich-depth] {
   max-width: calc(100% - 18px * var(--rich-depth, 0));
 }
 #rich
   .ProseMirror
-  > .table-scroll[style*="--rich-depth"]:has(> table.reading-columns),
+  > .table-scroll[data-rich-depth]:has(> table.reading-columns),
 :root[data-table-width="full"]
   #rich
   .ProseMirror
-  > .table-scroll[style*="--rich-depth"] {
+  > .table-scroll[data-rich-depth] {
   width: calc(100% - 18px * var(--rich-depth, 0));
 }
 #rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt] {

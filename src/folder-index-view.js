@@ -82,9 +82,8 @@ const attachment = (name) => EXTENSION.test(name) && !NOTE_NAME.test(name);
 // A link to a file elsewhere (not a site, not this note's own anchor).
 const localHref = (href) => href && !/^([a-z][a-z0-9+.-]*:|#)/i.test(href);
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
-// Recursive expand-all caps so giant vaults stay responsive.
-const MAX_EXPAND_FOLDERS = 64;
-const MAX_EXPAND_ITEMS = 800;
+// Level-by-level expansion stops cleanly if the next level adds more rows.
+const MAX_NEXT_ROWS = 300;
 
 export function createIndexView({
   api,
@@ -154,6 +153,7 @@ export function createIndexView({
           expandToken: 0,
           pendingRename: null,
           justUndidRename: null,
+          tooLarge: null,
         }),
       );
     return state;
@@ -278,7 +278,7 @@ export function createIndexView({
     info.version++;
     refresh(doc);
   }
-  function ensureSubfolder(doc, folderId, meta = {}) {
+  function ensureSubfolder(doc, folderId, meta = {}, { silent = false } = {}) {
     if (!folderId) return null;
     let sub = subfolders.get(folderId);
     if (sub && !sub.stale) return sub;
@@ -334,7 +334,7 @@ export function createIndexView({
         sub.promise = null;
       }
       subVersion++;
-      if (doc && getDocument() === doc) refresh(doc);
+      if (!silent && doc && getDocument() === doc) refresh(doc);
     })();
     return sub;
   }
@@ -479,6 +479,7 @@ export function createIndexView({
     }
     subfolders.clear();
     subVersion++;
+    if (doc) stateOf(doc).tooLarge = null;
     for (const [id, info] of folders)
       if (info !== shownInfo) folders.delete(id);
     if (shownInfo) load(doc, shownInfo);
@@ -1513,6 +1514,7 @@ export function createIndexView({
     const fKey = item?.dataset.foldKey;
     if (!doc || !fKey || !item.hasAttribute("aria-expanded")) return;
     const defClosed = item.dataset.defaultClosed === "true";
+    stateOf(doc).tooLarge = null;
     setFoldKey(doc, fKey, defClosed, closed);
     item.classList.toggle("closed", closed);
     item.setAttribute("aria-expanded", String(!closed));
@@ -1539,22 +1541,134 @@ export function createIndexView({
       loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
     }
   }
-  const hasFoldable = (doc = getDocument()) =>
-    Boolean(
-      doc &&
-      applies(doc) &&
-      !doc.preview &&
-      doc.mode !== "source" &&
+  const visibleCollapsedItems = () =>
+    [
+      ...host.querySelectorAll(
+        '.ix-item[aria-expanded="false"][data-fold-key]',
+      ),
+    ].filter((item) => !item.parentElement.closest(".ix-item.closed"));
+  function shallowestCollapsedGroup() {
+    const closed = visibleCollapsedItems();
+    if (!closed.length) return null;
+    let minLevel = Infinity;
+    for (const item of closed) {
+      const lv = Number(item.getAttribute("aria-level")) || 1;
+      if (lv < minLevel) minLevel = lv;
+    }
+    return {
+      level: minLevel,
+      items: closed.filter(
+        (item) => (Number(item.getAttribute("aria-level")) || 1) === minLevel,
+      ),
+    };
+  }
+  function visibleDescendantsCount(groupBox) {
+    let count = 0;
+    for (const el of groupBox.children) {
+      if (!el.classList.contains("ix-item")) continue;
+      count += 1;
+      if (!el.classList.contains("closed")) {
+        const inner = el.querySelector(":scope > .ix-children");
+        if (inner) count += visibleDescendantsCount(inner);
+      }
+    }
+    return count;
+  }
+  function directChildrenAdded(item) {
+    const childrenBox = item.querySelector(":scope > .ix-children");
+    const domChildren = childrenBox
+      ? [...childrenBox.children].filter((el) =>
+          el.classList.contains("ix-item"),
+        )
+      : [];
+    let count = 0;
+    for (const childEl of domChildren) {
+      count += 1;
+      if (!childEl.classList.contains("closed")) {
+        const inner = childEl.querySelector(":scope > .ix-children");
+        if (inner) count += visibleDescendantsCount(inner);
+      }
+    }
+    const hasRenderedSub = domChildren.some(
+      (el) => el.dataset.nested === "true",
+    );
+    if (!hasRenderedSub && item.dataset.childId) {
+      const sub = subfolders.get(item.dataset.childId);
+      if (sub?.status === "ready" && !sub.stale) {
+        const resolved = resolveSubfolderChildren(sub);
+        if (resolved)
+          count +=
+            resolved.kind === "items"
+              ? resolved.items.length
+              : resolved.roots.length;
+      }
+    }
+    return count;
+  }
+  function groupSignature(doc, group, info) {
+    const foldSig = (doc.folds || []).slice().sort().join("|");
+    return `${group.level}:${info?.version ?? 0}:${foldSig}`;
+  }
+  function estimateNextLevel(doc, group, info) {
+    let sum = 0;
+    let allKnown = true;
+    for (const item of group.items) {
+      sum += directChildrenAdded(item);
+      const cid = item.dataset.childId;
+      if (cid) {
+        const sub = subfolders.get(cid);
+        if (!sub || sub.status !== "ready" || sub.stale) allKnown = false;
+      }
+    }
+    const st = stateOf(doc);
+    const sig = groupSignature(doc, group, info);
+    if (st.tooLarge?.sig === sig)
+      return { known: true, count: st.tooLarge.count };
+    return { known: allKnown, count: sum };
+  }
+  function foldState(doc = getDocument()) {
+    if (!doc || !applies(doc) || doc.preview || doc.mode === "source")
+      return {
+        foldable: false,
+        canExpand: false,
+        canCollapse: false,
+        tooLargeCount: null,
+      };
+    const foldable = Boolean(
       host.querySelector(".ix-list .ix-item[aria-expanded]"),
     );
-  const anyExpanded = (doc = getDocument()) =>
-    Boolean(
-      doc &&
-      applies(doc) &&
-      !doc.preview &&
-      doc.mode !== "source" &&
-      host.querySelector('.ix-item[aria-level="1"][aria-expanded="true"]'),
-    );
+    if (!foldable)
+      return {
+        foldable: false,
+        canExpand: false,
+        canCollapse: false,
+        tooLargeCount: null,
+      };
+    const group = shallowestCollapsedGroup();
+    if (!group)
+      return {
+        foldable: true,
+        canExpand: false,
+        canCollapse: true,
+        tooLargeCount: null,
+      };
+    const est = estimateNextLevel(doc, group, folders.get(docKey(doc)));
+    if (est.known && est.count > MAX_NEXT_ROWS)
+      return {
+        foldable: true,
+        canExpand: false,
+        canCollapse: true,
+        tooLargeCount: est.count,
+      };
+    return {
+      foldable: true,
+      canExpand: true,
+      canCollapse: Boolean(
+        host.querySelector('.ix-item[aria-level="1"][aria-expanded="true"]'),
+      ),
+      tooLargeCount: null,
+    };
+  }
   function scrollAnchorFor(selector) {
     const reader = scroller();
     if (!reader || reader.scrollTop <= 2) return { top0: true };
@@ -1603,15 +1717,15 @@ export function createIndexView({
   }
   function collapseLevel1() {
     const doc = managed();
-    if (!doc) return;
+    if (!doc) return false;
     const anchor = scrollAnchorFor('.ix-item[aria-level="1"]');
-    stateOf(doc).expandToken++;
+    const st = stateOf(doc);
+    st.expandToken++;
+    st.tooLarge = null;
     doc.folds = (doc.folds || []).filter(
       (k) => !k.startsWith("ix:") && !k.startsWith("+ix:"),
     );
-    for (const item of host.querySelectorAll(
-      '.ix-item[aria-level="1"][aria-expanded]',
-    )) {
+    for (const item of host.querySelectorAll(".ix-item[aria-expanded]")) {
       const fKey = item.dataset.foldKey;
       const defClosed = item.dataset.defaultClosed === "true";
       setFoldKey(doc, fKey, defClosed, true);
@@ -1622,14 +1736,20 @@ export function createIndexView({
       ))
         control.setAttribute("aria-expanded", "false");
     }
-    const hiddenFocus =
-      host.contains(document.activeElement) &&
-      document.activeElement?.closest?.(".ix-item.closed");
+    const outermostClosed = (start) => {
+      let top = start?.closest?.(".ix-item.closed") || null;
+      while (top?.parentElement?.closest?.(".ix-item.closed"))
+        top = top.parentElement.closest(".ix-item.closed");
+      return top;
+    };
+    const hiddenFocus = host.contains(document.activeElement)
+      ? outermostClosed(document.activeElement)
+      : null;
     if (hiddenFocus) focusItem(hiddenFocus, false, { preventScroll: true });
     else {
-      const hiddenTab = host
-        .querySelector('.ix-item[tabindex="0"]')
-        ?.closest?.(".ix-item.closed");
+      const hiddenTab = outermostClosed(
+        host.querySelector('.ix-item[tabindex="0"]'),
+      );
       if (hiddenTab) {
         for (const other of host.querySelectorAll('.ix-item[tabindex="0"]'))
           other.tabIndex = -1;
@@ -1639,85 +1759,60 @@ export function createIndexView({
     restoreScrollAnchor(anchor);
     foldsChanged(doc);
     outlineChanged();
+    return true;
   }
-  async function expandAll() {
+  async function expandOneLevel() {
     const doc = managed();
-    if (!doc) return;
+    if (!doc) return false;
+    const st = stateOf(doc);
+    const group = shallowestCollapsedGroup();
+    if (!group) return false;
+    const info = folderOf(doc);
+    const sig = groupSignature(doc, group, info);
+    if (st.tooLarge?.sig === sig) return false;
     const anchor = scrollAnchorFor(".ix-item");
-    const token = ++stateOf(doc).expandToken;
-    let loadedFolders = 0;
-    let capped = false;
-    const seenFolders = new Set();
-    for (let round = 0; round < 16; round++) {
-      if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
-      if (host.querySelectorAll(".ix-item").length >= MAX_EXPAND_ITEMS) {
-        if (
-          host.querySelector('.ix-item[aria-expanded="false"][data-fold-key]')
-        )
-          capped = true;
-        break;
-      }
-      const closedItems = [
-        ...host.querySelectorAll(
-          '.ix-item[aria-expanded="false"][data-fold-key]',
-        ),
-      ];
-      const toLoad = [];
-      for (const item of closedItems) {
-        const cid = item.dataset.childId;
-        if (cid && !seenFolders.has(cid)) {
-          if (loadedFolders >= MAX_EXPAND_FOLDERS) {
-            capped = true;
-            continue;
-          }
-          seenFolders.add(cid);
-          loadedFolders++;
-        }
-        const fKey = item.dataset.foldKey;
-        const defClosed = item.dataset.defaultClosed === "true";
-        setFoldKey(doc, fKey, defClosed, false);
-        if (cid) {
-          const sub = ensureSubfolder(doc, cid, {
-            id: cid,
-            name: item.dataset.childName || "",
-            path: item.dataset.childPath || "",
-          });
-          if (sub?.promise) toLoad.push(sub.promise);
-        }
-      }
-      for (const item of host.querySelectorAll(
-        '.ix-item[aria-expanded="true"][data-child-id]',
-      )) {
-        const sub = subfolders.get(item.dataset.childId);
-        if (sub?.promise) toLoad.push(sub.promise);
-      }
-      if (!closedItems.length && !toLoad.length) break;
-      if (capped && !toLoad.length) {
-        foldsChanged(doc);
-        rerender(doc);
-        break;
-      }
-      foldsChanged(doc);
-      if (toLoad.length) {
-        await Promise.all(toLoad);
-        if (getDocument() !== doc || stateOf(doc).expandToken !== token) return;
-      }
-      rerender(doc);
-      if (
-        round === 15 &&
-        host.querySelector('.ix-item[aria-expanded="false"][data-fold-key]')
-      )
-        capped = true;
+    const token = ++st.expandToken;
+    const toLoad = [];
+    for (const item of group.items) {
+      const cid = item.dataset.childId;
+      if (!cid) continue;
+      const sub = ensureSubfolder(
+        doc,
+        cid,
+        {
+          id: cid,
+          name: item.dataset.childName || "",
+          path: item.dataset.childPath || "",
+        },
+        { silent: true },
+      );
+      if (sub?.promise) toLoad.push(sub.promise);
     }
-    if (getDocument() === doc && stateOf(doc).expandToken === token) {
-      restoreScrollAnchor(anchor);
-      if (capped) report(t("条目较多，仅展开前一部分"));
-      const info = folderOf(doc);
-      if (info?.status === "ready")
-        loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
-      foldsChanged(doc);
+    for (let i = 0; i < toLoad.length; i += 64) {
+      await Promise.all(toLoad.slice(i, i + 64));
+      if (getDocument() !== doc || st.expandToken !== token) return false;
+    }
+    let totalAdded = 0;
+    for (const item of group.items) totalAdded += directChildrenAdded(item);
+    if (totalAdded > MAX_NEXT_ROWS) {
+      st.tooLarge = { sig, count: totalAdded };
       outlineChanged();
+      return false;
     }
+    for (const item of group.items) {
+      const fKey = item.dataset.foldKey;
+      const defClosed = item.dataset.defaultClosed === "true";
+      setFoldKey(doc, fKey, defClosed, false);
+    }
+    st.tooLarge = null;
+    foldsChanged(doc);
+    rerender(doc);
+    restoreScrollAnchor(anchor);
+    if (info?.status === "ready")
+      loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
+    foldsChanged(doc);
+    outlineChanged();
+    return true;
   }
   // The entry at a line or ixId shown: the entries folded above it unfolded.
   function reveal(target) {
@@ -2626,9 +2721,8 @@ export function createIndexView({
     editFront,
     reveal,
     outlineEntries,
-    hasFoldable,
-    anyExpanded,
+    foldState,
     collapseLevel1,
-    expandAll,
+    expandOneLevel,
   };
 }

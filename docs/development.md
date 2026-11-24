@@ -79,7 +79,7 @@ pnpm dev
 - UI 用例通过 [tests/ui/fixtures.js](../tests/ui/fixtures.js) 模拟 `window.folio`：`installFolio(page)` 后用 `folioTest.mock({...})` 只写与本用例相关的方法。它与 `desktop/preload.cjs` 的接口列表保持一致（由单元测试校验），并按主进程的规则合并恢复草稿。
 - 编辑模式的编辑器（`src/rich/`）由 `tests/ui/rich-*.spec.js` 覆盖：读入再写回逐字节不变、只改动打字处、输入法组字、公式、列表、表格、链接、图片、折叠块、行内 HTML、查找替换、格式工具栏、标记、光标在各种块之间移动，以及 Typora 式输入。共用的启动与选择工具在 `tests/ui/rich-helpers.js`。
 - 已有开发服务器时，设置 `FOLIO_BASE_URL`（如 `http://127.0.0.1:5173`）可跳过自动启动。浏览器：装有 Chromium headless shell（`playwright install chromium-headless-shell`）时用它，否则用 Edge；`FOLIO_BROWSER_CHANNEL="msedge"` 强制用 Edge，`""` 强制用 headless shell。无头 Edge 每打开一页就建一个隐藏窗口，Windows 资源管理器为每个这样的窗口留下约 6 个 GDI 对象、直到它重启才释放；资源管理器的 GDI 对象接近 9000 时会自行结束（任务栏、托盘和菜单变空白），整轮 UI 测试就要几千个。headless shell 不建窗口，没有这项开销。
-- UI 测试、原生套件（`tools/run-native-suites.mjs` 在每个套件前、`tests/launch-app.mjs` 在每个套件第一次启动前）开始前读取任务栏资源管理器的 GDI 对象数（[tools/explorer-gdi.mjs](../tools/explorer-gdi.mjs)），超过 6000 时不启动并说明原因；`FOLIO_EXPLORER_GDI_LIMIT` 可改这个上限。空闲的原生测试实例和它开关的 Electron 窗口不增加资源管理器的 GDI 对象。
+- UI 测试、原生套件（`tools/run-native-suites.mjs` 在每个套件前、`tests/launch-app.mjs` 在每个套件第一次启动前）开始前读取任务栏资源管理器的 GDI 对象数（[tools/explorer-gdi.mjs](../tools/explorer-gdi.mjs)），超过 6000 时不启动并说明原因；`FOLIO_EXPLORER_GDI_LIMIT` 可改这个上限。直接运行 `tools/explorer-gdi.mjs` 打印一行当前数值和上限（读不到时说明原因），超过上限时退出码为 1。空闲的原生测试实例和它开关的 Electron 窗口不增加资源管理器的 GDI 对象。
 
 ### 规则向量
 

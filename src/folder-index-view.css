@@ -32,19 +32,19 @@
   outline: none;
 }
 .ix-row {
+  --ix-title-size: 1;
   display: flex;
   align-items: baseline;
   gap: var(--ix-gap);
-  min-height: 28px;
   padding: 2px 6px 2px var(--ix-pad);
   border-radius: 6px;
   box-sizing: border-box;
 }
 /* A section head: a top-level entry of a list that has levels. Space
    above it (and above a top-level entry after a group) keeps the groups
-   apart. */
+   apart without stretching the row box below its title. */
 .ix-list:has(.ix-children) > .ix-item > .ix-row {
-  min-height: 34px;
+  --ix-title-size: 1.1;
 }
 .ix-list > .ix-item[aria-expanded]:not(:first-child),
 .ix-list > .ix-item[aria-expanded] + .ix-item {
@@ -80,15 +80,21 @@
 .ix-twisty-space {
   position: relative;
   flex: none;
-  align-self: center;
+  align-self: flex-start;
   width: var(--ix-arrow);
   height: 24px;
   min-height: 0;
-  margin: -2px 0;
+  /* Centre on the title's first line (half of .ix-list's 1.45 line-height),
+     matching .prose .fold beside headings regardless of row height or wrap. */
+  margin-block: calc(0.725em - 12px);
   padding: 0;
   border: 0;
   background: none;
-  font-size: 0;
+  color: transparent;
+  font: inherit;
+  font-size: calc(1em * var(--ix-title-size, 1));
+  text-indent: -9999px;
+  overflow: hidden;
   cursor: pointer;
 }
 .ix-twisty-space {
@@ -176,19 +182,23 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--reading-ink);
+  font-size: calc(1em * var(--ix-title-size, 1));
   font-weight: 500;
 }
 .ix-list:has(.ix-children) > .ix-item > .ix-row > .ix-title {
-  font-size: 1.1em;
   font-weight: var(--heading-weight, 600);
   letter-spacing: 0.01em;
 }
+.ix-item[aria-level="3"] > .ix-row {
+  --ix-title-size: 0.96;
+}
 .ix-item[aria-level="3"] > .ix-row > .ix-title {
-  font-size: 0.96em;
   font-weight: 400;
 }
+.ix-children .ix-children .ix-children .ix-row {
+  --ix-title-size: 0.92;
+}
 .ix-children .ix-children .ix-children .ix-title {
-  font-size: 0.92em;
   font-weight: 400;
 }
 .prose .ix-children .ix-children a.ix-title:not(:hover) {
@@ -319,6 +329,7 @@
   align-items: center;
   gap: 2px;
   margin-left: auto;
+  margin-block: -2px;
   align-self: center;
 }
 .ix-open-folder {
@@ -355,6 +366,7 @@
   flex: none;
   gap: 1px;
   margin-left: auto;
+  margin-block: -2px;
   align-self: center;
   opacity: 0;
 }
@@ -370,7 +382,7 @@
   margin-left: 0;
 }
 .ix-row-actions > .ix-tools {
-  margin-left: 0;
+  margin: 0;
 }
 .ix-row:hover .ix-tools,
 .ix-item:focus-visible > .ix-row .ix-tools,

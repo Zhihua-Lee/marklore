@@ -1,0 +1,147 @@
+/* Quiet single-line breadcrumb above notes and index views inside a library.
+   Identical box geometry above #content and #rich keeps the title fixed
+   when switching between Read and Edit modes. */
+.note-breadcrumb {
+  box-sizing: border-box;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 46px 48px 4px 32px;
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 1px;
+  overflow: hidden;
+  color: var(--muted);
+  font: 400 12px/20px var(--font-ui);
+  user-select: none;
+}
+:root[data-wide="true"] .note-breadcrumb {
+  max-width: none;
+}
+.note-breadcrumb[hidden] {
+  display: none;
+}
+.note-breadcrumb:not([hidden]) + .prose {
+  padding-top: 8px;
+}
+@media (max-width: 1000px) {
+  #panes[data-mode="edit"]:not([data-rich="on"]) .note-breadcrumb {
+    padding: 16px 30px 4px;
+  }
+  #panes[data-mode="edit"]:not([data-rich="on"])
+    .note-breadcrumb:not([hidden])
+    + .prose {
+    padding-top: 8px;
+  }
+}
+
+.bc-item {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 240px;
+}
+.bc-sep {
+  flex: none;
+  margin: 0 4px;
+  opacity: 0.55;
+}
+.bc-link,
+.bc-current {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: inherit;
+  line-height: 20px;
+}
+.bc-link {
+  min-height: 0;
+  padding: 0 4px;
+  margin: 0 -2px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.bc-link:hover,
+.bc-link:focus-visible {
+  background: var(--hover);
+  color: var(--ink);
+}
+.bc-current {
+  padding: 0 2px;
+  color: color-mix(in srgb, var(--reading-ink) 74%, var(--reading-paper));
+}
+.bc-chevron {
+  position: relative;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 20px;
+  min-height: 0;
+  margin: 0 0 0 1px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.bc-chevron::after {
+  content: "";
+  display: block;
+  width: 5px;
+  height: 5px;
+  margin-top: -2px;
+  border-right: 1.3px solid currentColor;
+  border-bottom: 1.3px solid currentColor;
+  transform: rotate(45deg);
+  opacity: 0.72;
+}
+.bc-chevron:hover,
+.bc-chevron:focus-visible,
+.bc-chevron[aria-expanded="true"] {
+  background: var(--hover);
+  color: var(--ink);
+}
+.bc-chevron[aria-expanded="true"]::after {
+  opacity: 1;
+}
+
+.breadcrumb-menu {
+  max-width: 300px;
+  max-height: min(360px, calc(100vh - 24px));
+  overflow-y: auto;
+}
+.breadcrumb-menu .bc-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+}
+.breadcrumb-menu .bc-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.breadcrumb-menu .bc-menu-kind {
+  color: var(--muted);
+}
+.breadcrumb-menu .bc-menu-mark {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  color: var(--accent);
+  font-size: 11px;
+}
+.breadcrumb-menu .bc-menu-item[aria-current="true"] {
+  color: var(--accent);
+  font-weight: 500;
+}

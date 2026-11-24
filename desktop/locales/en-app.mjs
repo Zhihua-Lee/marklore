@@ -677,4 +677,12 @@ export default {
   打开此目录: "Open this folder's contents",
   暂无笔记或子文件夹: "No notes or subfolders",
   自动生成的目录为只读视图: "Generated folder contents are read-only",
+  // Breadcrumb navigation & settings (src/breadcrumb.js, src/appearance.js)
+  位置导航: "Breadcrumb navigation",
+  同级条目: "Sibling entries",
+  切换同级条目: "Switch sibling entry",
+  "{name} 的同级条目": "Siblings of {name}",
+  显示路径导航: "Show breadcrumb",
+  在笔记与目录页上方显示所属笔记库与层级路径:
+    "Show the library path above notes and index views",
 };

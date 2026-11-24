@@ -104,6 +104,7 @@ export default {
   // One name per note (note-names.mjs), the folder's index button and
   // "Unify names".
   "打开目录（{name}）": "Open index ({name})",
+  打开目录: "Open contents",
   "已更新 {count} 篇笔记": "{count} notes updated",
   "统一名字…": "Unify names…",
   "文件名、目录条目和标题统一为笔记的标题":

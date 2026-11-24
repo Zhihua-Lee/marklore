@@ -70,6 +70,7 @@ import {
   normalizeSettings,
   normalizeDesktopPreferences,
 } from "../desktop/settings-schema.mjs";
+import { folderDisplayName } from "../desktop/breadcrumb.mjs";
 import { FileStore } from "../desktop/files.mjs";
 
 const ROOT = fileURLToPath(new URL("./vectors/", import.meta.url));
@@ -348,6 +349,13 @@ const rules = {
   "settings/normalize": ({ stored }) => normalizeSettings(stored),
   "settings/desktop-preferences": ({ stored }) =>
     normalizeDesktopPreferences(stored),
+
+  // ── breadcrumb ──
+  "breadcrumb/folder-name": ({
+    folderName,
+    parentEntryText = null,
+    indexText = null,
+  }) => folderDisplayName({ folderName, parentEntryText, indexText }),
 };
 
 // ── A small JSON Schema (2020-12) checker: the keywords the schemas in

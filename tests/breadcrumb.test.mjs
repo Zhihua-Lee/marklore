@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { buildBreadcrumb, matchingRoot } from "../desktop/breadcrumb.mjs";
+import {
+  buildBreadcrumb,
+  folderDisplayName,
+  matchingRoot,
+} from "../desktop/breadcrumb.mjs";
 import { FileStore } from "../desktop/files.mjs";
 
 const LIB = "C:/Notes/Calculus";
@@ -159,7 +163,7 @@ test("builds nested parent-page breadcrumb and per-level siblings for a note", (
     })),
     [
       { kind: "root", name: "微积分", clickable: true, current: false },
-      { kind: "folder", name: "Chapter1", clickable: true, current: false },
+      { kind: "folder", name: "第一章", clickable: true, current: false },
       { kind: "note", name: "第一节 实数系", clickable: true, current: false },
       { kind: "note", name: "确界原理", clickable: true, current: false },
       { kind: "note", name: "典型例题", clickable: false, current: true },
@@ -171,9 +175,9 @@ test("builds nested parent-page breadcrumb and per-level siblings for a note", (
   assert.deepEqual(
     crumb.segments[1].siblings.map((s) => `${s.kind}:${s.name}:${s.current}`),
     [
-      "folder:Chapter1:true",
+      "folder:第一章:true",
       "note:写在前面:false",
-      "folder:Chapter2:false",
+      "folder:第二章:false",
       "note:未收录说明:false",
     ],
   );
@@ -187,7 +191,7 @@ test("builds nested parent-page breadcrumb and per-level siblings for a note", (
   // Parent page `确界原理` has siblings nested directly under `第一节 实数系`.
   assert.deepEqual(
     crumb.segments[3].siblings.map((s) => `${s.kind}:${s.name}`),
-    ["note:确界原理", "folder:Advanced"],
+    ["note:确界原理", "folder:进阶阅读"],
   );
 
   // Leaf note `典型例题` has only itself at its level (only 1 sibling -> hidden chevron in UI).
@@ -214,12 +218,12 @@ test("builds index view breadcrumb up to current folder without note segment", (
     })),
     [
       { kind: "root", name: "微积分", clickable: true, current: false },
-      { kind: "folder", name: "Chapter1", clickable: false, current: true },
+      { kind: "folder", name: "第一章", clickable: false, current: true },
     ],
   );
   assert.deepEqual(
     crumb.segments[1].siblings.map((s) => s.name),
-    ["Chapter1", "写在前面", "Chapter2", "未收录说明"],
+    ["第一章", "写在前面", "第二章", "未收录说明"],
   );
 });
 
@@ -282,13 +286,44 @@ test("deepest matching root wins when roots overlap", () => {
   assert.equal(matched.id, "r2");
 });
 
+test("folderDisplayName resolves parent entry text, own index heading, then folder name", () => {
+  assert.equal(
+    folderDisplayName({
+      folderName: "Part1",
+      parentEntryText: "第一部分 \\[基础\\]",
+      indexText: "# Part One\n",
+    }),
+    "第一部分 [基础]",
+  );
+  assert.equal(
+    folderDisplayName({
+      folderName: "Part1",
+      parentEntryText: null,
+      indexText: "# 第一部分\n\n- [A](A.md)\n",
+    }),
+    "第一部分",
+  );
+  assert.equal(
+    folderDisplayName({
+      folderName: "Plain",
+      parentEntryText: "",
+      indexText: "## Not Level One\n",
+    }),
+    "Plain",
+  );
+});
+
 test("FileStore resolves folderIndexText, previewChild and live disk breadcrumbs", async () => {
   const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "folio-crumb-"));
   try {
     const lib = path.join(tmp, "Lib");
     const part = path.join(lib, "Part1");
+    const unlistedHead = path.join(lib, "Extra");
+    const unlistedPlain = path.join(lib, "PlainSub");
     const outside = path.join(tmp, "Outside");
     await fs.mkdir(part, { recursive: true });
+    await fs.mkdir(unlistedHead, { recursive: true });
+    await fs.mkdir(unlistedPlain, { recursive: true });
     await fs.mkdir(outside, { recursive: true });
     await fs.writeFile(
       path.join(lib, "_目录.md"),
@@ -308,6 +343,10 @@ test("FileStore resolves folderIndexText, previewChild and live disk breadcrumbs
       "# Deep Detail\n\nBody.\n",
     );
     await fs.writeFile(path.join(part, "B.md"), "# Beta Title\n\nBody.\n");
+    await fs.writeFile(
+      path.join(unlistedHead, "_目录.md"),
+      "# Unlisted Heading\n\n- [One](One.md)\n",
+    );
     await fs.writeFile(path.join(outside, "Free.md"), "# Outside\n\nBody.\n");
 
     const store = new FileStore();
@@ -316,8 +355,17 @@ test("FileStore resolves folderIndexText, previewChild and live disk breadcrumbs
     store.roots = [rootDir.path];
 
     const rootInfo = await store.folderIndexText(rootDir.id);
+    assert.equal(rootInfo.folder.title, "Library");
     assert.equal(rootInfo.index.name, "_目录.md");
     assert.match(rootInfo.text, /First Part/);
+    assert.equal(
+      rootInfo.items.find((i) => i.name === "Extra")?.title,
+      "Unlisted Heading",
+    );
+    assert.equal(
+      rootInfo.items.find((i) => i.name === "Part1")?.title,
+      "First Part",
+    );
 
     const previewed = await store.previewChild(partDir.id, "Detail.md");
     assert.match(previewed.text, /# Deep Detail/);
@@ -328,10 +376,19 @@ test("FileStore resolves folderIndexText, previewChild and live disk breadcrumbs
     assert.deepEqual(
       noteCrumb.segments.map((s) => `${s.kind}:${s.name}:${s.clickable}`),
       [
-        "root:Lib:true",
-        "folder:Part1:true",
+        "root:Library:true",
+        "folder:First Part:true",
         "note:Alpha Title:true",
         "note:Deep Detail:false",
+      ],
+    );
+    assert.deepEqual(
+      noteCrumb.segments[1].siblings.map((s) => `${s.kind}:${s.name}`),
+      [
+        "folder:First Part",
+        "note:Library Intro",
+        "folder:Unlisted Heading",
+        "folder:PlainSub",
       ],
     );
     assert.deepEqual(
@@ -342,7 +399,15 @@ test("FileStore resolves folderIndexText, previewChild and live disk breadcrumbs
     const folderCrumb = await store.breadcrumb({ folderId: partDir.id });
     assert.deepEqual(
       folderCrumb.segments.map((s) => `${s.kind}:${s.name}:${s.current}`),
-      ["root:Lib:false", "folder:Part1:true"],
+      ["root:Library:false", "folder:First Part:true"],
+    );
+
+    const unlistedCrumb = await store.breadcrumb({
+      folderId: (await store.directory(unlistedHead)).id,
+    });
+    assert.deepEqual(
+      unlistedCrumb.segments.map((s) => `${s.kind}:${s.name}:${s.current}`),
+      ["root:Library:false", "folder:Unlisted Heading:true"],
     );
 
     const openedOut = await store.open(path.join(outside, "Free.md"));

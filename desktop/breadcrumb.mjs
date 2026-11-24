@@ -9,8 +9,35 @@ import {
   parseIndex,
   unescapeTitle,
 } from "./folder-index.mjs";
-import { baseName } from "./note-names.mjs";
+import { baseName, leadingHeading } from "./note-names.mjs";
 import { isUnder, pathKey } from "./link-rewrite.mjs";
+
+/**
+ * Single display name for a folder:
+ * 1) the parent index's entry text when the parent index lists it,
+ * 2) otherwise the leading level-1 heading of its own index file,
+ * 3) otherwise the folder name itself.
+ */
+export function folderDisplayName({
+  folderName = "",
+  parentEntryText = null,
+  indexText = null,
+  indexHeading = null,
+} = {}) {
+  if (typeof parentEntryText === "string") {
+    const text = unescapeTitle(parentEntryText).trim();
+    if (text) return text;
+  }
+  if (typeof indexHeading === "string") {
+    const heading = indexHeading.trim();
+    if (heading) return heading;
+  }
+  if (typeof indexText === "string" && indexText) {
+    const found = leadingHeading(indexText);
+    if (found?.title) return found.title;
+  }
+  return String(folderName ?? "");
+}
 
 export const compareTreeItems = (a, b) =>
   Number(Boolean(b.directory)) - Number(Boolean(a.directory)) ||
@@ -20,12 +47,17 @@ export const compareTreeItems = (a, b) =>
 function siblingFromChild(
   child,
   folder,
-  { current = false, label = null } = {},
+  { current = false, entryText = null } = {},
 ) {
   if (child.directory) {
     return {
       kind: "folder",
-      name: child.name,
+      name: folderDisplayName({
+        folderName: child.name,
+        parentEntryText: entryText,
+        indexText: child.indexText ?? null,
+        indexHeading: child.title ?? null,
+      }),
       path: child.path,
       folderId: child.id ?? null,
       indexName: child.indexName ?? null,
@@ -33,6 +65,7 @@ function siblingFromChild(
       current,
     };
   }
+  const label = entryText ? unescapeTitle(entryText).trim() : "";
   return {
     kind: "note",
     name: child.title || label || baseName(child.name),
@@ -71,7 +104,7 @@ function siblingsAtLevel(folder, parsed, childByName, parentIdx, currentName) {
       out.push(
         siblingFromChild(child, folder, {
           current: Boolean(currentLower && lower === currentLower),
-          label: unescapeTitle(entry.text),
+          entryText: entry.text,
         }),
       );
     }
@@ -147,24 +180,38 @@ export function buildBreadcrumb({
 
   const isNote = kind === "note";
   const segments = [];
+  const rootName = folderDisplayName({
+    folderName: chain[0].name || root.name,
+    indexText: chain[0].indexText ?? root.indexText ?? null,
+    indexHeading: chain[0].title ?? root.title ?? null,
+  });
   const rootSiblings =
     roots.length > 1
-      ? roots.map((r) => ({
-          kind: "root",
-          name: r.name,
-          path: r.path,
-          folderId: r.id ?? null,
-          indexName: r.indexName ?? null,
-          fileName: null,
-          current: pathKey(r.path) === pathKey(chain[0].path),
-        }))
+      ? roots.map((r) => {
+          const sameRoot = pathKey(r.path) === pathKey(chain[0].path);
+          return {
+            kind: "root",
+            name: sameRoot
+              ? rootName
+              : folderDisplayName({
+                  folderName: r.name,
+                  indexText: r.indexText ?? null,
+                  indexHeading: r.title ?? null,
+                }),
+            path: r.path,
+            folderId: r.id ?? null,
+            indexName: r.indexName ?? null,
+            fileName: null,
+            current: sameRoot,
+          };
+        })
       : [];
 
   // Root library segment.
   const rootCurrent = !isNote && chain.length === 1;
   segments.push({
     kind: "root",
-    name: chain[0].name || root.name,
+    name: rootName,
     path: chain[0].path,
     folderId: chain[0].id ?? root.id ?? null,
     indexName: chain[0].indexName ?? null,
@@ -181,10 +228,17 @@ export function buildBreadcrumb({
     const { parsed: pParsed, childByName: pChildren } = indexLookup(parent);
     const entryIdx = pParsed ? entryOf(pParsed, folder.name) : -1;
     const parentIdx = entryIdx >= 0 ? pParsed.entries[entryIdx].parent : -1;
+    const parentEntryText =
+      entryIdx >= 0 ? pParsed.entries[entryIdx].text : null;
     const current = !isNote && i === chain.length - 1;
     segments.push({
       kind: "folder",
-      name: folder.name,
+      name: folderDisplayName({
+        folderName: folder.name,
+        parentEntryText,
+        indexText: folder.indexText ?? null,
+        indexHeading: folder.title ?? null,
+      }),
       path: folder.path,
       folderId: folder.id ?? null,
       indexName: folder.indexName ?? null,
@@ -203,7 +257,7 @@ export function buildBreadcrumb({
 
   if (!isNote) {
     return {
-      root: { id: root.id ?? null, name: root.name, path: root.path },
+      root: { id: root.id ?? null, name: rootName, path: root.path },
       kind,
       segments,
     };
@@ -233,11 +287,16 @@ export function buildBreadcrumb({
       const isDir = folderEntry(entry, (n) =>
         Boolean(childByName.get(n.toLowerCase())?.directory),
       );
-      const label = unescapeTitle(entry.text);
+      const label = unescapeTitle(entry.text).trim();
       if (child?.directory) {
         segments.push({
           kind: "folder",
-          name: child.name,
+          name: folderDisplayName({
+            folderName: child.name,
+            parentEntryText: entry.text,
+            indexText: child.indexText ?? null,
+            indexHeading: child.title ?? null,
+          }),
           path: child.path,
           folderId: child.id ?? null,
           indexName: child.indexName ?? null,
@@ -273,7 +332,12 @@ export function buildBreadcrumb({
       } else {
         segments.push({
           kind: isDir ? "folder" : "page",
-          name: label || name || "",
+          name: isDir
+            ? folderDisplayName({
+                folderName: name || "",
+                parentEntryText: entry.text,
+              })
+            : label || name || "",
           path: null,
           folderId: null,
           indexName: null,
@@ -314,7 +378,7 @@ export function buildBreadcrumb({
   });
 
   return {
-    root: { id: root.id ?? null, name: root.name, path: root.path },
+    root: { id: root.id ?? null, name: rootName, path: root.path },
     kind: "note",
     segments,
   };

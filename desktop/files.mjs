@@ -18,6 +18,7 @@ import {
   subtreeOf,
   checkableEntries,
   titleFor,
+  unescapeTitle,
   parseIndex,
   childName,
 } from "./folder-index.mjs";
@@ -400,6 +401,17 @@ export class FileStore {
       items.map((item) => [item.name.toLowerCase(), item]),
     );
     const index = byName.get(name.toLowerCase());
+    const parsed = parseIndex(text);
+    const entryTitleByName = new Map();
+    for (const entry of parsed.entries) {
+      const child = childName(entry.href);
+      const matched = child && byName.get(child.toLowerCase());
+      if (!matched || matched === index) continue;
+      const k = matched.name.toLowerCase();
+      if (entryTitleByName.has(k)) continue;
+      const textTitle = unescapeTitle(entry.text).trim();
+      if (textTitle) entryTitleByName.set(k, textTitle);
+    }
     const order = indexOrder(text, (child) => {
       const item = byName.get(child.toLowerCase());
       return item && item !== index ? item.name : null;
@@ -408,7 +420,13 @@ export class FileStore {
     const listed = order.map(({ name: child, depth }) => {
       const item = byName.get(child.toLowerCase());
       taken.add(item);
-      return { ...item, depth, listed: true };
+      const entryTitle = entryTitleByName.get(item.name.toLowerCase());
+      return {
+        ...item,
+        depth,
+        listed: true,
+        ...(item.directory && entryTitle ? { title: entryTitle } : {}),
+      };
     });
     // Entries whose note or folder is not there (renamed or deleted by
     // another program): counted, for the index's row to say so.
@@ -915,15 +933,30 @@ export class FileStore {
     const items = await this.list(id);
     const indexItem = items.find((item) => item.index && !item.directory);
     const text = indexItem ? await this.indexText(indexItem.path) : null;
+    const enriched = await Promise.all(
+      items.map(async (item) => {
+        if (!item.directory || item.title) return item;
+        const idxPath = await this.indexFile(item.path).catch(() => null);
+        if (!idxPath) return item;
+        const head = await this.headingOf(idxPath).catch(() => null);
+        return {
+          ...item,
+          indexName: path.basename(idxPath),
+          ...(head?.title ? { title: head.title } : {}),
+        };
+      }),
+    );
+    const ownTitle = text ? (leadingHeading(text)?.title ?? null) : null;
     return {
       folder: {
         id,
         name: path.basename(folder) || folder,
+        ...(ownTitle ? { title: ownTitle } : {}),
         path: folder,
       },
       index: indexItem ? { name: indexItem.name, path: indexItem.path } : null,
       text,
-      items,
+      items: enriched,
     };
   }
   // "Unify names" for a folder (and its subfolders with deep): for each
@@ -1311,22 +1344,31 @@ export class FileStore {
     const matched = matchingRoot(roots, targetPath);
     if (!matched) return null;
 
-    if (roots.length > 1) {
-      for (const root of roots) {
-        try {
-          const idx = await this.indexFile(root.path);
-          root.indexName = idx ? path.basename(idx) : null;
-        } catch {
-          root.indexName = null;
-        }
-      }
-    }
-
     const draftMap = new Map();
     if (Array.isArray(query.drafts)) {
       for (const item of query.drafts.slice(0, 200)) {
         if (typeof item?.path === "string" && typeof item?.text === "string")
           draftMap.set(pathKey(item.path), item.text);
+      }
+    }
+    const indexHeadingFor = async (idxPath) => {
+      if (!idxPath) return null;
+      const key = pathKey(idxPath);
+      if (draftMap.has(key))
+        return leadingHeading(draftMap.get(key))?.title ?? null;
+      return (await this.headingOf(idxPath).catch(() => null))?.title ?? null;
+    };
+
+    if (roots.length > 1) {
+      for (const root of roots) {
+        try {
+          const idx = await this.indexFile(root.path);
+          root.indexName = idx ? path.basename(idx) : null;
+          root.title = idx ? await indexHeadingFor(idx) : null;
+        } catch {
+          root.indexName = null;
+          root.title = null;
+        }
       }
     }
 
@@ -1347,20 +1389,52 @@ export class FileStore {
           ? draftMap.get(key)
           : await this.indexText(indexPath).catch(() => null);
       }
+      const listedNames = new Set();
+      if (typeof indexText === "string") {
+        for (const entry of parseIndex(indexText).entries) {
+          const n = childName(entry.href);
+          if (n && unescapeTitle(entry.text).trim())
+            listedNames.add(n.toLowerCase());
+        }
+      }
       const items = await this.list(info.id);
+      const children = await Promise.all(
+        items.map(async (item) => {
+          if (!item.directory) {
+            return {
+              id: null,
+              name: item.name,
+              path: item.path,
+              directory: false,
+              title: item.title ?? null,
+            };
+          }
+          const lower = item.name.toLowerCase();
+          let title = item.title ?? null;
+          let cIndexName = null;
+          if (!listedNames.has(lower) || !title) {
+            const cIdx = await this.indexFile(item.path).catch(() => null);
+            cIndexName = cIdx ? path.basename(cIdx) : null;
+            if (!listedNames.has(lower))
+              title = cIdx ? await indexHeadingFor(cIdx) : null;
+          }
+          return {
+            id: item.id,
+            name: item.name,
+            path: item.path,
+            directory: true,
+            indexName: cIndexName,
+            title,
+          };
+        }),
+      );
       chain.push({
         id: info.id,
         name: info.name,
         path: info.path,
         indexName,
         indexText,
-        children: items.map((item) => ({
-          id: item.directory ? item.id : null,
-          name: item.name,
-          path: item.path,
-          directory: Boolean(item.directory),
-          title: item.title ?? null,
-        })),
+        children,
       });
       if (i >= parts.length) break;
       current = path.join(current, parts[i]);

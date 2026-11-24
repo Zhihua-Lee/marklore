@@ -1,0 +1,85 @@
+{
+  "about": "A folder's single display name used across the path line, sibling menus, nested index rows, generated root contents and outline: the parent index entry's text when the parent index lists the folder (Markdown backslash escapes removed, trimmed); otherwise the leading level-1 heading of the folder's own index file when it has one; otherwise the folder name. input: { folderName, parentEntryText (string or null/omitted), indexText (string with '\\n' line endings, or null/omitted) }. expected: display name string.",
+  "cases": [
+    {
+      "name": "parent index entry text wins over own index heading and folder name",
+      "input": {
+        "folderName": "Part1",
+        "parentEntryText": "第一部分 基础",
+        "indexText": "# 另一个标题\n\n- [A](A.md)\n"
+      },
+      "expected": "第一部分 基础"
+    },
+    {
+      "name": "parent entry text unescapes Markdown escapes and trims spaces",
+      "input": {
+        "folderName": "Part1",
+        "parentEntryText": "  Part \\[1\\]\\\\A  ",
+        "indexText": "# Ignored\n"
+      },
+      "expected": "Part [1]\\A"
+    },
+    {
+      "name": "blank parent entry text falls back to own index leading heading",
+      "input": {
+        "folderName": "Sub",
+        "parentEntryText": "   ",
+        "indexText": "# 进阶专题\n\n- [Note](Note.md)\n"
+      },
+      "expected": "进阶专题"
+    },
+    {
+      "name": "no parent entry falls back to own index heading after front matter and bom",
+      "input": {
+        "folderName": "Chapter2",
+        "parentEntryText": null,
+        "indexText": "\ufeff---\ntitle: ign\n---\n\n#   **第二章** 极限 $x^2$  #\n"
+      },
+      "expected": "第二章 极限 x^2"
+    },
+    {
+      "name": "no parent entry supports setext level-1 heading in own index",
+      "input": {
+        "folderName": "Chapter3",
+        "parentEntryText": null,
+        "indexText": "第三章 导数\n====\n\n- [A](A.md)\n"
+      },
+      "expected": "第三章 导数"
+    },
+    {
+      "name": "no parent entry ignores level-2 heading and falls back to folder name",
+      "input": {
+        "folderName": "PlainDir",
+        "parentEntryText": null,
+        "indexText": "## 二级标题\n\n- [A](A.md)\n"
+      },
+      "expected": "PlainDir"
+    },
+    {
+      "name": "no parent entry ignores paragraph before heading and falls back to folder name",
+      "input": {
+        "folderName": "Notes",
+        "parentEntryText": null,
+        "indexText": "说明文字\n\n# 后来的标题\n"
+      },
+      "expected": "Notes"
+    },
+    {
+      "name": "empty heading in own index falls back to folder name",
+      "input": {
+        "folderName": "EmptyHead",
+        "indexText": "#   \n\n- [A](A.md)\n"
+      },
+      "expected": "EmptyHead"
+    },
+    {
+      "name": "missing parent entry and index falls back to folder name",
+      "input": {
+        "folderName": "Plain",
+        "parentEntryText": null,
+        "indexText": null
+      },
+      "expected": "Plain"
+    }
+  ]
+}

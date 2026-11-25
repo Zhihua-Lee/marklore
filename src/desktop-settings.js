@@ -4,7 +4,7 @@ import { t } from "../desktop/i18n.mjs";
 const setting = (name, note, control) =>
   `<div class="setting"><span class="setting-text">${name}${note}</span>${control}</div>`;
 export const desktopSettingsMarkup = `
-<fieldset id="desktop-settings" hidden><legend>${t("后台与系统")}</legend>
+<fieldset id="desktop-settings" hidden data-desktop-only data-available="false"><legend>${t("后台与系统")}</legend><p class="settings-page-desc">${t("检查更新、托盘驻留、开机启动与文件关联")}</p>
   ${setting(`<span>${t("版本")}</span>`, '<small id="update-status" role="status"></small>', `<span class="setting-actions"><button id="update-notes" hidden>${t("更新说明")}</button><button id="update-action">${t("检查更新")}</button></span>`)}
   ${setting(`<label for="check-updates">${t("启动时检查更新")}</label>`, `<small>${t("访问 GitHub 查看有没有新版本")}</small>`, '<input id="check-updates" type="checkbox" class="switch">')}
   ${setting(`<label for="close-to-tray">${t("关闭窗口后留在托盘")}</label>`, `<small>${t("后台保留标签与草稿")}</small>`, '<input id="close-to-tray" type="checkbox" class="switch">')}
@@ -27,7 +27,10 @@ export function wireDesktopSettings({
   if (!api?.desktopStatus) return () => {};
   const q = (s) => document.querySelector(s),
     section = q("#desktop-settings");
-  section.hidden = false;
+  section.dataset.available = "true";
+  q("#appearance")?.dispatchEvent(
+    new CustomEvent("folio:settings-availability"),
+  );
   let busy = false,
     status,
     revision = 0;

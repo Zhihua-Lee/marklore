@@ -97,6 +97,10 @@ test("an English system gets an English interface", async ({ page }) => {
   await expect(page.locator("#appearance")).toBeVisible();
   await expect(page.locator("#appearance-title")).toHaveText("Settings");
   expect(await chineseInChrome(page, "#appearance")).toEqual([]);
+  await page
+    .locator('.settings-nav button[data-section="settings-theme"]')
+    .click();
+  expect(await chineseInChrome(page, "#appearance")).toEqual([]);
   // Language names are shown in their own language.
   await expect(
     page.locator("#interface-language option[value='zh']"),
@@ -115,6 +119,9 @@ test("choosing Chinese in Aa reloads the interface in Chinese", async ({
   await boot(page);
   await expect(page.locator('.modes [data-mode="read"]')).toHaveText("Read");
   await page.locator("#weight").click();
+  await page
+    .locator('.settings-nav button[data-section="settings-theme"]')
+    .click();
   await Promise.all([
     page.waitForEvent("load"),
     page.locator("#interface-language").selectOption("zh"),

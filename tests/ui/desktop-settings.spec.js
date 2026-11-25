@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openSettingsPage } from "./fixtures.js";
 
 async function boot(page, state = {}) {
   await page.goto("/");
@@ -41,7 +42,7 @@ async function boot(page, state = {}) {
       formatsChanged: () => m.actions.push({ formatsChanged: true }),
     });
   }, state);
-  await page.locator("#weight").click();
+  await openSettingsPage(page, "desktop-settings");
   await expect(page.locator("#association-status")).not.toHaveText("");
 }
 

@@ -173,6 +173,9 @@ test("off registers no blocking wheel listener and keeps the native scrollbar", 
   await expect(page.locator(".reader-scrollbar")).toBeHidden();
   // Switching in Aa takes effect at once and back again.
   await page.locator("#weight").click();
+  await page
+    .locator('.settings-nav button[data-section="settings-navigation"]')
+    .click();
   await page.locator("#smooth-scroll").selectOption("all");
   expect(await wheel(page, { deltaY: 10 })).toBe(true);
   await expect(page.locator(".reader-scrollbar")).toBeVisible();

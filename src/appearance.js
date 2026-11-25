@@ -14,8 +14,10 @@ const nativeNames = [
 // the control on the right. Only the name labels the control.
 const row = (id, name, control, note = "") =>
   `<div class="setting"><span class="setting-text"><label for="${id}">${name}</label>${note ? `<small>${note}</small>` : ""}</span>${control}</div>`;
-// Settings: a fixed title bar (changes apply at once; close with × or Esc),
-// section links on the left, one scrolling pane on the right.
+const page = (id, title, desc, body) =>
+  `<fieldset id="${id}"><legend>${title}</legend><p class="settings-page-desc">${desc}</p>${body}</fieldset>`;
+// Settings: fixed-size dialog; each category opens as its own page beside the
+// search bar and nav links.
 const sections = [
   ["settings-reading", t("阅读排版")],
   ["settings-theme", t("主题与语言")],
@@ -32,26 +34,49 @@ export const appearanceMarkup = `
 <dialog id="appearance" aria-labelledby="appearance-title">
   <header class="settings-title"><h2 id="appearance-title">${t("设置")}</h2><button id="appearance-close" class="icon" aria-label="${t("关闭设置")}" title="${t("关闭 Esc")}">${icon("close")}</button></header>
   <div class="settings-body">
-  <nav class="settings-nav" aria-label="${t("设置分类")}">${sections.map(([id, label]) => `<button type="button" data-section="${id}">${label}</button>`).join("")}</nav>
+  <aside class="settings-sidebar">
+    <div class="settings-search-box">
+      <input id="settings-search" type="text" placeholder="${t("搜索设置")}" aria-label="${t("搜索设置")}" autocomplete="off" spellcheck="false">
+      <button id="settings-search-clear" type="button" class="icon" aria-label="${t("清空搜索")}" hidden>×</button>
+    </div>
+    <nav class="settings-nav" aria-label="${t("设置分类")}">${sections.map(([id, label]) => `<button type="button" data-section="${id}">${label}</button>`).join("")}</nav>
+  </aside>
   <div class="settings-pane">
-  <fieldset id="settings-reading"><legend>${t("阅读排版")}</legend>
+  <div id="settings-search-results" class="settings-search-results" hidden></div>
+  ${page(
+    "settings-reading",
+    t("阅读排版"),
+    t("正文字体、字号、浓度、排版风格与栏宽"),
+    `
     ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
     ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="300">${t("细 300")}</option><option value="350">${t("较细 350")}</option><option value="400">${t("标准 400")}</option><option value="450">${t("适中 450")}</option><option value="500">${t("较浓 500")}</option><option value="550">${t("浓 550")}</option></select>`, '<span id="weight-note"></span>')}
     ${row("reading-style", t("排版风格"), `<select id="reading-style"><option value="relaxed">${t("舒展")}</option><option value="standard">${t("标准（默认）")}</option><option value="compact">${t("紧凑")}</option></select>`, t("只改行高、段距和标题大小；栏宽在下面单独设置"))}
     ${row("column-width", t("正文栏宽"), `<select id="column-width"><option value="window">${t("随窗口")}</option><option value="measure">${t("按字数")}</option><option value="fixed">${t("固定（默认）")}</option></select>`)}
     ${row("cjk-emphasis", t("中文旁的粗体与斜体"), '<input id="cjk-emphasis" type="checkbox" class="switch">', t("**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号"))}
-    <div class="setting"><span class="setting-text"><span>${t("默认排版")}</span></span><span class="setting-actions"><button id="reset-typography" type="button">${t("恢复默认排版")}</button></span></div>
-  </fieldset>
-  <fieldset id="settings-theme"><legend>${t("主题与语言")}</legend>
+    <div class="setting"><span class="setting-text"><span>${t("默认排版")}</span></span><span class="setting-actions"><button id="reset-typography" type="button">${t("恢复默认排版")}</button></span></div>`,
+  )}
+  ${page(
+    "settings-theme",
+    t("主题与语言"),
+    t("浅深外观颜色与界面显示语言"),
+    `
     ${row("color-theme", t("界面颜色"), `<select id="color-theme"><option value="light">${t("浅色")}</option><option value="dark">${t("深色")}</option></select><button id="theme" class="icon" aria-label="${t("切换深浅主题")}" title="${t("切换深浅主题")}">${icon("theme")}</button>`)}
-    ${row("interface-language", t("界面语言"), `<select id="interface-language"><option value="auto">${t("跟随系统")}</option>${nativeNames.map(([value, name]) => `<option value="${value}">${name}</option>`).join("")}</select>`)}
-  </fieldset>
-  <fieldset id="settings-tables"><legend>${t("表格")}</legend>
+    ${row("interface-language", t("界面语言"), `<select id="interface-language"><option value="auto">${t("跟随系统")}</option>${nativeNames.map(([value, name]) => `<option value="${value}">${name}</option>`).join("")}</select>`)}`,
+  )}
+  ${page(
+    "settings-tables",
+    t("表格"),
+    t("笔记与导出中表格的边框样式和宽度"),
+    `
     ${row("table-style", t("表格风格"), `<select id="table-style"><option value="soft">${t("柔和卡片")}</option><option value="plain">${t("简洁横线")}</option><option value="grid">${t("经典网格")}</option></select>`)}
-    ${row("table-width", t("表格宽度"), `<select id="table-width"><option value="auto">${t("自适应内容")}</option><option value="full">${t("铺满正文")}</option></select>`)}
-  </fieldset>
-  <fieldset id="settings-layout"><legend>${t("布局与侧栏")}</legend>
+    ${row("table-width", t("表格宽度"), `<select id="table-width"><option value="auto">${t("自适应内容")}</option><option value="full">${t("铺满正文")}</option></select>`)}`,
+  )}
+  ${page(
+    "settings-layout",
+    t("布局与侧栏"),
+    t("文件夹与目录位置、排除目录和侧栏字号"),
+    `
     ${row("library-placement", t("文件夹浏览"), `<select id="library-placement"><option value="left">${t("左侧")}</option><option value="right">${t("右侧")}</option><option value="hidden">${t("隐藏")}</option></select>`)}
     ${row("outline-placement", t("本文目录"), `<select id="outline-placement"><option value="right">${t("右侧")}</option><option value="left">${t("左侧")}</option><option value="hidden">${t("隐藏")}</option></select>`)}
     ${row("outline-anchors", t("目录中的引用点"), `<select id="outline-anchors"><option value="off">${t("关")}</option><option value="referenced">${t("被引用的位置")}</option><option value="all">${t("所有锚点")}</option></select>`, t("定义、定理等用锚点标出的位置，以及被引用的次数"))}
@@ -60,30 +85,46 @@ export const appearanceMarkup = `
     <div class="layout-sample" aria-hidden="true"><span data-panel="library">${t("文件夹")}</span><span class="layout-page">${t("笔记")}</span><span data-panel="outline">${t("目录")}</span></div>
     ${row("navigation-size", t("文件夹与目录字号"), `<select id="navigation-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option><option value="14">14 px</option></select>`)}
     ${row("group-counts", t("折叠的分组显示标签数"), '<input id="group-counts" type="checkbox" class="switch">', t("关闭时只在悬停提示中显示"))}
-    ${row("tab-size", t("标签页字号"), `<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select>`)}
-  </fieldset>
-  <fieldset id="settings-navigation"><legend>${t("导航与滚动")}</legend>
+    ${row("tab-size", t("标签页字号"), `<select id="tab-size"><option value="10">10 px</option><option value="11">11 px</option><option value="12">12 px</option><option value="13">13 px</option></select>`)}`,
+  )}
+  ${page(
+    "settings-navigation",
+    t("导航与滚动"),
+    t("跳转范围、路径导航、链接预览与滚动方式"),
+    `
     ${row("navigation-scope", t("导航范围"), `<select id="navigation-scope"><option value="all">${t("全部笔记")}</option><option value="current">${t("仅当前笔记")}</option></select>`)}
     ${row("show-breadcrumb", t("显示路径导航"), '<input id="show-breadcrumb" type="checkbox" class="switch">', t("在笔记与目录页上方显示所属笔记库与层级路径"))}
     ${row("history-buttons", t("前进 / 后退按钮"), `<select id="history-buttons"><option value="hidden">${t("隐藏")}</option><option value="visible">${t("显示")}</option></select>`, t("隐藏后仍可用鼠标侧键或 Alt+← / →"))}
     ${row("link-preview-mode", t("链接预览"), `<select id="link-preview-mode"><option value="hover">${t("悬停（克制，默认）")}</option><option value="ctrl">${t("按住 Ctrl 悬停")}</option><option value="off">${t("关")}</option></select>`, t("指针停留片刻才打开；按着鼠标或刚选过文字时不打开"))}
-    ${row("smooth-scroll", t("平滑滚动"), `<select id="smooth-scroll"><option value="off">${t("关")}</option><option value="touchpad">${t("仅触控板")}</option><option value="all">${t("触控板、滚轮与滚动条")}</option></select>`, t("速度更均匀，跟手稍慢"))}
-  </fieldset>
-  <fieldset id="settings-export"><legend>${t("导出")}</legend>
-    ${row("export-toc", t("HTML 附带目录"), '<input id="export-toc" type="checkbox" class="switch">', t("在页面一侧列出标题，点击跳转；PDF 总是带书签"))}
-  </fieldset>
-  <fieldset id="settings-editing"><legend>${t("编辑")}</legend>
+    ${row("smooth-scroll", t("平滑滚动"), `<select id="smooth-scroll"><option value="off">${t("关")}</option><option value="touchpad">${t("仅触控板")}</option><option value="all">${t("触控板、滚轮与滚动条")}</option></select>`, t("速度更均匀，跟手稍慢"))}`,
+  )}
+  ${page(
+    "settings-export",
+    t("导出"),
+    t("导出独立 HTML 时的目录选项"),
+    `
+    ${row("export-toc", t("HTML 附带目录"), '<input id="export-toc" type="checkbox" class="switch">', t("在页面一侧列出标题，点击跳转；PDF 总是带书签"))}`,
+  )}
+  ${page(
+    "settings-editing",
+    t("编辑"),
+    t("所见即所得编辑、源码栏与新笔记属性模板"),
+    `
     ${row("rich-edit", t("在渲染后的正文里编辑"), '<input id="rich-edit" type="checkbox" class="switch">', t("编辑模式里直接在排好版的笔记上打字；公式、表格和链接都就地编辑"))}
     ${row("literal-typing", t("字面输入（自动转义）"), '<input id="literal-typing" type="checkbox" class="switch">', t("打出的 Markdown 符号按原样显示，写入文件时自动加反斜杠；关闭时像 Typora，打完 **粗体** 就变粗"))}
     ${row("edit-split", t("编辑模式显示源码栏"), '<input id="edit-split" type="checkbox" class="switch">', t("在正文旁同时显示 Markdown 源码，两边同步"))}
     ${row("new-note-properties", t("新笔记自带属性"), '<input id="new-note-properties" type="checkbox" class="switch">', t("在 Marklore 里新建的笔记按下面的模板写好属性"))}
     <div class="setting setting-list"><span class="setting-text"><label for="property-template">${t("默认属性")}</label><small>${t("每行一项“名称: 值”；{title} 为文件名，{date}、{time}、{datetime} 为当时的日期和时间。右键笔记“添加默认属性”也用它，已有的属性不变")}</small></span></div>
     <textarea id="property-template" class="property-template" rows="4" spellcheck="false"></textarea>
-    ${row("stamp-modified", t("保存时更新修改时间"), '<input id="stamp-modified" type="checkbox" class="switch">', t("只改笔记已有的 modified 或 updated，沿用它原来的写法；不添加"))}
-  </fieldset>
-  <fieldset id="settings-annotation"><legend>${t("批注")}</legend>
-    ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}
-  </fieldset>
+    ${row("stamp-modified", t("保存时更新修改时间"), '<input id="stamp-modified" type="checkbox" class="switch">', t("只改笔记已有的 modified 或 updated，沿用它原来的写法；不添加"))}`,
+  )}
+  ${page(
+    "settings-annotation",
+    t("批注"),
+    t("阅读模式下划选文字的格式标注"),
+    `
+    ${row("reading-format", t("阅读模式中的格式栏"), '<input id="reading-format" type="checkbox" class="switch">', t("划选文字即可高亮、标色和加粗；Alt+双击跳到源码"))}`,
+  )}
 ${aiSettingsMarkup}
 ${desktopSettingsMarkup}
   </div>
@@ -235,60 +276,261 @@ export function applyAppearance(settings, typoLab = null) {
 }
 
 export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
+  const PAGE_STORAGE_KEY = "folio.settingsPage";
+  const DEFAULT_PAGE = "settings-reading";
   const dialog = $("#appearance"),
+    nav = dialog.querySelector(".settings-nav"),
     pane = dialog.querySelector(".settings-pane"),
-    links = [...dialog.querySelectorAll(".settings-nav button")];
-  const target = (link) => document.getElementById(link.dataset.section);
-  // A link the reader clicked stays current while its section is in view,
-  // although short sections near the end cannot scroll to the top; the
-  // reader's own scrolling hands the choice back to the position.
-  let chosen = null;
-  // The link of the section at the top of the pane is marked current.
-  function mark() {
-    const top = pane.getBoundingClientRect().top + 24;
-    let current = links.find((link) => !link.hidden);
-    for (const link of links)
-      if (!link.hidden && target(link).getBoundingClientRect().top <= top)
-        current = link;
-    // At the very end, the last section is current even if it is short.
-    if (pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2)
-      current = links.filter((link) => !link.hidden).at(-1);
-    if (chosen) {
-      const box = target(chosen).getBoundingClientRect(),
-        view = pane.getBoundingClientRect();
-      if (box.top < view.bottom && box.bottom > view.top) current = chosen;
+    links = [...nav.querySelectorAll("button")],
+    pages = [...pane.querySelectorAll(":scope > fieldset")],
+    searchInput = $("#settings-search"),
+    clearSearchBtn = $("#settings-search-clear"),
+    resultsEl = $("#settings-search-results");
+  const target = (id) => document.getElementById(id);
+  const isAvailable = (fs) =>
+    Boolean(
+      fs &&
+      (!fs.hasAttribute("data-desktop-only") ||
+        fs.dataset.available === "true"),
+    );
+  const visibleLinks = () => links.filter((link) => !link.hidden);
+  const readSavedPage = () => {
+    try {
+      return sessionStorage.getItem(PAGE_STORAGE_KEY) || "";
+    } catch {
+      return "";
     }
+  };
+  const writeSavedPage = (id) => {
+    try {
+      sessionStorage.setItem(PAGE_STORAGE_KEY, id);
+    } catch {}
+  };
+
+  let activePageId = readSavedPage() || DEFAULT_PAGE;
+  let highlightTimer = 0;
+
+  function syncAvailability() {
     for (const link of links)
-      link.setAttribute("aria-current", String(link === current));
+      link.hidden = !isAvailable(target(link.dataset.section));
+    if (!isAvailable(target(activePageId))) activePageId = DEFAULT_PAGE;
   }
-  function open() {
-    // Background & system exists only in the desktop app.
-    for (const link of links) link.hidden = target(link).hidden;
+
+  function applyCurrentPage({ scrollTop = true } = {}) {
+    if (!isAvailable(target(activePageId))) activePageId = DEFAULT_PAGE;
+    const searching = Boolean(searchInput.value.trim());
+    for (const fs of pages) fs.hidden = searching || fs.id !== activePageId;
+    resultsEl.hidden = !searching;
+    for (const link of links) {
+      if (link.dataset.section === activePageId)
+        link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+    }
+    if (scrollTop) pane.scrollTop = 0;
+  }
+
+  function selectPage(id, { persist = true, scrollTop = true } = {}) {
+    syncAvailability();
+    activePageId = isAvailable(target(id)) ? id : DEFAULT_PAGE;
+    if (persist) writeSavedPage(activePageId);
+    applyCurrentPage({ scrollTop });
+  }
+
+  function focusPageControl(id) {
+    const fs = target(id),
+      ctrl = fs?.querySelector(
+        "select:not([disabled]), input:not([disabled]), textarea:not([disabled]), button:not([disabled])",
+      );
+    (ctrl || links.find((l) => l.dataset.section === id))?.focus();
+  }
+
+  function clearSearch({ restore = true } = {}) {
+    searchInput.value = "";
+    clearSearchBtn.hidden = true;
+    resultsEl.replaceChildren();
+    resultsEl.hidden = true;
+    if (restore) applyCurrentPage({ scrollTop: true });
+  }
+
+  function rowText(settingRow) {
+    const textWrap = settingRow.querySelector(".setting-text");
+    if (!textWrap) return null;
+    const nameEl =
+      textWrap.querySelector("label") ||
+      textWrap.querySelector(":scope > span:first-child");
+    const smallEl = textWrap.querySelector("small");
+    const name = (nameEl?.textContent || "").trim();
+    const note = (smallEl?.textContent || "").trim();
+    if (!name && !note) return null;
+    return { name: name || note, note: name ? note : "" };
+  }
+
+  function highlightRow(settingRow) {
+    for (const el of dialog.querySelectorAll(".setting-highlight"))
+      el.classList.remove("setting-highlight");
+    clearTimeout(highlightTimer);
+    if (!settingRow) return;
+    settingRow.scrollIntoView({ block: "nearest" });
+    void settingRow.offsetWidth;
+    settingRow.classList.add("setting-highlight");
+    const focusable = settingRow.querySelector(
+      "select:not([disabled]), input:not([disabled]), button:not([disabled]), textarea:not([disabled])",
+    );
+    focusable?.focus();
+    highlightTimer = setTimeout(
+      () => settingRow.classList.remove("setting-highlight"),
+      1600,
+    );
+  }
+
+  function renderSearch() {
+    const raw = searchInput.value.trim();
+    clearSearchBtn.hidden = !raw;
+    if (!raw) {
+      resultsEl.replaceChildren();
+      applyCurrentPage({ scrollTop: true });
+      return;
+    }
+    const query = raw.toLowerCase();
+    syncAvailability();
+    for (const fs of pages) fs.hidden = true;
+    resultsEl.replaceChildren();
+    let total = 0;
+    for (const fs of pages) {
+      if (!isAvailable(fs)) continue;
+      const matches = [];
+      for (const settingRow of fs.querySelectorAll(".setting")) {
+        if (settingRow.hidden) continue;
+        const info = rowText(settingRow);
+        if (!info) continue;
+        if (
+          info.name.toLowerCase().includes(query) ||
+          info.note.toLowerCase().includes(query)
+        )
+          matches.push({ settingRow, ...info });
+      }
+      if (!matches.length) continue;
+      const group = document.createElement("section");
+      group.className = "settings-search-group";
+      const heading = document.createElement("h3");
+      heading.className = "settings-search-group-title";
+      heading.textContent = (
+        fs.querySelector("legend")?.textContent || ""
+      ).trim();
+      const list = document.createElement("ul");
+      list.className = "settings-search-list";
+      for (const hit of matches) {
+        total++;
+        const item = document.createElement("li");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "settings-search-item";
+        const title = document.createElement("span");
+        title.textContent = hit.name;
+        button.append(title);
+        if (hit.note) {
+          const small = document.createElement("small");
+          small.textContent = hit.note;
+          button.append(small);
+        }
+        button.onclick = () => {
+          clearSearch({ restore: false });
+          selectPage(fs.id);
+          highlightRow(hit.settingRow);
+        };
+        item.append(button);
+        list.append(item);
+      }
+      group.append(heading, list);
+      resultsEl.append(group);
+    }
+    if (!total) {
+      const empty = document.createElement("p");
+      empty.className = "settings-search-empty";
+      empty.textContent = t("没有找到匹配的设置");
+      resultsEl.append(empty);
+    }
+    resultsEl.hidden = false;
+    pane.scrollTop = 0;
+  }
+
+  function open(sectionId) {
+    syncAvailability();
+    const saved = sectionId || readSavedPage() || activePageId;
+    clearSearch({ restore: false });
+    selectPage(saved, { persist: Boolean(sectionId), scrollTop: true });
     if (!dialog.open) dialog.showModal();
-    mark();
   }
+
+  syncAvailability();
+  applyCurrentPage({ scrollTop: false });
+
   for (const link of links)
     link.onclick = () => {
-      chosen = link;
-      pane.scrollTo({ top: target(link).offsetTop - 12 });
-      mark();
+      clearSearch({ restore: false });
+      selectPage(link.dataset.section);
     };
-  pane.addEventListener("scroll", mark, { passive: true });
-  for (const event of ["wheel", "keydown", "pointerdown", "touchstart"])
-    pane.addEventListener(event, () => (chosen = null), { passive: true });
+
+  nav.addEventListener("keydown", (event) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
+    const shown = visibleLinks();
+    if (!shown.length) return;
+    const focused = document.activeElement;
+    const currentIdx = shown.indexOf(focused);
+    const delta = event.key === "ArrowDown" ? 1 : -1;
+    const nextIdx =
+      currentIdx === -1
+        ? delta > 0
+          ? 0
+          : shown.length - 1
+        : (currentIdx + delta + shown.length) % shown.length;
+    event.preventDefault();
+    shown[nextIdx].focus();
+  });
+
+  dialog.addEventListener(
+    "keydown",
+    (event) => {
+      if (
+        event.ctrlKey &&
+        !event.altKey &&
+        !event.shiftKey &&
+        !event.metaKey &&
+        (event.key === "PageDown" || event.key === "PageUp")
+      ) {
+        const shown = visibleLinks();
+        if (!shown.length) return;
+        event.preventDefault();
+        const idx = shown.findIndex((l) => l.dataset.section === activePageId);
+        const delta = event.key === "PageDown" ? 1 : -1;
+        const base = idx === -1 ? 0 : idx;
+        const next = shown[(base + delta + shown.length) % shown.length];
+        const inNav = Boolean(document.activeElement?.closest(".settings-nav"));
+        clearSearch({ restore: false });
+        selectPage(next.dataset.section);
+        if (inNav) next.focus();
+        else focusPageControl(activePageId);
+      }
+    },
+    { capture: true },
+  );
+
+  searchInput.addEventListener("input", renderSearch);
+  clearSearchBtn.onclick = () => {
+    clearSearch();
+    searchInput.focus();
+  };
+
   $("#weight").onclick = () => {
-    chosen = null;
     open();
-    pane.scrollTop = 0;
-    mark();
-    $("#typeface").focus();
+    focusPageControl(activePageId);
   };
   dialog.addEventListener("folio:open-section", (event) => {
-    open();
-    target({ dataset: { section: event.detail } })?.scrollIntoView({
-      block: "start",
-    });
-    mark();
+    open(event.detail);
+  });
+  dialog.addEventListener("folio:settings-availability", () => {
+    syncAvailability();
+    applyCurrentPage({ scrollTop: false });
   });
   $("#appearance-close").onclick = () => dialog.close();
   $("#typeface").onchange = (event) => change({ typeface: event.target.value });

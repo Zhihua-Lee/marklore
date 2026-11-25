@@ -163,3 +163,16 @@ function harness(api) {
 export async function installFolio(page) {
   await page.addInitScript(harness, FOLIO_API);
 }
+
+export async function openSettingsPage(page, sectionId) {
+  if (!(await page.locator("#appearance").evaluate((d) => d.open))) {
+    await page.locator("#weight").click();
+  }
+  await page.locator("#appearance").waitFor({ state: "visible" });
+  if (sectionId) {
+    await page
+      .locator(`.settings-nav button[data-section="${sectionId}"]`)
+      .click();
+    await page.locator("#" + sectionId).waitFor({ state: "visible" });
+  }
+}

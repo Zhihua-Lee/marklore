@@ -94,7 +94,28 @@ export default {
   // Appearance & layout (src/appearance.js)
   关闭外观设置: "Close appearance settings",
   完成: "Done",
+  搜索设置: "Search settings",
+  清空搜索: "Clear search",
+  没有找到匹配的设置: "No matching settings",
   阅读排版: "Reading typography",
+  "正文字体、字号、浓度、排版风格与栏宽":
+    "Body font, text size, weight, reading style, and column width",
+  浅深外观颜色与界面显示语言: "Light or dark appearance and interface language",
+  笔记与导出中表格的边框样式和宽度:
+    "Border style and width for tables in notes and exports",
+  "文件夹与目录位置、排除目录和侧栏字号":
+    "Sidebar and outline placement, excluded folders, and chrome sizes",
+  "跳转范围、路径导航、链接预览与滚动方式":
+    "Navigation scope, breadcrumbs, hover previews, and scrolling",
+  "导出独立 HTML 时的目录选项":
+    "Table of contents option for standalone HTML export",
+  "所见即所得编辑、源码栏与新笔记属性模板":
+    "Rich editing, split source pane, and default note properties",
+  阅读模式下划选文字的格式标注: "Inline formatting toolbar while reading",
+  "管理授权读取的笔记库与 MCP 助手连接":
+    "Authorize notebook folders and connect MCP assistants",
+  "检查更新、托盘驻留、开机启动与文件关联":
+    "Updates, tray behaviour, startup, and file associations",
   正文字体: "Body font",
   "Literata + 思源黑体（内置）": "Literata + Noto Sans SC (built-in)",
   "思源黑体（内置）": "Noto Sans SC (built-in)",

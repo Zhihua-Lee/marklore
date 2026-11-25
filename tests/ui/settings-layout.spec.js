@@ -34,33 +34,35 @@ test("settings: section links, a fixed title bar and no sideways scrolling", asy
     pane = dialog.locator(".settings-pane"),
     close = page.getByRole("button", { name: "关闭设置" });
   await expect(
-    dialog.locator('.settings-nav [aria-current="true"]'),
+    dialog.locator('.settings-nav [aria-current="page"]'),
   ).toHaveText("阅读排版");
+  await expect(dialog.locator("#settings-reading")).toBeVisible();
+  await expect(dialog.locator("#settings-navigation")).toBeHidden();
   const titleTop = (await close.boundingBox()).y;
 
   await dialog.getByRole("button", { name: "导航与滚动" }).click();
   await expect(
-    dialog.locator('.settings-nav [aria-current="true"]'),
+    dialog.locator('.settings-nav [aria-current="page"]'),
   ).toHaveText("导航与滚动");
-  // The section starts near the top of the pane, or the pane is scrolled to
-  // its end (the last section can be too short to reach the top).
+  await expect(dialog.locator("#settings-navigation")).toBeVisible();
+  await expect(dialog.locator("#settings-reading")).toBeHidden();
+  expect(await pane.evaluate((el) => el.scrollTop)).toBe(0);
   const paneTop = (await pane.boundingBox()).y,
-    sectionTop = (await dialog.locator("#settings-navigation").boundingBox()).y,
-    atEnd = await pane.evaluate(
-      (el) => el.scrollTop + el.clientHeight >= el.scrollHeight - 2,
-    );
-  expect(atEnd || Math.abs(sectionTop - paneTop) < 40).toBe(true);
+    sectionTop = (await dialog.locator("#settings-navigation").boundingBox()).y;
+  expect(Math.abs(sectionTop - paneTop)).toBeLessThan(40);
   expect(Math.abs((await close.boundingBox()).y - titleTop)).toBeLessThan(1);
   await expect(dialog.locator("#smooth-scroll")).toBeInViewport();
   // Controls fit: the pane never scrolls sideways.
   expect(
     await pane.evaluate((el) => el.scrollWidth - el.clientWidth),
   ).toBeLessThanOrEqual(1);
-  // Scrolling back marks the first section again.
-  await pane.evaluate((el) => (el.scrollTop = 0));
+  // Switching back marks the first page again.
+  await dialog.getByRole("button", { name: "阅读排版" }).click();
   await expect(
-    dialog.locator('.settings-nav [aria-current="true"]'),
+    dialog.locator('.settings-nav [aria-current="page"]'),
   ).toHaveText("阅读排版");
+  await expect(dialog.locator("#settings-reading")).toBeVisible();
+  await expect(dialog.locator("#settings-navigation")).toBeHidden();
   // The desktop-only section is left out of the browser demo.
   await expect(dialog.getByRole("button", { name: "后台与系统" })).toBeHidden();
   await close.click();

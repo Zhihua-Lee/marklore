@@ -65,9 +65,14 @@ async function boot(page, text = typographyText, folder = false) {
   await expect(page.locator("#content h1, #content h2").first()).toBeVisible();
   await page.evaluate(() => document.fonts.ready);
 }
-async function openAppearance(page) {
+async function openAppearance(page, section) {
   await page.locator("#weight").click();
   await expect(page.locator("#appearance")).toBeVisible();
+  if (section) {
+    await page
+      .locator(`.settings-nav button[data-section="${section}"]`)
+      .click();
+  }
 }
 async function closeAppearance(page) {
   await page.locator("#appearance-close").click();
@@ -88,7 +93,7 @@ test("current folder follows the note, navigation typography persists and reopen
   await page.locator("#sidebar-toggle").click();
   await expect(file).toBeVisible();
   expect(await page.evaluate(() => window.mock.listCalls)).toBe(initial);
-  await openAppearance(page);
+  await openAppearance(page, "settings-layout");
   await page.locator("#navigation-size").selectOption("11");
   await page.locator("#tab-size").selectOption("10");
   await closeAppearance(page);
@@ -670,6 +675,9 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await page.locator("#reading-style").selectOption("compact");
   await page.locator("#column-width").selectOption("window");
   for (let i = 0; i < 3; i++) await page.locator("#zoom-out").click();
+  await page
+    .locator('.settings-nav button[data-section="settings-export"]')
+    .click();
   await page.locator("#export-toc").uncheck();
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.settings))
@@ -682,7 +690,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
       exportToc: false,
     });
   await page.reload();
-  await openAppearance(page);
+  await openAppearance(page, "settings-reading");
   await expect(page.locator("#typeface")).toHaveValue("classic");
   await page.locator("#reset-typography").click();
   await expect(page.locator("#typeface")).toHaveValue("literata");
@@ -690,6 +698,9 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await expect(page.locator("#reading-style")).toHaveValue("standard");
   await expect(page.locator("#column-width")).toHaveValue("fixed");
   await expect(page.locator("#zoom-reset")).toHaveText("100%");
+  await page
+    .locator('.settings-nav button[data-section="settings-export"]')
+    .click();
   await expect(page.locator("#export-toc")).not.toBeChecked();
   await closeAppearance(page);
   await expect(page.locator("#content p").first()).toHaveCSS(
@@ -729,7 +740,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
     "450",
   );
   await page.evaluate(() => document.fonts.ready);
-  await openAppearance(page);
+  await openAppearance(page, "settings-reading");
   await page.locator("#text-weight").selectOption("400");
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
@@ -751,7 +762,7 @@ test("panel toggles follow the panel side and remain reachable when panels are h
   await expect(
     page.locator("#panel-controls-right #outline-toggle"),
   ).toBeVisible();
-  await openAppearance(page);
+  await openAppearance(page, "settings-layout");
   await page.locator("#library-placement").selectOption("right");
   await page.locator("#outline-placement").selectOption("left");
   await closeAppearance(page);
@@ -909,6 +920,9 @@ test("settings keep zoom while the adjacent theme button is directly accessible"
   await expect(page.locator("#zoom-reset")).toHaveText("50%");
   await page.locator("#zoom-reset").click();
   await expect(page.locator("#zoom-reset")).toHaveText("100%");
+  await page
+    .locator('.settings-nav button[data-section="settings-theme"]')
+    .click();
   await page.locator("#color-theme").selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect(page.locator("#color-theme")).toHaveValue("dark");

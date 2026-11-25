@@ -412,6 +412,9 @@ test("Ctrl mode opens a preview only while Ctrl is held; off never", async ({
   await expect(card).toBeHidden();
   // Off: neither the pointer, nor Ctrl, nor keyboard focus.
   await page.locator("#weight").click();
+  await page
+    .locator('.settings-nav button[data-section="settings-navigation"]')
+    .click();
   await page.locator("#link-preview-mode").selectOption("off");
   await page.getByRole("button", { name: "关闭设置" }).click();
   await fast.hover();

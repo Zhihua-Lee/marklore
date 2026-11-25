@@ -8,7 +8,7 @@ import { t } from "../desktop/i18n.mjs";
 // assistant takes the server's setup as JSON. Desktop only (the browser
 // preview has no server).
 export const aiSettingsMarkup = `
-<fieldset id="settings-ai" hidden><legend>${t("AI 助手")}</legend>
+<fieldset id="settings-ai" hidden data-desktop-only data-available="false"><legend>${t("AI 助手")}</legend><p class="settings-page-desc">${t("管理授权读取的笔记库与 MCP 助手连接")}</p>
   <div class="setting setting-list"><span class="setting-text"><span id="ai-libraries-label">${t("AI 可以读取的笔记库")}</span><small>${t("AI 助手通过 MCP 读取勾选的笔记库并提出修改；修改要你在 Marklore 中预览并接受才会写入")}</small></span></div>
   <ul id="ai-libraries" class="ai-libraries" aria-labelledby="ai-libraries-label"></ul>
   <div class="setting setting-list"><span class="setting-text"><span id="ai-connect-label">${t("连接 AI 助手")}</span><small>${t("连接后，它新开的会话就能读取勾选的笔记库、提出修改、收到你的标记")}</small></span></div>
@@ -43,8 +43,12 @@ function statusText(c) {
 
 export function wireAiSettings({ api, getRoots, getSettings, change, report }) {
   if (!api?.aiSetup) return () => {};
-  const $ = (s) => document.querySelector(s);
-  $("#settings-ai").hidden = false;
+  const $ = (s) => document.querySelector(s),
+    section = $("#settings-ai");
+  section.dataset.available = "true";
+  $("#appearance")?.dispatchEvent(
+    new CustomEvent("folio:settings-availability"),
+  );
   let setup = null;
   const key = (p) => p.replace(/[\\/]+$/, "").toLowerCase();
   function paint() {

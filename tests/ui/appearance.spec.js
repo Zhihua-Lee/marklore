@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { installFolio } from "./fixtures.js";
+import { installFolio, openSettingsPage } from "./fixtures.js";
 
 test("outline renders heading math safely and source edits preserve navigation", async ({
   page,
@@ -132,8 +132,8 @@ async function boot(page, { count = 1, text = mathText } = {}) {
   await page.evaluate(() => document.fonts.ready);
 }
 
-async function appearance(page) {
-  await page.locator("#weight").click();
+async function appearance(page, section = "settings-reading") {
+  await openSettingsPage(page, section);
   await expect(page.getByRole("dialog", { name: "设置" })).toBeVisible();
 }
 async function closeAppearance(page) {
@@ -201,7 +201,7 @@ test("panels stack, swap, hide and restore their saved locations", async ({
   page,
 }) => {
   await boot(page);
-  await appearance(page);
+  await appearance(page, "settings-layout");
   await page.locator("#outline-placement").selectOption("left");
   await expect(page.locator("#sidebar")).toHaveAttribute(
     "data-stacked",
@@ -514,7 +514,7 @@ test("theme and layout retain article nodes and semantic reading position", asyn
             32,
         ),
       );
-  await appearance(page);
+  await appearance(page, "settings-theme");
   await page.locator("#color-theme").selectOption("dark");
   await closeAppearance(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
@@ -530,7 +530,7 @@ test("theme and layout retain article nodes and semantic reading position", asyn
   await page.getByRole("button", { name: "切换本文目录" }).click();
   await expect(page.locator("#right-sidebar")).toBeHidden();
   await expect.poll(delta).toBeLessThan(100);
-  await appearance(page);
+  await appearance(page, "settings-layout");
   await page.locator("#library-placement").selectOption("right");
   await closeAppearance(page);
   await expect(page.locator("#right-sidebar > #library-panel")).toBeVisible();

@@ -1060,6 +1060,9 @@ test("note breadcrumb lists nested parent pages, preserves Read/Edit title align
 
   // Setting in 设置 → 导航与滚动 hides and restores breadcrumb.
   await page.locator("#weight").click();
+  await page
+    .locator('.settings-nav button[data-section="settings-navigation"]')
+    .click();
   await page.locator("#settings-navigation #show-breadcrumb").click();
   await page.locator("#appearance-close").click();
   await expect(page.locator("#breadcrumb-rich")).toBeHidden();
@@ -1067,6 +1070,9 @@ test("note breadcrumb lists nested parent pages, preserves Read/Edit title align
   await expect(page.locator("#breadcrumb-read")).toBeHidden();
 
   await page.locator("#weight").click();
+  await page
+    .locator('.settings-nav button[data-section="settings-navigation"]')
+    .click();
   await page.locator("#settings-navigation #show-breadcrumb").click();
   await page.locator("#appearance-close").click();
   await expect(page.locator("#breadcrumb-read")).toBeVisible();

@@ -63,6 +63,9 @@ test("the HTML contents switch is on by default and saved", async ({
   });
   await page.goto("/");
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-export"]')
+    .click();
   const toggle = page.getByRole("checkbox", { name: "HTML 附带目录" });
   await expect(toggle).toBeChecked();
   await toggle.uncheck();

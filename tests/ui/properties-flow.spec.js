@@ -182,6 +182,9 @@ test("new notes start with the default properties only when asked", async ({
   );
   // Off (the default): a new note is empty.
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-editing"]')
+    .click();
   await expect(page.locator("#new-note-properties")).toBeChecked();
   await page.locator("#new-note-properties").uncheck();
   await page.getByRole("button", { name: "关闭设置" }).click();
@@ -264,6 +267,9 @@ test("the modified time is kept on save only when asked and only if there", asyn
   // On: an edit, saved, carries the time, written as it was (OneNote's
   // seven decimals and offset); `updated`, not a date, stays.
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-editing"]')
+    .click();
   await page.locator("#stamp-modified").check();
   await page.getByRole("button", { name: "关闭设置" }).click();
   await caretAfter(page, "Text.1");

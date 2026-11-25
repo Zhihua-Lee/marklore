@@ -202,6 +202,9 @@ test("an anchor before the first section is listed at the top, at the top level"
   await boot(page);
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await page
+    .locator('.settings-nav button[data-section="settings-layout"]')
+    .click();
+  await page
     .getByRole("combobox", { name: "目录中的引用点" })
     .selectOption("all");
   await page.getByRole("button", { name: "关闭设置" }).click();

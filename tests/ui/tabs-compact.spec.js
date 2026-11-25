@@ -135,6 +135,9 @@ test("a group's label is a pill as wide as its name; a count only if chosen", as
   await expect(folded).toHaveText("TA");
   await expect(folded).toHaveAttribute("title", /2 篇/);
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-layout"]')
+    .click();
   await page.locator("#group-counts").check();
   await expect(folded).toHaveText("TA · 2");
   await page.locator("#group-counts").uncheck();

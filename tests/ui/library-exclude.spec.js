@@ -74,6 +74,9 @@ test("a folder is left out of search by right-click, shown dimmed, restored in S
 
   // Settings lists it; restoring brings it back.
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-layout"]')
+    .click();
   const list = page.locator("#excluded-folders");
   await expect(list.locator("li[data-path]")).toHaveText(["Z:/home/Runs恢复"]);
   await list

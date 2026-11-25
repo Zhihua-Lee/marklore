@@ -165,6 +165,9 @@ test("outline: anchored blocks and counts by setting", async ({ page }) => {
   await expect(labels).toHaveText(["Definition（Fourier transform）"]);
 
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-layout"]')
+    .click();
   const choice = page.getByRole("combobox", { name: "目录中的引用点" });
   await expect(choice).toHaveValue("referenced");
   await choice.selectOption("off");

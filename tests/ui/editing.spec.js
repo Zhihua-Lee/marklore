@@ -215,6 +215,9 @@ test("table styles, adaptive measure and motion-free hover remain selectable and
   await page.screenshot({ path: ".local/table-dark-hover-v018.png" });
   await page.locator("#theme").click();
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-tables"]')
+    .click();
   await page.getByRole("combobox", { name: "表格风格" }).selectOption("grid");
   await page.getByRole("combobox", { name: "表格宽度" }).selectOption("full");
   await page.getByRole("button", { name: "关闭设置" }).click();
@@ -233,6 +236,9 @@ test("table styles, adaptive measure and motion-free hover remain selectable and
   await page.reload();
   await expect(wrapper).toHaveCSS("border-radius", "0px");
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-tables"]')
+    .click();
   await page.getByRole("combobox", { name: "表格风格" }).selectOption("plain");
   await page.getByRole("button", { name: "关闭设置" }).click();
   await expect(page.locator("#content td").first()).toHaveCSS(

@@ -60,6 +60,9 @@ test("Read mode marks up the page only once its format bar is turned on", async 
   await expect(tools(page)).toBeHidden();
 
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-annotation"]')
+    .click();
   const option = page.getByRole("checkbox", { name: "阅读模式中的格式栏" });
   await expect(option).not.toBeChecked();
   await option.check();

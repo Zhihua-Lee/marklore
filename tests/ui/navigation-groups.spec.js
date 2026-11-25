@@ -74,6 +74,9 @@ async function section(page, number) {
 }
 async function appearance(page, name, value) {
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-navigation"]')
+    .click();
   await page.getByRole("combobox", { name, exact: true }).selectOption(value);
   await page.getByRole("button", { name: "关闭设置" }).click();
 }

@@ -48,7 +48,7 @@ export const appearanceMarkup = `
     t("阅读排版"),
     t("正文字体、字号、浓度、排版风格与栏宽"),
     `
-    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="yahei">${t("微软雅黑（系统）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
+    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源宋体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="yahei">${t("微软雅黑（系统）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
     ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="300">${t("细 300")}</option><option value="350">${t("较细 350")}</option><option value="400">${t("标准 400")}</option><option value="450">${t("适中 450")}</option><option value="500">${t("较浓 500")}</option><option value="550">${t("浓 550")}</option></select>`, '<span id="weight-note"></span>')}
     ${row("reading-style", t("排版风格"), `<select id="reading-style"><option value="relaxed">${t("舒展")}</option><option value="standard">${t("标准（默认）")}</option><option value="compact">${t("紧凑")}</option></select>`, t("只改行高、段距和标题大小；栏宽在下面单独设置"))}

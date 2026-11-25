@@ -598,6 +598,30 @@ test("text antialiasing row appears only in desktop builds and yahei HTML export
   expect(exported.css).not.toMatch(/noto-sans-sc/i);
   expect(exported.css).toMatch(/font-family:"Microsoft YaHei"/);
 
+  // Literata pairs with serif Chinese: HTML export embeds Noto Serif SC subsets
+  // and Chinese inside formulas follows the same face.
+  await appearance(page, "settings-reading");
+  await page.locator("#typeface").selectOption("literata");
+  await closeAppearance(page);
+  const serifExport = await page.evaluate(async () => {
+    let captured = null;
+    window.folio.exportNote = async (payload) => {
+      captured = payload;
+      return { canceled: false, warnings: payload.warnings };
+    };
+    const { exportNote } = await import("/src/export.js");
+    await exportNote("html", {
+      doc: { name: "Test.md", text: "# Title\n\n测试宋体 $\\text{中文}$。" },
+      toc: false,
+    });
+    return captured;
+  });
+  expect(serifExport.css).toMatch(/noto-serif-sc-[0-9]+-wght-normal/);
+  expect(serifExport.css).not.toMatch(/noto-sans-sc/i);
+  expect(serifExport.css).toMatch(
+    /\.katex \.cjk_fallback\{font-family:"Literata Variable","Noto Serif SC Variable"/,
+  );
+
   // Desktop build with textRendering API exposes the control and restart notice.
   await installFolio(page);
   await page.addInitScript(() => {

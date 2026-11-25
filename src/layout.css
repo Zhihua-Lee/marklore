@@ -29,8 +29,8 @@
 }
 :root[data-typeface="literata"] {
   --font-note:
-    "Literata Variable", "Noto Sans SC Variable", "Noto Sans SC",
-    "Microsoft YaHei", "PingFang SC", serif;
+    "Literata Variable", "Noto Serif SC Variable", "Noto Serif SC", "Songti SC",
+    SimSun, serif;
 }
 :root[data-typeface="literata"] .prose {
   font-optical-sizing: auto;

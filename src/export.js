@@ -16,6 +16,7 @@ import katexCSS from "katex/dist/katex.min.css?raw";
 import literataCSS from "@fontsource-variable/literata/standard.css?raw";
 import literataItalicCSS from "@fontsource-variable/literata/standard-italic.css?raw";
 import notoCSS from "@fontsource-variable/noto-sans-sc/wght.css?raw";
+import notoSerifCSS from "@fontsource-variable/noto-serif-sc/wght.css?raw";
 import monoCSS from "@fontsource-variable/jetbrains-mono/index.css?raw";
 import monoItalicCSS from "@fontsource-variable/jetbrains-mono/wght-italic.css?raw";
 
@@ -192,8 +193,8 @@ export async function exportNote(format, { doc, toc = false }) {
     const family =
       typeface === "literata"
         ? useBuiltInCjk
-          ? '"Literata Variable","Noto Sans SC Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
-          : '"Literata Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
+          ? '"Literata Variable","Noto Serif SC Variable","Noto Serif SC","Songti SC",SimSun,serif'
+          : '"Literata Variable","Noto Serif SC","Songti SC",SimSun,serif'
         : typeface === "yahei"
           ? '"Microsoft YaHei","Microsoft YaHei UI","PingFang SC",sans-serif'
           : typeface === "classic"
@@ -212,11 +213,17 @@ export async function exportNote(format, { doc, toc = false }) {
     const boldWeight = emphasisWeight(wght);
     const navHtml = format === "html" && toc ? headingList(host) || null : null;
     const notoSubsets = useBuiltInCjk
-      ? subsetFontCss(notoCSS, host.textContent + (navHtml ? t("目录") : ""))
+      ? subsetFontCss(
+          typeface === "literata" ? notoSerifCSS : notoCSS,
+          host.textContent + (navHtml ? t("目录") : ""),
+        )
       : "";
-    const fontWeightCss = useBuiltInCjk
-      ? `\nbody{font-family:${family};font-weight:${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight}}`
-      : `\nbody{font-family:${family};font-weight:${staticWeight};font-variation-settings:"wght" ${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight};font-variation-settings:"wght" ${boldWeight}} pre,.katex{font-variation-settings:normal}`;
+    // Chinese inside formulas follows the body face, as it does in the reader.
+    const fontWeightCss =
+      `\n.katex .cjk_fallback{font-family:${family}}` +
+      (useBuiltInCjk
+        ? `\nbody{font-family:${family};font-weight:${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight}}`
+        : `\nbody{font-family:${family};font-weight:${staticWeight};font-variation-settings:"wght" ${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight};font-variation-settings:"wght" ${boldWeight}} pre,.katex{font-variation-settings:normal}`);
     const readingStyle = ["relaxed", "standard", "compact"].includes(
       document.documentElement.dataset.readingStyle,
     )

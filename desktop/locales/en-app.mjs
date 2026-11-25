@@ -117,7 +117,7 @@ export default {
   "检查更新、托盘驻留、开机启动与文件关联":
     "Updates, tray behaviour, startup, and file associations",
   正文字体: "Body font",
-  "Literata + 思源黑体（内置）": "Literata + Noto Sans SC (built-in)",
+  "Literata + 思源宋体（内置）": "Literata + Noto Serif SC (built-in)",
   "思源黑体（内置）": "Noto Sans SC (built-in)",
   "微软雅黑（系统）": "Microsoft YaHei (system)",
   "Arial / 微软雅黑": "Arial / Microsoft YaHei",

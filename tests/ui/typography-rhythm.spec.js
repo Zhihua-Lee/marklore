@@ -735,7 +735,7 @@ test("bundled variable Noto Sans SC renders real variable weights 300-550 and ga
     const autoFonts = await probeCjkFonts(page);
     expect(
       autoFonts.some(
-        (f) => /Noto Sans SC/i.test(f.familyName) && f.isCustomFont,
+        (f) => /Noto Serif SC/i.test(f.familyName) && f.isCustomFont,
       ),
       JSON.stringify(autoFonts),
     ).toBe(true);

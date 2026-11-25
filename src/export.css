@@ -69,8 +69,7 @@ body {
   color: #202625;
   font-size: 16px;
   line-height: var(--exp-lh);
-  font-family:
-    "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
+  font-family: "Literata Variable", "Noto Serif SC", "Songti SC", SimSun, serif;
   letter-spacing: normal;
 }
 article {

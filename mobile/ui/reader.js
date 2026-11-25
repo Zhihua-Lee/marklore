@@ -418,15 +418,16 @@ export function mountReader(root, { library, account }) {
     return true;
   }
 
+  // Notes on the phone are readable without the account (sign-in lasts about
+  // a day; it is needed only to sync). The account screens show when nothing
+  // has been synced yet, or while choosing another folder.
+  function needsAccountScreen(info) {
+    return pickingFolder || !info;
+  }
+
   async function renderCurrentOnboardingOrHome() {
     const info = await library.info();
-    if (
-      !status.configured ||
-      !status.signedIn ||
-      !status.folder ||
-      pickingFolder ||
-      !info
-    ) {
+    if (needsAccountScreen(info)) {
       showAccountView(info);
       return;
     }
@@ -435,13 +436,7 @@ export function mountReader(root, { library, account }) {
 
   async function routeAfterSync() {
     const info = await library.info();
-    if (
-      !status.configured ||
-      !status.signedIn ||
-      !status.folder ||
-      pickingFolder ||
-      !info
-    ) {
+    if (needsAccountScreen(info)) {
       showAccountView(info);
       return;
     }
@@ -463,7 +458,7 @@ export function mountReader(root, { library, account }) {
     });
 
     const info = await library.info();
-    if (!status.configured || !status.signedIn || !status.folder || !info) {
+    if (needsAccountScreen(info)) {
       showAccountView(info);
       return;
     }
@@ -504,13 +499,7 @@ export function mountReader(root, { library, account }) {
     status = nextStatus;
     const info = await library.info();
 
-    if (
-      !status.configured ||
-      !status.signedIn ||
-      !status.folder ||
-      pickingFolder ||
-      !info
-    ) {
+    if (needsAccountScreen(info)) {
       showAccountView(info);
       return;
     }
@@ -561,13 +550,7 @@ export function mountReader(root, { library, account }) {
 
   const unsubChange = library.onChange(async () => {
     const info = await library.info();
-    if (
-      !status.configured ||
-      !status.signedIn ||
-      !status.folder ||
-      pickingFolder ||
-      !info
-    ) {
+    if (needsAccountScreen(info)) {
       showAccountView(info);
       return;
     }

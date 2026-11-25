@@ -98,7 +98,7 @@ const store = (key) => `marklore-mock:${key}`;
 export function createMock(
   flag = new URLSearchParams(location.search).get("mock"),
 ) {
-  const synced = !flag;
+  const synced = !flag || flag === "expired";
   let files = synced ? { ...SAMPLE } : {};
   const listeners = {
     change: new Set(),
@@ -108,7 +108,7 @@ export function createMock(
   const urls = new Map();
   let status = {
     configured: flag !== "unconfigured",
-    signedIn: flag !== "signedout" && flag !== "unconfigured",
+    signedIn: !["signedout", "unconfigured", "expired"].includes(flag),
     user: "测试用户",
     folder: synced
       ? { id: "f-notes", name: "数学笔记", path: "/数学笔记" }

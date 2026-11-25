@@ -1,6 +1,19 @@
 import { buildFolderTree, displayNoteTitle, folderOf } from "./paths.js";
 import { formatRelativeSync, formatSyncProgress, STRINGS } from "./strings.js";
 
+// A search snippet as plain text: link text without its target, no heading,
+// list, quote or task markers, no emphasis marks or formula dollars.
+export function plainSnippet(line) {
+  const inner = (_, text) => text;
+  return String(line)
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, inner)
+    .replace(/\[([^\]]*)\]\((?:<[^>]*>|[^)]*)\)/g, inner)
+    .replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d+[.)]\s+)+/, "")
+    .replace(/\*\*|__|\*|~~|`/g, "")
+    .replace(/\$\$?([^$]*)\$\$?/g, inner)
+    .trim();
+}
+
 function renderHighlightedText(container, text, query) {
   const words = query
     .trim()
@@ -511,7 +524,7 @@ export async function renderHomeScreen(
       if (hit.snippet) {
         const snip = document.createElement("div");
         snip.className = "mobile-search-snippet";
-        renderHighlightedText(snip, hit.snippet, q);
+        renderHighlightedText(snip, plainSnippet(hit.snippet), q);
         btn.append(snip);
       }
 
@@ -558,13 +571,22 @@ export async function renderHomeScreen(
   statusInfo.textContent = statsParts.join(" · ");
   if (progress?.phase === "error") statusInfo.classList.add("is-error");
 
+  // Signed out (or the day-long sign-in expired): the button signs in first.
+  const needsSignIn = !status.signedIn || !status.configured;
   const syncBtn = createSyncButton(
-    progress?.phase === "error" && !status.syncing
-      ? STRINGS.retry
-      : status.syncing
-        ? STRINGS.syncing
-        : STRINGS.sync,
-    () => account.sync(),
+    needsSignIn
+      ? STRINGS.signInToSync
+      : progress?.phase === "error" && !status.syncing
+        ? STRINGS.retry
+        : status.syncing
+          ? STRINGS.syncing
+          : STRINGS.sync,
+    () =>
+      needsSignIn
+        ? status.configured
+          ? account.signIn()
+          : onOpenSettings()
+        : account.sync(),
   );
   syncBtn.disabled = Boolean(status.syncing);
   footer.append(statusInfo, syncBtn);

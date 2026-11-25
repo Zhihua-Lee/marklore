@@ -429,4 +429,33 @@ test.describe("Mobile reader UI", () => {
     expect(outcome.wakeRequested).toBeGreaterThanOrEqual(1);
     expect(outcome.wakeReleased).toBeGreaterThanOrEqual(1);
   });
+
+  test("notes stay readable when the sign-in has expired; sync asks to sign in", async ({
+    page,
+  }) => {
+    await page.goto("./?mock=expired");
+    await expect(page.locator(".mobile-tree")).toContainText("一致收敛");
+    const sync = page.locator(".mobile-status-footer .mobile-sync-btn");
+    await expect(sync).toHaveText("登录后同步");
+    await page
+      .locator(".mobile-note-row", { hasText: "一致收敛" })
+      .first()
+      .click();
+    await expect(page.locator(".katex").first()).toBeVisible();
+    await page.goBack();
+    await page.locator(".mobile-status-footer .mobile-sync-btn").click();
+    await expect(
+      page.locator(".mobile-status-footer .mobile-sync-btn"),
+    ).toHaveText("同步");
+    await expect(page.locator(".mobile-tree")).toBeVisible();
+  });
+
+  test("search snippets read as plain text, not Markdown", async ({ page }) => {
+    await page.goto("./?mock");
+    await page.locator(".mobile-search-input").fill("柯西");
+    const snippet = page.locator(".mobile-search-snippet").first();
+    await expect(snippet).toContainText("见 确界原理");
+    await expect(snippet).not.toContainText("](");
+    await expect(snippet).not.toContainText("$");
+  });
 });

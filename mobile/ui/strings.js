@@ -24,6 +24,7 @@ export const STRINGS = {
   imageNotSynced: "图片未同步",
   imageDisabled: "图片未加载",
   sync: "同步",
+  signInToSync: "登录后同步",
   syncing: "正在同步…",
   retry: "重试",
   syncJustNow: "刚刚同步",

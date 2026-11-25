@@ -12,5 +12,6 @@ mountReader(document.getElementById("app"), { library, account });
 // For tests and troubleshooting from the console.
 window.markloreReader = { library, account };
 
-if (!mock && "serviceWorker" in navigator)
+// The offline shell exists only in a build (precache.js is written then).
+if (!mock && import.meta.env.PROD && "serviceWorker" in navigator)
   navigator.serviceWorker.register("./sw.js").catch(() => {});

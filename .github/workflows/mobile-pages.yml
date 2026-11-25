@@ -1,0 +1,61 @@
+name: Phone reader (GitHub Pages)
+
+# Builds the phone reader (mobile/) and publishes it on GitHub Pages. The page
+# is static: notes go only between the phone and Microsoft. The application
+# (client) ID of the owner's Microsoft app registration is public information
+# and comes from the repository variable MS_CLIENT_ID; it can also be typed in
+# the reader's settings.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "mobile/**"
+      - "src/**"
+      - "desktop/note-names.mjs"
+      - "desktop/slug.mjs"
+      - "desktop/i18n.mjs"
+      - "vite.mobile.config.mjs"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/mobile-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: mobile-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          check-latest: true
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:mobile
+        env:
+          VITE_MS_CLIENT_ID: ${{ vars.MS_CLIENT_ID }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist-mobile
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

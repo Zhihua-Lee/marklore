@@ -96,9 +96,13 @@ export function normalizeSettings(saved = {}) {
   settings.typographyVersion = 1;
   settings.zoom = clamp(settings.zoom, 50, 200, 100);
   settings.previewZoom = clamp(settings.previewZoom, 50, 200, 100);
-  settings.typeface = ["literata", "balanced", "classic", "book"].includes(
-    settings.typeface,
-  )
+  settings.typeface = [
+    "literata",
+    "balanced",
+    "yahei",
+    "classic",
+    "book",
+  ].includes(settings.typeface)
     ? settings.typeface
     : "literata";
   settings.readingStyle = ["relaxed", "standard", "compact"].includes(

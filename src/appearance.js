@@ -48,7 +48,7 @@ export const appearanceMarkup = `
     t("阅读排版"),
     t("正文字体、字号、浓度、排版风格与栏宽"),
     `
-    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
+    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="yahei">${t("微软雅黑（系统）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
     ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="300">${t("细 300")}</option><option value="350">${t("较细 350")}</option><option value="400">${t("标准 400")}</option><option value="450">${t("适中 450")}</option><option value="500">${t("较浓 500")}</option><option value="550">${t("浓 550")}</option></select>`, '<span id="weight-note"></span>')}
     ${row("reading-style", t("排版风格"), `<select id="reading-style"><option value="relaxed">${t("舒展")}</option><option value="standard">${t("标准（默认）")}</option><option value="compact">${t("紧凑")}</option></select>`, t("只改行高、段距和标题大小；栏宽在下面单独设置"))}
@@ -62,7 +62,8 @@ export const appearanceMarkup = `
     t("浅深外观颜色与界面显示语言"),
     `
     ${row("color-theme", t("界面颜色"), `<select id="color-theme"><option value="light">${t("浅色")}</option><option value="dark">${t("深色")}</option></select><button id="theme" class="icon" aria-label="${t("切换深浅主题")}" title="${t("切换深浅主题")}">${icon("theme")}</button>`)}
-    ${row("interface-language", t("界面语言"), `<select id="interface-language"><option value="auto">${t("跟随系统")}</option>${nativeNames.map(([value, name]) => `<option value="${value}">${name}</option>`).join("")}</select>`)}`,
+    ${row("interface-language", t("界面语言"), `<select id="interface-language"><option value="auto">${t("跟随系统")}</option>${nativeNames.map(([value, name]) => `<option value="${value}">${name}</option>`).join("")}</select>`)}
+    <div class="setting" id="text-rendering-row" hidden><span class="setting-text"><label for="text-rendering">${t("文字抗锯齿")}</label><small id="text-rendering-note"></small></span><select id="text-rendering"><option value="auto">${t("自动（高缩放屏用灰度）")}</option><option value="grayscale">${t("灰度")}</option><option value="subpixel">${t("彩色（ClearType）")}</option></select></div>`,
   )}
   ${page(
     "settings-tables",
@@ -133,16 +134,21 @@ ${desktopSettingsMarkup}
 
 export function applyAppearance(settings, typoLab = null) {
   const root = document.documentElement;
-  root.dataset.typeface = settings.typeface;
+  const lab = typoLab
+    ? typoLab.apply(settings)
+    : { autoRule: "new", oldChineseFont: false, yahei: false };
+  const effectiveTypeface = lab.yahei ? "yahei" : settings.typeface;
+  root.dataset.typeface = effectiveTypeface;
+  root.style.setProperty(
+    "--typeface-scale",
+    effectiveTypeface === "literata" ? "1" : "1.125",
+  );
   root.dataset.readingStyle = settings.readingStyle || "standard";
   root.dataset.columnWidth = settings.columnWidth || "fixed";
   root.dataset.tableStyle = settings.tableStyle;
   root.dataset.tableWidth = settings.tableWidth;
   root.style.setProperty("--navigation-size", settings.navigationSize + "px");
   root.style.setProperty("--tab-size", settings.tabSize + "px");
-  const lab = typoLab
-    ? typoLab.apply(settings)
-    : { autoRule: "new", oldChineseFont: false };
   const targetWeight = readingWeight({
     weight: settings.weight,
     dpr: typeof devicePixelRatio === "number" ? devicePixelRatio : 1,
@@ -150,7 +156,9 @@ export function applyAppearance(settings, typoLab = null) {
     autoRule: lab.autoRule,
   });
   const staticStack =
-    settings.typeface === "classic" || settings.typeface === "book";
+    effectiveTypeface === "yahei" ||
+    effectiveTypeface === "classic" ||
+    effectiveTypeface === "book";
   const staticCjk = staticStack || lab.oldChineseFont;
   const weight = staticCjk ? bodyFontWeight(targetWeight) : targetWeight;
   const boldWeight = emphasisWeight(staticCjk ? weight : targetWeight);
@@ -275,7 +283,10 @@ export function applyAppearance(settings, typoLab = null) {
   sample.dataset.outline = settings.outline ? settings.outlineSide : "hidden";
 }
 
-export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
+export function wireAppearance(
+  change,
+  { getSettings, typoLab = null, api = null, report = () => {} } = {},
+) {
   const PAGE_STORAGE_KEY = "folio.settingsPage";
   const DEFAULT_PAGE = "settings-reading";
   const dialog = $("#appearance"),
@@ -459,6 +470,7 @@ export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
     const saved = sectionId || readSavedPage() || activePageId;
     clearSearch({ restore: false });
     selectPage(saved, { persist: Boolean(sectionId), scrollTop: true });
+    void refreshTextRendering();
     if (!dialog.open) dialog.showModal();
   }
 
@@ -585,7 +597,52 @@ export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
       readingStyle: "standard",
       columnWidth: "fixed",
     });
-  typoLab?.mount(getSettings, change);
+  const trRow = $("#text-rendering-row"),
+    trSelect = $("#text-rendering"),
+    trNote = $("#text-rendering-note");
+  const desiredTextRendering = (mode, scale) => {
+    if (mode === "grayscale" || mode === "subpixel") return mode;
+    return typeof scale === "number" && scale >= 2 ? "grayscale" : "subpixel";
+  };
+  const paintTextRendering = (state) => {
+    if (!state || !trRow) return;
+    trRow.hidden = false;
+    const mode = ["auto", "grayscale", "subpixel"].includes(state.mode)
+      ? state.mode
+      : "auto";
+    const effective =
+      state.effective === "grayscale" ? "grayscale" : "subpixel";
+    trSelect.value = mode;
+    const desired = desiredTextRendering(mode, state.scale);
+    const label =
+      effective === "grayscale" ? t("灰度") : t("彩色（ClearType）");
+    trNote.textContent =
+      desired !== effective
+        ? t("当前生效：{mode}；重启后生效", { mode: label })
+        : t("当前生效：{mode}", { mode: label });
+  };
+  const refreshTextRendering = async () => {
+    if (!api?.textRendering) return;
+    try {
+      paintTextRendering(await api.textRendering());
+    } catch {}
+  };
+  if (api?.textRendering) {
+    void refreshTextRendering();
+    trSelect.onchange = async () => {
+      const next = trSelect.value;
+      trSelect.disabled = true;
+      try {
+        paintTextRendering(await api.setTextRendering(next));
+      } catch (error) {
+        report(error.message);
+        await refreshTextRendering();
+      } finally {
+        trSelect.disabled = false;
+      }
+    };
+  }
+  typoLab?.mount(getSettings, change, { api });
   $("#color-theme").onchange = (event) => change({ theme: event.target.value });
   $("#interface-language").onchange = (event) =>
     change({ language: event.target.value });

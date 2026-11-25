@@ -52,6 +52,8 @@ export const FOLIO_API = [
   "closeReady",
   "desktopStatus",
   "desktopAction",
+  "textRendering",
+  "setTextRendering",
   "exportNote",
   "copyText",
   "on",

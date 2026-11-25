@@ -29,6 +29,20 @@ const ITEMS = [
     oldAttr: "old",
     label: t("中文字体：v0.6.4 系统字体 ↔ 内置思源黑体（默认）"),
   },
+  {
+    key: "darkInk",
+    attr: "labDarkInk",
+    defaultVal: true,
+    oldAttr: "old",
+    label: t("深色正文：v0.6.4 #e4e2de ↔ 调暗（默认）"),
+  },
+  {
+    key: "yahei",
+    attr: "labYahei",
+    defaultVal: false,
+    newAttr: "new",
+    label: t("正文字体：设置里的 ↔ 微软雅黑"),
+  },
 ];
 
 // Each switch stores true for its new side and false for v0.6.4.
@@ -49,7 +63,7 @@ export function injectStyle() {
 
 // The switches float beside the note (a modal Settings dialog would hide the
 // very text being compared); Settings only opens them.
-export function mount(settings, change) {
+export function mount(settings, change, { api = null } = {}) {
   injectStyle();
   const fieldset = document.getElementById("settings-reading");
   if (!fieldset || document.getElementById("typo-lab")) return;
@@ -68,11 +82,37 @@ export function mount(settings, change) {
       const [name, values = ""] = label.split(/：|: /);
       return `<div class="setting"><label for="lab-${key}" class="typo-lab-label"><span>${name}</span><small>${values}</small></label><input id="lab-${key}" type="checkbox" class="switch" data-lab-key="${key}"></div>`;
     },
-  ).join("")}`;
+  ).join("")}<p id="typo-lab-aa" class="typo-lab-hint typo-lab-aa"></p>`;
   document.body.append(section);
+  const aaNote = section.querySelector("#typo-lab-aa");
+  const paintAntialiasing = async () => {
+    if (!api?.textRendering) {
+      aaNote.textContent = t(
+        "文字抗锯齿（仅桌面版）：在设置 → 文字抗锯齿 中切换，重启后生效",
+      );
+      return;
+    }
+    try {
+      const state = await api.textRendering();
+      if (!state) return;
+      const mode = state.effective === "grayscale" ? t("灰度") : t("彩色");
+      const scale =
+        typeof state.scale === "number" && state.scale > 0
+          ? `${Math.round(state.scale * 100)}%`
+          : t("未知");
+      aaNote.textContent = t(
+        "当前抗锯齿：{mode}（缩放 {scale}）· 在设置 → 文字抗锯齿 中切换，重启后生效",
+        { mode, scale },
+      );
+    } catch {}
+  };
+  void paintAntialiasing();
   const show = (open) => {
     section.hidden = !open;
-    if (open) document.getElementById("appearance")?.close();
+    if (open) {
+      document.getElementById("appearance")?.close();
+      void paintAntialiasing();
+    }
   };
   row.querySelector("#typo-lab-open").onclick = () => show(true);
   section.querySelector("#typo-lab-close").onclick = () => show(false);
@@ -120,5 +160,6 @@ export function apply(settings) {
   return {
     autoRule: state.autoWeight ? "new" : "v064",
     oldChineseFont: !state.chineseFont,
+    yahei: Boolean(state.yahei),
   };
 }

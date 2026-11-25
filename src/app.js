@@ -2731,10 +2731,6 @@ function applySettings() {
     document.documentElement.dataset.theme !== settings.theme;
   document.documentElement.dataset.theme = settings.theme;
   document.documentElement.style.setProperty(
-    "--typeface-scale",
-    settings.typeface === "literata" ? "1" : "1.125",
-  );
-  document.documentElement.style.setProperty(
     "--note-zoom",
     String(settings.zoom / 100),
   );
@@ -2976,7 +2972,12 @@ for (const [id, fn] of Object.entries({
   $("#" + id).onclick = run(fn);
 for (const b of document.querySelectorAll("button[data-mode]"))
   b.onclick = () => setMode(b.dataset.mode);
-wireAppearance(changeSettings, { getSettings: () => settings, typoLab });
+wireAppearance(changeSettings, {
+  getSettings: () => settings,
+  typoLab,
+  api,
+  report: toast,
+});
 paintAiSettings = wireAiSettings({
   api,
   getRoots: () => roots,

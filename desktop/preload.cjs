@@ -66,6 +66,8 @@ for (const name of [
   "closeReady",
   "desktopStatus",
   "desktopAction",
+  "textRendering",
+  "setTextRendering",
   "exportNote",
   "copyText",
   "recentFiles",

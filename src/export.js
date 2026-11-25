@@ -194,13 +194,15 @@ export async function exportNote(format, { doc, toc = false }) {
         ? useBuiltInCjk
           ? '"Literata Variable","Noto Sans SC Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
           : '"Literata Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
-        : typeface === "classic"
-          ? 'Arial,"Microsoft YaHei","PingFang SC",sans-serif'
-          : typeface === "book"
-            ? 'Cambria,Georgia,"Songti SC",SimSun,serif'
-            : useBuiltInCjk
-              ? '"Noto Sans SC Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif'
-              : '"Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif';
+        : typeface === "yahei"
+          ? '"Microsoft YaHei","Microsoft YaHei UI","PingFang SC",sans-serif'
+          : typeface === "classic"
+            ? 'Arial,"Microsoft YaHei","PingFang SC",sans-serif'
+            : typeface === "book"
+              ? 'Cambria,Georgia,"Songti SC",SimSun,serif'
+              : useBuiltInCjk
+                ? '"Noto Sans SC Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif'
+                : '"Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif';
     const rawWeight = Number(
       document.documentElement.style.getPropertyValue("--note-wght") ||
         document.documentElement.style.getPropertyValue("--note-weight"),

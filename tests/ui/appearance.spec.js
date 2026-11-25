@@ -275,11 +275,13 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
   await page.screenshot({ path: ".local/visual-v012/appearance-settings.png" });
   for (const [typeface, family] of [
     ["balanced", "Noto Sans SC"],
+    ["yahei", "Microsoft YaHei"],
     ["classic", "Arial"],
     ["book", "Cambria"],
   ]) {
     await page.locator("#typeface").selectOption(typeface);
-    const staticStack = typeface === "classic" || typeface === "book";
+    const staticStack =
+      typeface === "yahei" || typeface === "classic" || typeface === "book";
     await expect(page.locator("#weight-note")).toHaveText(
       staticStack ? "系统字体非可变字体，细微浓度不明显" : "",
     );
@@ -314,6 +316,12 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
         };
       });
       expect(typography.prose.family).toContain(family);
+      if (typeface === "yahei") {
+        expect(
+          await page.evaluate(() => document.documentElement.dataset.typeface),
+        ).toBe("yahei");
+        expect(typography.prose.family).toMatch(/^"?Microsoft YaHei/i);
+      }
       expect(typography.prose.weight).toBe(
         staticStack ? (Number(weight) >= 500 ? "500" : "400") : weight,
       );
@@ -518,6 +526,19 @@ test("theme and layout retain article nodes and semantic reading position", asyn
   await page.locator("#color-theme").selectOption("dark");
   await closeAppearance(page);
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  const darkTokens = await page.evaluate(() => {
+    const cs = getComputedStyle(document.documentElement);
+    return {
+      readingInk: cs.getPropertyValue("--reading-ink").trim().toLowerCase(),
+      ink: cs.getPropertyValue("--ink").trim().toLowerCase(),
+      proseColor: getComputedStyle(document.querySelector("#content")).color,
+    };
+  });
+  expect(darkTokens).toEqual({
+    readingInk: "#d3d0ca",
+    ink: "#dbe0d8",
+    proseColor: "rgb(211, 208, 202)",
+  });
   await expect.poll(delta).toBeLessThan(80);
   await page.screenshot({ path: ".local/visual-v012/reading-dark.png" });
   expect(
@@ -540,4 +561,80 @@ test("theme and layout retain article nodes and semantic reading position", asyn
       () => window.mock.headingNode === document.querySelector("#section-30"),
     ),
   ).toBe(true);
+});
+
+test("text antialiasing row appears only in desktop builds and yahei HTML export uses system font stack", async ({
+  page,
+}) => {
+  // Without textRendering API (browser build), the control stays hidden.
+  await boot(page);
+  await appearance(page, "settings-theme");
+  await expect(page.locator("#text-rendering")).toBeHidden();
+  await page.locator("#settings-search").fill("抗锯齿");
+  await expect(page.locator("#settings-search-results")).toContainText(
+    "没有找到匹配的设置",
+  );
+  await page.locator("#settings-search").fill("");
+
+  // Check yahei HTML export omits Noto subsets and sets Microsoft YaHei stack.
+  await page
+    .locator('.settings-nav button[data-section="settings-reading"]')
+    .click();
+  await page.locator("#typeface").selectOption("yahei");
+  await closeAppearance(page);
+  const exported = await page.evaluate(async () => {
+    let captured = null;
+    window.folio.exportNote = async (payload) => {
+      captured = payload;
+      return { canceled: false, warnings: payload.warnings };
+    };
+    const { exportNote } = await import("/src/export.js");
+    await exportNote("html", {
+      doc: { name: "Test.md", text: "# Title\n\n测试微软雅黑。" },
+      toc: false,
+    });
+    return captured;
+  });
+  expect(exported.css).not.toMatch(/noto-sans-sc/i);
+  expect(exported.css).toMatch(/font-family:"Microsoft YaHei"/);
+
+  // Desktop build with textRendering API exposes the control and restart notice.
+  await installFolio(page);
+  await page.addInitScript(() => {
+    const tr = { mode: "auto", effective: "subpixel", scale: 1.25 };
+    window.folio = folioTest.mock({
+      ready: async () => ({
+        incoming: [
+          {
+            id: "n1",
+            name: "n.md",
+            path: "C:/notes/n.md",
+            version: "1",
+            text: "# N\n",
+          },
+        ],
+        restored: [],
+        roots: [],
+        settings: {},
+      }),
+      textRendering: async () => ({ ...tr }),
+      setTextRendering: async (mode) => {
+        tr.mode = mode;
+        return { ...tr };
+      },
+    });
+  });
+  await page.goto("/");
+  await appearance(page, "settings-theme");
+  await expect(page.locator("#text-rendering")).toBeVisible();
+  await expect(page.locator("#text-rendering")).toHaveValue("auto");
+  await expect(page.locator("#text-rendering-note")).toContainText("彩色");
+  await expect(page.locator("#text-rendering-note")).not.toContainText(
+    "重启后生效",
+  );
+  await page.locator("#text-rendering").selectOption("grayscale");
+  await expect(page.locator("#text-rendering")).toHaveValue("grayscale");
+  await expect(page.locator("#text-rendering-note")).toContainText(
+    "重启后生效",
+  );
 });

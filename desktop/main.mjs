@@ -45,6 +45,10 @@ import { createAiStore, AI_FOLDER } from "./ai-store.mjs";
 import { createAiBridge } from "./ai-bridge.mjs";
 import { fileDensity } from "./image-density-file.mjs";
 import { automated, automatedWindow, keepOffScreen } from "./automated.mjs";
+import {
+  readTextRenderingSync,
+  createTextRenderingStore,
+} from "./text-rendering.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url)),
   dist = path.resolve(here, "../dist");
@@ -619,6 +623,16 @@ else {
     }
   });
   // Started while Chromium initialises: the window needs the saved theme.
+  const textRenderingFile = path.join(
+    app.getPath("userData"),
+    "text-rendering.json",
+  );
+  const textRendering = createTextRenderingStore({
+    file: textRenderingFile,
+    initial: readTextRenderingSync(textRenderingFile),
+  });
+  if (textRendering.status().effective === "grayscale")
+    app.commandLine.appendSwitch("disable-lcd-text");
   firstSessionRead = readSession();
   const preferencesRead = integration.load();
   // The page asks for its tabs once the files given on the command line are open.
@@ -746,6 +760,27 @@ else {
           send("disk", null);
         }
       });
+      let windowShown = false;
+      const syncTextRenderingScale = () => {
+        if (!windowShown || !win || win.isDestroyed()) return;
+        try {
+          const display = screen.getDisplayMatching(win.getBounds());
+          textRendering.recordScale(display?.scaleFactor);
+        } catch {}
+      };
+      win.once("show", () => {
+        windowShown = true;
+        syncTextRenderingScale();
+      });
+      for (const event of ["move", "moved"])
+        win.on(event, syncTextRenderingScale);
+      screen.on("display-metrics-changed", syncTextRenderingScale);
+      win.once("closed", () =>
+        screen.removeListener(
+          "display-metrics-changed",
+          syncTextRenderingScale,
+        ),
+      );
       // Notes never navigate the window away. The one exception is the page
       // reloading itself (a language change rebuilds the interface).
       win.webContents.on("will-navigate", (event, url) => {
@@ -950,6 +985,8 @@ else {
         },
       });
       api("desktopStatus", desktopState);
+      api("textRendering", () => textRendering.status());
+      api("setTextRendering", (mode) => textRendering.setMode(mode));
       api("desktopAction", (action) =>
         desktopAction(async () => {
           if (!action || typeof action !== "object")

@@ -821,6 +821,8 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
     columnWidth: false,
     autoWeight: false,
     chineseFont: false,
+    darkInk: false,
+    yahei: false,
   };
   await page.setViewportSize({ width: 1366, height: 900 });
   await boot(page, FIXTURE, { richEdit: true, typoLab: allOld });
@@ -854,14 +856,20 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   await page.locator("#typo-lab-open").click();
   await expect(page.locator("#appearance")).not.toHaveAttribute("open", "");
   await expect(page.locator("#typo-lab")).toBeVisible();
-  await expect(page.locator("#typo-lab input[type=checkbox]")).toHaveCount(4);
+  await expect(page.locator("#typo-lab input[type=checkbox]")).toHaveCount(6);
   for (const removed of ["lineHeight", "spacing", "headingScale"]) {
     await expect(page.locator(`#lab-${removed}`)).toHaveCount(0);
   }
+  await expect(page.locator("#typo-lab-aa")).toContainText(
+    "在设置 → 文字抗锯齿 中切换，重启后生效",
+  );
   const labels = await page
     .locator("#typo-lab .typo-lab-label > small")
     .evaluateAll((els) => els.map((e) => e.textContent));
-  expect(labels.every((s) => /（默认）|\(default\)/.test(s))).toBe(true);
+  expect(labels.slice(0, 5).every((s) => /（默认）|\(default\)/.test(s))).toBe(
+    true,
+  );
+  expect(labels[5]).toContain("微软雅黑");
 
   await page.locator("#typo-lab-all-old").click();
   await page.setViewportSize({ width: 1920, height: 1080 });
@@ -889,24 +897,58 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   expect(oldEdit.w).toBe(680);
   expect(oldEdit.fw).toBe("400");
 
-  // "全部新" turns columnWidth on (56em at 1920).
+  // Dark theme ink switch and YaHei typeface override.
+  await expect(page.locator("#lab-darkInk")).not.toBeChecked();
+  await expect(page.locator("#lab-yahei")).not.toBeChecked();
+  await page.locator("#theme").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  expect(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement)
+        .getPropertyValue("--reading-ink")
+        .trim()
+        .toLowerCase(),
+    ),
+  ).toBe("#e4e2de");
+
+  // "全部新" turns columnWidth and yahei on (56em at 1920, Microsoft YaHei font).
   await page.locator("#typo-lab-all-new").click();
   await expect(page.locator("#lab-columnWidth")).toBeChecked();
+  await expect(page.locator("#lab-darkInk")).toBeChecked();
+  await expect(page.locator("#lab-yahei")).toBeChecked();
   const newEdit = await page.evaluate(() => {
     const p = document.querySelector("#rich .ProseMirror p");
     return {
       w: Math.round(p.getBoundingClientRect().width * 10) / 10,
       fw: getComputedStyle(p).fontWeight,
       fs: parseFloat(getComputedStyle(p).fontSize),
+      family: getComputedStyle(p).fontFamily,
+      typefaceAttr: document.documentElement.dataset.typeface,
+      readingInk: getComputedStyle(document.documentElement)
+        .getPropertyValue("--reading-ink")
+        .trim()
+        .toLowerCase(),
     };
   });
   expect(newEdit.w).toBeCloseTo(56 * newEdit.fs, 0);
-  expect(newEdit.fw).toBe("450");
+  expect(newEdit.fw).toBe("400");
+  expect(newEdit.typefaceAttr).toBe("yahei");
+  expect(newEdit.family).toMatch(/^"?Microsoft YaHei/i);
+  expect(newEdit.readingInk).toBe("#d3d0ca");
+  expect(
+    await page.evaluate(() => document.getElementById("typeface").value),
+  ).toBe("literata");
 
-  // "默认" resets to the 4 default settings (columnWidth off = 680 px, other 3 on).
+  // "全部旧" turns both new switches back to their old side.
+  await page.locator("#typo-lab-all-old").click();
+  await expect(page.locator("#lab-darkInk")).not.toBeChecked();
+  await expect(page.locator("#lab-yahei")).not.toBeChecked();
+
+  // "默认" resets to default settings (dimmer dark ink on, YaHei off, columnWidth off).
   await page.locator("#typo-lab-default").click();
   await expect(page.locator("#lab-columnWidth")).not.toBeChecked();
-  for (const onKey of ["fluidSize", "autoWeight", "chineseFont"]) {
+  await expect(page.locator("#lab-yahei")).not.toBeChecked();
+  for (const onKey of ["fluidSize", "autoWeight", "chineseFont", "darkInk"]) {
     await expect(page.locator(`#lab-${onKey}`)).toBeChecked();
   }
   const defEdit = await page.evaluate(() => {
@@ -914,12 +956,22 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
     return {
       w: Math.round(p.getBoundingClientRect().width * 10) / 10,
       fw: getComputedStyle(p).fontWeight,
+      typefaceAttr: document.documentElement.dataset.typeface,
       attrs: [...document.documentElement.attributes].filter((a) =>
         a.name.startsWith("data-lab-"),
       ).length,
     };
   });
   expect(defEdit.w).toBe(680);
-  expect(defEdit.fw).toBe("450");
+  expect(defEdit.fw).toBe("400");
+  expect(defEdit.typefaceAttr).toBe("literata");
   expect(defEdit.attrs).toBe(0);
+  await page.locator("#theme").click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  expect(
+    await page
+      .locator("#rich .ProseMirror p")
+      .first()
+      .evaluate((p) => getComputedStyle(p).fontWeight),
+  ).toBe("450");
 });

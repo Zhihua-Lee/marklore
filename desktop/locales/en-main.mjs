@@ -57,6 +57,7 @@ export default {
   复制内容过大或格式无效: "Copied content is too large or invalid",
   无效窗口操作: "Invalid window action",
   无效系统操作: "Invalid system action",
+  无效的文字抗锯齿设置: "Invalid text antialiasing setting",
   "托盘不可用，无法隐藏窗口":
     "The tray is unavailable, so the window can't be hidden",
   便携模式仅在打包版可用: "Portable mode is only available in the packaged app",

@@ -95,21 +95,32 @@ const IMAGES = { "images/curve.svg": curve };
 const states = new Map();
 const store = (key) => `marklore-mock:${key}`;
 
-export function createMock(flag = new URLSearchParams(location.search).get("mock")) {
+export function createMock(
+  flag = new URLSearchParams(location.search).get("mock"),
+) {
   const synced = !flag;
   let files = synced ? { ...SAMPLE } : {};
-  const listeners = { change: new Set(), status: new Set(), progress: new Set() };
+  const listeners = {
+    change: new Set(),
+    status: new Set(),
+    progress: new Set(),
+  };
   const urls = new Map();
   let status = {
     configured: flag !== "unconfigured",
     signedIn: flag !== "signedout" && flag !== "unconfigured",
     user: "测试用户",
-    folder: synced ? { id: "f-notes", name: "数学笔记", path: "/数学笔记" } : null,
+    folder: synced
+      ? { id: "f-notes", name: "数学笔记", path: "/数学笔记" }
+      : null,
     syncing: false,
   };
   let lastSync = synced ? Date.now() - 3600_000 : null;
   const emit = (kind, value) => listeners[kind].forEach((fn) => fn(value));
-  const on = (kind) => (fn) => (listeners[kind].add(fn), () => listeners[kind].delete(fn));
+  const on = (kind) => (fn) => (
+    listeners[kind].add(fn),
+    () => listeners[kind].delete(fn)
+  );
   const titleOf = (path, text) =>
     leadingHeading(text)?.title || path.split("/").pop().replace(/\.md$/i, "");
 
@@ -140,7 +151,12 @@ export function createMock(flag = new URLSearchParams(location.search).get("mock
     async asset(path) {
       if (!(path in IMAGES) || lastSync === null) return null;
       if (!urls.has(path))
-        urls.set(path, URL.createObjectURL(new Blob([IMAGES[path]], { type: "image/svg+xml" })));
+        urls.set(
+          path,
+          URL.createObjectURL(
+            new Blob([IMAGES[path]], { type: "image/svg+xml" }),
+          ),
+        );
       return urls.get(path);
     },
     async search(query, { limit = 50 } = {}) {
@@ -152,7 +168,12 @@ export function createMock(flag = new URLSearchParams(location.search).get("mock
         if (!words.every((w) => lower.includes(w))) continue;
         const lines = text.split("\n");
         const line = lines.findIndex((l) => l.toLowerCase().includes(words[0]));
-        hits.push({ path, title: titleOf(path, text), snippet: lines[line].slice(0, 120), line });
+        hits.push({
+          path,
+          title: titleOf(path, text),
+          snippet: lines[line].slice(0, 120),
+          line,
+        });
         if (hits.length >= limit) break;
       }
       return hits;
@@ -175,7 +196,14 @@ export function createMock(flag = new URLSearchParams(location.search).get("mock
       { id: "f-notes", name: "数学笔记", path: "/数学笔记", childCount: 5 },
       { id: "f-docs", name: "文档", path: "/文档", childCount: 2 },
     ],
-    "f-notes": [{ id: "f-ch1", name: "第一章 实数", path: "/数学笔记/第一章 实数", childCount: 3 }],
+    "f-notes": [
+      {
+        id: "f-ch1",
+        name: "第一章 实数",
+        path: "/数学笔记/第一章 实数",
+        childCount: 3,
+      },
+    ],
     "f-docs": [],
     "f-ch1": [],
   };
@@ -209,13 +237,23 @@ export function createMock(flag = new URLSearchParams(location.search).get("mock
       emit("progress", { phase: "listing", done: 0, total: 0, message: "" });
       for (let i = 0; i < names.length; i++) {
         await new Promise((r) => setTimeout(r, 30));
-        emit("progress", { phase: "downloading", done: i + 1, total: names.length, message: names[i] });
+        emit("progress", {
+          phase: "downloading",
+          done: i + 1,
+          total: names.length,
+          message: names[i],
+        });
       }
       const added = Object.keys(SAMPLE).filter((p) => !(p in files)).length;
       files = { ...SAMPLE };
       lastSync = Date.now();
       status = { ...status, syncing: false };
-      emit("progress", { phase: "done", done: names.length, total: names.length, message: "" });
+      emit("progress", {
+        phase: "done",
+        done: names.length,
+        total: names.length,
+        message: "",
+      });
       emit("status", account.status());
       emit("change", null);
       return { added, changed: names.length - added, removed: 0 };

@@ -10,3 +10,4 @@ output/playwright/
 blob-report/
 native/index/target/
 native/index/*.node
+dist-mobile/

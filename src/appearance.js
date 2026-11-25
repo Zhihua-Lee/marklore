@@ -35,11 +35,12 @@ export const appearanceMarkup = `
   <nav class="settings-nav" aria-label="${t("设置分类")}">${sections.map(([id, label]) => `<button type="button" data-section="${id}">${label}</button>`).join("")}</nav>
   <div class="settings-pane">
   <fieldset id="settings-reading"><legend>${t("阅读排版")}</legend>
-    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（微软雅黑）")}</option><option value="balanced">${t("思源黑体（或微软雅黑）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
+    ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
-    ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="400">${t("标准")}</option><option value="450">${t("适中")}</option><option value="500">${t("较浓")}</option></select>`, t("中文仅在装有可变中文字体时变浓度"))}
+    ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="300">${t("细 300")}</option><option value="350">${t("较细 350")}</option><option value="400">${t("标准 400")}</option><option value="450">${t("适中 450")}</option><option value="500">${t("较浓 500")}</option><option value="550">${t("浓 550")}</option></select>`, '<span id="weight-note"></span>')}
+    ${row("column-width", t("正文栏宽"), `<select id="column-width"><option value="window">${t("随窗口（默认）")}</option><option value="measure">${t("按字数")}</option><option value="fixed">${t("固定")}</option></select>`)}
     ${row("cjk-emphasis", t("中文旁的粗体与斜体"), '<input id="cjk-emphasis" type="checkbox" class="switch">', t("**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号"))}
-    <div class="setting"><span class="setting-text"><span>${t("书页排版")}</span><small>${t("Literata 与自动浓度，保留字号和布局")}</small></span><span class="setting-actions"><button id="reading-preset" type="button">${t("恢复")}</button></span></div>
+    <div class="setting"><span class="setting-text"><span>${t("默认排版")}</span></span><span class="setting-actions"><button id="reset-typography" type="button">${t("恢复默认排版")}</button></span></div>
   </fieldset>
   <fieldset id="settings-theme"><legend>${t("主题与语言")}</legend>
     ${row("color-theme", t("界面颜色"), `<select id="color-theme"><option value="light">${t("浅色")}</option><option value="dark">${t("深色")}</option></select><button id="theme" class="icon" aria-label="${t("切换深浅主题")}" title="${t("切换深浅主题")}">${icon("theme")}</button>`)}
@@ -88,27 +89,37 @@ ${desktopSettingsMarkup}
   </div>
 </dialog>`;
 
-export function applyAppearance(settings) {
+export function applyAppearance(settings, typoLab = null) {
   const root = document.documentElement;
   root.dataset.typeface = settings.typeface;
+  root.dataset.columnWidth = settings.columnWidth || "window";
   root.dataset.tableStyle = settings.tableStyle;
   root.dataset.tableWidth = settings.tableWidth;
   root.style.setProperty("--navigation-size", settings.navigationSize + "px");
   root.style.setProperty("--tab-size", settings.tabSize + "px");
+  const lab = typoLab
+    ? typoLab.apply(settings)
+    : { autoRule: "new", oldChineseFont: false };
   const targetWeight = readingWeight({
     weight: settings.weight,
     dpr: typeof devicePixelRatio === "number" ? devicePixelRatio : 1,
     theme: settings.theme,
+    autoRule: lab.autoRule,
   });
-  const weight = bodyFontWeight(targetWeight);
-  const boldWeight = String(emphasisWeight(targetWeight));
+  const staticStack =
+    settings.typeface === "classic" || settings.typeface === "book";
+  const staticCjk = staticStack || lab.oldChineseFont;
+  const weight = staticCjk ? bodyFontWeight(targetWeight) : targetWeight;
+  const boldWeight = emphasisWeight(staticCjk ? weight : targetWeight);
   root.style.setProperty("--note-weight", String(weight));
   root.style.setProperty("--note-wght", String(targetWeight));
-  root.style.setProperty("--strong-weight", boldWeight);
-  root.style.setProperty("--inline-code-weight", String(weight));
-  root.style.setProperty("--inline-code-wght", String(targetWeight));
+  root.style.setProperty("--strong-weight", String(boldWeight));
+  root.style.setProperty("--inline-code-weight", String(targetWeight));
   // Real font weights only. A weight jump should never make all math bold.
-  root.style.setProperty("--heading-weight", boldWeight);
+  root.style.setProperty("--heading-weight", String(boldWeight));
+  $("#weight-note").textContent = staticCjk
+    ? t("系统字体非可变字体，细微浓度不明显")
+    : "";
   for (const [id, visible, side] of [
     ["library-panel", settings.sidebar, settings.librarySide],
     ["outline-panel", settings.outline, settings.outlineSide],
@@ -154,6 +165,7 @@ export function applyAppearance(settings) {
   $("#sidebar-toggle").setAttribute("aria-expanded", String(settings.sidebar));
   $("#outline-toggle").setAttribute("aria-expanded", String(settings.outline));
   $("#typeface").value = settings.typeface;
+  $("#column-width").value = settings.columnWidth || "window";
   $("#table-style").value = settings.tableStyle;
   $("#table-width").value = settings.tableWidth;
   $("#navigation-scope").value = settings.navigationScope;
@@ -219,7 +231,7 @@ export function applyAppearance(settings) {
   sample.dataset.outline = settings.outline ? settings.outlineSide : "hidden";
 }
 
-export function wireAppearance(change) {
+export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
   const dialog = $("#appearance"),
     pane = dialog.querySelector(".settings-pane"),
     links = [...dialog.querySelectorAll(".settings-nav button")];
@@ -277,6 +289,8 @@ export function wireAppearance(change) {
   });
   $("#appearance-close").onclick = () => dialog.close();
   $("#typeface").onchange = (event) => change({ typeface: event.target.value });
+  $("#column-width").onchange = (event) =>
+    change({ columnWidth: event.target.value });
   $("#table-style").onchange = (event) =>
     change({ tableStyle: event.target.value });
   $("#table-width").onchange = (event) =>
@@ -316,8 +330,14 @@ export function wireAppearance(change) {
       weight:
         event.target.value === "auto" ? "auto" : Number(event.target.value),
     });
-  $("#reading-preset").onclick = () =>
-    change({ typeface: "literata", weight: "auto" });
+  $("#reset-typography").onclick = () =>
+    change({
+      typeface: "literata",
+      zoom: 100,
+      weight: "auto",
+      columnWidth: "window",
+    });
+  typoLab?.mount(getSettings, change);
   $("#color-theme").onchange = (event) => change({ theme: event.target.value });
   $("#interface-language").onchange = (event) =>
     change({ language: event.target.value });

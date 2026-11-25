@@ -378,8 +378,20 @@ export function watchTableLayout(
     attributeFilter: [
       "style",
       "data-typeface",
+      "data-column-width",
+      "data-wide",
       "data-table-style",
       "data-table-width",
+      ...(import.meta.env?.VITE_TYPO_LAB === "1"
+        ? [
+            "data-lab-line-height",
+            "data-lab-spacing",
+            "data-lab-heading-scale",
+            "data-lab-fluid-size",
+            "data-lab-column-width",
+            "data-lab-chinese-font",
+          ]
+        : []),
     ],
   });
   host.addEventListener("folio:math-rendered", schedule);

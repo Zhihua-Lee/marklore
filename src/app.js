@@ -115,6 +115,7 @@ import { measureAllLines } from "./editor-heights.js";
 import folioLogo from "./folio.svg?raw";
 import "@fontsource-variable/literata/standard.css";
 import "@fontsource-variable/literata/standard-italic.css";
+import "@fontsource-variable/noto-sans-sc";
 import "@fontsource-variable/jetbrains-mono";
 import "@fontsource-variable/jetbrains-mono/wght-italic.css";
 import "@fontsource-variable/inter";
@@ -164,6 +165,11 @@ configureColorTools(
 );
 let editingKeys = [];
 let imageInsertion, backlinks, linkHere, proposals, marks, paintAiSettings;
+const typoLab =
+  typeof import.meta.env !== "undefined" &&
+  import.meta.env.VITE_TYPO_LAB === "1"
+    ? await import("./typo-lab.js")
+    : null;
 // A folder's index file shown as its pages (src/folder-index-view.js).
 let indexView, breadcrumb;
 $("#app").innerHTML = `
@@ -2742,7 +2748,7 @@ function applySettings() {
   backlinks?.decorateOutline();
   $("#width-toggle").setAttribute("aria-pressed", String(settings.wide));
   $("#width-toggle").title = settings.wide ? t("切换为窄版") : t("切换为宽版");
-  applyAppearance(settings);
+  applyAppearance(settings, typoLab);
   // Emphasis beside CJK text read differently: every note is read again.
   if (setCjkEmphasis(settings.cjkEmphasis)) {
     for (const doc of tabs) {
@@ -2767,7 +2773,7 @@ function watchDevicePixelRatio() {
     const mq = window.matchMedia?.(`(resolution: ${devicePixelRatio}dppx)`);
     if (!mq) return;
     const onChange = () => {
-      applyAppearance(settings);
+      applyAppearance(settings, typoLab);
       listen();
     };
     mq.addEventListener("change", onChange, { once: true });
@@ -2794,8 +2800,10 @@ function changeSettings(patch) {
     [
       "zoom",
       "typeface",
+      "columnWidth",
       "weight",
       "wide",
+      ...(typoLab ? ["typoLab"] : []),
       "sidebar",
       "outline",
       "librarySide",
@@ -2967,7 +2975,7 @@ for (const [id, fn] of Object.entries({
   $("#" + id).onclick = run(fn);
 for (const b of document.querySelectorAll("button[data-mode]"))
   b.onclick = () => setMode(b.dataset.mode);
-wireAppearance(changeSettings);
+wireAppearance(changeSettings, { getSettings: () => settings, typoLab });
 paintAiSettings = wireAiSettings({
   api,
   getRoots: () => roots,

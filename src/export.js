@@ -3,15 +3,23 @@ import { loadMath, mayContainMath } from "./markdown.js";
 import { renderDocument } from "./document-render.js";
 import { loadHighlighter, mayContainCode } from "./highlighting.js";
 import { renderDiagrams } from "./diagrams.js";
-import { readingWeight, bodyFontWeight, emphasisWeight } from "./typography.js";
+import {
+  readingWeight,
+  bodyFontWeight,
+  emphasisWeight,
+  subsetFontCss,
+} from "./typography.js";
 import exportCSS from "./export.css?raw";
 import tableCSS from "./tables.css?raw";
 import imageLayoutCSS from "./image-layout.css?raw";
 import katexCSS from "katex/dist/katex.min.css?raw";
 import literataCSS from "@fontsource-variable/literata/standard.css?raw";
 import literataItalicCSS from "@fontsource-variable/literata/standard-italic.css?raw";
+import notoCSS from "@fontsource-variable/noto-sans-sc/wght.css?raw";
 import monoCSS from "@fontsource-variable/jetbrains-mono/index.css?raw";
 import monoItalicCSS from "@fontsource-variable/jetbrains-mono/wght-italic.css?raw";
+
+export { subsetFontCss };
 
 async function completeDiagrams(host) {
   const blocks = [...host.querySelectorAll("pre > code.language-mermaid")];
@@ -176,21 +184,37 @@ export async function exportNote(format, { doc, toc = false }) {
       image.removeAttribute("decoding");
     }
     const typeface = document.documentElement.dataset.typeface;
+    const labOldCjk = document.documentElement.dataset.labChineseFont === "old";
+    const useBuiltInCjk =
+      format === "html" &&
+      !labOldCjk &&
+      (typeface === "literata" || typeface === "balanced");
     const family =
       typeface === "literata"
-        ? '"Literata Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
+        ? useBuiltInCjk
+          ? '"Literata Variable","Noto Sans SC Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
+          : '"Literata Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",serif'
         : typeface === "classic"
           ? 'Arial,"Microsoft YaHei","PingFang SC",sans-serif'
           : typeface === "book"
             ? 'Cambria,Georgia,"Songti SC",SimSun,serif'
-            : '"Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif';
+            : useBuiltInCjk
+              ? '"Noto Sans SC Variable","Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif'
+              : '"Noto Sans SC","Microsoft YaHei","PingFang SC",sans-serif';
     const rawWeight = Number(
       document.documentElement.style.getPropertyValue("--note-wght") ||
         document.documentElement.style.getPropertyValue("--note-weight"),
     );
     const wght = readingWeight({ weight: rawWeight || 400 });
-    const weight = bodyFontWeight(wght);
+    const staticWeight = bodyFontWeight(wght);
     const boldWeight = emphasisWeight(wght);
+    const navHtml = format === "html" && toc ? headingList(host) || null : null;
+    const notoSubsets = useBuiltInCjk
+      ? subsetFontCss(notoCSS, host.textContent + (navHtml ? t("目录") : ""))
+      : "";
+    const fontWeightCss = useBuiltInCjk
+      ? `\nbody{font-family:${family};font-weight:${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight}}`
+      : `\nbody{font-family:${family};font-weight:${staticWeight};font-variation-settings:"wght" ${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight};font-variation-settings:"wght" ${boldWeight}} pre,.katex{font-variation-settings:normal}`;
     warnings.push(
       ...[...host.querySelectorAll(".math-error,.diagram-error")].map(
         (element) => element.textContent,
@@ -201,18 +225,19 @@ export async function exportNote(format, { doc, toc = false }) {
       name: doc.name,
       fileId: doc.fileId || null,
       html: host.innerHTML,
-      nav: format === "html" && toc ? headingList(host) || null : null,
+      nav: navHtml,
       css:
         katexCSS +
         "\n" +
         (typeface === "literata" ? literataCSS + literataItalicCSS : "") +
+        notoSubsets +
         monoCSS +
         monoItalicCSS +
         "\n" +
         exportCSS +
         tableCSS +
         imageLayoutCSS +
-        `\nbody{font-family:${family};font-weight:${weight};font-variation-settings:"wght" ${wght}} h1,h2,h3,h4,h5,h6,strong,b,th,summary{font-weight:${boldWeight};font-variation-settings:"wght" ${boldWeight}} pre,.katex{font-variation-settings:normal}`,
+        fontWeightCss,
       images,
       warnings,
     });

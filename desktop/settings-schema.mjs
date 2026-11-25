@@ -34,6 +34,7 @@ export function defaultSettings() {
     navigationSize: 12,
     tabSize: 11,
     typeface: "literata",
+    columnWidth: "window",
     wide: false,
     tableStyle: "soft",
     tableWidth: "auto",
@@ -99,6 +100,11 @@ export function normalizeSettings(saved = {}) {
   )
     ? settings.typeface
     : "literata";
+  settings.columnWidth = ["window", "measure", "fixed"].includes(
+    settings.columnWidth,
+  )
+    ? settings.columnWidth
+    : "window";
   settings.wide = settings.wide === true;
   settings.tabGroups = Array.isArray(settings.tabGroups)
     ? settings.tabGroups
@@ -146,10 +152,11 @@ export function normalizeSettings(saved = {}) {
     : "hover";
   settings.navigationSize = clamp(settings.navigationSize, 10, 14, 12);
   settings.tabSize = clamp(settings.tabSize, 10, 13, 11);
-  settings.weight = [400, 450, 500].includes(Number(settings.weight))
-    ? Number(settings.weight)
-    : Number(settings.weight) === 600
-      ? 500
+  const weight = Number(settings.weight);
+  settings.weight = [300, 350, 400, 450, 500, 550].includes(weight)
+    ? weight
+    : weight === 600
+      ? 550
       : "auto";
   settings.librarySide = settings.librarySide === "right" ? "right" : "left";
   settings.outlineSide = settings.outlineSide === "left" ? "left" : "right";

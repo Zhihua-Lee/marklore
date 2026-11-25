@@ -1,0 +1,468 @@
+/* Build-gated typography comparison overrides (test builds only).
+   Each toggle restores exact v0.6.4 (317cfb2^1) values for Read and Edit. */
+
+#typo-lab {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.typo-lab-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.typo-lab-head h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.typo-lab-bulk {
+  display: flex;
+  gap: 6px;
+}
+.typo-lab-bulk button {
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--bg);
+}
+.typo-lab-bulk button:hover {
+  background: var(--hover);
+}
+#appearance #typo-lab .setting:last-of-type {
+  border-bottom: 0;
+}
+
+/* 1. Body / table / code line height */
+:root[data-lab-line-height="old"] .prose {
+  line-height: 1.8;
+}
+:root[data-lab-line-height="old"][data-typeface="literata"] .prose {
+  line-height: 1.7;
+}
+:root[data-lab-line-height="old"] .prose pre {
+  line-height: 1.6;
+}
+:root[data-lab-line-height="old"] .prose .code-block pre {
+  line-height: 1.65;
+}
+:root[data-lab-line-height="old"] .table-scroll table,
+:root[data-lab-line-height="old"] .prose .table-scroll table,
+:root[data-lab-line-height="old"] .prose table {
+  line-height: 1.6;
+}
+
+/* 2. Block spacing: restore v0.6.4 element-specific margins */
+:root[data-lab-spacing="old"] .prose h1 {
+  margin: 0 0 0.7em;
+}
+:root[data-lab-spacing="old"] .prose h2 {
+  margin: 1.65em 0 0.7em;
+}
+:root[data-lab-spacing="old"] .prose h3 {
+  margin-top: 1.5em;
+  margin-bottom: 0.65em;
+}
+:root[data-lab-spacing="old"] .prose h4,
+:root[data-lab-spacing="old"] .prose h5,
+:root[data-lab-spacing="old"] .prose h6 {
+  margin: 1.33em 0 0.65em;
+}
+:root[data-lab-spacing="old"] .prose p {
+  margin: 0 0 1em;
+}
+:root[data-lab-spacing="old"] .prose ul,
+:root[data-lab-spacing="old"] .prose ol {
+  margin: 0.75em 0 1em;
+}
+:root[data-lab-spacing="old"] .prose li {
+  margin-block: 0.35em;
+}
+:root[data-lab-spacing="old"] .prose li > p {
+  margin-block: 0.4em;
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror li > p {
+  margin: 0.15em 0;
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  :is(ul, ol):not([data-tight])
+  > li
+  > p {
+  margin-block: 0.4em;
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  :is(ul, ol)[data-tight]
+  > li
+  > p {
+  margin-block: 0.15em;
+}
+:root[data-lab-spacing="old"] .prose li > ul,
+:root[data-lab-spacing="old"] .prose li > ol {
+  margin-block: 0.3em 0;
+}
+:root[data-lab-spacing="old"] .prose hr {
+  margin: 2em auto;
+}
+:root[data-lab-spacing="old"] .prose pre {
+  padding: 18px;
+}
+:root[data-lab-spacing="old"] .prose blockquote {
+  border-left: 4px solid var(--accent);
+  margin: 1.3em 0;
+  padding: 0.65em 1.2em;
+  background: color-mix(in srgb, var(--accent) 7%, var(--reading-paper));
+  border-radius: 0;
+}
+:root[data-lab-spacing="old"] .prose .math-block {
+  margin: 1.75em 0;
+  padding: 0.5em 0;
+}
+:root[data-lab-spacing="old"] .prose li > .math-block {
+  margin: 1em 0 1.2em;
+}
+:root[data-lab-spacing="old"] .table-scroll,
+:root[data-lab-spacing="old"] .prose .table-scroll,
+:root[data-lab-spacing="old"] .prose table {
+  margin: 1.4em 0;
+}
+:root[data-lab-spacing="old"] .table-scroll :is(th, td),
+:root[data-lab-spacing="old"] .prose .table-scroll :is(th, td) {
+  padding: 0.62em 1em;
+}
+:root[data-lab-spacing="old"] .prose th,
+:root[data-lab-spacing="old"] .prose td {
+  padding: 0.55em 0.9em;
+}
+:root[data-lab-spacing="old"] .prose .code-block,
+:root[data-lab-spacing="old"] #rich .raw-block[data-kind="diagram"] {
+  margin: 1.25em 0;
+}
+:root[data-lab-spacing="old"] .prose .code-block pre {
+  padding: 14px 16px 16px;
+}
+:root[data-lab-spacing="old"] .code-toolbar {
+  min-height: 0;
+  padding: 4px 10px 4px 16px;
+  line-height: 1.5;
+}
+:root[data-lab-spacing="old"] .code-copy,
+:root[data-lab-spacing="old"] .code-action {
+  min-height: 26px;
+  padding: 3px 6px;
+}
+:root[data-lab-spacing="old"] .prose details:not(.front-matter, .fm-more),
+:root[data-lab-spacing="old"] #rich .rich-details {
+  padding: 12px 16px;
+  margin: 1.1em 0;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  details:not(.front-matter, .fm-more)[open]
+  > :nth-child(2),
+:root[data-lab-spacing="old"]
+  #rich
+  .rich-details:not(.rich-folded)
+  > :nth-child(2) {
+  margin-top: 0.65em;
+}
+:root[data-lab-spacing="old"] .prose details.front-matter {
+  margin: 0 0 1.1em;
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .rich-properties:has(> details.front-matter, > .fm-title) {
+  margin-bottom: calc(12.5px * 1.1);
+}
+:root[data-lab-spacing="old"] .prose img {
+  margin: 20px auto;
+}
+:root[data-lab-spacing="old"] .prose .fm-title {
+  margin: 0 0 0.3em;
+}
+:root[data-lab-spacing="old"] .prose .footnotes-sep {
+  display: block;
+}
+:root[data-lab-spacing="old"] .prose .footnotes {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+:root[data-lab-spacing="old"] .prose .footnotes > ol {
+  margin: 0.75em 0 1em;
+}
+:root[data-lab-spacing="old"] .prose .footnotes li {
+  margin-block: 0.35em;
+}
+:root[data-lab-spacing="old"] .prose .footnotes li > p {
+  margin-block: 0.4em;
+}
+:root[data-lab-spacing="old"] .note-section,
+:root[data-lab-spacing="old"]
+  .note-section:is([data-level="4"], [data-level="5"], [data-level="6"]) {
+  margin-block: 1.6em;
+}
+:root[data-lab-spacing="old"] .note-section > :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0 0 0.65em;
+}
+:root[data-lab-spacing="old"]
+  .section-body
+  > .note-section:nth-child(1 of :not(.anchor-only)) {
+  margin-top: 0.8em;
+}
+/* v0.6.4 left non-paragraph first children in section-body with their own top margin. */
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > :is(ul, ol):nth-child(1 of :not(.anchor-only)) {
+  margin-top: 0.75em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > blockquote:nth-child(1 of :not(.anchor-only)) {
+  margin-top: 1.3em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > .code-block:nth-child(1 of :not(.anchor-only)) {
+  margin-top: 1.25em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > .math-block:nth-child(1 of :not(.anchor-only)) {
+  margin-top: 1.75em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > .table-scroll:nth-child(1 of :not(.anchor-only)) {
+  margin-top: 1.4em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > hr:nth-child(1 of :not(.anchor-only)) {
+  margin-top: 2em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > details:not(.front-matter, .fm-more):nth-child(1 of :not(.anchor-only)) {
+  margin-top: 1.1em;
+}
+:root[data-lab-spacing="old"]
+  .prose
+  .section-body
+  > p:first-child
+  > img:first-child {
+  margin-top: 20px;
+}
+
+/* Edit-mode counterparts when block spacing = v0.6.4 */
+:root[data-lab-spacing="old"] #rich .ProseMirror > [data-rich-head="1"] {
+  --rich-head-mb: calc(0.65 * var(--lab-h1, 1.6) * var(--note-size));
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > [data-rich-head="2"] {
+  --rich-head-mb: calc(0.65 * var(--lab-h2, 1.32) * var(--note-size));
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > [data-rich-head="3"] {
+  --rich-head-mb: calc(0.65 * var(--lab-h3, 1.15) * var(--note-size));
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > [data-rich-head="4"] {
+  --rich-head-mb: calc(0.65 * var(--lab-h4, 1.05) * var(--note-size));
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > [data-rich-head="5"] {
+  --rich-head-mb: calc(0.65 * var(--lab-h5, 1) * var(--note-size));
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > [data-rich-head="6"] {
+  --rich-head-mb: calc(0.65 * var(--lab-h6, 0.94) * var(--note-size));
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > h1:not([data-rich-sec-mt]) {
+  margin: 0 0 0.7em;
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt] {
+  margin-bottom: 0.65em;
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="normal"] {
+  margin-top: calc(1.6 * var(--note-size));
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="nested-first"] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 0.8 * var(--note-size));
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="after-empty"],
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(h4, h5, h6)[data-rich-sec-mt="after-empty"]:is(
+    [data-rich-head="1"],
+    [data-rich-head="2"],
+    [data-rich-head="3"],
+    [data-rich-head="4"],
+    [data-rich-head="5"],
+    [data-rich-head="6"]
+  ) {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.6 * var(--note-size));
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(ul, ol)[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 0.75em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > blockquote[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.3em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > .code-block[data-rich-sec-first],
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > .raw-block[data-kind="diagram"][data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.25em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > .math-block[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.75em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > .table-scroll[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.4em);
+}
+:root[data-lab-spacing="old"] #rich .ProseMirror > hr[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 2em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > .rich-details[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1.1em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > .columns[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 1em);
+}
+:root[data-lab-spacing="old"]
+  #rich
+  .ProseMirror
+  > :is(.image-line, .image-row)[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + 20px);
+}
+
+/* 3. Heading scale */
+:root[data-lab-heading-scale="old"] {
+  --lab-h1: 1.85;
+  --lab-h2: 1.5;
+  --lab-h3: 1.25;
+  --lab-h4: 1.1;
+  --lab-h5: 1;
+  --lab-h6: 0.95;
+}
+:root[data-lab-heading-scale="old"]
+  .prose
+  :is(h1, .note-section[data-level="1"]),
+:root[data-lab-heading-scale="old"] .prose .fm-title {
+  --heading-scale: 1.85;
+}
+:root[data-lab-heading-scale="old"]
+  .prose
+  :is(h2, .note-section[data-level="2"]) {
+  --heading-scale: 1.5;
+}
+:root[data-lab-heading-scale="old"]
+  .prose
+  :is(h3, .note-section[data-level="3"]) {
+  --heading-scale: 1.25;
+}
+:root[data-lab-heading-scale="old"]
+  .prose
+  :is(h4, .note-section[data-level="4"]) {
+  --heading-scale: 1.1;
+}
+:root[data-lab-heading-scale="old"]
+  .prose
+  :is(h5, .note-section[data-level="5"]) {
+  --heading-scale: 1;
+}
+:root[data-lab-heading-scale="old"]
+  .prose
+  :is(h6, .note-section[data-level="6"]) {
+  --heading-scale: 0.95;
+}
+
+/* 4. Fluid note size */
+:root[data-lab-fluid-size="old"] {
+  --note-fluid: 16px;
+}
+
+/* 5. Column width */
+:root[data-lab-column-width="old"] {
+  --note-column: calc(680px + var(--note-hpad, 80px));
+}
+
+/* 7. Chinese font: fall back to system CJK and keep static CJK weights safe */
+:root[data-lab-chinese-font="old"] {
+  --font-ui:
+    "Inter Variable", "Noto Sans SC", "Segoe UI", "Microsoft YaHei",
+    "PingFang SC", sans-serif;
+  --font-code:
+    "JetBrains Mono Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
+    monospace;
+  --font-note: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+:root[data-lab-chinese-font="old"][data-typeface="literata"] {
+  --font-note:
+    "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
+}
+:root[data-lab-chinese-font="old"] .prose {
+  font-variation-settings: "wght" var(--note-wght, 400);
+}
+:root[data-lab-chinese-font="old"]
+  .prose
+  :is(h1, h2, h3, h4, h5, h6, .fm-title) {
+  font-variation-settings: "wght" var(--heading-weight, 600);
+}
+:root[data-lab-chinese-font="old"]
+  .prose
+  :is(strong, b, th, summary, #rich .rich-summary) {
+  font-variation-settings: "wght" var(--strong-weight, 600);
+}
+:root[data-lab-chinese-font="old"] .prose :is(pre, .katex, .front-matter) {
+  font-variation-settings: normal;
+}

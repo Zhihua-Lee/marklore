@@ -18,7 +18,6 @@ body {
     "Microsoft YaHei",
     "PingFang SC",
     serif;
-  font-variation-settings: "wght" 400;
   letter-spacing: normal;
 }
 article {
@@ -51,18 +50,6 @@ h3 {
   font-size: 1.15em;
   font-weight: 600;
   margin: 1.55em 0 0.45em;
-}
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-strong,
-b,
-th,
-summary {
-  font-variation-settings: "wght" 600;
 }
 strong {
   font-weight: 600;
@@ -209,14 +196,15 @@ summary {
 .katex {
   font-size: 1em;
   font-weight: 400;
-  font-variation-settings: normal;
   letter-spacing: normal;
 }
 .katex-display > .katex {
   font-size: 1.1616em;
 }
 .katex .cjk_fallback {
-  font-family: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family:
+    "Noto Sans SC Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
+    sans-serif;
   font-size: 1em;
 }
 .katex-display .cjk_fallback {

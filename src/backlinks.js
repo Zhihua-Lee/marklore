@@ -11,6 +11,16 @@ const HEADINGS = "h1,h2,h3,h4,h5,h6";
 const BLOCKS =
   "p,h1,h2,h3,h4,h5,h6,li,blockquote,table,pre,figure,.math-block,dl";
 const arrowIn = icon("backlink");
+// A snippet is its paragraph's lines joined: in a list, the items' markers
+// and task boxes would read as noise. The first marker goes; between items,
+// a quiet separator.
+export const tidySnippet = (text) =>
+  String(text)
+    .replace(
+      /^(…?)[ \t]*(?:>[ \t]?)*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(?:\[[ xX]\][ \t]+)?/,
+      "$1",
+    )
+    .replace(/[ \t]+(?:[-*+]|\d{1,9}[.)])[ \t]+\[[ xX]\][ \t]+/g, " · ");
 
 // An author anchor (<a id="..."></a> on its own line) marks what follows it.
 export function explicitAnchors(content) {
@@ -419,8 +429,11 @@ export function createBacklinks({
           ? "› " + entry.section
           : "";
         const snippet = button.querySelector(".backlink-snippet");
-        snippet.dataset.source = entry.snippet;
-        snippet.innerHTML = renderMarkdown(entry.snippet, doc?.fileId).html;
+        snippet.dataset.source = tidySnippet(entry.snippet);
+        snippet.innerHTML = renderMarkdown(
+          snippet.dataset.source,
+          doc?.fileId,
+        ).html;
         button.onclick = run(async () => {
           hide();
           await navigate(entry.href);

@@ -231,29 +231,41 @@ export function createOutline({
     else programmaticTop = null;
   }
   // What each entry stands for on the page: its heading, or its index row.
+  // Found in one pass over the page: a query per entry made folding a long
+  // note (hundreds of headings) stall.
   function resolve(buttons) {
-    if (
-      targets &&
-      targets.length === buttons.length &&
-      targets.every(
-        ([button, element]) =>
-          buttons.includes(button) && (!element || element.isConnected),
+    if (targets && targets.length === buttons.length) {
+      const shown = new Set(buttons);
+      if (
+        targets.every(
+          ([button, element]) =>
+            shown.has(button) && (!element || element.isConnected),
+        )
       )
-    )
-      return targets;
+        return targets;
+    }
+    const first = (map, key, value) => {
+      if (key != null && !map.has(key)) map.set(key, value);
+    };
+    const headings = new Map(),
+      byId = new Map(),
+      byLine = new Map();
+    for (const h of content.querySelectorAll(
+      ":is(h1,h2,h3,h4,h5,h6)[data-heading]",
+    ))
+      first(headings, h.dataset.heading, h);
+    if (buttons.some((button) => !button.dataset.heading))
+      for (const row of content.querySelectorAll(".ix-item > .ix-row")) {
+        first(byId, row.parentElement.dataset.ixId, row);
+        first(byLine, row.parentElement.dataset.line, row);
+      }
     targets = buttons.map((button) => [
       button,
       button.dataset.heading
-        ? content.querySelector(
-            `:is(h1,h2,h3,h4,h5,h6)[data-heading="${button.dataset.heading}"]`,
-          )
-        : (button.dataset.ixKey &&
-            content.querySelector(
-              `.ix-item[data-ix-id="${CSS.escape(button.dataset.ixKey)}"] > .ix-row`,
-            )) ||
-          content.querySelector(
-            `.ix-item[data-line="${button.dataset.line}"] > .ix-row`,
-          ),
+        ? headings.get(button.dataset.heading) || null
+        : (button.dataset.ixKey && byId.get(button.dataset.ixKey)) ||
+          byLine.get(button.dataset.line) ||
+          null,
     ]);
     return targets;
   }

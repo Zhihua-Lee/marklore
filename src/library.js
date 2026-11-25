@@ -76,6 +76,9 @@ export function snippetMarkdown(snippet) {
 }
 // Notes with sub-pages the reader folded (by path), kept across rebuilds.
 const closedPages = new Set();
+// Hits listed under a search result (main sends one more, for the title's
+// own line, which is left out).
+const SHOWN_HITS = 3;
 export function createLibrary({
   api,
   roots,
@@ -136,6 +139,10 @@ export function createLibrary({
   const expanded = new Set();
   const foldedRoots = new Set();
   const pathKey = (p) => p.toLowerCase().replace(/[\\/]+$/, "");
+  // Notes' names (their leading headings) as the tree last listed them, for
+  // naming search results alike.
+  const noteTitles = new Map();
+  const titleKey = (p) => String(p).toLowerCase().replace(/\\/g, "/");
   // The tree's place when a search replaced it: scroll and focused row.
   let treePlace = null;
   async function openFolder() {
@@ -302,6 +309,9 @@ export function createLibrary({
           ?.remove();
       }
     }
+    for (const child of children)
+      if (child.title && !child.index && child.path)
+        noteTitles.set(titleKey(child.path), child.title);
     const stack = [{ depth: -1, box: details }];
     let separated = false;
     for (let i = 0; i < children.length; i++) {
@@ -954,23 +964,40 @@ export function createLibrary({
     out.append(text.slice(at));
     return out;
   }
-  // One result: the note's name (words marked), how many hits, and the
-  // section and line around its best hits. open(hit) opens it there.
+  // One result: the note's name as the tree shows it (its title, else its
+  // file name without ".md"; words marked), how many hits, and its best
+  // hits. The title's own line is left out (the name shows it), and a
+  // section is named once for the hits that follow in it (a heading found
+  // names the section of the hits under it). open(hit) opens it there.
   function resultItem({ name, path, count, hits = [] }, terms, open, typeset) {
+    const shown =
+      noteTitles.get(titleKey(path)) || name.replace(/\.(md|markdown)$/i, "");
     const item = element("div", "text-note");
     const title = element("button", "text-note-name");
     title.title = path;
     const label = element("span", "text-note-title");
-    label.append(markWords(name, terms));
+    label.append(markWords(shown, terms));
     title.append(label);
     if (count) title.append(element("span", "text-note-count", String(count)));
     title.onclick = run(() => open(hits[0] || null));
     item.append(title);
-    for (const hit of hits) {
+    const plain = (hit) =>
+      hit.snippet
+        .map(([text]) => text)
+        .join("")
+        .trim();
+    let named = shown;
+    hits = hits.filter(
+      (hit, i) => !(i === 0 && hit.heading && plain(hit) === shown),
+    );
+    for (const hit of hits.slice(0, SHOWN_HITS)) {
       const b = element("button", "text-hit");
       b.title = t("第 {line} 行", { line: hit.line });
-      if (hit.section)
+      if (hit.heading) named = plain(hit);
+      else if (hit.section && hit.section !== named) {
         b.append(element("span", "text-hit-section", hit.section));
+        named = hit.section;
+      }
       const line = element(
         "span",
         hit.heading ? "text-hit-line heading" : "text-hit-line",

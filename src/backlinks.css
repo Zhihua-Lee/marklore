@@ -9,7 +9,7 @@
   height: 1.55em;
   margin: 0.05em 0 0 0.6em;
   padding: 0 7px 0 6px;
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border: 1px solid transparent;
   border-radius: 999px;
   background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: color-mix(in srgb, var(--accent) 80%, var(--muted));
@@ -34,7 +34,7 @@
 }
 /* Some links into this note point at places it no longer has. */
 #content .backlink-badge.has-missing {
-  border-style: dashed;
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, transparent);
 }
 #content h1 > .backlink-badge,
 #content h2 > .backlink-badge,
@@ -50,10 +50,14 @@
   color: color-mix(in srgb, var(--danger) 55%, var(--ink));
 }
 
+/* The card: which notes link here. Grouped by the place they point at (a
+   quiet label), each link as its note's name, the section it is in, and the
+   sentence around it in at most three lines. One face (the interface's),
+   one left edge, space between links rather than inside them. */
 #backlinks-card {
   position: fixed;
   z-index: 50;
-  width: min(460px, calc(100vw - 24px));
+  width: min(440px, calc(100vw - 24px));
   max-height: min(60vh, 520px);
   display: flex;
   flex-direction: column;
@@ -71,43 +75,53 @@
 #backlinks-card header {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
+  gap: 6px;
+  padding: 7px 12px;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
+  font-size: 12px;
 }
 #backlinks-card header strong {
   color: var(--ink);
   font-weight: 600;
 }
 #backlinks-card header .ui-icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 #backlinks-card .backlinks-list {
   overflow: auto;
   padding: 4px;
 }
 #backlinks-card .backlinks-target {
-  margin: 8px 8px 2px;
+  margin: 10px 8px 2px;
   color: var(--muted);
-  font-size: 11.5px;
+  font-size: 11px;
+  line-height: 1.4;
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#backlinks-card .backlinks-target:first-child {
+  margin-top: 4px;
 }
 #backlinks-card .backlink-entry {
   display: block;
   width: 100%;
   min-height: 0;
-  padding: 7px 9px;
-  border-radius: 7px;
+  padding: 5px 8px 6px;
+  border-radius: 6px;
   text-align: left;
   white-space: normal;
+  font: inherit;
 }
 #backlinks-card .backlink-entry:hover,
 #backlinks-card .backlink-entry:focus-visible {
   background: var(--hover);
 }
 #backlinks-card .backlink-source {
+  font-size: 12.5px;
   font-weight: 600;
 }
 #backlinks-card .backlink-section {
@@ -116,11 +130,21 @@
   font-size: 12px;
 }
 #backlinks-card .backlink-snippet {
-  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  margin-top: 1px;
   color: color-mix(in srgb, var(--ink) 82%, var(--muted));
-  font: 400 13px/1.55 var(--font-note);
+  font: 400 12.5px/1.55 var(--font-ui);
 }
-#backlinks-card .backlink-snippet p {
+#backlinks-card .backlink-snippet :is(p, ul, ol, li, blockquote) {
+  display: inline;
+  margin: 0;
+  padding: 0;
+}
+#backlinks-card .backlink-snippet .katex-display {
+  display: inline;
   margin: 0;
 }
 #backlinks-card .backlink-hit {

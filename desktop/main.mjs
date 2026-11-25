@@ -1440,7 +1440,8 @@ else {
       api("searchText", (query) => {
         if (typeof query !== "string" || query.length > 200)
           throw Error(t("无效搜索"));
-        return linkIndex.search(query);
+        // One hit more than listed: the title's line is left out there.
+        return linkIndex.search(query, { maxHits: 4 });
       });
       // Open a note found by searchText; only notes in the library index.
       api("openFromLibrary", (p) => {

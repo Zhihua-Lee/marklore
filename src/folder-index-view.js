@@ -430,7 +430,29 @@ export function createIndexView({
     await Promise.all([worker(), worker(), worker(), worker()]);
     if (folders.get(dKey) !== info) return;
     info.version++;
-    refresh(doc);
+    // Shown: the sentences go into the rows as they are (drawing a long
+    // index again froze the view for a moment after each unfold).
+    if (getDocument() === doc && !inlineEditor()) placeExcerpts(doc, info);
+    else refresh(doc);
+  }
+  // First sentences that arrived, put into the rows shown that have room for
+  // one (as buildItemElement places them: after the title and count).
+  function placeExcerpts(doc, info) {
+    for (const item of host.querySelectorAll(".ix-item[data-excerpt-key]")) {
+      const row = item.querySelector(":scope > .ix-row");
+      if (
+        !row ||
+        row.querySelector(":scope > :is(.ix-rest, .ix-excerpt, .ix-missing)")
+      )
+        continue;
+      const excerpt = info.excerpts.get(item.dataset.excerptKey);
+      if (!excerpt) continue;
+      row.insertBefore(
+        element("span", "ix-excerpt", excerpt),
+        row.querySelector(":scope > .ix-row-actions"),
+      );
+    }
+    foldsChanged(doc, { domUpdated: true });
   }
   function collectVisibleNotesFromDom(doc, info) {
     const out = [];
@@ -977,6 +999,8 @@ export function createIndexView({
           ).toLowerCase()
         : null;
 
+    if (!isFolder && child && !child.directory && excerptKey)
+      item.dataset.excerptKey = excerptKey;
     if (!hidden && !isFolder && child && !child.directory && excerptKey) {
       visibleNotes.push({
         excerptKey,
@@ -1817,17 +1841,31 @@ export function createIndexView({
       outlineChanged();
       return false;
     }
+    // Entries whose pages are drawn already (hidden under the fold) open in
+    // place; a subfolder read just now needs the view drawn again.
+    const drawn =
+      !toLoad.length &&
+      group.items.every((item) =>
+        item.querySelector(":scope > .ix-children > .ix-item"),
+      );
     for (const item of group.items) {
       const fKey = item.dataset.foldKey;
       const defClosed = item.dataset.defaultClosed === "true";
       setFoldKey(doc, fKey, defClosed, false);
+      if (!drawn) continue;
+      item.classList.remove("closed");
+      item.setAttribute("aria-expanded", "true");
+      for (const control of item.querySelectorAll(
+        ":scope > .ix-row > .ix-twisty, :scope > .ix-children > .ix-rail",
+      ))
+        control.setAttribute("aria-expanded", "true");
     }
     st.tooLarge = null;
-    rerender(doc);
+    if (!drawn) rerender(doc);
     restoreScrollAnchor(anchor);
     if (info?.status === "ready")
       loadExcerpts(doc, info, collectVisibleNotesFromDom(doc, info));
-    foldsChanged(doc);
+    foldsChanged(doc, { domUpdated: drawn });
     outlineChanged();
     return true;
   }

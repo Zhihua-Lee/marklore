@@ -1,27 +1,18 @@
-/* A folder left out of search and backlinks: dimmed, with a short note. */
-#tree details.folder.excluded > summary {
-  color: var(--muted);
-  font-weight: 400;
-}
-#tree details.folder.excluded > summary::after {
-  content: attr(data-excluded);
-  margin-left: 8px;
-  font-size: 10.5px;
-  font-weight: 400;
-  letter-spacing: 0.02em;
-}
-
-/* Library search results: one list of notes, each with its best hits. */
+/* Library search results: one list of notes, each with its best hits. The
+   note's name leads; each hit is the line found, under its section's name
+   only where the section changes; a line shows at most three rows. Space
+   goes between notes, not inside them. */
 #tree .search-results {
-  padding-top: 4px;
+  padding-top: 2px;
 }
 #tree .text-note {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 #tree .text-note-name,
 #tree .text-hit {
   display: block;
   width: 100%;
+  min-height: 0;
   text-align: left;
   font-family: var(--font-ui);
   font-weight: 400;
@@ -30,8 +21,9 @@
   display: flex;
   align-items: baseline;
   gap: 6px;
-  padding: 6px 8px;
+  padding: 4px 8px;
   font-size: var(--navigation-size, 12px);
+  line-height: 1.45;
   font-weight: 600;
 }
 #tree .text-note-title {
@@ -45,10 +37,11 @@
   flex: none;
   font-size: 11px;
   font-weight: 400;
+  font-variant-numeric: tabular-nums;
   color: var(--muted);
 }
 #tree .text-hit {
-  padding: 4px 8px 5px 18px;
+  padding: 2px 8px 3px 16px;
   font-size: 12px;
   line-height: 1.5;
   color: color-mix(in srgb, var(--ink) 82%, var(--muted));
@@ -57,14 +50,25 @@
 }
 #tree .text-hit-section {
   display: block;
+  margin-top: 2px;
   font-size: 11px;
+  line-height: 1.45;
   color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+#tree .text-hit-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+/* A heading found: it names the section of the hits under it. */
 #tree .text-hit-line.heading {
   font-weight: 600;
+  color: var(--ink);
+  -webkit-line-clamp: 1;
 }
 /* Lines with formulas are rendered Markdown: one inline paragraph. */
 #tree .text-hit-line p {
@@ -75,9 +79,8 @@
   font-size: 1.05em;
 }
 #tree .text-hit .katex-display {
-  margin: 2px 0;
-  overflow-x: auto;
-  overflow-y: hidden;
+  display: inline;
+  margin: 0;
 }
 #tree .text-note-name[aria-current="page"] {
   background: var(--hover);
@@ -89,4 +92,36 @@
   border-radius: 3px;
   background: color-mix(in srgb, var(--accent) 22%, transparent);
   color: inherit;
+}
+
+/* The side panels' lists scroll with a thin bar, without arrow buttons
+   (like the note's own). */
+:is(#tree, #outline, #backlinks-card .backlinks-list)::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+:is(#tree, #outline, #backlinks-card .backlinks-list)::-webkit-scrollbar-track {
+  background: transparent;
+}
+:is(#tree, #outline, #backlinks-card .backlinks-list)::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 18%, transparent);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 8px;
+}
+:is(
+    #tree,
+    #outline,
+    #backlinks-card .backlinks-list
+  )::-webkit-scrollbar-thumb:hover {
+  background-color: color-mix(in srgb, var(--ink) 32%, transparent);
+}
+:is(
+  #tree,
+  #outline,
+  #backlinks-card .backlinks-list
+)::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
 }

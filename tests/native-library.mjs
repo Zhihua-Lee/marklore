@@ -120,7 +120,7 @@ try {
   ]);
   assert.equal(await hit.locator(".text-hit-section").textContent(), "Energy");
   assert.equal(
-    await tree.locator(".text-note-title", { hasText: "Hidden.md" }).count(),
+    await tree.locator('.text-note-name[title$="Hidden.md"]').count(),
     0,
   );
   // Results follow the typing: from a new query to the list on screen.
@@ -128,7 +128,7 @@ try {
   const typed = Date.now();
   await filter.fill("energy");
   await tree
-    .locator(".text-note-title", { hasText: "Deep.md" })
+    .locator('.text-note-name[title$="Deep.md"]')
     .waitFor({ timeout: 2000 });
   const latency = Date.now() - typed;
   assert.ok(latency < 1000, `search took ${latency} ms`);

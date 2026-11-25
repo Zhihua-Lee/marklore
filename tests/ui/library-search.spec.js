@@ -206,7 +206,7 @@ test("names in a folder outside the library are searched on disk and appended", 
   const notes = page.locator("#tree .text-note");
   await expect(notes).toHaveCount(3);
   await expect(notes.nth(2).locator(".text-note-title")).toHaveText(
-    "FFT outside.md",
+    "FFT outside",
   );
   await expect(notes.nth(2).locator("mark")).toHaveText("FFT");
   await expect(page.locator("#tree .search-info")).toHaveText("共 3 篇笔记");

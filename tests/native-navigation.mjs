@@ -132,6 +132,9 @@ try {
   await expect(page.getByRole("tab")).toHaveCount(2);
   await page.getByRole("button", { name: "设置", exact: true }).click();
   await page
+    .locator('.settings-nav button[data-section="settings-navigation"]')
+    .click();
+  await page
     .getByRole("combobox", { name: "前进 / 后退按钮" })
     .selectOption("visible");
   await page.getByRole("button", { name: "关闭设置" }).click();

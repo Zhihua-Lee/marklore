@@ -45,6 +45,9 @@ try {
     ["zh", "阅读", "文件"],
   ]) {
     await page.locator("#weight").click();
+    await page
+      .locator('.settings-nav button[data-section="settings-theme"]')
+      .click();
     await page.locator("#interface-language").selectOption(choice);
     await page.waitForFunction(
       (label) =>

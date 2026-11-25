@@ -58,6 +58,9 @@ try {
   await page.keyboard.type("\nUNSAVED DRAFT INCLUDED");
   await command("read");
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-tables"]')
+    .click();
   await page.getByRole("combobox", { name: "表格风格" }).selectOption("grid");
   await page.getByRole("combobox", { name: "表格宽度" }).selectOption("full");
   await page.getByRole("button", { name: "关闭设置" }).click();
@@ -113,6 +116,9 @@ try {
   for (const id of targets) assert.ok(html.includes(`id="${id}"`), id);
   // Turned off in Settings: no list.
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-export"]')
+    .click();
   await page.getByRole("checkbox", { name: "HTML 附带目录" }).uncheck();
   await page.getByRole("button", { name: "关闭设置" }).click();
   const plainPath = path.join(temp, "plain.html");
@@ -125,6 +131,9 @@ try {
   assert.ok(plain.includes("<body><article>"));
   assert.ok(plain.includes("UNSAVED DRAFT INCLUDED"));
   await page.getByRole("button", { name: "设置", exact: true }).click();
+  await page
+    .locator('.settings-nav button[data-section="settings-export"]')
+    .click();
   await page.getByRole("checkbox", { name: "HTML 附带目录" }).check();
   await page.getByRole("button", { name: "关闭设置" }).click();
   await instance.evaluate(({ app }) => {

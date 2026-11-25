@@ -84,6 +84,9 @@ try {
   await expect.poll(visible).toBe(true);
   assert.match(await page.locator("#content h1").innerText(), /Background$/);
   await page.locator("#weight").click();
+  await page
+    .locator('.settings-nav button[data-section="desktop-settings"]')
+    .click();
   await expect(page.locator("#association-status")).not.toHaveText("");
   await page.locator("#close-to-tray").check();
   await expect

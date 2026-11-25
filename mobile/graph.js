@@ -4,7 +4,7 @@ const SELECT =
   "id,name,size,file,folder,package,deleted,parentReference,cTag,eTag,lastModifiedDateTime";
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const TIMEOUT = 30_000;
+const TIMEOUT = 60_000;
 const DOWNLOAD_TIMEOUT = 120_000;
 
 export function createGraph(

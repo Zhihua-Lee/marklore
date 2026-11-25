@@ -11,7 +11,8 @@ It reuses the desktop renderer (`src/markdown.js`): formulas, tables, code, link
 - `library.js`: notes and images stored on the phone (IndexedDB), search, small persisted state.
 - `account.js`, `auth.js`, `graph.js`, `sync.js`: Microsoft sign-in (authorization code with PKCE), folder listing and incremental sync (Graph delta).
 - `mock.js`: an in-memory `library` and `account` with a sample notebook, for developing and testing the interface without an account.
-- `sw.js`, `manifest.webmanifest`: offline shell and home-screen install.
+- `sw.js`: offline shell. The build writes the list of its files into it, so each build is a new service worker; an open page reloads into a new version once it has taken over.
+- `public/manifest.webmanifest`: home-screen install.
 
 Build: `vite build --config vite.mobile.config.mjs` (output `dist-mobile/`). Dev server: `vite --config vite.mobile.config.mjs` (port 5180). Tests: `playwright test --config playwright.mobile.config.mjs` (iPhone viewport in Chromium and WebKit; mock back end).
 

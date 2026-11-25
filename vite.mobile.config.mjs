@@ -6,9 +6,10 @@ import { fileURLToPath } from "node:url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const publicDir = path.join(root, "mobile", "public");
+const swSource = path.join(root, "mobile", "sw.js");
 
-// Writes precache.js for the service worker (public/sw.js): every file of the
-// build and a version derived from their names (hashed assets) and contents.
+// Writes the service worker (mobile/sw.js) with the list of every file of the
+// build and a version derived from their names (hashed assets) and sw.js.
 function precache() {
   return {
     name: "marklore-reader-precache",
@@ -18,18 +19,22 @@ function precache() {
         "./",
         "index.html",
         ...Object.keys(bundle),
-        ...fs.readdirSync(publicDir).filter((f) => f !== "sw.js"),
+        ...fs.readdirSync(publicDir),
       ]
         .filter((f) => !f.endsWith(".map"))
         .filter((f, i, all) => all.indexOf(f) === i);
       const hash = crypto.createHash("sha256");
       for (const name of files.sort()) hash.update(name);
-      hash.update(fs.readFileSync(path.join(publicDir, "sw.js")));
+      const worker = fs.readFileSync(swSource, "utf8");
+      hash.update(worker);
       const version = hash.digest("hex").slice(0, 12);
+      if (!worker.includes("/* PRECACHE */"))
+        throw new Error("mobile/sw.js lost its /* PRECACHE */ marker");
+      const list = `self.PRECACHE = ${JSON.stringify({ version, files })};`;
       this.emitFile({
         type: "asset",
-        fileName: "precache.js",
-        source: `self.PRECACHE = ${JSON.stringify({ version, files })};\n`,
+        fileName: "sw.js",
+        source: worker.split("/* PRECACHE */").join(list),
       });
     },
   };

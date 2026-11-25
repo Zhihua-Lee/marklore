@@ -1,8 +1,11 @@
-// Offline shell for the phone reader. precache.js (written at build time by
-// vite.mobile.config.mjs) lists every file of this build and its version.
+// Offline shell for the phone reader. The build (vite.mobile.config.mjs)
+// writes this file with self.PRECACHE (every file of the build and its
+// version) in place of the line below, so each build changes sw.js itself:
+// browsers look for an update by comparing sw.js, and the HTTP cache of
+// imported scripts (GitHub Pages: 10 minutes) cannot hide a new version.
 // Notes are not here: they live in IndexedDB. Requests to other origins
 // (Microsoft sign-in and OneDrive) are never touched.
-importScripts("./precache.js");
+/* PRECACHE */
 
 const { version, files } = self.PRECACHE;
 const CACHE = "marklore-reader-" + version;

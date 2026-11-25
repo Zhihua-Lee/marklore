@@ -1336,20 +1336,61 @@ const blockMarks = (blocks, nonce) => {
 // outline. Its entry in `env.headings` gets `title: true`. Only a parse of
 // the whole note can tell (a window of blocks, incremental-render.js, starts
 // further down).
+function isAnchorParagraphTokens(tokens, openIdx) {
+  if (tokens[openIdx]?.type !== "paragraph_open") return false;
+  const inline = tokens[openIdx + 1];
+  if (inline?.type !== "inline" || !inline.children?.length) return false;
+  let anchors = 0;
+  for (let i = 0; i < inline.children.length; i++) {
+    const child = inline.children[i];
+    if (child.type === "text" && !child.content.trim()) continue;
+    if (child.type === "softbreak") continue;
+    if (
+      child.type === "html_inline" &&
+      /^<a\s[^>]*\b(?:id|name)\s*=/i.test(child.content) &&
+      /^<\/a\s*>$/i.test(inline.children[i + 1]?.content || "")
+    ) {
+      anchors++;
+      i++;
+      continue;
+    }
+    if (
+      child.type === "html_inline" &&
+      /^<a\s[^>]*\b(?:id|name)\s*=[^>]*><\/a\s*>$/i.test(child.content)
+    ) {
+      anchors++;
+      continue;
+    }
+    return false;
+  }
+  return anchors > 0;
+}
 function markTitle(state) {
-  const top = state.tokens.filter(
-    (token) =>
-      token.level === 0 && token.nesting !== -1 && token.type !== "inline",
-  );
-  const first = top.find((token) => token.type !== "front_matter");
+  let idx = 0;
+  while (idx < state.tokens.length) {
+    const tok = state.tokens[idx];
+    if (tok.level !== 0 || tok.nesting === -1 || tok.type === "inline") {
+      idx++;
+      continue;
+    }
+    if (tok.type === "front_matter") {
+      idx++;
+      continue;
+    }
+    if (isAnchorParagraphTokens(state.tokens, idx)) {
+      idx += 3;
+      continue;
+    }
+    break;
+  }
+  const first = state.tokens[idx];
   if (first?.type !== "heading_open" || first.tag !== "h1" || !first.map)
     return;
-  // The parse began at the note's top: nothing but blank lines (and the
-  // front matter) before this heading.
-  const lines = state.src.split("\n", first.map[0]);
-  const from = top[0].type === "front_matter" ? top[0].map[1] : 0;
-  if (lines.slice(from).some((line) => line.trim())) return;
-  if (top.filter((t) => t.type === "heading_open" && t.tag === "h1").length > 1)
+  if (
+    state.tokens.filter(
+      (t) => t.level === 0 && t.type === "heading_open" && t.tag === "h1",
+    ).length > 1
+  )
     return;
   const heading = state.env.headings[Number(first.attrGet("data-heading"))];
   if (heading) heading.title = true;
@@ -1779,7 +1820,29 @@ function finishNote(
   // The note's title (markTitle) stays a plain heading at the top: no fold,
   // rail or summary, and the `##` sections below it are the top level.
   const titleIndex = (env.headings || []).findIndex((h) => h.title);
+  // Hold anchor-only paragraphs until the next non-anchor block decides which
+  // section owns them so anchors before a shallower heading never stay inside a
+  // deeper closed section or inflate its block count.
+  const pendingAnchors = [];
+  const flushAnchors = (beforeNode = null) => {
+    if (!pendingAnchors.length) return;
+    if (stack.length) stack.at(-1).body.append(...pendingAnchors);
+    else if (beforeNode)
+      for (const anchor of pendingAnchors)
+        fragment.insertBefore(anchor, beforeNode);
+    else fragment.append(...pendingAnchors);
+    pendingAnchors.length = 0;
+  };
   for (const node of [...fragment.childNodes]) {
+    if (node.nodeType === 3 && !node.nodeValue.trim()) {
+      if (stack.length && !pendingAnchors.length)
+        stack.at(-1).body.append(node);
+      continue;
+    }
+    if (node.nodeType === 1 && node.classList.contains("anchor-only")) {
+      pendingAnchors.push(node);
+      continue;
+    }
     const level =
       node.nodeType === 1 && /^H[1-6]$/.test(node.tagName)
         ? Number(node.tagName[1])
@@ -1790,11 +1853,13 @@ function finishNote(
       !stack.length &&
       node.getAttribute("data-heading") === String(titleIndex)
     ) {
+      flushAnchors(node);
       node.classList.add("note-title");
       continue;
     }
     if (level) {
       while (stack.length && stack.at(-1).level >= level) stack.pop();
+      flushAnchors();
       const section = document.createElement("section");
       section.className = "note-section";
       section.dataset.foldKey = node.id;
@@ -1827,8 +1892,12 @@ function finishNote(
       body.className = "section-body";
       section.append(body);
       stack.push({ level, body });
-    } else if (stack.length) stack.at(-1).body.append(node);
+    } else {
+      flushAnchors(stack.length ? null : node);
+      if (stack.length) stack.at(-1).body.append(node);
+    }
   }
+  flushAnchors();
   // Count rendered blocks bottom-up once; scrolling and hovering need no work.
   for (const section of [
     ...fragment.querySelectorAll(".note-section"),
@@ -1836,13 +1905,21 @@ function finishNote(
     const body = section.querySelector(":scope > .section-body");
     const count = [...body.children].reduce(
       (sum, child) =>
-        sum +
-        (child.classList.contains("note-section")
-          ? Number(child.dataset.blockCount)
-          : 1),
+        child.classList.contains("anchor-only")
+          ? sum
+          : sum +
+            (child.classList.contains("note-section")
+              ? Number(child.dataset.blockCount)
+              : 1),
       0,
     );
     section.dataset.blockCount = String(count);
+    if (
+      ![...body.children].some(
+        (child) => !child.classList.contains("anchor-only"),
+      )
+    )
+      section.dataset.empty = "1";
     const summary = document.createElement("span");
     summary.className = "section-summary";
     summary.textContent = sectionSummary(count);

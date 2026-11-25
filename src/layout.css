@@ -29,7 +29,8 @@
 }
 :root[data-typeface="literata"] {
   --font-note:
-    "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
+    "Literata Variable", "Noto Sans SC Variable", "Noto Sans SC",
+    "Microsoft YaHei", "PingFang SC", serif;
 }
 :root[data-typeface="literata"] .prose {
   font-optical-sizing: auto;
@@ -40,7 +41,6 @@
 }
 :root[data-typeface="literata"] .prose strong {
   font-weight: var(--strong-weight, 600);
-  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 :root[data-typeface="literata"] .prose pre {
   font-weight: var(--note-weight, 400);
@@ -49,7 +49,6 @@
 :root[data-typeface="literata"] .prose :not(pre) > code {
   font-size: 0.82em;
   font-weight: var(--inline-code-weight, 400);
-  font-variation-settings: "wght" var(--inline-code-wght, 400);
 }
 :root[data-typeface="literata"] .prose .formula > .katex {
   font-size: 1em;
@@ -72,7 +71,6 @@
 .prose strong,
 .prose b {
   font-weight: var(--strong-weight, 600);
-  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 /* KaTeX owns math family/weight/style; never smear glyphs or override its spans. */
 .prose .katex {

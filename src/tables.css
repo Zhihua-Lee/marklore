@@ -16,16 +16,18 @@
   scrollbar-color: color-mix(in srgb, var(--table-ink) 22%, transparent)
     transparent;
 }
-:is(.prose, .prose .ProseMirror) > .table-scroll:first-child,
 :is(.prose, .prose .ProseMirror)
-  > :is(.fm-none, .rich-properties:empty)
-  + .table-scroll,
-.prose .section-body > .table-scroll:first-child,
-.prose .section-body > p.anchor-only:first-child + .table-scroll {
+  > .table-scroll:nth-child(1 of :not(.anchor-only)),
+:is(.prose, .prose .ProseMirror)
+  > .table-scroll:nth-child(
+    1 of :not(.fm-none, .rich-properties:empty, .anchor-only)
+  ),
+.prose .section-body > .table-scroll:nth-child(1 of :not(.anchor-only)) {
   margin-top: 0;
 }
-:is(.prose, .prose .ProseMirror) > .table-scroll:last-child,
-.prose .section-body > .table-scroll:last-child {
+:is(.prose, .prose .ProseMirror)
+  > .table-scroll:nth-last-child(1 of :not(.anchor-only)),
+.prose .section-body > .table-scroll:nth-last-child(1 of :not(.anchor-only)) {
   margin-bottom: 0;
 }
 .table-scroll table,
@@ -68,7 +70,6 @@
   background: color-mix(in srgb, var(--table-accent) 5%, var(--table-paper));
   text-align: left;
   font-weight: var(--strong-weight, 600);
-  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 .table-scroll tbody tr:last-child > td {
   border-bottom: 0;

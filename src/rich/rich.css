@@ -20,15 +20,15 @@
   min-height: 60vh;
   padding-bottom: 30vh;
 }
-#rich .ProseMirror li > p {
+#rich .ProseMirror li > p:not(.anchor-only) {
   margin: 0;
 }
 /* A loose list (blank lines between its items) is read with its items'
    paragraphs spaced as paragraphs (style.css): the same height here. */
-#rich .ProseMirror :is(ul, ol):not([data-tight]) > li > p {
+#rich .ProseMirror :is(ul, ol):not([data-tight]) > li > p:not(.anchor-only) {
   margin-block: var(--gap-block);
 }
-#rich .ProseMirror :is(ul, ol)[data-tight] > li > p {
+#rich .ProseMirror :is(ul, ol)[data-tight] > li > p:not(.anchor-only) {
   margin-block: 0;
 }
 #rich .ProseMirror li.task-item,
@@ -210,6 +210,7 @@
   > :not(
     .rich-current,
     .ProseMirror-gapcursor,
+    .anchor-only,
     ul,
     ol,
     .table-scroll,
@@ -455,6 +456,20 @@
   > :last-child {
   margin-bottom: 0;
 }
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:first-child
+  > :nth-child(1 of :not(.anchor-only)) {
+  margin-top: 0;
+}
+#rich
+  .ProseMirror
+  > :is(ul, ol)
+  > li:last-child
+  > :nth-last-child(1 of :not(.anchor-only)) {
+  margin-bottom: 0;
+}
 /* Sections (sections.js): mirror the reading view's nested section inset,
    non-collapsed heading-body spacing, and zeroed trailing section margins. */
 #rich .ProseMirror > [data-rich-depth="1"] {
@@ -582,6 +597,42 @@
   opacity: 0.6;
   padding: 0 1px;
 }
+#rich .ProseMirror p.anchor-only:not(:has(.math-src)) {
+  position: absolute;
+  margin-block: 0;
+  padding: 0;
+  border: 0;
+  width: 0;
+  height: 0;
+  min-height: 0;
+  font-size: 0;
+  line-height: 0;
+  overflow: visible;
+  contain: none;
+}
+#rich
+  .ProseMirror
+  p.anchor-only:not(:has(.math-src))
+  > :is(img.ProseMirror-separator, br.ProseMirror-trailingBreak) {
+  display: none;
+}
+#rich .ProseMirror p.anchor-only .raw-inline[data-kind="anchor"] {
+  position: absolute;
+  left: -1.4em;
+  top: 0;
+  z-index: 2;
+  font-size: calc(0.75 * var(--note-size));
+  line-height: 1.3;
+  padding: 1px 4px;
+  cursor: pointer;
+}
+#rich
+  .ProseMirror
+  p.anchor-only
+  + p.anchor-only
+  .raw-inline[data-kind="anchor"] {
+  left: -2.4em;
+}
 /* <details> folds: card styling and marker matching Read mode; clicking the
    marker before the summary folds and unfolds. */
 #rich .rich-details {
@@ -610,7 +661,6 @@
   position: relative;
   margin: 0 0 0 1.25em;
   font-weight: var(--strong-weight, 600);
-  font-variation-settings: "wght" var(--strong-weight, 600);
 }
 #rich .rich-summary::before {
   content: "▾";
@@ -626,10 +676,12 @@
 #rich .rich-folded > :not(.rich-summary) {
   display: none;
 }
-#rich .rich-details:not(.rich-folded) > :nth-child(2) {
+#rich .rich-details:not(.rich-folded) > :nth-child(2 of :not(.anchor-only)) {
   margin-top: var(--gap-inner);
 }
-#rich .rich-details:not(.rich-folded) > :last-child:not(.rich-summary) {
+#rich
+  .rich-details:not(.rich-folded)
+  > :nth-last-child(1 of :not(.anchor-only)):not(.rich-summary) {
   margin-bottom: 0;
 }
 @media (prefers-reduced-motion: no-preference) {

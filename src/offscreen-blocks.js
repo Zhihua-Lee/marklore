@@ -26,7 +26,7 @@ const SKIP = "reading-skip";
 // blocks of a note before or without headings. Bodies are few even in a long
 // note (each skipped element costs an intersection check per frame), and
 // they hold their blocks' margins already (flow-root).
-const CANDIDATES = ".section-body, .prose > :not(.note-section)";
+const CANDIDATES = ".section-body, .prose > :not(.note-section, .anchor-only)";
 const COSMETIC = [SKIP, "section-hover", "section-focus"];
 const UNFINISHED =
   "[data-folio-math], code.language-mermaid, [contenteditable], .table-measure";

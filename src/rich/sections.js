@@ -8,23 +8,39 @@ import { schema } from "./markdown.js";
 const S = schema.nodes;
 const key = new PluginKey("richSections");
 
+export function isAnchorOnlyNode(node) {
+  if (node?.type !== S.paragraph || !node.childCount) return false;
+  let anchors = 0;
+  for (let i = 0; i < node.childCount; i++) {
+    const child = node.child(i);
+    if (child.type === S.raw_inline && child.attrs.kind === "anchor") {
+      anchors++;
+    } else if (!child.isText || child.text.trim()) {
+      return false;
+    }
+  }
+  return anchors > 0;
+}
+
 function blockSig(node) {
   if (node.type === S.heading) return node.attrs.level;
   if (node.type === S.raw_block && node.attrs.kind === "frontmatter")
     return "fm";
+  if (isAnchorOnlyNode(node)) return "anchor";
   return "b";
 }
 
 function titleBlockIndex(doc) {
-  let firstNonFront = -1;
+  let firstReal = -1;
   let h1Count = 0;
   for (let i = 0; i < doc.childCount; i++) {
     const child = doc.child(i);
-    if (child.type === S.heading && child.attrs.level === 1) h1Count++;
-    if (firstNonFront < 0 && blockSig(child) !== "fm") firstNonFront = i;
+    const sig = blockSig(child);
+    if (sig === 1) h1Count++;
+    if (firstReal < 0 && sig !== "fm" && sig !== "anchor") firstReal = i;
   }
-  if (firstNonFront < 0 || h1Count !== 1) return -1;
-  return blockSig(doc.child(firstNonFront)) === 1 ? firstNonFront : -1;
+  if (firstReal < 0 || h1Count !== 1) return -1;
+  return blockSig(doc.child(firstReal)) === 1 ? firstReal : -1;
 }
 
 function computeEntries(doc) {
@@ -44,10 +60,25 @@ function computeEntries(doc) {
     };
   }
 
+  let seenReal = false;
+  const pendingAnchors = [];
+  const flushAnchors = (depth) => {
+    for (const idx of pendingAnchors) entries[idx].depth = depth;
+    pendingAnchors.length = 0;
+  };
+
   for (let i = 0; i < doc.childCount; i++) {
-    if (i === titleIdx) continue;
     const entry = entries[i];
     const sig = entry.sig;
+    if (sig === "anchor") {
+      pendingAnchors.push(i);
+      continue;
+    }
+    if (i === titleIdx) {
+      flushAnchors(0);
+      seenReal = true;
+      continue;
+    }
     if (typeof sig === "number") {
       const level = sig;
       let closedEmptyLevel = 0;
@@ -59,13 +90,14 @@ function computeEntries(doc) {
       }
       const parent = stack.at(-1) || null;
       entry.depth = stack.length;
+      flushAnchors(parent ? stack.length - 1 : 0);
       if (parent && parent.childrenCount === 0) {
         entry.mtKind = "nested-first";
         entry.headLevel = parent.level;
       } else if (closedEmptyLevel) {
         entry.mtKind = "after-empty";
         entry.headLevel = closedEmptyLevel;
-      } else if (i === 0 || (i === 1 && entries[0].sig === "fm")) {
+      } else if (!seenReal) {
         entry.mtKind = "zero";
       } else {
         entry.mtKind = "normal";
@@ -80,9 +112,14 @@ function computeEntries(doc) {
         lastBodyIdx: null,
         lastChildWasSection: false,
       });
+      seenReal = true;
+    } else if (sig === "fm") {
+      flushAnchors(0);
     } else if (stack.length) {
+      const depth = stack.length - 1;
+      flushAnchors(depth);
       const top = stack.at(-1);
-      entry.depth = stack.length - 1;
+      entry.depth = depth;
       if (top.childrenCount === 0) {
         entry.secFirst = true;
         entry.headLevel = top.level;
@@ -90,8 +127,13 @@ function computeEntries(doc) {
       top.childrenCount++;
       top.lastChildWasSection = false;
       top.lastBodyIdx = i;
+      seenReal = true;
+    } else {
+      flushAnchors(0);
+      seenReal = true;
     }
   }
+  flushAnchors(stack.length ? stack.length - 1 : 0);
   while (stack.length) {
     const popped = stack.pop();
     if (!popped.lastChildWasSection && popped.lastBodyIdx != null)
@@ -99,7 +141,7 @@ function computeEntries(doc) {
   }
 
   for (const e of entries)
-    e.key = `${e.depth}|${e.headLevel}|${e.mtKind}|${e.secFirst ? 1 : 0}|${e.secLast ? 1 : 0}`;
+    e.key = `${e.sig === "anchor" ? 1 : 0}|${e.depth}|${e.headLevel}|${e.mtKind}|${e.secFirst ? 1 : 0}|${e.secLast ? 1 : 0}`;
   return entries;
 }
 
@@ -148,35 +190,69 @@ function syncFlag(el, name, want, prevHas) {
   }
 }
 
-function syncElement(el, entry, observerControl) {
+function syncNestedAnchors(el, docNode, observerControl) {
+  if (
+    !docNode ||
+    docNode.type === S.paragraph ||
+    docNode.type === S.heading ||
+    docNode.isLeaf
+  )
+    return;
+  const flags = [];
+  docNode.descendants((node) => {
+    if (node.type === S.paragraph) {
+      flags.push(isAnchorOnlyNode(node));
+      return false;
+    }
+    return true;
+  });
+  const domParas = el.querySelectorAll("p");
+  if (domParas.length !== flags.length) return;
+  for (let i = 0; i < domParas.length; i++) {
+    const has = domParas[i].classList.contains("anchor-only");
+    if (has !== flags[i]) {
+      observerControl.stop();
+      domParas[i].classList.toggle("anchor-only", flags[i]);
+    }
+  }
+}
+
+function syncElement(el, entry, observerControl, docNode) {
   const prev = applied.get(el);
-  if (prev?.key === entry.key) return false;
-  observerControl.stop();
-  syncAttr(
-    el,
-    "data-rich-depth",
-    entry.depth > 0 ? String(entry.depth) : "",
-    Boolean(prev?.depth > 0),
-    prev ? String(prev.depth) : "",
-  );
-  syncAttr(
-    el,
-    "data-rich-head",
-    entry.headLevel > 0 ? String(entry.headLevel) : "",
-    Boolean(prev?.headLevel > 0),
-    prev ? String(prev.headLevel) : "",
-  );
-  syncAttr(
-    el,
-    "data-rich-sec-mt",
-    entry.mtKind,
-    Boolean(prev?.mtKind),
-    prev?.mtKind || "",
-  );
-  syncFlag(el, "data-rich-sec-first", entry.secFirst, Boolean(prev?.secFirst));
-  syncFlag(el, "data-rich-sec-last", entry.secLast, Boolean(prev?.secLast));
-  applied.set(el, entry);
-  return true;
+  if (prev?.key !== entry.key) {
+    observerControl.stop();
+    syncAttr(
+      el,
+      "data-rich-depth",
+      entry.depth > 0 ? String(entry.depth) : "",
+      Boolean(prev?.depth > 0),
+      prev ? String(prev.depth) : "",
+    );
+    syncAttr(
+      el,
+      "data-rich-head",
+      entry.headLevel > 0 ? String(entry.headLevel) : "",
+      Boolean(prev?.headLevel > 0),
+      prev ? String(prev.headLevel) : "",
+    );
+    syncAttr(
+      el,
+      "data-rich-sec-mt",
+      entry.mtKind,
+      Boolean(prev?.mtKind),
+      prev?.mtKind || "",
+    );
+    syncFlag(
+      el,
+      "data-rich-sec-first",
+      entry.secFirst,
+      Boolean(prev?.secFirst),
+    );
+    syncFlag(el, "data-rich-sec-last", entry.secLast, Boolean(prev?.secLast));
+    el.classList.toggle("anchor-only", entry.sig === "anchor");
+    applied.set(el, entry);
+  }
+  syncNestedAnchors(el, docNode, observerControl);
 }
 
 function syncAll(view, entries) {
@@ -190,22 +266,24 @@ function syncAll(view, entries) {
   };
   try {
     let idx = 0;
+    const doc = view.state.doc;
     for (
       let el = view.dom.firstElementChild;
       el && idx < entries.length;
       el = el.nextElementSibling
     ) {
       if (!el.pmViewDesc?.node) continue;
-      syncElement(el, entries[idx++], control);
+      syncElement(el, entries[idx], control, doc.child(idx));
+      idx++;
     }
   } finally {
     if (stopped) view.domObserver?.start();
   }
 }
 
-function syncSingle(view, entry, pos) {
+function syncSingle(view, entry, pos, idx) {
   const el = view.nodeDOM(pos);
-  if (!el || applied.get(el)?.key === entry.key) return;
+  if (!el) return;
   let stopped = false;
   const control = {
     stop() {
@@ -215,7 +293,7 @@ function syncSingle(view, entry, pos) {
     },
   };
   try {
-    syncElement(el, entry, control);
+    syncElement(el, entry, control, view.state.doc.child(idx));
   } finally {
     if (stopped) view.domObserver?.start();
   }
@@ -266,7 +344,12 @@ export const richSections = new Plugin({
           syncAll(view, next.entries);
           syncedEntries = next.entries;
         } else if (next.touched) {
-          syncSingle(view, next.entries[next.touched.idx], next.touched.pos);
+          syncSingle(
+            view,
+            next.entries[next.touched.idx],
+            next.touched.pos,
+            next.touched.idx,
+          );
         }
       },
     };

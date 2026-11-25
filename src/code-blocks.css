@@ -18,16 +18,18 @@
   color-scheme: dark;
   overflow: hidden;
 }
-:is(.prose, .prose .ProseMirror) > .code-block:first-child,
 :is(.prose, .prose .ProseMirror)
-  > :is(.fm-none, .rich-properties:empty)
-  + .code-block,
-.prose .section-body > .code-block:first-child,
-.prose .section-body > p.anchor-only:first-child + .code-block {
+  > .code-block:nth-child(1 of :not(.anchor-only)),
+:is(.prose, .prose .ProseMirror)
+  > .code-block:nth-child(
+    1 of :not(.fm-none, .rich-properties:empty, .anchor-only)
+  ),
+.prose .section-body > .code-block:nth-child(1 of :not(.anchor-only)) {
   margin-top: 0;
 }
-:is(.prose, .prose .ProseMirror) > .code-block:last-child,
-.prose .section-body > .code-block:last-child {
+:is(.prose, .prose .ProseMirror)
+  > .code-block:nth-last-child(1 of :not(.anchor-only)),
+.prose .section-body > .code-block:nth-last-child(1 of :not(.anchor-only)) {
   margin-bottom: 0;
 }
 .code-toolbar {

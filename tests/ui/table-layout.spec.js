@@ -140,6 +140,8 @@ test("live reader and hover preview optimize automatically and retain cached lay
   });
   await page.goto("/");
   await expect(page.locator("#content table.reading-columns")).toHaveCount(1);
+  await page.evaluate(() => document.fonts.ready);
+  await page.waitForTimeout(120);
   const cols = await page.locator("#content colgroup").innerHTML();
   await page.waitForTimeout(300);
   expect(await page.locator("#content colgroup").innerHTML()).toBe(cols);

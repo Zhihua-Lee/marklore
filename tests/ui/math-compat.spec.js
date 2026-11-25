@@ -86,8 +86,8 @@ test("quotes emphasize text in light and dark themes without making all math bol
       };
     });
     expect(styles.color).toBe(styles.ink);
-    expect(Number(styles.weight)).toBe(400);
-    expect(styles.variation).toContain("450");
+    expect(Number(styles.weight)).toBe(450);
+    expect(styles.variation).toBe("normal");
     expect(styles.border).toBe("3px");
     await expect(page.locator("blockquote .katex")).toHaveCSS(
       "font-weight",

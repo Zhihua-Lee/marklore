@@ -361,7 +361,7 @@ async function snapshotBlocks(page, mode) {
     );
     const sRect = scroller.getBoundingClientRect();
     const skipText =
-      ".fold,.section-summary,.code-toolbar,.table-sort,.katex-mathml,annotation,.fm-actions";
+      ".fold,.section-summary,.code-toolbar,.table-sort,.katex-mathml,annotation,.fm-actions,.raw-inline[data-kind='anchor']";
     const firstTextRect = (el) => {
       const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
         acceptNode(n) {
@@ -662,5 +662,165 @@ test("narrow sortable tables never wrap headers and sort cleanly; details keep o
   await page.mouse.click(sBox.x - 10, sBox.y + sBox.height / 2);
   await expect(page.locator("#rich .rich-details").first()).not.toHaveClass(
     /rich-folded/,
+  );
+});
+
+const ANCHOR_SWEEP_NOTE = [
+  '<a id="before-title"></a>',
+  "",
+  "# 锚点排版基准标题",
+  "",
+  '<a id="before-h2"></a>',
+  "",
+  "## 第一节 A",
+  '<a id="right-after-h2"></a>',
+  "",
+  '包含<a id="inline-a"></a>行内锚点的正文段。',
+  "",
+  '<a id="before-h3"></a>',
+  "",
+  "### 子节 1",
+  "",
+  '<a id="sec-first"></a>',
+  "",
+  "子节内容第一段。",
+  "",
+  '<a id="consec-1"></a>',
+  "",
+  '<a id="consec-2"></a>',
+  "",
+  "#### 四级标题",
+  "",
+  "##### 五级标题",
+  "",
+  "###### 六级标题",
+  "",
+  '<a id="sec-last"></a>',
+  "",
+  "## 第二节 B",
+  "",
+  "- 列表项一",
+  "- 列表项二",
+  "",
+  '  <a id="list-anchor"></a>',
+  "",
+  "  列表项二续段",
+  "",
+  "> 引用第一行",
+  ">",
+  '> <a id="bq-anchor"></a>',
+  ">",
+  "> 引用第二段",
+  "",
+  '<a id="before-table"></a>',
+  "",
+  "| Col A | Col B |",
+  "| --- | --- |",
+  "| 1 | 2 |",
+  "",
+  '<a id="before-code"></a>',
+  "",
+  "```js",
+  "const anchored = true;",
+  "```",
+  "",
+].join("\n");
+
+test("standalone anchors have zero height/gap and match Read and Edit within 0.5 px across column widths", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await installFolio(page);
+  await page.addInitScript(
+    ({ text }) => {
+      window.folio = folioTest.mock({
+        ready: async () => ({
+          incoming: [
+            {
+              id: "anchor-sweep",
+              path: "C:/notes/Anchors.md",
+              name: "Anchors.md",
+              text,
+              version: "v1",
+            },
+          ],
+          roots: [],
+          restored: [],
+          settings: {
+            sidebar: false,
+            outline: true,
+            richEdit: true,
+          },
+        }),
+      });
+    },
+    { text: ANCHOR_SWEEP_NOTE },
+  );
+  await page.goto("/", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#content h1.note-title")).toHaveText(
+    "锚点排版基准标题",
+  );
+  await expect(
+    page
+      .locator("#outline button")
+      .evaluateAll((els) => els.map((b) => b.dataset.depth)),
+  ).resolves.toEqual(["0", "1", "2", "3", "4", "0"]);
+
+  const measureAnchorsZero = async (sel) =>
+    page
+      .locator(sel)
+      .evaluateAll((els) =>
+        els.map(
+          (el) => Math.round(el.getBoundingClientRect().height * 10) / 10,
+        ),
+      );
+  const readAnchors = await measureAnchorsZero("#content p.anchor-only");
+  expect(readAnchors.length).toBe(12);
+  expect(readAnchors.every((h) => h === 0)).toBe(true);
+
+  for (const columnWidth of ["window", "measure", "fixed"]) {
+    await page.locator("#weight").click();
+    await page.locator("#column-width").selectOption(columnWidth);
+    await page.locator("#appearance-close").click();
+    await page.keyboard.press("Control+1");
+    await settlePane(page, "#content", "#reader");
+    const read = await snapshotBlocks(page, "read");
+    read.blocks = read.blocks.filter((b) => !b.cls.includes("anchor-only"));
+
+    await page.keyboard.press("Control+2");
+    await expect(page.locator("#rich-reader")).toBeVisible();
+    await settlePane(page, "#rich", "#rich-reader");
+    const edit = await snapshotBlocks(page, "edit");
+    edit.blocks = edit.blocks.filter((b) => !b.cls.includes("anchor-only"));
+
+    expect(edit.blocks.length, `${columnWidth} visible count`).toBe(
+      read.blocks.length,
+    );
+    const r0 = read.blocks[0].top;
+    const e0 = edit.blocks[0].top;
+    for (let i = 0; i < read.blocks.length; i++) {
+      assertBoxMatch(
+        `anchors-${columnWidth} block[${i}]`,
+        read.blocks[i],
+        edit.blocks[i],
+        r0,
+        e0,
+      );
+    }
+    const editAnchors = await measureAnchorsZero(
+      "#rich .ProseMirror p.anchor-only",
+    );
+    expect(editAnchors.length).toBe(12);
+    expect(editAnchors.every((h) => h === 0)).toBe(true);
+  }
+
+  // Clicking the margin `#` marker in Edit reveals `<a id="..."></a>` source.
+  const firstMarker = page
+    .locator('#rich .ProseMirror p.anchor-only .raw-inline[data-kind="anchor"]')
+    .first();
+  await expect(firstMarker).toBeVisible();
+  await firstMarker.click();
+  await expect(page.locator("#rich .ProseMirror .math-src")).toContainText(
+    '<a id="before-title"></a>',
   );
 });

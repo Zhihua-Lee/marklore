@@ -1,14 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  WEIGHT_STEPS,
   readingWeight,
   bodyFontWeight,
   emphasisWeight,
   fluidFactor,
   noteSize,
+  subsetFontCss,
 } from "../src/typography.js";
 
-test("automatic reading weight adapts to DPR and theme, and fixed weights avoid 600 collision", () => {
+const project = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "..",
+);
+
+test("automatic reading weight adapts to DPR and theme, supports 300-550, and migrates 600 -> 550", () => {
+  assert.deepEqual(WEIGHT_STEPS, [300, 350, 400, 450, 500, 550]);
   assert.equal(readingWeight({ weight: "auto", dpr: 1, theme: "light" }), 450);
   assert.equal(
     readingWeight({ weight: "auto", dpr: 1.25, theme: "light" }),
@@ -21,16 +32,42 @@ test("automatic reading weight adapts to DPR and theme, and fixed weights avoid 
   assert.equal(readingWeight({ weight: "auto", dpr: 2, theme: "light" }), 400);
   assert.equal(readingWeight({ weight: "auto", dpr: 1, theme: "dark" }), 400);
   assert.equal(readingWeight({ weight: "auto", dpr: 2, theme: "dark" }), 400);
-  for (const weight of [400, 450, 500]) {
+  assert.equal(
+    readingWeight({ weight: "auto", dpr: 1, theme: "light", autoRule: "v064" }),
+    400,
+  );
+  for (const weight of [300, 350, 400, 450, 500, 550]) {
     assert.equal(readingWeight({ weight, dpr: 1, theme: "light" }), weight);
     assert.equal(readingWeight({ weight, dpr: 2, theme: "dark" }), weight);
     assert.ok(emphasisWeight(weight) - weight >= 150);
-    assert.ok(emphasisWeight(weight) <= 700);
+    assert.ok(emphasisWeight(weight) <= 800);
   }
+  assert.equal(bodyFontWeight(300), 400);
   assert.equal(bodyFontWeight(400), 400);
   assert.equal(bodyFontWeight(450), 400);
   assert.equal(bodyFontWeight(500), 500);
-  assert.equal(readingWeight({ weight: 600, dpr: 1, theme: "light" }), 500);
+  assert.equal(bodyFontWeight(550), 500);
+  assert.equal(readingWeight({ weight: 600, dpr: 1, theme: "light" }), 550);
+  assert.equal(
+    readingWeight({ weight: "unknown", dpr: 1, theme: "light" }),
+    450,
+  );
+});
+
+test("subsetFontCss keeps only @font-face subsets matching characters in the note", () => {
+  const notoCss = fs.readFileSync(
+    path.join(
+      project,
+      "node_modules/@fontsource-variable/noto-sans-sc/wght.css",
+    ),
+    "utf8",
+  );
+  const allFaces = (notoCss.match(/@font-face\s*\{/g) || []).length;
+  assert.ok(allFaces > 80);
+  const smallCss = subsetFontCss(notoCss, "测试排版\nHello 123");
+  const keptFaces = (smallCss.match(/@font-face\s*\{/g) || []).length;
+  assert.ok(keptFaces >= 1 && keptFaces < 10);
+  assert.equal(subsetFontCss(notoCss, ""), "");
 });
 
 test("fluid note size scales smoothly between 1366px and 1920px viewports", () => {

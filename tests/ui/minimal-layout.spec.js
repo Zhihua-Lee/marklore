@@ -199,8 +199,8 @@ $$`,
         }));
         expect(metrics.dpr).toBeCloseTo(dpr, 5);
         expect(metrics.spacing).toBe("normal");
-        expect(metrics.weight).toBe("400");
-        expect(metrics.variation).toContain(dpr <= 1.25 ? "450" : "400");
+        expect(metrics.weight).toBe(dpr <= 1.25 ? "450" : "400");
+        expect(metrics.variation).toBe("normal");
         expect(metrics.transform).toBe("none");
         for (const formula of metrics.formulas) {
           expect(formula.vertical).toBe("hidden");
@@ -357,11 +357,14 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
         }),
       );
       for (const value of styles) expect(value).toEqual(styles[0]);
-      expect(styles[0].weight).toBe(weight === "500" ? "500" : "400");
-      expect(styles[0].variation).toContain(weight === "auto" ? "450" : weight);
+      const staticStack = typeface === "classic" || typeface === "book";
+      const targetWeight = weight === "auto" ? "450" : weight;
+      expect(styles[0].weight).toBe(
+        staticStack ? (weight === "500" ? "500" : "400") : targetWeight,
+      );
     }
   }
-  await page.locator("#reading-preset").click();
+  await page.locator("#reset-typography").click();
   await closeAppearance(page);
   await page.setViewportSize({ width: 640, height: 800 });
   await page.locator("#sidebar-toggle").click();
@@ -657,42 +660,48 @@ test("half-screen widths keep the reader full width and toolbar reachable", asyn
   await page.screenshot({ path: ".local/half-screen-480.png" });
 });
 
-test("reading preset replaces saved Arial, adapts small text and preserves math and zoom", async ({
+test("reset default typography restores defaults while preserving zoom-changed or non-typography settings", async ({
   page,
 }) => {
   await boot(page);
   await openAppearance(page);
   await page.locator("#typeface").selectOption("classic");
-  await page.locator("#text-weight").selectOption("400");
+  await page.locator("#text-weight").selectOption("350");
+  await page.locator("#column-width").selectOption("fixed");
   for (let i = 0; i < 3; i++) await page.locator("#zoom-out").click();
+  await page.locator("#export-toc").uncheck();
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.settings))
-    .toMatchObject({ typeface: "classic", zoom: 70, weight: 400 });
+    .toMatchObject({
+      typeface: "classic",
+      zoom: 70,
+      weight: 350,
+      columnWidth: "fixed",
+      exportToc: false,
+    });
   await page.reload();
   await openAppearance(page);
   await expect(page.locator("#typeface")).toHaveValue("classic");
-  await page.locator("#reading-preset").click();
+  await page.locator("#reset-typography").click();
   await expect(page.locator("#typeface")).toHaveValue("literata");
   await expect(page.locator("#text-weight")).toHaveValue("auto");
-  await expect(page.locator("#zoom-reset")).toHaveText("70%");
+  await expect(page.locator("#column-width")).toHaveValue("window");
+  await expect(page.locator("#zoom-reset")).toHaveText("100%");
+  await expect(page.locator("#export-toc")).not.toBeChecked();
   await closeAppearance(page);
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "400",
+    "450",
   );
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-variation-settings",
-    /"wght" 450/,
+    "normal",
   );
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-size",
-    "11.2px",
+    "16px",
   );
   await expect(page.locator("#content strong")).toHaveCSS("font-weight", "650");
-  await expect(page.locator("#content strong")).toHaveCSS(
-    "font-variation-settings",
-    /"wght" 650/,
-  );
   await expect(page.locator("#content .formula > .katex")).toHaveCSS(
     "font-weight",
     "400",
@@ -703,28 +712,20 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   );
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.settings))
-    .toMatchObject({ typeface: "literata", zoom: 70, weight: "auto" });
+    .toMatchObject({
+      typeface: "literata",
+      zoom: 100,
+      weight: "auto",
+      columnWidth: "window",
+      exportToc: false,
+    });
   await page.reload();
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "400",
-  );
-  await expect(page.locator("#content p").first()).toHaveCSS(
-    "font-variation-settings",
-    /"wght" 450/,
+    "450",
   );
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: ".local/visual-v014/reading-70.png" });
   await openAppearance(page);
-  await page.locator("#zoom-out").click();
-  await expect(page.locator("#content p").first()).toHaveCSS(
-    "font-weight",
-    "400",
-  );
-  await expect(page.locator("#content p").first()).toHaveCSS(
-    "font-variation-settings",
-    /"wght" 450/,
-  );
   await page.locator("#text-weight").selectOption("400");
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
@@ -732,7 +733,7 @@ test("reading preset replaces saved Arial, adapts small text and preserves math 
   );
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-variation-settings",
-    /"wght" 400/,
+    "normal",
   );
 });
 
@@ -825,7 +826,7 @@ test("wide reading expands the measure, preserves the current paragraph and pers
     "false",
   );
   const expectedSize = 16 * (1 + (0.09 * (1800 - 1366)) / (1920 - 1366));
-  const expectedMeasure = 42 * expectedSize;
+  const expectedMeasure = 56 * expectedSize;
   const expectedOuter = expectedMeasure + 80;
   const before = await page.locator("#content").boundingBox();
   expect(before.width).toBeCloseTo(expectedOuter, 0);
@@ -941,11 +942,11 @@ test("default typography uses actual Literata and JetBrains with the original in
   });
   expect(css.paragraph.family).toContain("Literata");
   expect(css.paragraph.size).toBe(16);
-  expect(css.paragraph.weight).toBe("400");
-  expect(css.paragraph.variation).toContain("450");
+  expect(css.paragraph.weight).toBe("450");
+  expect(css.paragraph.variation).toBe("normal");
   expect(css.paragraph.lineHeight / css.paragraph.size).toBeCloseTo(1.7, 2);
   expect(css.strong.weight).toBe("650");
-  expect(css.strong.variation).toContain("650");
+  expect(css.strong.variation).toBe("normal");
   expect(css.math.size / css.paragraph.size).toBeCloseTo(1, 3);
   expect(css.math.family).toContain("KaTeX_Main");
   expect(css.boldMath.weight).toBe("700");

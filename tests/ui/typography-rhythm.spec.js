@@ -304,13 +304,13 @@ test("fixture note uses <= 4 distinct vertical rhythm gaps matching tokens and R
   }
 });
 
-test("fluid note size and 42em column measure respond cleanly from 1366 to 1920 and preserve wide mode", async ({
+test("fluid note size and columnWidth options (window, measure, fixed, wide) match in Read and Edit", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
-  await boot(page);
+  await boot(page, FIXTURE, { richEdit: true });
 
-  const measureBox = () =>
+  const measureRead = () =>
     page.locator("#content").evaluate((el) => {
       const cs = getComputedStyle(el);
       const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
@@ -320,19 +320,45 @@ test("fluid note size and 42em column measure respond cleanly from 1366 to 1920 
         measure: el.getBoundingClientRect().width - pad,
       };
     });
+  const measureEdit = () =>
+    page.locator("#rich .ProseMirror").evaluate((el) => {
+      const cs = getComputedStyle(el);
+      const pad = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+      return el.getBoundingClientRect().width - pad;
+    });
 
-  const at1366 = await measureBox();
-  expect(at1366.fontSize).toBeCloseTo(16, 1);
-  expect(at1366.lineHeight / at1366.fontSize).toBeCloseTo(1.7, 2);
-  expect(at1366.measure).toBeCloseTo(42 * 16, 1);
+  // Default columnWidth ("window"): fills pane up to 56em at 1366 & 1920.
+  const win1366 = await measureRead();
+  expect(win1366.fontSize).toBeCloseTo(16, 1);
+  expect(win1366.lineHeight / win1366.fontSize).toBeCloseTo(1.7, 2);
+  expect(win1366.measure).toBeCloseTo(56 * 16, 1);
 
   await page.setViewportSize({ width: 1920, height: 1080 });
-  const at1920 = await measureBox();
-  expect(at1920.fontSize).toBeCloseTo(16 * 1.09, 2);
-  expect(at1920.measure).toBeCloseTo(42 * 16 * 1.09, 1);
+  const win1920 = await measureRead();
+  expect(win1920.fontSize).toBeCloseTo(16 * 1.09, 2);
+  expect(win1920.measure).toBeCloseTo(56 * 16 * 1.09, 1);
 
+  for (const [cw, expected1920] of [
+    ["measure", 42 * 16 * 1.09],
+    ["fixed", 680],
+    ["window", 56 * 16 * 1.09],
+  ]) {
+    await page.locator("#weight").click();
+    await page.locator("#column-width").selectOption(cw);
+    await page.locator("#appearance-close").click();
+    await page.keyboard.press("Control+1");
+    await expect(page.locator("#content")).toBeVisible();
+    const readW = (await measureRead()).measure;
+    expect(readW).toBeCloseTo(expected1920, 1);
+    await page.keyboard.press("Control+2");
+    await expect(page.locator("#rich .ProseMirror")).toBeVisible();
+    const editW = await measureEdit();
+    expect(Math.abs(editW - readW)).toBeLessThan(0.5);
+  }
+
+  await page.keyboard.press("Control+1");
   await page.locator("#width-toggle").click();
-  const wide = await measureBox();
+  const wide = await measureRead();
   expect(wide.measure).toBeGreaterThan(1200);
 });
 
@@ -470,7 +496,7 @@ test("long inline formulas wrap inside narrow 700px column without horizontal ov
   expect(edit.commaDetached).toBe(false);
 });
 
-test("auto and medium weights keep static CJK Regular via wght, darker uses Medium, and bold keeps wght", async ({
+test("bundled variable Noto Sans SC renders real variable weights 300-550 and gates the typo lab", async ({
   browser,
 }) => {
   const probeCjkFonts = async (page) => {
@@ -505,10 +531,9 @@ test("auto and medium weights keep static CJK Regular via wght, darker uses Medi
         pWeight: p.fontWeight,
         pVariation: p.fontVariationSettings,
         h2Weight: h2.fontWeight,
-        h2Variation: h2.fontVariationSettings,
-        strongVariation: strong.fontVariationSettings,
-        thVariation: th.fontVariationSettings,
-        summaryVariation: summary.fontVariationSettings,
+        strongWeight: strong.fontWeight,
+        thWeight: th.fontWeight,
+        summaryWeight: summary.fontWeight,
       };
     });
 
@@ -521,60 +546,88 @@ test("auto and medium weights keep static CJK Regular via wght, darker uses Medi
     await boot(page, FIXTURE);
     await page.evaluate(() => document.fonts.ready);
 
+    // 600 replaced by 300..550 options; normal build omits #typo-lab DOM and CSS.
     await expect(page.locator('#text-weight option[value="600"]')).toHaveCount(
       0,
     );
+    await expect(
+      page
+        .locator("#text-weight option")
+        .evaluateAll((els) => els.map((e) => e.value)),
+    ).resolves.toEqual(["auto", "300", "350", "400", "450", "500", "550"]);
+    await expect(page.locator("#reading-preset")).toHaveCount(0);
+    await expect(page.locator("#reset-typography")).toHaveCount(1);
+    if (process.env.VITE_TYPO_LAB !== "1") {
+      await expect(page.locator("#typo-lab")).toHaveCount(0);
+      await expect(page.locator("#typo-lab-style")).toHaveCount(0);
+    }
+
     const autoState = await inspect(page);
-    expect(autoState.varWeight).toBe(400);
+    expect(autoState.varWeight).toBe(450);
     expect(autoState.varWght).toBe(450);
     expect(autoState.strongVar).toBe(650);
-    expect(autoState.pWeight).toBe("400");
-    expect(autoState.pVariation).toContain("450");
-    expect(autoState.h2Variation).toContain("650");
-    expect(autoState.strongVariation).toContain("650");
-    expect(autoState.thVariation).toContain("650");
-    expect(autoState.summaryVariation).toContain("650");
+    expect(autoState.pWeight).toBe("450");
+    expect(autoState.pVariation).toBe("normal");
+    expect(autoState.h2Weight).toBe("650");
+    expect(autoState.strongWeight).toBe("650");
+    expect(autoState.thWeight).toBe("650");
+    expect(autoState.summaryWeight).toBe("650");
 
     const autoFonts = await probeCjkFonts(page);
-    const hasNoto = autoFonts.some((f) => /Noto Sans SC/i.test(f.familyName));
-    if (hasNoto) {
-      expect(
-        autoFonts.some((f) => /^Noto-Sans-SC$/i.test(f.postScriptName)),
-        JSON.stringify(autoFonts),
-      ).toBe(true);
-    }
+    expect(
+      autoFonts.some(
+        (f) => /Noto Sans SC/i.test(f.familyName) && f.isCustomFont,
+      ),
+      JSON.stringify(autoFonts),
+    ).toBe(true);
 
+    // Weight-note hidden on built-in stacks, visible on static system stacks.
     await page.locator("#weight").click();
-    await page.locator("#text-weight").selectOption("450");
-    await page.locator("#appearance-close").click();
-    const medState = await inspect(page);
-    expect(medState.varWeight).toBe(400);
-    expect(medState.varWght).toBe(450);
-    const medFonts = await probeCjkFonts(page);
-    if (hasNoto) {
-      expect(
-        medFonts.some((f) => /^Noto-Sans-SC$/i.test(f.postScriptName)),
-        JSON.stringify(medFonts),
-      ).toBe(true);
-    }
-
-    await page.locator("#weight").click();
-    await page.locator("#text-weight").selectOption("500");
-    await page.locator("#appearance-close").click();
-    const darkFonts = await probeCjkFonts(page);
-    const darkerState = await inspect(page);
-    expect(darkerState.varWeight).toBe(500);
-    expect(darkerState.varWght).toBe(500);
-    if (hasNoto) {
-      expect(
-        darkFonts.some((f) => /Noto-Sans-SC-Medium/i.test(f.postScriptName)),
-        JSON.stringify(darkFonts),
-      ).toBe(true);
-    }
-    console.log(
-      `CDP fonts dpr=${dpr}:`,
-      JSON.stringify({ auto: autoFonts, medium: medFonts, darker: darkFonts }),
+    await expect(page.locator("#weight-note")).toHaveText("");
+    await page.locator("#typeface").selectOption("classic");
+    await expect(page.locator("#weight-note")).toHaveText(
+      "系统字体非可变字体，细微浓度不明显",
     );
+    await page.locator("#typeface").selectOption("literata");
+    await expect(page.locator("#weight-note")).toHaveText("");
+    await page.locator("#appearance-close").click();
+
+    // Verify rendered ink pixel darkness increases across 300, 350, 450, 550.
+    const masses = [];
+    for (const w of ["300", "350", "450", "550"]) {
+      await page.locator("#weight").click();
+      await page.locator("#text-weight").selectOption(w);
+      await page.locator("#appearance-close").click();
+      await page.evaluate(() => document.fonts.ready);
+      const box = await page.locator("#content p").first().boundingBox();
+      const png = await page.screenshot({
+        clip: {
+          x: box.x,
+          y: box.y,
+          width: Math.min(220, box.width),
+          height: box.height,
+        },
+      });
+      const mass = await page.evaluate(async (b64) => {
+        const img = new Image();
+        img.src = "data:image/png;base64," + b64;
+        await new Promise((r) => (img.onload = r));
+        const c = document.createElement("canvas");
+        c.width = img.width;
+        c.height = img.height;
+        const g = c.getContext("2d");
+        g.drawImage(img, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4)
+          sum += 255 - (d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11);
+        return Math.round(sum);
+      }, png.toString("base64"));
+      masses.push(mass);
+    }
+    expect(masses[0]).toBeLessThan(masses[1]);
+    expect(masses[1]).toBeLessThan(masses[2]);
+    expect(masses[2]).toBeLessThan(masses[3]);
 
     if (dpr === 1) {
       await page.locator("#weight").click();
@@ -599,4 +652,114 @@ test("auto and medium weights keep static CJK Regular via wght, darker uses Medi
   expect(hiState.varWeight).toBe(400);
   expect(hiState.varWght).toBe(400);
   await ctxHi.close();
+});
+
+test("build-gated typography comparison lab toggles Read and Edit live when enabled and disappears cleanly when disabled", async ({
+  page,
+}) => {
+  const allOld = {
+    lineHeight: false,
+    spacing: false,
+    headingScale: false,
+    fluidSize: false,
+    columnWidth: false,
+    autoWeight: false,
+    chineseFont: false,
+  };
+  await page.setViewportSize({ width: 1366, height: 900 });
+  await boot(page, FIXTURE, { richEdit: true, typoLab: allOld });
+  await page.evaluate(() => document.fonts.ready);
+
+  if (process.env.VITE_TYPO_LAB !== "1") {
+    await expect(page.locator("#typo-lab")).toHaveCount(0);
+    await expect(page.locator("#typo-lab-style")).toHaveCount(0);
+    const attrCount = await page.evaluate(
+      () =>
+        [...document.documentElement.attributes].filter((a) =>
+          a.name.startsWith("data-lab-"),
+        ).length,
+    );
+    expect(attrCount).toBe(0);
+    const readPara = await page
+      .locator("#content p")
+      .first()
+      .evaluate((el) => ({
+        w: Math.round(el.getBoundingClientRect().width),
+        fw: getComputedStyle(el).fontWeight,
+      }));
+    expect(readPara.w).toBe(896);
+    expect(readPara.fw).toBe("450");
+    return;
+  }
+
+  await page.locator("#weight").click();
+  await expect(page.locator("#typo-lab")).toBeVisible();
+  await expect(page.locator("#typo-lab input[type=checkbox]")).toHaveCount(7);
+  await page.locator("#typo-lab-all-old").click();
+  await page.locator("#appearance-close").click();
+
+  const oldMetrics = await page.evaluate(() => {
+    const p = document.querySelector("#content p");
+    const h1 = document.querySelector("#content h1");
+    const h2 = document.querySelector("#content h2");
+    const ul = document.querySelector("#content ul");
+    const bq = document.querySelector("#content blockquote");
+    const math = document.querySelector("#content .math-block");
+    const table = document.querySelector("#content .table-scroll");
+    const code = document.querySelector("#content .code-block");
+    const hr = document.querySelector("#content hr:not(.footnotes-sep)");
+    const gap = (a, b) =>
+      Math.round(
+        (b.getBoundingClientRect().top - a.getBoundingClientRect().bottom) * 10,
+      ) / 10;
+    return {
+      pWidth: Math.round(p.getBoundingClientRect().width * 10) / 10,
+      pWeight: getComputedStyle(p).fontWeight,
+      h1Fs: Math.round(parseFloat(getComputedStyle(h1).fontSize) * 10) / 10,
+      h1ToP: gap(h1, p),
+      pToH2: gap(document.querySelectorAll("#content p")[1], h2),
+      h2ToP: gap(h2, document.querySelectorAll("#content p")[2]),
+      olToBq: gap(document.querySelector("#content ol"), bq),
+      mathGap: gap(math.previousElementSibling, math),
+      tableGap: gap(table.previousElementSibling, table),
+      codeGap: gap(code.previousElementSibling, code),
+      hrGap: gap(document.querySelector("#content ul.contains-task-list"), hr),
+    };
+  });
+  expect(oldMetrics.pWidth).toBe(680);
+  expect(oldMetrics.pWeight).toBe("400");
+  expect(oldMetrics.h1Fs).toBeCloseTo(29.6, 1);
+  expect(Math.abs(oldMetrics.h1ToP - 20.7)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.pToH2 - 25.6)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.h2ToP - 15.6)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.olToBq - 20.8)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.mathGap - 28)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.tableGap - 22.4)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.codeGap - 20)).toBeLessThanOrEqual(0.5);
+  expect(Math.abs(oldMetrics.hrGap - 32)).toBeLessThanOrEqual(0.5);
+
+  await page.keyboard.press("Control+2");
+  await expect(page.locator("#rich .ProseMirror h1")).toBeVisible();
+  const oldEdit = await page.evaluate(() => {
+    const p = document.querySelector("#rich .ProseMirror p");
+    return {
+      w: Math.round(p.getBoundingClientRect().width * 10) / 10,
+      fw: getComputedStyle(p).fontWeight,
+    };
+  });
+  expect(oldEdit.w).toBe(680);
+  expect(oldEdit.fw).toBe("400");
+
+  await page.locator("#weight").click();
+  await page.locator("#typo-lab-all-new").click();
+  await page.locator("#appearance-close").click();
+  const newEdit = await page.evaluate(() => {
+    const p = document.querySelector("#rich .ProseMirror p");
+    return {
+      w: Math.round(p.getBoundingClientRect().width * 10) / 10,
+      fw: getComputedStyle(p).fontWeight,
+    };
+  });
+  expect(newEdit.w).toBe(896);
+  expect(newEdit.fw).toBe("450");
 });

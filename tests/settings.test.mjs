@@ -63,9 +63,22 @@ test("enumerated settings reject unknown values", () => {
   assert.equal(result.librarySide, "left");
   assert.equal(result.outlineSide, "right");
   assert.equal(result.theme, "light");
+  assert.equal(result.columnWidth, "window");
   assert.equal(result.weight, "auto");
-  assert.equal(normalizeSettings({ weight: 600 }).weight, 500);
-  assert.equal(normalizeSettings({ weight: "600" }).weight, 500);
+  assert.equal(normalizeSettings({ weight: 600 }).weight, 550);
+  assert.equal(normalizeSettings({ weight: "600" }).weight, 550);
+  assert.equal(normalizeSettings({ weight: "invalid" }).weight, "auto");
+  for (const w of [300, 350, 400, 450, 500, 550])
+    assert.equal(normalizeSettings({ weight: w }).weight, w);
+  assert.equal(
+    normalizeSettings({ columnWidth: "measure" }).columnWidth,
+    "measure",
+  );
+  assert.equal(
+    normalizeSettings({ columnWidth: "fixed" }).columnWidth,
+    "fixed",
+  );
+  assert.equal(normalizeSettings({ columnWidth: "bad" }).columnWidth, "window");
   assert.equal(result.wide, false);
   assert.equal(result.showHistoryButtons, false);
   assert.equal(result.smoothScroll, "off");

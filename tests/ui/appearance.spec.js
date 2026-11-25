@@ -279,7 +279,11 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
     ["book", "Cambria"],
   ]) {
     await page.locator("#typeface").selectOption(typeface);
-    for (const weight of ["400", "450", "500"]) {
+    const staticStack = typeface === "classic" || typeface === "book";
+    await expect(page.locator("#weight-note")).toHaveText(
+      staticStack ? "系统字体非可变字体，细微浓度不明显" : "",
+    );
+    for (const weight of ["350", "400", "450", "500", "550"]) {
       await page.locator("#text-weight").selectOption(weight);
       const typography = await page.evaluate(() => {
         const content = document.querySelector("#content"),
@@ -310,8 +314,9 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
         };
       });
       expect(typography.prose.family).toContain(family);
-      expect(typography.prose.weight).toBe(weight === "500" ? "500" : "400");
-      expect(typography.prose.variation).toContain(weight);
+      expect(typography.prose.weight).toBe(
+        staticStack ? (Number(weight) >= 500 ? "500" : "400") : weight,
+      );
       expect(typography.math.family).toContain("KaTeX_Main");
       expect(typography.math.weight).toBe("400");
       expect(typography.bold.weight).toBe("700");
@@ -333,7 +338,7 @@ test("typeface and weight retain mathematical bold, italic and actual CJK font s
   await closeAppearance(page);
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.settings))
-    .toMatchObject({ typeface: "book", weight: 500 });
+    .toMatchObject({ typeface: "book", weight: 550 });
   await page.setViewportSize({ width: 820, height: 900 });
   const readSize = await page
     .locator("#content")

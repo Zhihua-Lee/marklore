@@ -72,7 +72,7 @@ export async function buildExportDocument(
   const fontFaces = [...css.matchAll(/@font-face\s*\{[^}]*\}/g)];
   for (const [face] of fontFaces) {
     const font = face.match(
-      /url\(\s*(?:["'])?(?:\.\/)?(?:fonts|files)\/((?:KaTeX_[A-Za-z0-9]+-[A-Za-z]+|(?:literata|jetbrains-mono|noto-sans-sc|noto-serif-sc)-[a-z0-9-]+))\.woff2(?:["'])?\)/,
+      /url\(\s*(?:["'])?(?:\.\/)?(?:fonts|files)\/((?:KaTeX_[A-Za-z0-9]+-[A-Za-z]+|(?:source-serif-4|jetbrains-mono|noto-sans-sc|noto-serif-sc)-[a-z0-9-]+))\.woff2(?:["'])?\)/,
     )?.[1];
     if (!font) throw Error(t("导出字体资源缺失"));
     const bundled = assetNames.find(

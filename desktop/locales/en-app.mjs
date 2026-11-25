@@ -117,7 +117,7 @@ export default {
   "检查更新、托盘驻留、开机启动与文件关联":
     "Updates, tray behaviour, startup, and file associations",
   正文字体: "Body font",
-  "Literata + 思源宋体（内置）": "Literata + Noto Serif SC (built-in)",
+  "Source Serif + 思源宋体（内置）": "Source Serif + Noto Serif SC (built-in)",
   "思源黑体（内置）": "Noto Sans SC (built-in)",
   "微软雅黑（系统）": "Microsoft YaHei (system)",
   "Arial / 微软雅黑": "Arial / Microsoft YaHei",
@@ -134,6 +134,8 @@ export default {
   "适中 450": "Medium 450",
   "较浓 500": "Darker 500",
   "浓 550": "Heavy 550",
+  "宋体笔画较细，中文比所选浓度重 100，与西文一致":
+    "Song strokes are thinner, so Chinese is set 100 heavier than the chosen weight to match the Latin text",
   "系统字体非可变字体，细微浓度不明显":
     "System fonts are static; fine weight steps need a built-in font",
   排版风格: "Reading style",
@@ -176,8 +178,6 @@ export default {
     "Text antialiasing (desktop only): switch in Settings → Text antialiasing (restart required)",
   彩色: "Color",
   未知: "Unknown",
-  "Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。":
-    "Literata and the code font are built in; Chinese text uses system fonts. Formulas keep their own font and the meaning of bold and italic.",
   表格风格: "Table style",
   柔和卡片: "Soft cards",
   简洁横线: "Simple rules",
@@ -388,8 +388,6 @@ export default {
   主题与语言: "Theme & language",
   布局与侧栏: "Layout & sidebars",
   导航与滚动: "Navigation & scrolling",
-  "Literata 与自动浓度，保留字号和布局":
-    "Literata at auto weight; keeps text size and layout",
   "Markdown 文件关联": "Markdown files",
   书页排版: "Book typography",
   "仅 Windows 打包版可用": "Only in the packaged Windows app",

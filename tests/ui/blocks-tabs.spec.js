@@ -134,7 +134,8 @@ test("code blocks copy exact text and other block types retain semantics in both
       code: getComputedStyle(el.querySelector("code")).fontFamily,
     }));
     expect(styles.weight).toBe(styles.body);
-    expect(["400", "450"]).toContain(styles.weight);
+    // Auto: 400/450 for the sans faces, 100 more for the default serif pairing.
+    expect(["400", "450", "500", "550"]).toContain(styles.weight);
     expect(styles.code).toContain("JetBrains");
     await first.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `.local/blocks-${theme}-v014.png` });

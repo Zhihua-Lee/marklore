@@ -27,39 +27,38 @@
 :root[data-typeface="classic"] {
   --font-note: Arial, "Microsoft YaHei", "PingFang SC", sans-serif;
 }
-:root[data-typeface="literata"] {
+:root[data-typeface="serif"] {
   --font-note:
-    "Literata Variable", "Noto Serif SC Variable", "Noto Serif SC", "Songti SC",
-    SimSun, serif;
+    "Marklore Serif Latin", "Marklore Serif SC", "Songti SC", SimSun, serif;
 }
-:root[data-typeface="literata"] .prose {
+:root[data-typeface="serif"] .prose {
   font-optical-sizing: auto;
   font-kerning: normal;
 }
-:root[data-typeface="literata"] .prose p {
+:root[data-typeface="serif"] .prose p {
   letter-spacing: normal;
 }
-:root[data-typeface="literata"] .prose strong {
+:root[data-typeface="serif"] .prose strong {
   font-weight: var(--strong-weight, 600);
 }
-:root[data-typeface="literata"] .prose pre {
+:root[data-typeface="serif"] .prose pre {
   font-weight: var(--note-weight, 400);
   font-variation-settings: normal;
 }
-:root[data-typeface="literata"] .prose :not(pre) > code {
+:root[data-typeface="serif"] .prose :not(pre) > code {
   font-size: 0.82em;
   font-weight: var(--inline-code-weight, 400);
 }
-:root[data-typeface="literata"] .prose .formula > .katex {
+:root[data-typeface="serif"] .prose .formula > .katex {
   font-size: 1em;
 }
-:root[data-typeface="literata"] .prose .formula > .katex .cjk_fallback {
+:root[data-typeface="serif"] .prose .formula > .katex .cjk_fallback {
   font-size: 1em;
 }
-:root[data-typeface="literata"] .prose .katex-display > .katex {
+:root[data-typeface="serif"] .prose .katex-display > .katex {
   font-size: 1.1616em;
 }
-:root[data-typeface="literata"] .prose .katex-display .cjk_fallback {
+:root[data-typeface="serif"] .prose .katex-display .cjk_fallback {
   font-size: calc(1em / 1.1616);
 }
 :root[data-wide="true"] .prose {

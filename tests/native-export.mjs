@@ -96,7 +96,7 @@ try {
   assert.match(html, /<details open/);
   assert.match(html, /data:image\/svg\+xml;base64,/);
   assert.match(html, /data:font\/woff2;base64,/);
-  assert.match(html, /Literata Variable/);
+  assert.match(html, /Marklore Serif Latin/);
   assert.match(html, /SIL OPEN FONT LICENSE/);
   assert.doesNotMatch(
     html,
@@ -305,7 +305,7 @@ try {
     "rgb(178, 60, 54)",
   );
   const fonts = await standalone.evaluate(() => ({
-    literature: document.fonts.check('16px "Literata Variable"', "Export"),
+    literature: document.fonts.check('16px "Marklore Serif Latin"', "Export"),
     mathematics: document.fonts.check("italic 16px KaTeX_Math", "e"),
   }));
   assert.equal(fonts.literature, true);

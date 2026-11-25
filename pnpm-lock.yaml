@@ -36,13 +36,13 @@ importers:
       '@fontsource-variable/jetbrains-mono':
         specifier: 5.3.0
         version: 5.3.0
-      '@fontsource-variable/literata':
-        specifier: 5.3.0
-        version: 5.3.0
       '@fontsource-variable/noto-sans-sc':
         specifier: 5.3.1
         version: 5.3.1
       '@fontsource-variable/noto-serif-sc':
+        specifier: 5.3.1
+        version: 5.3.1
+      '@fontsource-variable/source-serif-4':
         specifier: 5.3.1
         version: 5.3.1
       '@lezer/highlight':
@@ -213,14 +213,14 @@ packages:
   '@fontsource-variable/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
 
-  '@fontsource-variable/literata@5.3.0':
-    resolution: {integrity: sha512-1Jw7xvOcoGyB83lxB2nG4bfNbqtX2/TTbdh9sHAOmU064SvmSdulDtA5RBu5JYWf64fdaKX7xU+z3GO1T2bCHA==}
-
   '@fontsource-variable/noto-sans-sc@5.3.1':
     resolution: {integrity: sha512-UB96JJ17HyD5ehEU7Em0hDdh7fvTMB4B4Hzmq5c4QaNwwSLqTrdM2S+coySeBqCkXwh0DxqXT0b0wMrmzorFpQ==}
 
   '@fontsource-variable/noto-serif-sc@5.3.1':
     resolution: {integrity: sha512-aIHcBaL13QctVaJFeT6wqfgO9Rq/cNtD5g2ob4ze59fYPYwacGthnIrHBe83kDpMEB/k6VGtGc6fS99RImcoSQ==}
+
+  '@fontsource-variable/source-serif-4@5.3.1':
+    resolution: {integrity: sha512-4Rtay22SC4lMvw11r/+9kxANB6P3M0X8s1NudBC2v0J1KU2y3DcMoNcT3lBoZ/CqLirzf+StlO6UlJilyrvaUg==}
 
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
@@ -1845,11 +1845,11 @@ snapshots:
 
   '@fontsource-variable/jetbrains-mono@5.3.0': {}
 
-  '@fontsource-variable/literata@5.3.0': {}
-
   '@fontsource-variable/noto-sans-sc@5.3.1': {}
 
   '@fontsource-variable/noto-serif-sc@5.3.1': {}
+
+  '@fontsource-variable/source-serif-4@5.3.1': {}
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:

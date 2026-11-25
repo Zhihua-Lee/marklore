@@ -287,7 +287,7 @@ test("readingStyle modes (standard, relaxed, compact) match spec rhythm, Read ==
     return edit;
   };
 
-  // 1) Default "standard" = v0.6.4 rhythm & heading scale (literata 1.7; other 1.8).
+  // 1) Default "standard" = v0.6.4 rhythm & heading scale (serif 1.7; other 1.8).
   const std = await measureReadRhythm();
   expect(std.bodyLhRatio).toBeCloseTo(1.7, 2);
   expect(std.tableLhRatio).toBeCloseTo(1.6, 2);
@@ -320,7 +320,7 @@ test("readingStyle modes (standard, relaxed, compact) match spec rhythm, Read ==
     ).toBeLessThan(0.5);
   }
 
-  // Non-literata typeface under standard uses 1.8 body line height.
+  // Non-serif typefaces under standard use 1.8 body line height.
   await page.locator("#weight").click();
   await expect(
     page.locator("#settings-reading .setting:has(#reading-style) small"),
@@ -337,9 +337,9 @@ test("readingStyle modes (standard, relaxed, compact) match spec rhythm, Read ==
   const balancedStd = await measureReadRhythm();
   expect(balancedStd.bodyLhRatio).toBeCloseTo(1.8, 2);
 
-  // Switch back to literata and test "relaxed" (1.85 / 1.65 / x1.15 margins).
+  // Switch back to the serif pairing and test "relaxed" (1.85 / 1.65 / x1.15 margins).
   await page.locator("#weight").click();
-  await page.locator("#typeface").selectOption("literata");
+  await page.locator("#typeface").selectOption("serif");
   await page.locator("#reading-style").selectOption("relaxed");
   await page.locator("#appearance-close").click();
   const rel = await measureReadRhythm();
@@ -722,15 +722,16 @@ test("bundled variable Noto Sans SC renders real variable weights 300-550 and ga
     }
 
     const autoState = await inspect(page);
-    expect(autoState.varWeight).toBe(450);
-    expect(autoState.varWght).toBe(450);
-    expect(autoState.strongVar).toBe(650);
-    expect(autoState.pWeight).toBe("450");
+    // Serif pairing: auto reads 100 heavier (550 at DPR <= 1.25 light).
+    expect(autoState.varWeight).toBe(550);
+    expect(autoState.varWght).toBe(550);
+    expect(autoState.strongVar).toBe(750);
+    expect(autoState.pWeight).toBe("550");
     expect(autoState.pVariation).toBe("normal");
-    expect(autoState.h2Weight).toBe("650");
-    expect(autoState.strongWeight).toBe("650");
-    expect(autoState.thWeight).toBe("650");
-    expect(autoState.summaryWeight).toBe("650");
+    expect(autoState.h2Weight).toBe("750");
+    expect(autoState.strongWeight).toBe("750");
+    expect(autoState.thWeight).toBe("750");
+    expect(autoState.summaryWeight).toBe("750");
 
     const autoFonts = await probeCjkFonts(page);
     expect(
@@ -740,15 +741,22 @@ test("bundled variable Noto Sans SC renders real variable weights 300-550 and ga
       JSON.stringify(autoFonts),
     ).toBe(true);
 
-    // Weight-note hidden on built-in stacks, visible on static system stacks.
+    // Weight-note: the serif pairing says Chinese is set heavier; empty on the
+    // built-in sans; visible on static system stacks.
     await page.locator("#weight").click();
+    await expect(page.locator("#weight-note")).toHaveText(
+      "宋体笔画较细，中文比所选浓度重 100，与西文一致",
+    );
+    await page.locator("#typeface").selectOption("balanced");
     await expect(page.locator("#weight-note")).toHaveText("");
     await page.locator("#typeface").selectOption("classic");
     await expect(page.locator("#weight-note")).toHaveText(
       "系统字体非可变字体，细微浓度不明显",
     );
-    await page.locator("#typeface").selectOption("literata");
-    await expect(page.locator("#weight-note")).toHaveText("");
+    await page.locator("#typeface").selectOption("serif");
+    await expect(page.locator("#weight-note")).toHaveText(
+      "宋体笔画较细，中文比所选浓度重 100，与西文一致",
+    );
     await page.locator("#appearance-close").click();
 
     // Verify rendered ink pixel darkness increases across 300, 350, 450, 550.
@@ -794,9 +802,9 @@ test("bundled variable Noto Sans SC renders real variable weights 300-550 and ga
       await page.locator("#appearance-close").click();
       await page.locator("#theme").click();
       const darkThemeState = await inspect(page);
-      expect(darkThemeState.varWeight).toBe(400);
-      expect(darkThemeState.varWght).toBe(400);
-      expect(darkThemeState.strongVar).toBe(600);
+      expect(darkThemeState.varWeight).toBe(500);
+      expect(darkThemeState.varWght).toBe(500);
+      expect(darkThemeState.strongVar).toBe(700);
     }
     await ctx.close();
   }
@@ -808,8 +816,8 @@ test("bundled variable Noto Sans SC renders real variable weights 300-550 and ga
   const hiPage = await ctxHi.newPage();
   await boot(hiPage, FIXTURE);
   const hiState = await inspect(hiPage);
-  expect(hiState.varWeight).toBe(400);
-  expect(hiState.varWght).toBe(400);
+  expect(hiState.varWeight).toBe(500);
+  expect(hiState.varWght).toBe(500);
   await ctxHi.close();
 });
 
@@ -846,7 +854,7 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
         fw: getComputedStyle(el).fontWeight,
       }));
     expect(readPara.w).toBe(680);
-    expect(readPara.fw).toBe("450");
+    expect(readPara.fw).toBe("550");
     return;
   }
 
@@ -937,7 +945,7 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   expect(newEdit.readingInk).toBe("#d3d0ca");
   expect(
     await page.evaluate(() => document.getElementById("typeface").value),
-  ).toBe("literata");
+  ).toBe("serif");
 
   // "全部旧" turns both new switches back to their old side.
   await page.locator("#typo-lab-all-old").click();
@@ -963,8 +971,8 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
     };
   });
   expect(defEdit.w).toBe(680);
-  expect(defEdit.fw).toBe("400");
-  expect(defEdit.typefaceAttr).toBe("literata");
+  expect(defEdit.fw).toBe("500");
+  expect(defEdit.typefaceAttr).toBe("serif");
   expect(defEdit.attrs).toBe(0);
   await page.locator("#theme").click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
@@ -973,5 +981,5 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
       .locator("#rich .ProseMirror p")
       .first()
       .evaluate((p) => getComputedStyle(p).fontWeight),
-  ).toBe("450");
+  ).toBe("550");
 });

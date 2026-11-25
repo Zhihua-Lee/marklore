@@ -13,10 +13,8 @@ import exportCSS from "./export.css?raw";
 import tableCSS from "./tables.css?raw";
 import imageLayoutCSS from "./image-layout.css?raw";
 import katexCSS from "katex/dist/katex.min.css?raw";
-import literataCSS from "@fontsource-variable/literata/standard.css?raw";
-import literataItalicCSS from "@fontsource-variable/literata/standard-italic.css?raw";
 import notoCSS from "@fontsource-variable/noto-sans-sc/wght.css?raw";
-import notoSerifCSS from "@fontsource-variable/noto-serif-sc/wght.css?raw";
+import { serifFaceCss, serifStack } from "./reading-fonts.js";
 import monoCSS from "@fontsource-variable/jetbrains-mono/index.css?raw";
 import monoItalicCSS from "@fontsource-variable/jetbrains-mono/wght-italic.css?raw";
 
@@ -189,12 +187,10 @@ export async function exportNote(format, { doc, toc = false }) {
     const useBuiltInCjk =
       format === "html" &&
       !labOldCjk &&
-      (typeface === "literata" || typeface === "balanced");
+      (typeface === "serif" || typeface === "balanced");
     const family =
-      typeface === "literata"
-        ? useBuiltInCjk
-          ? '"Literata Variable","Noto Serif SC Variable","Noto Serif SC","Songti SC",SimSun,serif'
-          : '"Literata Variable","Noto Serif SC","Songti SC",SimSun,serif'
+      typeface === "serif"
+        ? serifStack.replaceAll(", ", ",")
         : typeface === "yahei"
           ? '"Microsoft YaHei","Microsoft YaHei UI","PingFang SC",sans-serif'
           : typeface === "classic"
@@ -212,12 +208,18 @@ export async function exportNote(format, { doc, toc = false }) {
     const staticWeight = bodyFontWeight(wght);
     const boldWeight = emphasisWeight(wght);
     const navHtml = format === "html" && toc ? headingList(host) || null : null;
-    const notoSubsets = useBuiltInCjk
-      ? subsetFontCss(
-          typeface === "literata" ? notoSerifCSS : notoCSS,
-          host.textContent + (navHtml ? t("目录") : ""),
-        )
-      : "";
+    const usedText = host.textContent + (navHtml ? t("目录") : "");
+    // The serif pairing always embeds its Latin faces; its Chinese faces (one per
+    // weight in use) only where built-in Chinese is embedded, as for Noto Sans SC.
+    const notoSubsets =
+      typeface === "serif"
+        ? subsetFontCss(
+            serifFaceCss(useBuiltInCjk ? [wght, boldWeight] : []),
+            usedText,
+          )
+        : useBuiltInCjk
+          ? subsetFontCss(notoCSS, usedText)
+          : "";
     // Chinese inside formulas follows the body face, as it does in the reader.
     const fontWeightCss =
       `\n.katex .cjk_fallback{font-family:${family}}` +
@@ -234,7 +236,7 @@ export async function exportNote(format, { doc, toc = false }) {
         ? "\n:root{--exp-lh:1.85;--exp-pre-lh:1.65;--table-lh:1.65;--gap-scale:1.15}"
         : readingStyle === "compact"
           ? "\n:root{--exp-lh:1.7;--exp-head-lh:1.3;--h1-scale:1.6;--h2-scale:1.32;--h3-scale:1.15;--h4-scale:1.05;--h5-scale:1;--h6-scale:0.94;--exp-h1-m:0 0 0.95em;--exp-h2-m:1.55em 0 0.45em;--exp-h3-m:1.55em 0 0.45em;--exp-h4-m:0.95em 0 0.45em;--exp-h5-m:0.95em 0 0.45em;--exp-h6-m:0.95em 0 0.45em;--exp-p-mb:0.95em;--exp-list-m:0.95em 0;--exp-li-y:0.28em;--exp-li-p-y:0.95em;--exp-sublist-y:0.45em 0;--exp-hr-y:0.95em;--exp-img-y:0.95em;--gap-row-y:0.95em;--gap-col-y:0.95em;--pad-pre:12px 16px 14px;--exp-pre-y:0.95em;--exp-pre-lh:1.5;--exp-bq-m:0.95em 0;--pad-bq:0.45em 1.05em;--exp-bq-border:3px solid color-mix(in srgb,#246d5d 42%,transparent);--exp-bq-bg:color-mix(in srgb,#246d5d 3.5%,#fff);--exp-bq-radius:0 4px 4px 0;--gap-table-y:0.95em;--table-lh:1.5;--pad-table-cell:0.45em 0.8em;--exp-table-m:0.95em 0;--exp-cell-pad:0.45em 0.8em;--exp-details-m:0.95em 0;--pad-details:10px 14px;--exp-math-y:0.95em;--pad-math-y:0.08em;--fn-sep-display:none;--exp-fn-size:0.88em;--exp-fn-lh:1.65;--exp-fn-mt:1.55em;--exp-fn-pt:0.95em;--exp-fn-color:#68716e;--exp-fn-list-m:0;--exp-fn-li-y:0.28em;--exp-fn-p-y:0;--exp-fn-p2-mt:0.45em}"
-          : typeface === "literata"
+          : typeface === "serif"
             ? "\n:root{--exp-lh:1.7}"
             : "";
     warnings.push(
@@ -251,7 +253,6 @@ export async function exportNote(format, { doc, toc = false }) {
       css:
         katexCSS +
         "\n" +
-        (typeface === "literata" ? literataCSS + literataItalicCSS : "") +
         notoSubsets +
         monoCSS +
         monoItalicCSS +

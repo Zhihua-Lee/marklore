@@ -141,9 +141,10 @@
 :root[data-lab-chinese-font="old"][data-typeface="balanced"] {
   --font-note: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
-:root[data-lab-chinese-font="old"][data-typeface="literata"] {
+:root[data-lab-chinese-font="old"][data-typeface="serif"] {
   --font-note:
-    "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
+    "Marklore Serif Latin", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
+    serif;
 }
 :root[data-lab-chinese-font="old"] .prose {
   font-variation-settings: "wght" var(--note-wght, 400);

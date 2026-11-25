@@ -106,7 +106,7 @@ pnpm dev
 
 [desktop/settings-schema.mjs](../desktop/settings-schema.mjs) 定义设置的默认值和读回时的规范化，不依赖 DOM 和 Electron；`src/settings.js` 只是转出它。分三类，互不混放：
 
-- 用户设置（`DURABLE_SETTINGS`）：数据目录 `session.json` 的 `settings`，由页面随会话写入，读回时经 `normalizeSettings`：缺的取默认值，取值不认识的改回默认，数值限定范围，旧版本的值迁移（`typeface: "balanced"` 改为 `literata`，`touchpadScroll` 并入 `smoothScroll`，删去 `aiTarget`）。不认识的键原样保留；`sidebar`、`split`、`outline` 目前不做校验。主进程从中读取 `theme`、`language`、`searchExclude` 和 `aiLibraries`。
+- 用户设置（`DURABLE_SETTINGS`）：数据目录 `session.json` 的 `settings`，由页面随会话写入，读回时经 `normalizeSettings`：缺的取默认值，取值不认识的改回默认，数值限定范围，旧版本的值迁移（`typeface: "balanced"` 和原先的默认 `literata` 改为 `serif`，`touchpadScroll` 并入 `smoothScroll`，删去 `aiTarget`）。不认识的键原样保留；`sidebar`、`split`、`outline` 目前不做校验。主进程从中读取 `theme`、`language`、`searchExclude` 和 `aiLibraries`。
 - 桌面偏好（`DESKTOP_PREFERENCES`）：个人资料目录的 `desktop-settings.json`，由主进程（`desktop/integration.mjs`）读写：`closeToTray`、`otherFormats`、`checkUpdates`，只有存为 `true` 时才算开启。开机启动由 Windows 记录，不在这里。
 - 测试与实验开关（`FLAGS`）：环境变量 `FOLIO_DATA_DIR`、`FOLIO_PROFILE_DIR`、`FOLIO_LANG`、`FOLIO_TEST_INACTIVE`、`FOLIO_TEST_TRAY`、`FOLIO_NO_RELAUNCH`、`FOLIO_UPDATE_FEED`、`FOLIO_CLAUDE`、`MARKLORE_INDEX`、`MARKLORE_RUN`，以及页面上的 `window.__folioIncremental`，都不保存。页面 `localStorage` 中的 `folio-language` 只是 `language` 的副本，供页面在读到会话之前使用。
 

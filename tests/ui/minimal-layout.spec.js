@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { installFolio } from "./fixtures.js";
 
 const typographyText =
-  "# Typography 字体\n\nLiterata makes long-form English reading feel familiar. 中文与英文并列，**Strong emphasis** 保留层次。\n\nInline $x + \\mathbf{v}$ and code `monospace_code`\n\n```js\nconst readable = true;\n```\n";
+  "# Typography 字体\n\nSource Serif makes long-form English reading feel familiar. 中文与英文并列，**Strong emphasis** 保留层次。\n\nInline $x + \\mathbf{v}$ and code `monospace_code`\n\n```js\nconst readable = true;\n```\n";
 const longText = Array.from(
   { length: 60 },
   (_, i) =>
@@ -127,7 +127,7 @@ test("current folder follows the note, navigation typography persists and reopen
   expect(values.tab).toBe("10px");
   expect(values.em).toBe("italic");
   for (let i = 0; i < values.headings.length; i++) {
-    expect(values.headings[i].weight).toBe("650");
+    expect(values.headings[i].weight).toBe("750");
     expect(values.headings[i].alignment).toBeLessThan(1);
     if (i)
       expect(values.headings[i].size).toBeLessThan(values.headings[i - 1].size);
@@ -204,7 +204,8 @@ $$`,
         }));
         expect(metrics.dpr).toBeCloseTo(dpr, 5);
         expect(metrics.spacing).toBe("normal");
-        expect(metrics.weight).toBe(dpr <= 1.25 ? "450" : "400");
+        // Serif pairing: auto reads 100 heavier than the sans rule (450 / 400).
+        expect(metrics.weight).toBe(dpr <= 1.25 ? "550" : "500");
         expect(metrics.variation).toBe("normal");
         expect(metrics.transform).toBe("none");
         for (const formula of metrics.formulas) {
@@ -340,7 +341,7 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
   await openAppearance(page);
   await page.locator("#zoom-out").click();
   await page.locator("#zoom-out").click();
-  for (const typeface of ["literata", "balanced", "yahei", "classic", "book"]) {
+  for (const typeface of ["serif", "balanced", "yahei", "classic", "book"]) {
     await page.locator("#typeface").selectOption(typeface);
     for (const weight of ["auto", "450", "500"]) {
       await page.locator("#text-weight").selectOption(weight);
@@ -364,7 +365,8 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
       for (const value of styles) expect(value).toEqual(styles[0]);
       const staticStack =
         typeface === "yahei" || typeface === "classic" || typeface === "book";
-      const targetWeight = weight === "auto" ? "450" : weight;
+      const targetWeight =
+        weight === "auto" ? (typeface === "serif" ? "550" : "450") : weight;
       expect(styles[0].weight).toBe(
         staticStack ? (weight === "500" ? "500" : "400") : targetWeight,
       );
@@ -694,7 +696,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await openAppearance(page, "settings-reading");
   await expect(page.locator("#typeface")).toHaveValue("classic");
   await page.locator("#reset-typography").click();
-  await expect(page.locator("#typeface")).toHaveValue("literata");
+  await expect(page.locator("#typeface")).toHaveValue("serif");
   await expect(page.locator("#text-weight")).toHaveValue("auto");
   await expect(page.locator("#reading-style")).toHaveValue("standard");
   await expect(page.locator("#column-width")).toHaveValue("fixed");
@@ -706,7 +708,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await closeAppearance(page);
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "450",
+    "550",
   );
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-variation-settings",
@@ -716,7 +718,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
     "font-size",
     "16px",
   );
-  await expect(page.locator("#content strong")).toHaveCSS("font-weight", "650");
+  await expect(page.locator("#content strong")).toHaveCSS("font-weight", "750");
   await expect(page.locator("#content .formula > .katex")).toHaveCSS(
     "font-weight",
     "400",
@@ -728,7 +730,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await expect
     .poll(() => page.evaluate(() => window.mock.session?.settings))
     .toMatchObject({
-      typeface: "literata",
+      typeface: "serif",
       zoom: 100,
       weight: "auto",
       readingStyle: "standard",
@@ -738,7 +740,7 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await page.reload();
   await expect(page.locator("#content p").first()).toHaveCSS(
     "font-weight",
-    "450",
+    "550",
   );
   await page.evaluate(() => document.fonts.ready);
   await openAppearance(page, "settings-reading");
@@ -934,7 +936,7 @@ test("settings keep zoom while the adjacent theme button is directly accessible"
     .toBe("dark");
 });
 
-test("default typography uses actual Literata and JetBrains with the original inline math scale", async ({
+test("default typography uses Source Serif with Noto Serif SC, JetBrains and the original inline math scale", async ({
   page,
 }, testInfo) => {
   await boot(page);
@@ -958,12 +960,13 @@ test("default typography uses actual Literata and JetBrains with the original in
       boldMath: style("#content .katex .mathbf"),
     };
   });
-  expect(css.paragraph.family).toContain("Literata");
+  expect(css.paragraph.family).toContain("Marklore Serif Latin");
+  expect(css.paragraph.family).toContain("Marklore Serif SC");
   expect(css.paragraph.size).toBe(16);
-  expect(css.paragraph.weight).toBe("450");
+  expect(css.paragraph.weight).toBe("550");
   expect(css.paragraph.variation).toBe("normal");
   expect(css.paragraph.lineHeight / css.paragraph.size).toBeCloseTo(1.7, 2);
-  expect(css.strong.weight).toBe("650");
+  expect(css.strong.weight).toBe("750");
   expect(css.strong.variation).toBe("normal");
   expect(css.math.size / css.paragraph.size).toBeCloseTo(1, 3);
   expect(css.math.family).toContain("KaTeX_Main");
@@ -994,7 +997,7 @@ test("default typography uses actual Literata and JetBrains with the original in
   console.log("Original-style actual fonts:", JSON.stringify(evidence));
   expect(
     evidence.prose.some(
-      (font) => /Literata/.test(font.familyName) && font.isCustomFont,
+      (font) => /Source Serif 4/.test(font.familyName) && font.isCustomFont,
     ),
   ).toBe(true);
   expect(
@@ -1002,5 +1005,5 @@ test("default typography uses actual Literata and JetBrains with the original in
       (font) => /JetBrains Mono/.test(font.familyName) && font.isCustomFont,
     ),
   ).toBe(true);
-  await page.screenshot({ path: ".local/visual-v013/literata-baseline.png" });
+  await page.screenshot({ path: ".local/visual-v013/serif-baseline.png" });
 });

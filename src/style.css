@@ -720,7 +720,7 @@ main[data-empty="true"] > #panes {
 :root[data-column-width="fixed"] {
   --note-column: calc(680px + var(--note-hpad, 80px));
 }
-:root[data-typeface="literata"]:not([data-reading-style="relaxed"]) {
+:root[data-typeface="serif"]:not([data-reading-style="relaxed"]) {
   --prose-lh: 1.7;
 }
 :root[data-reading-style="relaxed"] {

@@ -77,13 +77,12 @@ test("fluid note size scales smoothly between 1366px and 1920px viewports", () =
   assert.ok(Math.abs(fluidFactor(1920) - 1.09) < 1e-6);
   assert.ok(Math.abs(fluidFactor(2560) - 1.09) < 1e-6);
   assert.equal(
-    noteSize({ typeface: "literata", zoom: 100, viewportWidth: 1366 }),
+    noteSize({ typeface: "serif", zoom: 100, viewportWidth: 1366 }),
     16,
   );
   assert.ok(
     Math.abs(
-      noteSize({ typeface: "literata", zoom: 100, viewportWidth: 1920 }) -
-        17.44,
+      noteSize({ typeface: "serif", zoom: 100, viewportWidth: 1920 }) - 17.44,
     ) < 1e-6,
   );
   assert.equal(
@@ -95,4 +94,22 @@ test("fluid note size scales smoothly between 1366px and 1920px viewports", () =
       noteSize({ typeface: "classic", zoom: 125, viewportWidth: 1366 }) - 22.5,
     ) < 1e-6,
   );
+});
+
+test("auto weight reads 100 heavier for the serif pairing; chosen steps stay as chosen", () => {
+  for (const [dpr, theme, base] of [
+    [1, "light", 450],
+    [2, "light", 400],
+    [3.5, "dark", 400],
+  ]) {
+    assert.equal(
+      readingWeight({ weight: "auto", dpr, theme, typeface: "serif" }),
+      base + 100,
+    );
+    assert.equal(
+      readingWeight({ weight: "auto", dpr, theme, typeface: "balanced" }),
+      base,
+    );
+  }
+  assert.equal(readingWeight({ weight: 400, dpr: 2, typeface: "serif" }), 400);
 });

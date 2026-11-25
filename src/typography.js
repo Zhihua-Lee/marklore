@@ -7,12 +7,16 @@ export function readingWeight({
   dpr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1,
   theme = "light",
   autoRule = "new",
+  typeface = "",
 } = {}) {
   const n = Number(weight);
   if (n === 600) return 550;
   if (WEIGHT_STEPS.includes(n)) return n;
   if (autoRule === "v064") return 400;
-  return dpr <= 1.25 && theme !== "dark" ? 450 : 400;
+  // Source Serif is lighter than the sans faces at the same nominal weight
+  // (measured against the previous default): auto reads 100 heavier.
+  const lift = typeface === "serif" ? 100 : 0;
+  return (dpr <= 1.25 && theme !== "dark" ? 450 : 400) + lift;
 }
 
 // Keep static CJK faces on CSS 400 for weights below 500 so `450` / `auto` never
@@ -31,10 +35,10 @@ export function fluidFactor(viewportWidth = 1366) {
   return 1 + 0.09 * t;
 }
 
-export const typefaceBase = (typeface) => (typeface === "literata" ? 16 : 18);
+export const typefaceBase = (typeface) => (typeface === "serif" ? 16 : 18);
 
 export function noteSize({
-  typeface = "literata",
+  typeface = "serif",
   zoom = 100,
   viewportWidth = 1366,
 } = {}) {

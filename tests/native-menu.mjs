@@ -68,7 +68,7 @@ try {
     return fonts;
   };
   const fontEvidence = {};
-  for (const typeface of ["literata", "balanced", "classic", "book"]) {
+  for (const typeface of ["serif", "balanced", "classic", "book"]) {
     await page.evaluate((value) => {
       const selector = document.querySelector("#typeface");
       selector.value = value;
@@ -87,17 +87,24 @@ try {
       fontEvidence[typeface].math.some((font) => /KaTeX/.test(font.familyName)),
       "Formula glyphs must use the loaded mathematical font, not body fallback",
     );
-    if (typeface === "literata")
+    if (typeface === "serif") {
       assert.ok(
         fontEvidence[typeface].latin.some((font) =>
-          /Literata/.test(font.familyName),
+          /Source Serif 4/.test(font.familyName),
         ),
-        "Literata must load from the bundled font",
+        "Source Serif 4 must load from the bundled font",
       );
+      assert.ok(
+        fontEvidence[typeface].cjk.some((font) =>
+          /Noto Serif SC/.test(font.familyName),
+        ),
+        "Noto Serif SC must load from the bundled font",
+      );
+    }
   }
   await page.evaluate(() => {
     const selector = document.querySelector("#typeface");
-    selector.value = "literata";
+    selector.value = "serif";
     selector.dispatchEvent(new Event("change", { bubbles: true }));
   });
   const artifacts = path.join(project, ".local");

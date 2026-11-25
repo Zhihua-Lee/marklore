@@ -56,7 +56,7 @@ test("enumerated settings reject unknown values", () => {
     language: "fr",
     tabGroups: "none",
   });
-  assert.equal(result.typeface, "literata");
+  assert.equal(result.typeface, "serif");
   assert.equal(result.tableStyle, "soft");
   assert.equal(result.tableWidth, "auto");
   assert.equal(result.navigationScope, "all");
@@ -141,11 +141,8 @@ test("valid stored choices survive normalization", () => {
   assert.equal(result.split, 40);
 });
 
-test("legacy balanced typeface migrates once to literata", () => {
-  assert.equal(
-    normalizeSettings({ typeface: "balanced" }).typeface,
-    "literata",
-  );
+test("legacy balanced typeface migrates once to the serif pairing", () => {
+  assert.equal(normalizeSettings({ typeface: "balanced" }).typeface, "serif");
   // A choice stored after the typography migration is an explicit preference.
   const current = normalizeSettings({
     typeface: "balanced",
@@ -167,4 +164,12 @@ test("the unreleased touchpad smoothing choice carries over", () => {
   });
   assert.equal(merged.smoothScroll, "touchpad");
   assert.equal("touchpadScroll" in result, false);
+});
+
+test("the former Literata default becomes the serif pairing", () => {
+  assert.equal(normalizeSettings({ typeface: "literata" }).typeface, "serif");
+  assert.equal(
+    normalizeSettings({ typeface: "literata", typographyVersion: 1 }).typeface,
+    "serif",
+  );
 });

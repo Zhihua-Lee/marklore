@@ -33,7 +33,7 @@ export function defaultSettings() {
     weight: "auto",
     navigationSize: 12,
     tabSize: 11,
-    typeface: "literata",
+    typeface: "serif",
     readingStyle: "standard",
     columnWidth: "fixed",
     wide: false,
@@ -92,19 +92,21 @@ export function normalizeSettings(saved = {}) {
   // The old automatic sans-serif preset becomes the bundled reading preset.
   // Preserve alternatives explicitly stored by earlier versions.
   if (!settings.typographyVersion && settings.typeface === "balanced")
-    settings.typeface = "literata";
+    settings.typeface = "serif";
+  // Literata was the default face until the serif pairing replaced it.
+  if (settings.typeface === "literata") settings.typeface = "serif";
   settings.typographyVersion = 1;
   settings.zoom = clamp(settings.zoom, 50, 200, 100);
   settings.previewZoom = clamp(settings.previewZoom, 50, 200, 100);
   settings.typeface = [
-    "literata",
+    "serif",
     "balanced",
     "yahei",
     "classic",
     "book",
   ].includes(settings.typeface)
     ? settings.typeface
-    : "literata";
+    : "serif";
   settings.readingStyle = ["relaxed", "standard", "compact"].includes(
     settings.readingStyle,
   )

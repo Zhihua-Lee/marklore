@@ -598,10 +598,10 @@ test("text antialiasing row appears only in desktop builds and yahei HTML export
   expect(exported.css).not.toMatch(/noto-sans-sc/i);
   expect(exported.css).toMatch(/font-family:"Microsoft YaHei"/);
 
-  // Literata pairs with serif Chinese: HTML export embeds Noto Serif SC subsets
+  // The serif pairing: HTML export embeds Source Serif and Noto Serif SC subsets
   // and Chinese inside formulas follows the same face.
   await appearance(page, "settings-reading");
-  await page.locator("#typeface").selectOption("literata");
+  await page.locator("#typeface").selectOption("serif");
   await closeAppearance(page);
   const serifExport = await page.evaluate(async () => {
     let captured = null;
@@ -617,9 +617,19 @@ test("text antialiasing row appears only in desktop builds and yahei HTML export
     return captured;
   });
   expect(serifExport.css).toMatch(/noto-serif-sc-[0-9]+-wght-normal/);
+  expect(serifExport.css).toMatch(/source-serif-4-latin-standard-normal/);
+  // Chinese is pinned 100 above each weight in use; Latin is scaled to x-height.
+  expect(serifExport.css).toMatch(
+    /font-weight: (\d+);\s*font-variation-settings: "wght" (\d+)/,
+  );
+  const [, step, pinned] = serifExport.css.match(
+    /font-weight: (\d+);\s*font-variation-settings: "wght" (\d+)/,
+  );
+  expect(Number(pinned) - Number(step)).toBe(100);
+  expect(serifExport.css).toMatch(/size-adjust: 113%/);
   expect(serifExport.css).not.toMatch(/noto-sans-sc/i);
   expect(serifExport.css).toMatch(
-    /\.katex \.cjk_fallback\{font-family:"Literata Variable","Noto Serif SC Variable"/,
+    /\.katex \.cjk_fallback\{font-family:"Marklore Serif Latin","Marklore Serif SC"/,
   );
 
   // Desktop build with textRendering API exposes the control and restart notice.

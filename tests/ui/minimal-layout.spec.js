@@ -340,7 +340,7 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
   await openAppearance(page);
   await page.locator("#zoom-out").click();
   await page.locator("#zoom-out").click();
-  for (const typeface of ["literata", "balanced", "classic", "book"]) {
+  for (const typeface of ["literata", "balanced", "yahei", "classic", "book"]) {
     await page.locator("#typeface").selectOption(typeface);
     for (const weight of ["auto", "450", "500"]) {
       await page.locator("#text-weight").selectOption(weight);
@@ -362,7 +362,8 @@ test("ordinary prose has one weight across lists, quotes and tables at 80 percen
         }),
       );
       for (const value of styles) expect(value).toEqual(styles[0]);
-      const staticStack = typeface === "classic" || typeface === "book";
+      const staticStack =
+        typeface === "yahei" || typeface === "classic" || typeface === "book";
       const targetWeight = weight === "auto" ? "450" : weight;
       expect(styles[0].weight).toBe(
         staticStack ? (weight === "500" ? "500" : "400") : targetWeight,

@@ -137,6 +137,8 @@
   --font-code:
     "JetBrains Mono Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC",
     monospace;
+}
+:root[data-lab-chinese-font="old"][data-typeface="balanced"] {
   --font-note: "Noto Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
 }
 :root[data-lab-chinese-font="old"][data-typeface="literata"] {
@@ -158,4 +160,17 @@
 }
 :root[data-lab-chinese-font="old"] .prose :is(pre, .katex, .front-matter) {
   font-variation-settings: normal;
+}
+
+/* 8. Dark theme body/chrome ink: old restores v0.6.4 brighter values */
+:root[data-theme="dark"][data-lab-dark-ink="old"] {
+  --reading-ink: #e4e2de;
+  --ink: #e5e9e1;
+}
+
+.typo-lab-aa {
+  margin: 6px 0 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  line-height: 1.45;
 }

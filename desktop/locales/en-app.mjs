@@ -119,6 +119,7 @@ export default {
   正文字体: "Body font",
   "Literata + 思源黑体（内置）": "Literata + Noto Sans SC (built-in)",
   "思源黑体（内置）": "Noto Sans SC (built-in)",
+  "微软雅黑（系统）": "Microsoft YaHei (system)",
   "Arial / 微软雅黑": "Arial / Microsoft YaHei",
   "Cambria / 宋体": "Cambria / SimSun",
   字号: "Text size",
@@ -165,6 +166,16 @@ export default {
     "Auto weight: v0.6.4 always 400 ↔ 400/450 by screen (default)",
   "中文字体：v0.6.4 系统字体 ↔ 内置思源黑体（默认）":
     "Chinese font: v0.6.4 system ↔ built-in Noto Sans SC (default)",
+  "深色正文：v0.6.4 #e4e2de ↔ 调暗（默认）":
+    "Dark body ink: v0.6.4 #e4e2de ↔ dimmed (default)",
+  "正文字体：设置里的 ↔ 微软雅黑":
+    "Body font: Settings choice ↔ Microsoft YaHei",
+  "当前抗锯齿：{mode}（缩放 {scale}）· 在设置 → 文字抗锯齿 中切换，重启后生效":
+    "Current antialiasing: {mode} (scale {scale}) · Switch in Settings → Text antialiasing (restart required)",
+  "文字抗锯齿（仅桌面版）：在设置 → 文字抗锯齿 中切换，重启后生效":
+    "Text antialiasing (desktop only): switch in Settings → Text antialiasing (restart required)",
+  彩色: "Color",
+  未知: "Unknown",
   "Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。":
     "Literata and the code font are built in; Chinese text uses system fonts. Formulas keep their own font and the meaning of bold and italic.",
   表格风格: "Table style",
@@ -204,6 +215,13 @@ export default {
   浅色: "Light",
   深色: "Dark",
   切换深浅主题: "Toggle light/dark theme",
+  文字抗锯齿: "Text antialiasing",
+  "自动（高缩放屏用灰度）": "Auto (grayscale on high-DPI displays)",
+  灰度: "Grayscale",
+  "彩色（ClearType）": "Color (ClearType)",
+  "当前生效：{mode}": "Active now: {mode}",
+  "当前生效：{mode}；重启后生效":
+    "Active now: {mode}; takes effect after restart",
 
   // Background & system (src/desktop-settings.js)
   后台与系统: "Background & system",

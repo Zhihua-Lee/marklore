@@ -153,6 +153,7 @@ test("legacy balanced typeface migrates once to literata", () => {
   });
   assert.equal(current.typeface, "balanced");
   assert.equal(current.typographyVersion, 1);
+  assert.equal(normalizeSettings({ typeface: "yahei" }).typeface, "yahei");
   assert.equal(normalizeSettings({ typeface: "classic" }).typeface, "classic");
 });
 

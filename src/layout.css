@@ -65,6 +65,10 @@
 :root[data-wide="true"] .prose {
   max-width: none;
 }
+:root[data-typeface="yahei"] {
+  --font-note:
+    "Microsoft YaHei", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+}
 :root[data-typeface="book"] {
   --font-note: Cambria, Georgia, "Songti SC", SimSun, serif;
 }

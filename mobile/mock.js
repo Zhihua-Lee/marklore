@@ -96,6 +96,7 @@ const IMAGES = { "images/curve.svg": curve };
 // section with its _目录.md), for checking the interface stays quick.
 function bigNotebook() {
   const out = {};
+  const sections = [];
   for (let s = 1; s <= 40; s++) {
     const dir = `分区 ${s}`;
     const pages = [];
@@ -111,7 +112,10 @@ function bigNotebook() {
         ).join("\n\n");
     }
     out[`${dir}/_目录.md`] = `# ${dir}\n\n${pages.join("\n")}\n`;
+    sections.push(`- [${dir}](${encodeURI(dir)}/_目录.md)`);
   }
+  // The root index lists the sections too, as an export of a notebook does.
+  out["_目录.md"] = SAMPLE["_目录.md"] + sections.join("\n") + "\n";
   return out;
 }
 

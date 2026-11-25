@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 test.describe("Mobile reader UI", () => {
-  test("home shows folder tree with 目录 first, recent, and sync status", async ({
+  test("home shows the folder's table of contents like the desktop, and sync status", async ({
     page,
   }) => {
     await page.goto("./?mock");
@@ -16,30 +16,48 @@ test.describe("Mobile reader UI", () => {
       "1 小时前同步",
     );
 
-    // Root index file listed first as "目录"
-    const rootFirstRow = page
-      .locator(".mobile-tree > .mobile-note-row")
-      .first();
-    await expect(rootFirstRow).toContainText("目录");
-
-    // Child folder collapses and expands, with 目录 listed first inside it
-    const ch1Toggle = page.locator(
-      '.mobile-folder-row[data-folder-path="第一章 实数"]',
+    // The root _目录.md in its order: the chapter folder first (open, as a
+    // first-level section), its pages under it, then the other pages.
+    const index = page.locator(".mobile-home-index");
+    const titles = await index
+      .locator(".ix-list > .ix-item > .ix-row > .ix-title")
+      .allTextContents();
+    expect(titles).toEqual([
+      "第一章 实数",
+      "一致收敛",
+      "长笔记：实分析习题",
+      "English notes",
+    ]);
+    const chapter = index.locator('.ix-item[data-kind="folder"]').first();
+    await expect(chapter).toHaveAttribute("aria-expanded", "true");
+    const page1 = chapter.locator(
+      'a.ix-title[data-note-path="第一章 实数/确界原理.md"]',
     );
-    await expect(ch1Toggle).toHaveAttribute("aria-expanded", "true");
-    const ch1FirstChild = page
-      .locator(
-        '.mobile-tree-folder:has(> .mobile-folder-row[data-folder-path="第一章 实数"]) .mobile-note-row',
-      )
-      .first();
-    await expect(ch1FirstChild).toContainText("目录");
+    await expect(page1).toBeVisible();
+    // Each page shows its first sentence, as on the desktop.
+    await expect(
+      index.locator('.ix-row:has(a[data-note-path="一致收敛.md"]) .ix-excerpt'),
+    ).toContainText("函数列");
+    await expect(page.locator(".mobile-tree")).toHaveCount(0);
 
-    await ch1Toggle.click();
-    await expect(ch1Toggle).toHaveAttribute("aria-expanded", "false");
-    await expect(ch1FirstChild).toBeHidden();
-    await ch1Toggle.click();
-    await expect(ch1Toggle).toHaveAttribute("aria-expanded", "true");
-    await expect(ch1FirstChild).toBeVisible();
+    // Folding: closed shows the page count; it stays closed after a reload.
+    await chapter.locator("> .ix-row > .ix-twisty").click();
+    await expect(chapter).toHaveAttribute("aria-expanded", "false");
+    await expect(page1).toBeHidden();
+    await expect(chapter.locator("> .ix-row > .ix-count")).toHaveText("2 页");
+    await page.reload();
+    await expect(
+      page.locator('.mobile-home-index .ix-item[data-kind="folder"]').first(),
+    ).toHaveAttribute("aria-expanded", "false");
+    // Tapping a folder's name opens it too.
+    await page
+      .locator('.mobile-home-index .ix-title[data-folder-path="第一章 实数"]')
+      .click();
+    await expect(
+      page.locator(
+        '.mobile-home-index a.ix-title[data-note-path="第一章 实数/确界原理.md"]',
+      ),
+    ).toBeVisible();
 
     // Sync button works cleanly and updates status to 刚刚同步
     await page.locator(".mobile-sync-btn").click();
@@ -56,7 +74,7 @@ test.describe("Mobile reader UI", () => {
   }) => {
     await page.goto("./?mock");
     await page
-      .locator('.mobile-note-row[data-note-path="一致收敛.md"]')
+      .locator('.mobile-home-index a.ix-title[data-note-path="一致收敛.md"]')
       .click();
     await expect(page.locator(".mobile-topbar-title")).toHaveText("一致收敛");
     await expect(page.locator(".prose .katex").first()).toBeVisible();
@@ -104,11 +122,12 @@ test.describe("Mobile reader UI", () => {
     page,
   }) => {
     await page.goto("./?mock");
-    await page.locator('.mobile-note-row[data-note-path="_目录.md"]').click();
-    await expect(page.locator(".mobile-topbar-title")).toHaveText("数学分析");
-
-    // Link with <...> spaces in destination
-    await page.locator('.prose a:has-text("实数的完备性")').click();
+    // An index entry written as <…> with spaces opens its page.
+    await page
+      .locator(
+        '.mobile-home-index a.ix-title[data-note-path="第一章 实数/实数的完备性.md"]',
+      )
+      .click();
     await expect(page.locator(".mobile-topbar-title")).toHaveText(
       "实数的完备性",
     );
@@ -130,7 +149,9 @@ test.describe("Mobile reader UI", () => {
 
     // Navigate back to Home, open long note
     await page.locator(".mobile-topbar-btn", { hasText: "主页" }).click();
-    await page.locator('.mobile-note-row[data-note-path="长笔记.md"]').click();
+    await page
+      .locator('.mobile-home-index a.ix-title[data-note-path="长笔记.md"]')
+      .click();
     await expect(page.locator(".mobile-topbar-title")).toContainText("长笔记");
 
     // Outline sheet opens, jumps to a deep section, and closes
@@ -177,7 +198,9 @@ test.describe("Mobile reader UI", () => {
     page,
   }) => {
     await page.goto("./?mock");
-    await page.locator('.mobile-note-row[data-note-path="长笔记.md"]').click();
+    await page
+      .locator('.mobile-home-index a.ix-title[data-note-path="长笔记.md"]')
+      .click();
     await expect(page.locator(".mobile-topbar-title")).toContainText("长笔记");
 
     await page.evaluate(() => window.scrollTo(0, 620));
@@ -193,7 +216,7 @@ test.describe("Mobile reader UI", () => {
     // Recent list shows 长笔记 at top on Home
     await page.locator(".mobile-topbar-btn", { hasText: "主页" }).click();
     await expect(
-      page.locator(".mobile-section-heading", { hasText: "最近" }),
+      page.locator(".mobile-recent-label", { hasText: "最近" }),
     ).toBeVisible();
     const firstRecent = page.locator("[data-recent-path]").first();
     await expect(firstRecent).toHaveAttribute("data-recent-path", "长笔记.md");
@@ -434,11 +457,11 @@ test.describe("Mobile reader UI", () => {
     page,
   }) => {
     await page.goto("./?mock=expired");
-    await expect(page.locator(".mobile-tree")).toContainText("一致收敛");
+    await expect(page.locator(".mobile-home-index")).toContainText("一致收敛");
     const sync = page.locator(".mobile-status-footer .mobile-sync-btn");
     await expect(sync).toHaveText("登录后同步");
     await page
-      .locator(".mobile-note-row", { hasText: "一致收敛" })
+      .locator(".mobile-home-index a.ix-title", { hasText: "一致收敛" })
       .first()
       .click();
     await expect(page.locator(".katex").first()).toBeVisible();
@@ -447,7 +470,7 @@ test.describe("Mobile reader UI", () => {
     await expect(
       page.locator(".mobile-status-footer .mobile-sync-btn"),
     ).toHaveText("同步");
-    await expect(page.locator(".mobile-tree")).toBeVisible();
+    await expect(page.locator(".mobile-home-index")).toBeVisible();
   });
 
   test("search snippets read as plain text, not Markdown", async ({ page }) => {
@@ -463,7 +486,7 @@ test.describe("Mobile reader UI", () => {
   }) => {
     await page.goto("./?mock=lazy");
     await page
-      .locator('.mobile-note-row[data-note-path="一致收敛.md"]')
+      .locator('.mobile-home-index a.ix-title[data-note-path="一致收敛.md"]')
       .click();
     // The note shows at once; the image follows after its download.
     await expect(page.locator(".mobile-topbar-title")).toHaveText("一致收敛");
@@ -484,7 +507,7 @@ test.describe("Mobile reader UI", () => {
   }) => {
     await page.goto("./?mock=lazyoffline");
     await page
-      .locator('.mobile-note-row[data-note-path="一致收敛.md"]')
+      .locator('.mobile-home-index a.ix-title[data-note-path="一致收敛.md"]')
       .click();
     await expect(page.locator(".mobile-image-missing")).toContainText(
       "图片还没下载到手机",
@@ -501,5 +524,25 @@ test.describe("Mobile reader UI", () => {
         ),
       )
       .toBe(true);
+  });
+  test("an index note shows its table of contents, the rest as written", async ({
+    page,
+  }) => {
+    await page.goto(
+      "./?mock#/note/" + encodeURIComponent("第一章 实数/_目录.md"),
+    );
+    await expect(page.locator(".mobile-topbar-title")).toHaveText(
+      "第一章 实数",
+    );
+    await expect(page.locator(".prose h1")).toHaveText("第一章 实数");
+    const view = page.locator(".prose .ix-list");
+    await expect(view.locator("a.ix-title")).toHaveText([
+      "确界原理",
+      "实数的完备性",
+    ]);
+    // Not the plain list it is written as.
+    await expect(page.locator(".prose > ul")).toHaveCount(0);
+    await view.locator("a.ix-title", { hasText: "确界原理" }).click();
+    await expect(page.locator(".mobile-topbar-title")).toHaveText("确界原理");
   });
 });

@@ -7,7 +7,7 @@ It reuses the desktop renderer (`src/markdown.js`): formulas, tables, code, link
 ## Layout
 
 - `index.html`, `main.js`: entry; picks the real or the mock back end (`?mock`).
-- `ui/`: the reading interface. It talks only to `library` and `account` below.
+- `ui/`: the reading interface. It talks only to `library` and `account` below. Home is the chosen folder's table of contents and an index note (`_目录.md`, `SUMMARY.md`) shows its list the same way (`ui/index-view.js`): the desktop's index view read-only, with its parser (`src/index-list.js`), first sentences, styles (`src/folder-index-view.css`) and default folding; folds are kept on the phone.
 - `library.js`: notes and images stored on the phone (IndexedDB), search, small persisted state.
 - `account.js`, `auth.js`, `graph.js`, `sync.js`: Microsoft sign-in (authorization code with PKCE), folder listing and incremental sync (Graph delta).
 - `mock.js`: an in-memory `library` and `account` with a sample notebook, for developing and testing the interface without an account.

@@ -25,7 +25,6 @@ export function mountReader(root, { library, account }) {
   let searchQuery = "";
   let pickingFolder = false;
   const folderStack = [];
-  const collapsedDirs = new Set();
 
   let activeScreen = "loading"; // "account" | "home" | "note"
   let currentNotePath = null;
@@ -206,7 +205,6 @@ export function mountReader(root, { library, account }) {
       status,
       progress,
       searchQuery,
-      collapsedDirs,
       onSearchChange: (q) => {
         searchQuery = q;
       },

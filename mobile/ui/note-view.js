@@ -10,12 +10,21 @@ import { wireSortableTables } from "../../src/table-sort.js";
 import {
   classifyNoteHref,
   findAnchorElement,
+  folderOf,
   resolveRelativePath,
   safeDecodeURIComponent,
 } from "./paths.js";
+import {
+  isIndexNote,
+  loadIndexContext,
+  renderIndexView,
+  splitIndexNote,
+} from "./index-view.js";
 import { STRINGS } from "./strings.js";
 
 const MOBILE_ASSET_PREFIX = "folio-asset://mobile-note/?path=";
+// Where an index note's table of contents goes in its rendered text.
+const INDEX_SLOT = "MARKLOREINDEXVIEWSLOT";
 
 function buildMissingImageNode(message, caption = "") {
   const box = document.createElement("figure");
@@ -229,10 +238,15 @@ export async function renderNoteContent(
   if (mayContainCode(text)) needs.push(loadHighlighter().catch(() => null));
   if (needs.length > 0) await Promise.all(needs);
 
-  const rendered = renderMarkdown(text, "mobile-note", {
-    deferMath: false,
-    expandCode: false,
-  });
+  // A folder's index note: its entry lists show as the table of contents
+  // (the rest of the note as written), like the desktop's index view.
+  const split = isIndexNote(path) ? splitIndexNote(text) : null;
+  const indexContext = split ? await loadIndexContext(library) : null;
+  const rendered = renderMarkdown(
+    split ? `${split.before}\n\n${INDEX_SLOT}\n\n${split.after}` : text,
+    "mobile-note",
+    { deferMath: false, expandCode: false },
+  );
 
   host.replaceChildren();
   if (!text.trim()) {
@@ -252,6 +266,17 @@ export async function renderNoteContent(
     onAnchor: (anchor) => onAnchor(anchor, host),
     onToast,
   });
+  // After the links are wired: the view handles its own.
+  if (split) {
+    const slot = [...host.querySelectorAll("p")].find(
+      (p) => p.textContent.trim() === INDEX_SLOT,
+    );
+    const view = renderIndexView(indexContext, folderOf(path), {
+      onOpenNote: (next) => onNavigateNote(next, ""),
+    });
+    if (slot) slot.replaceWith(view);
+    else host.append(view);
+  }
   await resolveNoteImages(host, path, library);
   return { headings: rendered.headings || [] };
 }

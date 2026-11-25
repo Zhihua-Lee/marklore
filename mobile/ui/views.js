@@ -1,4 +1,5 @@
-import { buildFolderTree, displayNoteTitle, folderOf } from "./paths.js";
+import { displayNoteTitle, folderOf } from "./paths.js";
+import { loadIndexContext, renderIndexView } from "./index-view.js";
 import { formatRelativeSync, formatSyncProgress, STRINGS } from "./strings.js";
 
 // A search snippet as plain text: link text without its target, no heading,
@@ -292,66 +293,8 @@ export function renderAccountScreen(
   void loadLevel();
 }
 
-function buildTreeBranch(node, { collapsedDirs, onOpenNote, depth = 0 }) {
-  const frag = document.createDocumentFragment();
-  for (const note of node.notes) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "mobile-note-row";
-    btn.dataset.notePath = note.path;
-    btn.style.setProperty("--tree-depth", String(depth));
-    const title = document.createElement("span");
-    title.className = "mobile-note-row-title";
-    title.textContent = displayNoteTitle(note);
-    btn.append(title);
-    btn.addEventListener("click", () => onOpenNote(note.path));
-    frag.append(btn);
-  }
-  for (const folder of node.folders) {
-    const wrap = document.createElement("div");
-    wrap.className = "mobile-tree-folder";
-    const isCollapsed = collapsedDirs.has(folder.path);
-
-    const toggle = document.createElement("button");
-    toggle.type = "button";
-    toggle.className = "mobile-folder-row";
-    toggle.dataset.folderPath = folder.path;
-    toggle.style.setProperty("--tree-depth", String(depth));
-    toggle.setAttribute("aria-expanded", String(!isCollapsed));
-
-    const arrow = document.createElement("span");
-    arrow.className = "mobile-folder-arrow";
-    arrow.setAttribute("aria-hidden", "true");
-    arrow.textContent = isCollapsed ? "▸" : "▾";
-    const name = document.createElement("span");
-    name.className = "mobile-folder-name";
-    name.textContent = folder.name;
-    toggle.append(arrow, name);
-
-    const children = document.createElement("div");
-    children.className = "mobile-tree-children";
-    if (isCollapsed) children.hidden = true;
-    children.append(
-      buildTreeBranch(folder, { collapsedDirs, onOpenNote, depth: depth + 1 }),
-    );
-
-    toggle.addEventListener("click", () => {
-      const nextCollapsed = !children.hidden;
-      children.hidden = nextCollapsed;
-      if (nextCollapsed) collapsedDirs.add(folder.path);
-      else collapsedDirs.delete(folder.path);
-      toggle.setAttribute("aria-expanded", String(!nextCollapsed));
-      arrow.textContent = nextCollapsed ? "▸" : "▾";
-    });
-
-    wrap.append(toggle, children);
-    frag.append(wrap);
-  }
-  return frag;
-}
-
 /**
- * Renders Home: brand bar + Settings button, Search, Recent, Folder Tree, and Sync footer.
+ * Renders Home: brand bar + Settings button, Search, Recent, the folder index, and Sync footer.
  */
 export async function renderHomeScreen(
   container,
@@ -361,16 +304,16 @@ export async function renderHomeScreen(
     status,
     progress,
     searchQuery,
-    collapsedDirs,
     onSearchChange,
     onOpenNote,
     onOpenSettings,
   },
 ) {
-  const [info, entries, recentPaths] = await Promise.all([
+  const [info, entries, recentPaths, indexContext] = await Promise.all([
     library.info(),
     library.list(),
     library.state.get("recent", []),
+    loadIndexContext(library),
   ]);
   if (!container.isConnected) return;
 
@@ -422,57 +365,43 @@ export async function renderHomeScreen(
       .filter(Boolean)
       .slice(0, 8);
 
+    // Recent pages: one short row of chips above the table of contents.
     if (validRecent.length > 0) {
       const sec = document.createElement("section");
-      sec.className = "mobile-home-section";
+      sec.className = "mobile-home-section mobile-recent";
+      sec.setAttribute("aria-label", STRINGS.recent);
       const h = document.createElement("h2");
-      h.className = "mobile-section-heading";
+      h.className = "mobile-recent-label";
       h.textContent = STRINGS.recent;
       const list = document.createElement("div");
-      list.className = "mobile-note-list";
+      list.className = "mobile-recent-list";
       for (const entry of validRecent) {
-        const row = document.createElement("button");
-        row.type = "button";
-        row.className = "mobile-note-row";
-        row.dataset.recentPath = entry.path;
-        const title = document.createElement("span");
-        title.className = "mobile-note-row-title";
-        title.textContent = displayNoteTitle(entry);
-        const dir = folderOf(entry.path);
-        row.append(title);
-        if (dir) {
-          const meta = document.createElement("span");
-          meta.className = "mobile-note-row-path";
-          meta.textContent = dir;
-          row.append(meta);
-        }
-        row.addEventListener("click", () => onOpenNote(entry.path));
-        list.append(row);
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "mobile-recent-chip";
+        chip.dataset.recentPath = entry.path;
+        chip.textContent = displayNoteTitle(entry);
+        chip.title = entry.path;
+        chip.addEventListener("click", () => onOpenNote(entry.path));
+        list.append(chip);
       }
       sec.append(h, list);
       contentArea.append(sec);
     }
 
-    const treeSec = document.createElement("section");
-    treeSec.className = "mobile-home-section";
-    const h = document.createElement("h2");
-    h.className = "mobile-section-heading";
-    h.textContent = STRINGS.folders;
-    treeSec.append(h);
-
+    // The chosen folder's table of contents, as the desktop shows a
+    // library's index.
+    const indexSec = document.createElement("section");
+    indexSec.className = "mobile-home-section mobile-home-index";
     if (entries.length === 0) {
       const empty = document.createElement("p");
       empty.className = "mobile-home-empty";
       empty.textContent = STRINGS.emptyLibrary;
-      treeSec.append(empty);
+      indexSec.append(empty);
     } else {
-      const tree = buildFolderTree(entries);
-      const treeBox = document.createElement("div");
-      treeBox.className = "mobile-tree";
-      treeBox.append(buildTreeBranch(tree, { collapsedDirs, onOpenNote }));
-      treeSec.append(treeBox);
+      indexSec.append(renderIndexView(indexContext, "", { onOpenNote }));
     }
-    contentArea.append(treeSec);
+    contentArea.append(indexSec);
   };
 
   let searchTimer = null;

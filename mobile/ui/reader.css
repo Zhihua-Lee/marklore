@@ -470,8 +470,6 @@ button:disabled {
   padding: 0 4px;
 }
 
-.mobile-note-list,
-.mobile-tree,
 .mobile-search-results {
   display: flex;
   flex-direction: column;
@@ -481,13 +479,10 @@ button:disabled {
   overflow: hidden;
 }
 
-.mobile-note-row,
-.mobile-folder-row,
 .mobile-search-item {
   width: 100%;
   min-height: 44px;
   padding: 10px 14px;
-  padding-left: calc(14px + var(--tree-depth, 0) * 16px);
   border-radius: 0;
   border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
   display: flex;
@@ -498,58 +493,101 @@ button:disabled {
   background: transparent;
 }
 
-.mobile-note-row:active,
-.mobile-folder-row:active,
 .mobile-search-item:active {
   background: var(--hover);
 }
 
-.mobile-note-list > .mobile-note-row:last-child,
-.mobile-search-results > .mobile-search-item:last-child,
-.mobile-tree > :last-child {
+.mobile-search-results > .mobile-search-item:last-child {
   border-bottom: 0;
 }
 
-.mobile-note-row-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 16px;
-  color: var(--ink);
+/* Recent pages: one scrolling row of chips above the table of contents. */
+.mobile-recent {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
 }
 
-.mobile-note-row-path {
+.mobile-recent-label {
   flex: none;
-  max-width: 42%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
-.mobile-folder-row {
-  justify-content: flex-start;
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.mobile-folder-arrow {
-  width: 14px;
-  flex: none;
-  color: var(--muted);
+  margin: 0;
+  padding-left: 4px;
   font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
 }
 
-.mobile-folder-name {
-  flex: 1;
+.mobile-recent-list {
+  display: flex;
+  gap: 8px;
   min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-block: 2px;
+}
+
+.mobile-recent-list::-webkit-scrollbar {
+  display: none;
+}
+
+.mobile-recent-chip {
+  flex: none;
+  max-width: 15em;
+  min-height: 34px;
+  padding: 6px 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.mobile-recent-chip:active {
+  background: var(--hover);
+}
+
+/* The table of contents (the desktop's index view, folder-index-view.css),
+   with rows and arrows sized for a finger. */
+.mobile-home-index .ix-list {
+  margin: 0;
+  padding: 0 2px;
+  font-family: var(--font-note);
+  font-size: 16px;
+  color: var(--reading-ink);
+}
+
+.ix-list.mobile-index {
+  --ix-arrow: 22px;
+}
+
+.mobile-index .ix-row {
+  padding-block: 5px;
+}
+
+.mobile-index .ix-row:hover {
+  background: none;
+}
+
+.mobile-index .ix-row:active {
+  background: var(--hover);
+}
+
+.mobile-index .ix-twisty {
+  height: 34px;
+  margin-block: calc(0.725em - 17px);
+}
+
+.mobile-index .ix-title {
+  color: var(--reading-ink);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-index span.ix-title {
+  cursor: pointer;
 }
 
 .mobile-search-item {

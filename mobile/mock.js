@@ -92,14 +92,39 @@ Uniform convergence preserves continuity. See [一致收敛](一致收敛.md).
 };
 const IMAGES = { "images/curve.svg": curve };
 
+// ?mock=big: a OneNote-export-sized library (40 sections, 800 pages, each
+// section with its _目录.md), for checking the interface stays quick.
+function bigNotebook() {
+  const out = {};
+  for (let s = 1; s <= 40; s++) {
+    const dir = `分区 ${s}`;
+    const pages = [];
+    for (let p = 1; p <= 20; p++) {
+      const name = `第 ${s}.${p} 页`;
+      pages.push(`- [${name}](${encodeURI(name)}.md)`);
+      out[`${dir}/${name}.md`] =
+        `# ${name}\n\n` +
+        Array.from(
+          { length: 12 },
+          (_, i) =>
+            `第 ${i + 1} 段：设 $x_{${i}}$ 满足条件，讨论收敛性与一致收敛。`,
+        ).join("\n\n");
+    }
+    out[`${dir}/_目录.md`] = `# ${dir}\n\n${pages.join("\n")}\n`;
+  }
+  return out;
+}
+
 const states = new Map();
 const store = (key) => `marklore-mock:${key}`;
 
 export function createMock(
   flag = new URLSearchParams(location.search).get("mock"),
 ) {
-  const synced = !flag || flag === "expired";
-  let files = synced ? { ...SAMPLE } : {};
+  const synced = !flag || flag === "expired" || flag === "big";
+  let files = synced
+    ? { ...SAMPLE, ...(flag === "big" ? bigNotebook() : {}) }
+    : {};
   const listeners = {
     change: new Set(),
     status: new Set(),

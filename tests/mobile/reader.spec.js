@@ -458,4 +458,48 @@ test.describe("Mobile reader UI", () => {
     await expect(snippet).not.toContainText("](");
     await expect(snippet).not.toContainText("$");
   });
+  test("images not on the phone download when a note shows them", async ({
+    page,
+  }) => {
+    await page.goto("./?mock=lazy");
+    await page
+      .locator('.mobile-note-row[data-note-path="一致收敛.md"]')
+      .click();
+    // The note shows at once; the image follows after its download.
+    await expect(page.locator(".mobile-topbar-title")).toHaveText("一致收敛");
+    await expect(page.locator(".mobile-image-missing")).toContainText(
+      "正在下载图片",
+    );
+    await expect(page.locator(".prose img")).toHaveJSProperty("complete", true);
+    await expect(page.locator(".mobile-image-missing")).toHaveCount(0);
+    expect(
+      await page
+        .locator(".prose img")
+        .evaluate((img) => img.naturalWidth > 0 && img.src.startsWith("blob:")),
+    ).toBe(true);
+  });
+
+  test("an image that cannot download now says so; the setting keeps all", async ({
+    page,
+  }) => {
+    await page.goto("./?mock=lazyoffline");
+    await page
+      .locator('.mobile-note-row[data-note-path="一致收敛.md"]')
+      .click();
+    await expect(page.locator(".mobile-image-missing")).toContainText(
+      "图片还没下载到手机",
+    );
+    await page.goBack();
+    await page.locator('.mobile-icon-btn[aria-label="设置"]').click();
+    const toggle = page.getByRole("checkbox", { name: /下载全部图片供离线/ });
+    await expect(toggle).not.toBeChecked();
+    await toggle.check();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => window.markloreReader.account.status().offlineImages,
+        ),
+      )
+      .toBe(true);
+  });
 });

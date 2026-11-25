@@ -13,6 +13,12 @@ export async function createBackend() {
   const { library, internal } = createLibrary(db);
   const graph = createGraph(auth);
   const account = createAccount({ auth, graph, internal });
+  // Images a note shows that are not on the phone yet.
+  internal.setFetcher((id) =>
+    navigator.onLine === false || !auth.signedIn()
+      ? null
+      : graph.download(id, { quick: true }),
+  );
   await account.ready;
   account.signinResult = signin;
   // A sign-in that just finished: sync right away when a folder is known.

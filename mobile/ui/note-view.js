@@ -47,16 +47,37 @@ async function resolveNoteImages(proseEl, notePath, library) {
       const encodedRel = rawAttr.slice(MOBILE_ASSET_PREFIX.length);
       const relative = safeDecodeURIComponent(decodeURIComponent(encodedRel));
       const resolvedPath = resolveRelativePath(notePath, relative);
-      const url = await library.asset(resolvedPath);
-      if (!url) {
-        img.replaceWith(
-          buildMissingImageNode(STRINGS.imageNotSynced, img.alt?.trim() || ""),
-        );
-        return;
-      }
+      const caption = img.alt?.trim() || "";
       img.removeAttribute("width");
       img.removeAttribute("height");
-      img.src = url;
+      const url = await library.asset(resolvedPath);
+      if (!url) {
+        if (!(await library.isRemoteImage?.(resolvedPath))) {
+          img.replaceWith(
+            buildMissingImageNode(STRINGS.imageNotSynced, caption),
+          );
+          return;
+        }
+        // Listed but not on the phone yet: the note shows now, the image
+        // follows when it has downloaded.
+        const waiting = buildMissingImageNode(
+          STRINGS.imageDownloading,
+          caption,
+        );
+        waiting.classList.add("is-loading");
+        img.replaceWith(waiting);
+        void library.fetchAsset(resolvedPath).then((fetched) => {
+          if (!waiting.parentNode) return;
+          if (fetched) {
+            img.src = fetched;
+            waiting.replaceWith(img);
+          } else {
+            waiting.classList.remove("is-loading");
+            waiting.querySelector(".mobile-image-missing-label").textContent =
+              STRINGS.imageNotDownloaded;
+          }
+        });
+      } else img.src = url;
       img.addEventListener(
         "error",
         () => {

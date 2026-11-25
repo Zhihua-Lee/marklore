@@ -121,7 +121,11 @@ const store = (key) => `marklore-mock:${key}`;
 export function createMock(
   flag = new URLSearchParams(location.search).get("mock"),
 ) {
-  const synced = !flag || flag === "expired" || flag === "big";
+  // ?mock=lazy: images listed but not on the phone (downloaded when shown);
+  // ?mock=lazyoffline: the same, and downloading fails.
+  const lazy = flag === "lazy" || flag === "lazyoffline";
+  const local = new Set(lazy ? [] : Object.keys(IMAGES));
+  const synced = !flag || flag === "expired" || flag === "big" || lazy;
   let files = synced
     ? { ...SAMPLE, ...(flag === "big" ? bigNotebook() : {}) }
     : {};
@@ -139,6 +143,7 @@ export function createMock(
       ? { id: "f-notes", name: "数学笔记", path: "/数学笔记" }
       : null,
     syncing: false,
+    offlineImages: false,
   };
   let lastSync = synced ? Date.now() - 3600_000 : null;
   const emit = (kind, value) => listeners[kind].forEach((fn) => fn(value));
@@ -174,7 +179,8 @@ export function createMock(
       return files[path] ?? null;
     },
     async asset(path) {
-      if (!(path in IMAGES) || lastSync === null) return null;
+      if (!(path in IMAGES) || lastSync === null || !local.has(path))
+        return null;
       if (!urls.has(path))
         urls.set(
           path,
@@ -183,6 +189,18 @@ export function createMock(
           ),
         );
       return urls.get(path);
+    },
+    async isRemoteImage(path) {
+      return path in IMAGES && lastSync !== null && !local.has(path);
+    },
+    async fetchAsset(path) {
+      if (!(path in IMAGES) || lastSync === null) return null;
+      if (!local.has(path)) {
+        await new Promise((r) => setTimeout(r, 300));
+        if (flag === "lazyoffline") return null;
+        local.add(path);
+      }
+      return library.asset(path);
     },
     async search(query, { limit = 50 } = {}) {
       const words = String(query).toLowerCase().split(/\s+/).filter(Boolean);
@@ -234,6 +252,11 @@ export function createMock(
   };
   const account = {
     status: () => ({ ...status }),
+    async setOfflineImages(on) {
+      status = { ...status, offlineImages: Boolean(on) };
+      if (on) for (const path of Object.keys(IMAGES)) local.add(path);
+      emit("status", account.status());
+    },
     onStatus: on("status"),
     setClientId() {
       status = { ...status, configured: true };

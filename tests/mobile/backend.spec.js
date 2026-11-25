@@ -232,6 +232,8 @@ test("sign in, sync a folder, then follow renames, deletions and edits", async (
   );
   expect(first.failed).toEqual([]);
   expect(first.added).toBe(3);
+  // Notes come down; the image is only listed until a note shows it.
+  expect([...drive.downloads].sort()).toEqual(["N1", "N2"]);
   const lib = () =>
     api(page, async () => {
       const { library } = window.markloreReader;
@@ -246,16 +248,27 @@ test("sign in, sync a folder, then follow renames, deletions and edits", async (
     folderName: "数学笔记",
     notes: 2,
     images: 1,
+    imagesOnPhone: 0,
   });
   expect(
     await api(page, () => window.markloreReader.library.text("一致收敛.md")),
   ).toBe("# 一致收敛\n\n设 $f_n$ 一致收敛。");
   const svg = await api(page, async () => {
-    const url =
-      await window.markloreReader.library.asset("第一章 实数/curve.svg");
-    return url && (await (await fetch(url)).text());
+    const { library } = window.markloreReader;
+    const path = "第一章 实数/curve.svg";
+    const before = [
+      await library.asset(path),
+      await library.isRemoteImage(path),
+    ];
+    const url = await library.fetchAsset(path);
+    return {
+      before,
+      text: url && (await (await fetch(url)).text()),
+      after: await library.isRemoteImage(path),
+    };
   });
-  expect(svg).toBe(SVG);
+  expect(svg).toEqual({ before: [null, true], text: SVG, after: false });
+  expect((await lib()).info.imagesOnPhone).toBe(1);
   expect(
     (await api(page, () => window.markloreReader.library.search("上确界")))[0],
   ).toMatchObject({
@@ -368,4 +381,66 @@ test("folders without delta (work or school accounts) sync by walking", async ({
   expect(
     (await api(page, () => window.markloreReader.account.sync())).removed,
   ).toBe(1);
+});
+
+test("all images offline: a sync keeps every image; changed ones come again", async ({
+  page,
+}) => {
+  const drive = fakeDrive();
+  await routeMicrosoft(page, drive, []);
+  await page.goto("./");
+  await page.waitForFunction(() => window.markloreReader);
+  await api(page, () =>
+    window.markloreReader.account.setClientId("test-client"),
+  );
+  await Promise.all([
+    page.waitForURL((u) => !u.search.includes("code="), { waitUntil: "load" }),
+    api(page, () => window.markloreReader.account.signIn()),
+  ]);
+  await page.waitForFunction(
+    () => window.markloreReader?.account.status().signedIn,
+  );
+  await api(page, () =>
+    window.markloreReader.account.chooseFolder({
+      id: "R",
+      name: "数学笔记",
+      path: "/数学笔记",
+    }),
+  );
+  expect(drive.downloads).not.toContain("I1");
+  await api(page, () => window.markloreReader.account.setOfflineImages(true));
+  expect(drive.downloads).toContain("I1");
+  const onPhone = () =>
+    api(
+      page,
+      async () => (await window.markloreReader.library.info()).imagesOnPhone,
+    );
+  expect(await onPhone()).toBe(1);
+
+  // The setting survives a reload; an edited image comes down again.
+  await page.reload();
+  await page.waitForFunction(() => window.markloreReader);
+  expect(
+    await api(page, () => window.markloreReader.account.status().offlineImages),
+  ).toBe(true);
+  drive.files.I1.tag = "c2";
+  drive.changes.push(drive.item("I1"));
+  drive.downloads.length = 0;
+  await api(page, () => window.markloreReader.account.sync());
+  expect(drive.downloads).toEqual(["I1"]);
+
+  // Off again: a new image is only listed; one already on the phone stays
+  // and is still updated.
+  await api(page, () => window.markloreReader.account.setOfflineImages(false));
+  drive.files.I2 = { name: "graph.png", parent: "R", body: "png", tag: "e1" };
+  drive.files.I1.tag = "c3";
+  drive.changes.push(drive.item("I2"), drive.item("I1"));
+  drive.downloads.length = 0;
+  await api(page, () => window.markloreReader.account.sync());
+  expect(drive.downloads).toEqual(["I1"]);
+  expect(
+    await api(page, () =>
+      window.markloreReader.library.isRemoteImage("graph.png"),
+    ),
+  ).toBe(true);
 });

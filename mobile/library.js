@@ -56,6 +56,10 @@ export function createLibrary(db) {
   const listeners = new Set();
   const urls = new Map();
   let notesCache = null; // [{ path, title, modified, size, lower }]
+  // Images are listed at sync time but downloaded when a note shows them
+  // (unless "all images offline" is on): `fetchImage(id)` → Blob | null.
+  let fetchImage = null;
+  const fetching = new Map(); // id → Promise<row | null>
 
   const tx = (stores, mode = "readonly") => db.transaction(stores, mode);
   const allFiles = () => request(tx("files").objectStore("files").getAll());
@@ -83,6 +87,50 @@ export function createLibrary(db) {
     return notesCache;
   }
 
+  const objectUrl = (row) => {
+    if (!urls.has(row.path))
+      urls.set(
+        row.path,
+        URL.createObjectURL(new Blob([row.data], { type: row.type })),
+      );
+    return urls.get(row.path);
+  };
+
+  // Downloads one listed image and keeps it; null when that is not possible
+  // now (offline, signed out, or the file changed or went away meanwhile).
+  function download(row) {
+    if (!fetchImage) return Promise.resolve(null);
+    if (!fetching.has(row.id))
+      fetching.set(
+        row.id,
+        (async () => {
+          try {
+            const blob = await fetchImage(row.id);
+            if (!blob) return null;
+            const data = await blob.arrayBuffer();
+            const current = await request(
+              tx("files").objectStore("files").get(row.id),
+            );
+            if (!current || current.kind !== "image") return null;
+            const next = {
+              ...current,
+              data,
+              type: imageType(current.path, blob.type),
+            };
+            await request(
+              tx("files", "readwrite").objectStore("files").put(next),
+            );
+            return next;
+          } catch {
+            return null;
+          } finally {
+            fetching.delete(row.id);
+          }
+        })(),
+      );
+    return fetching.get(row.id);
+  }
+
   const state = {
     async get(key, fallback = null) {
       const value = await request(
@@ -108,11 +156,13 @@ export function createLibrary(db) {
       );
       if (!meta?.lastSync) return null;
       const rows = await allFiles();
+      const images = rows.filter((r) => r.kind === "image");
       return {
         folderName: meta.folderName || "",
         lastSync: meta.lastSync,
         notes: rows.filter((r) => r.kind === "note").length,
-        images: rows.filter((r) => r.kind === "image").length,
+        images: images.length,
+        imagesOnPhone: images.filter((r) => r.data).length,
       };
     },
     async list() {
@@ -131,9 +181,18 @@ export function createLibrary(db) {
       if (urls.has(path)) return urls.get(path);
       const row = await byPath(path);
       if (!row || row.kind !== "image" || !row.data) return null;
-      const url = URL.createObjectURL(new Blob([row.data], { type: row.type }));
-      urls.set(path, url);
-      return url;
+      return objectUrl(row);
+    },
+    async isRemoteImage(path) {
+      const row = await byPath(path);
+      return row?.kind === "image" && !row.data;
+    },
+    async fetchAsset(path) {
+      const row = await byPath(path);
+      if (!row || row.kind !== "image") return null;
+      if (row.data) return objectUrl(row);
+      const stored = await download(row);
+      return stored ? objectUrl(stored) : null;
     },
     async search(query, { limit = 50 } = {}) {
       const words = String(query).toLowerCase().split(/\s+/).filter(Boolean);
@@ -170,8 +229,19 @@ export function createLibrary(db) {
     db,
     stored: async () =>
       new Map(
-        (await allFiles()).map((r) => [r.id, { path: r.path, tag: r.tag }]),
+        (await allFiles()).map((r) => [
+          r.id,
+          {
+            path: r.path,
+            tag: r.tag,
+            kind: r.kind,
+            local: r.kind !== "image" || Boolean(r.data),
+          },
+        ]),
       ),
+    setFetcher(fn) {
+      fetchImage = fn;
+    },
     async getMeta(key, fallback = null) {
       const value = await request(
         tx("state")
@@ -188,7 +258,8 @@ export function createLibrary(db) {
       );
     },
     // Writes one downloaded file. Images are kept as bytes, not Blobs: WebKit
-    // (Safari) has refused Blobs in IndexedDB.
+    // (Safari) has refused Blobs in IndexedDB. An image without content is
+    // only listed; it is downloaded when a note shows it.
     async put({ id, path, kind, tag, size, modified }, content) {
       const record =
         kind === "note"
@@ -202,16 +273,18 @@ export function createLibrary(db) {
               text: content,
               title: titleOf(path, content),
             }
-          : {
-              id,
-              path,
-              kind,
-              tag,
-              size,
-              modified,
-              data: await content.arrayBuffer(),
-              type: imageType(path, content.type),
-            };
+          : content
+            ? {
+                id,
+                path,
+                kind,
+                tag,
+                size,
+                modified,
+                data: await content.arrayBuffer(),
+                type: imageType(path, content.type),
+              }
+            : { id, path, kind, tag, size, modified };
       await request(tx("files", "readwrite").objectStore("files").put(record));
     },
     async move(id, to) {

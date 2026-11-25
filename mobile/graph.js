@@ -118,9 +118,12 @@ export function createGraph(auth, { fetcher = (...a) => fetch(...a) } = {}) {
       }
       return items;
     },
-    download(id) {
+    // `quick`: no waiting retries on a network error (an image a note is
+    // showing; a sync retries).
+    download(id, { quick = false } = {}) {
       return get(`/me/drive/items/${encodeURIComponent(id)}/content`, {
         as: "blob",
+        attempt: quick ? 3 : 0,
       });
     },
   };

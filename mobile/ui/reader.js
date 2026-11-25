@@ -32,6 +32,7 @@ export function mountReader(root, { library, account }) {
   let currentHeadings = [];
   let noteRenderToken = 0;
   let closeActiveSheet = null;
+  let homeStale = false;
   let toastTimer = null;
   let lastPersistTimer = null;
   let pendingScrollSave = null;
@@ -233,9 +234,16 @@ export function mountReader(root, { library, account }) {
             account.signOut();
           },
           onSetClientId: (id) => account.setClientId(id),
+          onSetOfflineImages: account.setOfflineImages
+            ? (on) => void account.setOfflineImages(on)
+            : null,
           onToast: showToast,
           onClose: () => {
             closeActiveSheet = null;
+            if (homeStale && activeScreen === "home") {
+              homeStale = false;
+              void showHomeView();
+            }
           },
         });
       },
@@ -514,7 +522,10 @@ export function mountReader(root, { library, account }) {
     }
 
     if (activeScreen === "home") {
-      await showHomeView();
+      // Settings open over home (a switch there changed the status): redraw
+      // home when the sheet closes, not under the owner's finger.
+      if (closeActiveSheet) homeStale = true;
+      else await showHomeView();
     }
   });
 

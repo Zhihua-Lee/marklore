@@ -21,21 +21,24 @@ Paths are relative to the chosen folder, with `/` separators, as stored in OneDr
 
 ### `library`
 
-- `info()` → `{ folderName, lastSync, notes, images } | null`. `null` until a folder has been synced once.
+- `info()` → `{ folderName, lastSync, notes, images, imagesOnPhone } | null`. `null` until a folder has been synced once. `images` counts the images listed in the folder, `imagesOnPhone` those downloaded.
 - `list()` → `[{ path, title, modified, size }]`, Markdown notes only, sorted by path. `title` is the note's leading heading, else the file name without `.md`.
 - `text(path)` → the note's Markdown, or `null`.
 - `asset(path)` → an object URL for a stored image (path already resolved against the note's folder and decoded), or `null` when it is not on the phone. URLs stay valid until the next change event.
+- `isRemoteImage(path)` → true when the image is in the folder but not on the phone yet. A sync downloads every note but, unless all images are kept offline (`account.setOfflineImages`), only lists images; a note shows them by calling `fetchAsset`.
+- `fetchAsset(path)` → like `asset`, downloading the image first when needed; `null` when that is not possible now (offline, signed out).
 - `search(query, { limit = 50 })` → `[{ path, title, snippet, line }]`; case-insensitive, all words must occur; `line` is the 0-based line of the first match.
 - `state.get(key, fallback)`, `state.set(key, value)`: small JSON values kept on the phone. Keys used by the interface: `recent` (paths, newest first), `last` (`{ path, scroll }`), `settings` (`{ size, theme, typeface, keepAwake }`).
 - `onChange(fn)` → unsubscribe. Called after a sync added, changed or removed notes.
 
 ### `account`
 
-- `status()` (sync) → `{ configured, signedIn, user, folder, syncing }`. `configured` is false while no application (client) ID is set; `folder` is `{ id, name, path } | null`.
+- `status()` (sync) → `{ configured, signedIn, user, folder, syncing, offlineImages }`. `configured` is false while no application (client) ID is set; `folder` is `{ id, name, path } | null`.
 - `onStatus(fn)` → unsubscribe.
 - `setClientId(id)`: stores the application ID registered by the owner.
 - `signIn()`: leaves the page for Microsoft's sign-in and comes back; `signOut()`.
 - `folders(parentId | null)` → `[{ id, name, path, childCount }]` (OneDrive root when `null`), for the folder picker.
 - `chooseFolder(folder)`: remembers it and starts the first sync.
 - `sync()` → `{ added, changed, removed }`.
+- `setOfflineImages(on)`: keep every image on the phone (each sync downloads the missing and changed ones; turning it on starts a sync). Off by default: images come down when a note shows them, and those already on the phone stay and are updated.
 - `onProgress(fn)` → unsubscribe; `fn({ phase, done, total, message })` with `phase` one of `listing`, `downloading`, `done`, `error`.

@@ -199,6 +199,7 @@ export function openSettingsSheet({
   wakeLockSupported,
   onUpdateSettings,
   onChangeFolder,
+  onSetOfflineImages,
   onSignOut,
   onSetClientId,
   onToast,
@@ -280,6 +281,25 @@ export function openSettingsSheet({
   fv.textContent = status.folder?.name || STRINGS.accountUnknownFolder;
   folderRow.append(fk, fv);
   accountSection.append(folderRow);
+
+  if (onSetOfflineImages) {
+    const row = document.createElement("label");
+    row.className = "mobile-setting-row mobile-toggle-row";
+    const text = document.createElement("span");
+    text.className = "mobile-setting-label";
+    text.textContent = STRINGS.offlineImagesLabel;
+    const hint = document.createElement("span");
+    hint.className = "mobile-setting-hint";
+    hint.textContent = STRINGS.offlineImagesHint;
+    text.append(document.createElement("br"), hint);
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.className = "mobile-switch";
+    toggle.checked = Boolean(status.offlineImages);
+    toggle.addEventListener("change", () => onSetOfflineImages(toggle.checked));
+    row.append(text, toggle);
+    accountSection.append(row);
+  }
 
   const actions = document.createElement("div");
   actions.className = "mobile-account-actions";

@@ -255,23 +255,55 @@ test("nested lists, tables, and note first blocks match Read and Edit across the
 }) => {
   // Every case in two themes and two widths, both modes: longer than one
   // ordinary test on a slow runner.
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const composite =
     "# Parity\n\n" +
     Object.entries(parityCases)
       .map(([name, md]) => `Before ${name}.\n\n${md}\n\nAfter ${name}.\n\n`)
       .join("");
   const configs = [
-    { name: "light-default", theme: "light", width: 1360 },
-    { name: "dark-default", theme: "dark", width: 1360 },
-    { name: "light-narrow", theme: "light", width: 700 },
-    { name: "dark-narrow", theme: "dark", width: 700 },
+    {
+      name: "light-default",
+      theme: "light",
+      width: 1360,
+      readingStyle: "standard",
+    },
+    {
+      name: "light-relaxed",
+      theme: "light",
+      width: 1360,
+      readingStyle: "relaxed",
+    },
+    {
+      name: "light-compact",
+      theme: "light",
+      width: 1360,
+      readingStyle: "compact",
+    },
+    {
+      name: "dark-default",
+      theme: "dark",
+      width: 1360,
+      readingStyle: "standard",
+    },
+    {
+      name: "light-narrow",
+      theme: "light",
+      width: 700,
+      readingStyle: "standard",
+    },
+    {
+      name: "dark-narrow",
+      theme: "dark",
+      width: 700,
+      readingStyle: "standard",
+    },
   ];
 
-  const openDoc = async (text, theme) => {
+  const openDoc = async (text, theme, readingStyle = "standard") => {
     await installFolio(page);
     await page.addInitScript(
-      ({ text, theme }) => {
+      ({ text, theme, readingStyle }) => {
         window.folio = folioTest.mock({
           ready: async () => ({
             incoming: [
@@ -290,11 +322,12 @@ test("nested lists, tables, and note first blocks match Read and Edit across the
               outline: false,
               richEdit: true,
               theme,
+              readingStyle,
             },
           }),
         });
       },
-      { text, theme },
+      { text, theme, readingStyle },
     );
     await page.goto("/");
     await expect(page.locator("#content")).toBeVisible();
@@ -302,7 +335,7 @@ test("nested lists, tables, and note first blocks match Read and Edit across the
 
   for (const cfg of configs) {
     await page.setViewportSize({ width: cfg.width, height: 900 });
-    await openDoc(composite, cfg.theme);
+    await openDoc(composite, cfg.theme, cfg.readingStyle);
     await expect(page.locator("#content table").first()).toBeVisible();
     const measureComposite = async (root, mathSel) => {
       await page.evaluate(() => document.fonts.ready);
@@ -398,7 +431,7 @@ test("nested lists, tables, and note first blocks match Read and Edit across the
     }
 
     for (const [label, spec] of Object.entries(firstBlockCases)) {
-      await openDoc(spec.text, cfg.theme);
+      await openDoc(spec.text, cfg.theme, cfg.readingStyle);
       await page.waitForTimeout(100);
       const readBoxes = await page.evaluate((sel) => {
         const scroller = document

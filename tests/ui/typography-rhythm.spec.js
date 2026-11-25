@@ -122,186 +122,345 @@ async function waitForRendered(page, rootSelector) {
     .toBe(0);
 }
 
-test("fixture note uses <= 4 distinct vertical rhythm gaps matching tokens and Read === Edit", async ({
+test("readingStyle modes (standard, relaxed, compact) match spec rhythm, Read === Edit parity, and HTML/PDF export", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1366, height: 900 });
-  await boot(page);
+  await boot(page, FIXTURE, { richEdit: true });
   await waitForRendered(page, "#content");
 
-  const read = await page.evaluate(() => {
-    const prose = document.querySelector("#content");
-    const noteSize = parseFloat(getComputedStyle(prose).fontSize);
-    const tokens = {
-      tight: 0.28 * noteSize,
-      inner: 0.45 * noteSize,
-      block: 0.95 * noteSize,
-      section: 1.55 * noteSize,
-    };
+  const measureReadRhythm = () =>
+    page.evaluate(() => {
+      const prose = document.querySelector("#content");
+      const p0 = prose.querySelectorAll("p")[0];
+      const p1 = prose.querySelectorAll("p")[1];
+      const h1 = prose.querySelector("h1");
+      const h2 = prose.querySelector("h2");
+      const p2 = prose.querySelectorAll("p")[2];
+      const ol = prose.querySelector("ol");
+      const bq = prose.querySelector("blockquote");
+      const math = prose.querySelector(".math-block");
+      const table = prose.querySelector(".table-scroll");
+      const tableEl = table.querySelector("table");
+      const code = prose.querySelector(".code-block");
+      const codePre = code.querySelector("pre");
+      const hr = prose.querySelector("hr:not(.footnotes-sep)");
+      const details = prose.querySelector("details:not(.front-matter)");
+      const fm = prose.querySelector("details.front-matter");
+      const gap = (a, b) =>
+        Math.round(
+          (b.getBoundingClientRect().top - a.getBoundingClientRect().bottom) *
+            10,
+        ) / 10;
+      const cs = (el) => getComputedStyle(el);
+      const blocks = [];
+      const walk = (el) => {
+        for (const ch of el.children) {
+          if (
+            ch.classList.contains("note-section") ||
+            ch.classList.contains("section-body")
+          ) {
+            walk(ch);
+            continue;
+          }
+          if (
+            ch.classList.contains("section-rail") ||
+            ch.classList.contains("footnotes-sep") ||
+            ch.classList.contains("anchor-only")
+          )
+            continue;
+          const r = ch.getBoundingClientRect();
+          if (r.height > 0)
+            blocks.push({ tag: ch.tagName, cls: ch.className, r });
+        }
+      };
+      walk(prose);
+      const compactGaps = [];
+      for (let i = 1; i < blocks.length; i++) {
+        compactGaps.push(blocks[i].r.top - blocks[i - 1].r.bottom);
+      }
+      for (const h of prose.querySelectorAll(
+        ".note-section > h2, .note-section > h3",
+      )) {
+        const next = h.parentElement.querySelector(
+          ":scope > .section-body > :first-child",
+        );
+        if (next)
+          compactGaps.push(
+            next.getBoundingClientRect().top - h.getBoundingClientRect().bottom,
+          );
+      }
+      for (const list of prose.querySelectorAll("ul, ol")) {
+        if (list.closest(".footnotes")) continue;
+        const items = [...list.children].filter((c) => c.tagName === "LI");
+        for (let i = 1; i < items.length; i++) {
+          compactGaps.push(
+            items[i].getBoundingClientRect().top -
+              items[i - 1].getBoundingClientRect().bottom,
+          );
+        }
+      }
+      const dirichletLi = [...prose.querySelectorAll("li")].find((li) =>
+        li.textContent.includes("Dirichlet"),
+      );
+      let readNestedOffset = null;
+      if (dirichletLi) {
+        const nested = dirichletLi.querySelector(":scope > ul");
+        const liRect = dirichletLi.getBoundingClientRect();
+        const lineBoxBottom =
+          liRect.top + parseFloat(getComputedStyle(dirichletLi).lineHeight);
+        readNestedOffset = nested.getBoundingClientRect().top - liRect.top;
+        compactGaps.push(nested.getBoundingClientRect().top - lineBoxBottom);
+      }
+      const noteSize = parseFloat(cs(prose).fontSize);
+      return {
+        noteSize,
+        bodyLhRatio: parseFloat(cs(p0).lineHeight) / noteSize,
+        tableLhRatio: parseFloat(cs(tableEl).lineHeight) / noteSize,
+        codeLhRatio:
+          parseFloat(cs(codePre).lineHeight) / parseFloat(cs(codePre).fontSize),
+        h1Fs: parseFloat(cs(h1).fontSize),
+        h2Fs: parseFloat(cs(h2).fontSize),
+        fmGap: gap(fm, h1),
+        h1ToP: gap(h1, p0),
+        pToH2: gap(p1, h2),
+        h2ToP: gap(h2, p2),
+        olToBq: gap(ol, bq),
+        mathGap: gap(math.previousElementSibling, math),
+        tableGap: gap(table.previousElementSibling, table),
+        codeGap: gap(code.previousElementSibling, code),
+        detailsGap: gap(details.previousElementSibling, details),
+        hrGap: gap(prose.querySelector("ul.contains-task-list"), hr),
+        compactGaps,
+        readNestedOffset,
+        topBlocks: blocks
+          .filter((b) => !b.cls.includes("footnotes"))
+          .map((b) => ({
+            tag: b.tag,
+            top: b.r.top - blocks[0].r.top,
+            height: b.r.height,
+          })),
+      };
+    });
 
-    const blocks = [];
-    const walk = (el) => {
-      for (const ch of el.children) {
-        if (
-          ch.classList.contains("note-section") ||
-          ch.classList.contains("section-body")
-        ) {
-          walk(ch);
+  const measureEditBlocks = async () => {
+    await page.keyboard.press("Control+2");
+    await expect(page.locator("#rich-reader")).toBeVisible();
+    await waitForRendered(page, "#rich .ProseMirror");
+    const edit = await page.evaluate(() => {
+      const pm = document.querySelector("#rich .ProseMirror");
+      const dirichletLi = [...pm.querySelectorAll("li")].find((li) =>
+        li.textContent.includes("Dirichlet"),
+      );
+      const editNestedOffset = dirichletLi
+        ? dirichletLi.querySelector(":scope > ul").getBoundingClientRect().top -
+          dirichletLi.getBoundingClientRect().top
+        : null;
+      const blocks = [];
+      for (const ch of pm.children) {
+        if (ch.classList.contains("ProseMirror-gapcursor")) continue;
+        if (ch.classList.contains("rich-properties")) {
+          const title = ch.querySelector(".fm-title");
+          const fm = ch.querySelector("details.front-matter");
+          if (title)
+            blocks.push({ tag: "DIV", box: title.getBoundingClientRect() });
+          if (fm)
+            blocks.push({ tag: "DETAILS", box: fm.getBoundingClientRect() });
           continue;
         }
-        if (
-          ch.classList.contains("section-rail") ||
-          ch.classList.contains("footnotes-sep") ||
-          ch.classList.contains("anchor-only")
-        )
+        if (ch.classList.contains("raw-block") && ch.dataset.kind === "text")
           continue;
         const r = ch.getBoundingClientRect();
-        if (r.height > 0)
-          blocks.push({ tag: ch.tagName, cls: ch.className, r });
+        if (r.height > 0) blocks.push({ tag: ch.tagName, box: r });
       }
-    };
-    walk(prose);
-
-    const gaps = [];
-    for (let i = 1; i < blocks.length; i++) {
-      gaps.push({
-        kind: `${blocks[i - 1].tag}->${blocks[i].tag}`,
-        gap: blocks[i].r.top - blocks[i - 1].r.bottom,
-      });
-    }
-    for (const h of prose.querySelectorAll(
-      ".note-section > h2, .note-section > h3",
-    )) {
-      const next = h.parentElement.querySelector(
-        ":scope > .section-body > :first-child",
-      );
-      if (next)
-        gaps.push({
-          kind: `${h.tagName}->${next.tagName}`,
-          gap:
-            next.getBoundingClientRect().top - h.getBoundingClientRect().bottom,
-        });
-    }
-    for (const list of prose.querySelectorAll("ul, ol")) {
-      if (list.closest(".footnotes")) continue;
-      const items = [...list.children].filter((c) => c.tagName === "LI");
-      for (let i = 1; i < items.length; i++) {
-        gaps.push({
-          kind: "li->li",
-          gap:
-            items[i].getBoundingClientRect().top -
-            items[i - 1].getBoundingClientRect().bottom,
-        });
-      }
-    }
-    // Nested list starts with inner gap from its parent item's first line box.
-    const dirichletLi = [...prose.querySelectorAll("li")].find((li) =>
-      li.textContent.includes("Dirichlet"),
-    );
-    let readNestedOffset = null;
-    if (dirichletLi) {
-      const nested = dirichletLi.querySelector(":scope > ul");
-      const liRect = dirichletLi.getBoundingClientRect();
-      const lineBoxBottom =
-        liRect.top + parseFloat(getComputedStyle(dirichletLi).lineHeight);
-      readNestedOffset = nested.getBoundingClientRect().top - liRect.top;
-      gaps.push({
-        kind: "li-text->nested-ul",
-        gap: nested.getBoundingClientRect().top - lineBoxBottom,
-      });
-    }
-
-    return {
-      noteSize,
-      tokens,
-      gaps,
-      readNestedOffset,
-      topBlocks: blocks
-        .filter((b) => !b.cls.includes("footnotes"))
-        .map((b) => ({
+      return {
+        editNestedOffset,
+        blocks: blocks.map((b) => ({
           tag: b.tag,
-          top: b.r.top - blocks[0].r.top,
-          height: b.r.height,
+          top: b.box.top - blocks[0].box.top,
+          height: b.box.height,
         })),
-    };
-  });
+      };
+    });
+    await page.keyboard.press("Control+1");
+    await expect(page.locator("#content")).toBeVisible();
+    return edit;
+  };
 
-  const clusters = [];
-  for (const item of read.gaps) {
-    const matched = Object.values(read.tokens).some(
-      (t) => Math.abs(item.gap - t) <= 1,
-    );
+  // 1) Default "standard" = v0.6.4 rhythm & heading scale (literata 1.7; other 1.8).
+  const std = await measureReadRhythm();
+  expect(std.bodyLhRatio).toBeCloseTo(1.7, 2);
+  expect(std.tableLhRatio).toBeCloseTo(1.6, 2);
+  expect(std.codeLhRatio).toBeCloseTo(1.65, 2);
+  expect(std.h1Fs).toBeCloseTo(1.85 * 16, 1);
+  expect(std.h2Fs).toBeCloseTo(1.5 * 16, 1);
+  for (const [actual, expected] of [
+    [std.fmGap, 13.8],
+    [std.h1ToP, 20.7],
+    [std.pToH2, 25.6],
+    [std.h2ToP, 15.6],
+    [std.olToBq, 20.8],
+    [std.mathGap, 28],
+    [std.tableGap, 22.4],
+    [std.codeGap, 20],
+    [std.detailsGap, 17.6],
+    [std.hrGap, 32],
+  ]) {
+    expect(Math.abs(actual - expected)).toBeLessThanOrEqual(0.5);
+  }
+  const stdEdit = await measureEditBlocks();
+  expect(
+    Math.abs(stdEdit.editNestedOffset - std.readNestedOffset),
+  ).toBeLessThan(0.5);
+  expect(stdEdit.blocks.length).toBe(std.topBlocks.length);
+  for (let i = 0; i < stdEdit.blocks.length; i++) {
     expect(
-      matched,
-      `${item.kind}: ${item.gap} not within 1px of ${JSON.stringify(read.tokens)}`,
-    ).toBe(true);
-    if (!clusters.some((c) => Math.abs(c - item.gap) <= 1)) {
-      clusters.push(item.gap);
-    }
+      Math.abs(stdEdit.blocks[i].top - std.topBlocks[i].top),
+      `standard block #${i} (${std.topBlocks[i].tag})`,
+    ).toBeLessThan(0.5);
+  }
+
+  // Non-literata typeface under standard uses 1.8 body line height.
+  await page.locator("#weight").click();
+  await expect(
+    page.locator("#settings-reading .setting:has(#reading-style) small"),
+  ).toContainText("只改行高、段距和标题大小；栏宽在下面单独设置");
+  const readingOrder = await page
+    .locator("#settings-reading select, #settings-reading input")
+    .evaluateAll((els) => els.map((e) => e.id));
+  expect(readingOrder.indexOf("reading-style")).toBeGreaterThan(-1);
+  expect(readingOrder.indexOf("reading-style")).toBeLessThan(
+    readingOrder.indexOf("column-width"),
+  );
+  await page.locator("#typeface").selectOption("balanced");
+  await page.locator("#appearance-close").click();
+  const balancedStd = await measureReadRhythm();
+  expect(balancedStd.bodyLhRatio).toBeCloseTo(1.8, 2);
+
+  // Switch back to literata and test "relaxed" (1.85 / 1.65 / x1.15 margins).
+  await page.locator("#weight").click();
+  await page.locator("#typeface").selectOption("literata");
+  await page.locator("#reading-style").selectOption("relaxed");
+  await page.locator("#appearance-close").click();
+  const rel = await measureReadRhythm();
+  expect(rel.bodyLhRatio).toBeCloseTo(1.85, 2);
+  expect(rel.tableLhRatio).toBeCloseTo(1.65, 2);
+  expect(rel.codeLhRatio).toBeCloseTo(1.65, 2);
+  expect(rel.h1Fs).toBeCloseTo(1.85 * 16, 1);
+  for (const [actual, expected] of [
+    [rel.fmGap, 13.75 * 1.15],
+    [rel.h1ToP, 20.72 * 1.15],
+    [rel.pToH2, 25.6 * 1.15],
+    [rel.h2ToP, 15.6 * 1.15],
+    [rel.olToBq, 20.8 * 1.15],
+    [rel.mathGap, 28 * 1.15],
+    [rel.tableGap, 22.4 * 1.15],
+    [rel.codeGap, 20 * 1.15],
+    [rel.detailsGap, 17.6 * 1.15],
+    [rel.hrGap, 32 * 1.15],
+  ]) {
+    expect(Math.abs(actual - expected)).toBeLessThanOrEqual(0.5);
+  }
+  const relEdit = await measureEditBlocks();
+  expect(relEdit.blocks.length).toBe(rel.topBlocks.length);
+  for (let i = 0; i < relEdit.blocks.length; i++) {
+    expect(
+      Math.abs(relEdit.blocks[i].top - rel.topBlocks[i].top),
+      `relaxed block #${i} (${rel.topBlocks[i].tag})`,
+    ).toBeLessThan(0.5);
+  }
+
+  // Test "compact" = next-test-18 (4-token rhythm, 1.7 / 1.5, 1.6..0.94 headings).
+  await page.locator("#weight").click();
+  await page.locator("#reading-style").selectOption("compact");
+  await page.locator("#appearance-close").click();
+  const cmp = await measureReadRhythm();
+  expect(cmp.bodyLhRatio).toBeCloseTo(1.7, 2);
+  expect(cmp.tableLhRatio).toBeCloseTo(1.5, 2);
+  expect(cmp.codeLhRatio).toBeCloseTo(1.5, 2);
+  expect(cmp.h1Fs).toBeCloseTo(1.6 * 16, 1);
+  expect(cmp.h2Fs).toBeCloseTo(1.32 * 16, 1);
+  const tokens = [0.28, 0.45, 0.95, 1.55].map((k) => k * cmp.noteSize);
+  const clusters = [];
+  for (const g of cmp.compactGaps) {
+    expect(tokens.some((t) => Math.abs(g - t) <= 1)).toBe(true);
+    if (!clusters.some((c) => Math.abs(c - g) <= 1)) clusters.push(g);
   }
   expect(clusters.length).toBeLessThanOrEqual(4);
+  const cmpEdit = await measureEditBlocks();
+  expect(cmpEdit.blocks.length).toBe(cmp.topBlocks.length);
+  for (let i = 0; i < cmpEdit.blocks.length; i++) {
+    expect(
+      Math.abs(cmpEdit.blocks[i].top - cmp.topBlocks[i].top),
+      `compact block #${i} (${cmp.topBlocks[i].tag})`,
+    ).toBeLessThan(0.5);
+  }
 
-  // Switch to Edit and check Read === Edit alignment.
-  await page.keyboard.press("Control+2");
-  await expect(page.locator("#rich-reader")).toBeVisible();
-  await waitForRendered(page, "#rich .ProseMirror");
-
-  const edit = await page.evaluate(() => {
-    const pm = document.querySelector("#rich .ProseMirror");
-    const dirichletLi = [...pm.querySelectorAll("li")].find((li) =>
-      li.textContent.includes("Dirichlet"),
-    );
-    const editNestedOffset = dirichletLi
-      ? dirichletLi.querySelector(":scope > ul").getBoundingClientRect().top -
-        dirichletLi.getBoundingClientRect().top
-      : null;
-    const blocks = [];
-    const seenFm = new Set();
-    for (const ch of pm.children) {
-      if (ch.classList.contains("ProseMirror-gapcursor")) continue;
-      if (ch.classList.contains("rich-properties")) {
-        const title = ch.querySelector(".fm-title");
-        const fm = ch.querySelector("details.front-matter");
-        if (title)
-          blocks.push({
-            tag: "DIV",
-            box: title.getBoundingClientRect(),
-          });
-        if (fm)
-          blocks.push({
-            tag: "DETAILS",
-            box: fm.getBoundingClientRect(),
-          });
-        seenFm.add(ch);
-        continue;
-      }
-      if (ch.classList.contains("raw-block") && ch.dataset.kind === "text")
-        continue;
-      const r = ch.getBoundingClientRect();
-      if (r.height > 0) blocks.push({ tag: ch.tagName, box: r });
-    }
-    return {
-      editNestedOffset,
-      blocks: blocks.map((b) => ({
-        tag: b.tag,
-        top: b.box.top - blocks[0].box.top,
-        height: b.box.height,
-      })),
+  // Verify HTML/PDF export obeys readingStyle.
+  const captured = {};
+  await page.evaluate(() => {
+    window.__exports = [];
+    window.folio.exportNote = async (payload) => {
+      window.__exports.push(payload);
+      return { canceled: false, warnings: payload.warnings };
     };
   });
+  for (const style of ["relaxed", "standard", "compact"]) {
+    await page.locator("#weight").click();
+    await page.locator("#reading-style").selectOption(style);
+    await page.locator("#appearance-close").click();
+    await page.locator("#app-menu-toggle").click();
+    await page
+      .locator('#app-menu button[role="menuitem"]')
+      .filter({ hasText: "导出 HTML" })
+      .click();
+    await expect
+      .poll(() => page.evaluate(() => window.__exports.length))
+      .toBe(Object.keys(captured).length + 1);
+    captured[style] = await page.evaluate(() => window.__exports.at(-1));
+  }
+  const exportMetrics = {};
+  const expPage = await page.context().newPage();
+  for (const [style, payload] of Object.entries(captured)) {
+    await expPage.setContent(
+      `<!doctype html><html><head><style>${payload.css}</style></head><body><article>${payload.html}</article></body></html>`,
+    );
+    exportMetrics[style] = await expPage.evaluate(() => {
+      const b = getComputedStyle(document.body);
+      const h1 = document.querySelector("h1");
+      const h2 = document.querySelector("h2");
+      const p1 = document.querySelectorAll("p")[1];
+      return {
+        bodyLh: parseFloat(b.lineHeight) / parseFloat(b.fontSize),
+        h1Fs: parseFloat(getComputedStyle(h1).fontSize),
+        pToH2:
+          h2.getBoundingClientRect().top - p1.getBoundingClientRect().bottom,
+      };
+    });
+  }
+  await expPage.close();
+  expect(exportMetrics.relaxed.bodyLh).toBeCloseTo(1.85, 2);
+  expect(exportMetrics.standard.bodyLh).toBeCloseTo(1.7, 2);
+  expect(exportMetrics.compact.bodyLh).toBeCloseTo(1.7, 2);
+  expect(exportMetrics.standard.h1Fs).toBeCloseTo(1.85 * 16, 1);
+  expect(exportMetrics.compact.h1Fs).toBeCloseTo(1.6 * 16, 1);
+  expect(exportMetrics.relaxed.pToH2).toBeGreaterThan(
+    exportMetrics.standard.pToH2 + 2,
+  );
+  expect(exportMetrics.standard.pToH2).toBeGreaterThan(
+    exportMetrics.compact.pToH2 + 0.5,
+  );
 
-  if (read.readNestedOffset !== null && edit.editNestedOffset !== null) {
-    expect(
-      Math.abs(edit.editNestedOffset - read.readNestedOffset),
-    ).toBeLessThan(0.5);
-  }
-  expect(edit.blocks.length).toBe(read.topBlocks.length);
-  for (let i = 0; i < edit.blocks.length; i++) {
-    expect(
-      Math.abs(edit.blocks[i].top - read.topBlocks[i].top),
-      `block #${i} (${read.topBlocks[i].tag}) top delta`,
-    ).toBeLessThan(0.5);
-  }
+  await page.locator("#app-menu-toggle").click();
+  await page
+    .locator('#app-menu button[role="menuitem"]')
+    .filter({ hasText: "导出 PDF" })
+    .click();
+  await expect.poll(() => page.evaluate(() => window.__exports.length)).toBe(4);
+  const pdfPayload = await page.evaluate(() => window.__exports.at(-1));
+  expect(pdfPayload.format).toBe("pdf");
+  expect(pdfPayload.css).toContain("--exp-lh:1.7");
+  expect(pdfPayload.css).toContain("--exp-h2-m:1.55em 0 0.45em");
 });
 
 test("fluid note size and columnWidth options (window, measure, fixed, wide) match in Read and Edit", async ({
@@ -327,21 +486,21 @@ test("fluid note size and columnWidth options (window, measure, fixed, wide) mat
       return el.getBoundingClientRect().width - pad;
     });
 
-  // Default columnWidth ("window"): fills pane up to 56em at 1366 & 1920.
+  // Default columnWidth ("fixed"): stays 680 px at both 1366 & 1920 while fluid size grows.
   const win1366 = await measureRead();
   expect(win1366.fontSize).toBeCloseTo(16, 1);
   expect(win1366.lineHeight / win1366.fontSize).toBeCloseTo(1.7, 2);
-  expect(win1366.measure).toBeCloseTo(56 * 16, 1);
+  expect(win1366.measure).toBeCloseTo(680, 1);
 
   await page.setViewportSize({ width: 1920, height: 1080 });
   const win1920 = await measureRead();
   expect(win1920.fontSize).toBeCloseTo(16 * 1.09, 2);
-  expect(win1920.measure).toBeCloseTo(56 * 16 * 1.09, 1);
+  expect(win1920.measure).toBeCloseTo(680, 1);
 
   for (const [cw, expected1920] of [
+    ["window", 56 * 16 * 1.09],
     ["measure", 42 * 16 * 1.09],
     ["fixed", 680],
-    ["window", 56 * 16 * 1.09],
   ]) {
     await page.locator("#weight").click();
     await page.locator("#column-width").selectOption(cw);
@@ -658,9 +817,6 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   page,
 }) => {
   const allOld = {
-    lineHeight: false,
-    spacing: false,
-    headingScale: false,
     fluidSize: false,
     columnWidth: false,
     autoWeight: false,
@@ -687,7 +843,7 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
         w: Math.round(el.getBoundingClientRect().width),
         fw: getComputedStyle(el).fontWeight,
       }));
-    expect(readPara.w).toBe(896);
+    expect(readPara.w).toBe(680);
     expect(readPara.fw).toBe("450");
     return;
   }
@@ -698,48 +854,28 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   await page.locator("#typo-lab-open").click();
   await expect(page.locator("#appearance")).not.toHaveAttribute("open", "");
   await expect(page.locator("#typo-lab")).toBeVisible();
-  await expect(page.locator("#typo-lab input[type=checkbox]")).toHaveCount(7);
-  await page.locator("#typo-lab-all-old").click();
+  await expect(page.locator("#typo-lab input[type=checkbox]")).toHaveCount(4);
+  for (const removed of ["lineHeight", "spacing", "headingScale"]) {
+    await expect(page.locator(`#lab-${removed}`)).toHaveCount(0);
+  }
+  const labels = await page
+    .locator("#typo-lab .typo-lab-label > small")
+    .evaluateAll((els) => els.map((e) => e.textContent));
+  expect(labels.every((s) => /（默认）|\(default\)/.test(s))).toBe(true);
 
+  await page.locator("#typo-lab-all-old").click();
+  await page.setViewportSize({ width: 1920, height: 1080 });
   const oldMetrics = await page.evaluate(() => {
     const p = document.querySelector("#content p");
-    const h1 = document.querySelector("#content h1");
-    const h2 = document.querySelector("#content h2");
-    const ul = document.querySelector("#content ul");
-    const bq = document.querySelector("#content blockquote");
-    const math = document.querySelector("#content .math-block");
-    const table = document.querySelector("#content .table-scroll");
-    const code = document.querySelector("#content .code-block");
-    const hr = document.querySelector("#content hr:not(.footnotes-sep)");
-    const gap = (a, b) =>
-      Math.round(
-        (b.getBoundingClientRect().top - a.getBoundingClientRect().bottom) * 10,
-      ) / 10;
     return {
       pWidth: Math.round(p.getBoundingClientRect().width * 10) / 10,
+      pFs: Math.round(parseFloat(getComputedStyle(p).fontSize) * 10) / 10,
       pWeight: getComputedStyle(p).fontWeight,
-      h1Fs: Math.round(parseFloat(getComputedStyle(h1).fontSize) * 10) / 10,
-      h1ToP: gap(h1, p),
-      pToH2: gap(document.querySelectorAll("#content p")[1], h2),
-      h2ToP: gap(h2, document.querySelectorAll("#content p")[2]),
-      olToBq: gap(document.querySelector("#content ol"), bq),
-      mathGap: gap(math.previousElementSibling, math),
-      tableGap: gap(table.previousElementSibling, table),
-      codeGap: gap(code.previousElementSibling, code),
-      hrGap: gap(document.querySelector("#content ul.contains-task-list"), hr),
     };
   });
   expect(oldMetrics.pWidth).toBe(680);
+  expect(oldMetrics.pFs).toBe(16);
   expect(oldMetrics.pWeight).toBe("400");
-  expect(oldMetrics.h1Fs).toBeCloseTo(29.6, 1);
-  expect(Math.abs(oldMetrics.h1ToP - 20.7)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.pToH2 - 25.6)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.h2ToP - 15.6)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.olToBq - 20.8)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.mathGap - 28)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.tableGap - 22.4)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.codeGap - 20)).toBeLessThanOrEqual(0.5);
-  expect(Math.abs(oldMetrics.hrGap - 32)).toBeLessThanOrEqual(0.5);
 
   await page.keyboard.press("Control+2");
   await expect(page.locator("#rich .ProseMirror h1")).toBeVisible();
@@ -753,16 +889,37 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   expect(oldEdit.w).toBe(680);
   expect(oldEdit.fw).toBe("400");
 
-  // The panel stays open beside the note while switching modes.
-  await expect(page.locator("#typo-lab")).toBeVisible();
+  // "全部新" turns columnWidth on (56em at 1920).
   await page.locator("#typo-lab-all-new").click();
+  await expect(page.locator("#lab-columnWidth")).toBeChecked();
   const newEdit = await page.evaluate(() => {
     const p = document.querySelector("#rich .ProseMirror p");
     return {
       w: Math.round(p.getBoundingClientRect().width * 10) / 10,
       fw: getComputedStyle(p).fontWeight,
+      fs: parseFloat(getComputedStyle(p).fontSize),
     };
   });
-  expect(newEdit.w).toBe(896);
+  expect(newEdit.w).toBeCloseTo(56 * newEdit.fs, 0);
   expect(newEdit.fw).toBe("450");
+
+  // "默认" resets to the 4 default settings (columnWidth off = 680 px, other 3 on).
+  await page.locator("#typo-lab-default").click();
+  await expect(page.locator("#lab-columnWidth")).not.toBeChecked();
+  for (const onKey of ["fluidSize", "autoWeight", "chineseFont"]) {
+    await expect(page.locator(`#lab-${onKey}`)).toBeChecked();
+  }
+  const defEdit = await page.evaluate(() => {
+    const p = document.querySelector("#rich .ProseMirror p");
+    return {
+      w: Math.round(p.getBoundingClientRect().width * 10) / 10,
+      fw: getComputedStyle(p).fontWeight,
+      attrs: [...document.documentElement.attributes].filter((a) =>
+        a.name.startsWith("data-lab-"),
+      ).length,
+    };
+  });
+  expect(defEdit.w).toBe(680);
+  expect(defEdit.fw).toBe("450");
+  expect(defEdit.attrs).toBe(0);
 });

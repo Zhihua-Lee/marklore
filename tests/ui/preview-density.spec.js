@@ -226,6 +226,15 @@ test("dense tree/outline/code heights and single-line .name-mark on long note na
   expect(density.markSameLineAsFile).toBe(true);
   expect(density.markCenterDelta).toBeLessThanOrEqual(3);
   expect(density.outlineHeight).toBeLessThanOrEqual(29);
-  expect(density.codeHeaderHeight).toBeGreaterThanOrEqual(25);
-  expect(density.codeHeaderHeight).toBeLessThanOrEqual(28);
+  expect(density.codeHeaderHeight).toBeGreaterThanOrEqual(33);
+  expect(density.codeHeaderHeight).toBeLessThanOrEqual(37);
+
+  await page.locator("#weight").click();
+  await page.locator("#reading-style").selectOption("compact");
+  await page.locator("#appearance-close").click();
+  const compactCodeHeight = await page
+    .locator("#content .code-toolbar")
+    .evaluate((el) => el.getBoundingClientRect().height);
+  expect(compactCodeHeight).toBeGreaterThanOrEqual(25);
+  expect(compactCodeHeight).toBeLessThanOrEqual(28);
 });

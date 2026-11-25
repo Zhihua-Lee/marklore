@@ -667,7 +667,8 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await openAppearance(page);
   await page.locator("#typeface").selectOption("classic");
   await page.locator("#text-weight").selectOption("350");
-  await page.locator("#column-width").selectOption("fixed");
+  await page.locator("#reading-style").selectOption("compact");
+  await page.locator("#column-width").selectOption("window");
   for (let i = 0; i < 3; i++) await page.locator("#zoom-out").click();
   await page.locator("#export-toc").uncheck();
   await expect
@@ -676,7 +677,8 @@ test("reset default typography restores defaults while preserving zoom-changed o
       typeface: "classic",
       zoom: 70,
       weight: 350,
-      columnWidth: "fixed",
+      readingStyle: "compact",
+      columnWidth: "window",
       exportToc: false,
     });
   await page.reload();
@@ -685,7 +687,8 @@ test("reset default typography restores defaults while preserving zoom-changed o
   await page.locator("#reset-typography").click();
   await expect(page.locator("#typeface")).toHaveValue("literata");
   await expect(page.locator("#text-weight")).toHaveValue("auto");
-  await expect(page.locator("#column-width")).toHaveValue("window");
+  await expect(page.locator("#reading-style")).toHaveValue("standard");
+  await expect(page.locator("#column-width")).toHaveValue("fixed");
   await expect(page.locator("#zoom-reset")).toHaveText("100%");
   await expect(page.locator("#export-toc")).not.toBeChecked();
   await closeAppearance(page);
@@ -716,7 +719,8 @@ test("reset default typography restores defaults while preserving zoom-changed o
       typeface: "literata",
       zoom: 100,
       weight: "auto",
-      columnWidth: "window",
+      readingStyle: "standard",
+      columnWidth: "fixed",
       exportToc: false,
     });
   await page.reload();
@@ -825,8 +829,7 @@ test("wide reading expands the measure, preserves the current paragraph and pers
     "aria-pressed",
     "false",
   );
-  const expectedSize = 16 * (1 + (0.09 * (1800 - 1366)) / (1920 - 1366));
-  const expectedMeasure = 56 * expectedSize;
+  const expectedMeasure = 680;
   const expectedOuter = expectedMeasure + 80;
   const before = await page.locator("#content").boundingBox();
   expect(before.width).toBeCloseTo(expectedOuter, 0);

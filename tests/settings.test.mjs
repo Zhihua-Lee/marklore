@@ -63,13 +63,27 @@ test("enumerated settings reject unknown values", () => {
   assert.equal(result.librarySide, "left");
   assert.equal(result.outlineSide, "right");
   assert.equal(result.theme, "light");
-  assert.equal(result.columnWidth, "window");
+  assert.equal(result.readingStyle, "standard");
+  assert.equal(result.columnWidth, "fixed");
   assert.equal(result.weight, "auto");
   assert.equal(normalizeSettings({ weight: 600 }).weight, 550);
   assert.equal(normalizeSettings({ weight: "600" }).weight, 550);
   assert.equal(normalizeSettings({ weight: "invalid" }).weight, "auto");
   for (const w of [300, 350, 400, 450, 500, 550])
     assert.equal(normalizeSettings({ weight: w }).weight, w);
+  for (const style of ["relaxed", "standard", "compact"])
+    assert.equal(
+      normalizeSettings({ readingStyle: style }).readingStyle,
+      style,
+    );
+  assert.equal(
+    normalizeSettings({ readingStyle: "bad" }).readingStyle,
+    "standard",
+  );
+  assert.equal(
+    normalizeSettings({ columnWidth: "window" }).columnWidth,
+    "window",
+  );
   assert.equal(
     normalizeSettings({ columnWidth: "measure" }).columnWidth,
     "measure",
@@ -78,7 +92,7 @@ test("enumerated settings reject unknown values", () => {
     normalizeSettings({ columnWidth: "fixed" }).columnWidth,
     "fixed",
   );
-  assert.equal(normalizeSettings({ columnWidth: "bad" }).columnWidth, "window");
+  assert.equal(normalizeSettings({ columnWidth: "bad" }).columnWidth, "fixed");
   assert.equal(result.wide, false);
   assert.equal(result.showHistoryButtons, false);
   assert.equal(result.smoothScroll, "off");

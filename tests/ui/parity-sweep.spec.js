@@ -266,11 +266,11 @@ const MATRIX = [
   { name: "dark-narrow", theme: "dark", width: 700 },
 ];
 
-async function openNote(page, text, theme, width) {
+async function openNote(page, text, theme, width, readingStyle = "standard") {
   await page.setViewportSize({ width, height: 900 });
   await installFolio(page);
   await page.addInitScript(
-    ({ text, theme }) => {
+    ({ text, theme, readingStyle }) => {
       window.folio = folioTest.mock({
         ready: async () => ({
           incoming: [
@@ -289,11 +289,12 @@ async function openNote(page, text, theme, width) {
             outline: false,
             richEdit: true,
             theme,
+            readingStyle,
           },
         }),
       });
     },
-    { text, theme },
+    { text, theme, readingStyle },
   );
   await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("#content")).toBeVisible();
@@ -541,7 +542,78 @@ for (const cfg of MATRIX) {
       page.locator('#rich .raw-block[data-kind="text"]').last(),
     ).toContainText("[^fn1]:");
   });
+}
 
+for (const readingStyle of ["relaxed", "compact"]) {
+  test(`complete block sweep matches Read and Edit within 0.5 px (${readingStyle})`, async ({
+    page,
+  }) => {
+    await openNote(page, sweepNote, "light", 1360, readingStyle);
+    await settlePane(page, "#content", "#reader");
+    const read = await snapshotBlocks(page, "read");
+
+    await page.keyboard.press("Control+2");
+    await expect(page.locator("#rich-reader")).toBeVisible();
+    await settlePane(page, "#rich", "#rich-reader");
+    const edit = await snapshotBlocks(page, "edit");
+
+    expect(edit.blocks.length, `${readingStyle} block count`).toBe(
+      read.blocks.length,
+    );
+    const r0 = read.blocks[0].top;
+    const e0 = edit.blocks[0].top;
+    for (let i = 0; i < read.blocks.length; i++) {
+      assertBoxMatch(
+        `${readingStyle} block[${i}]`,
+        read.blocks[i],
+        edit.blocks[i],
+        r0,
+        e0,
+      );
+    }
+
+    expect(edit.listItems.length, `${readingStyle} li count`).toBe(
+      read.listItems.length,
+    );
+    for (let i = 0; i < read.listItems.length; i++) {
+      assertBoxMatch(
+        `${readingStyle} li[${i}]`,
+        read.listItems[i],
+        edit.listItems[i],
+        r0,
+        e0,
+      );
+    }
+
+    expect(edit.cols.length, `${readingStyle} column count`).toBe(
+      read.cols.length,
+    );
+    for (let i = 0; i < read.cols.length; i++) {
+      assertBoxMatch(
+        `${readingStyle} col[${i}]`,
+        read.cols[i],
+        edit.cols[i],
+        r0,
+        e0,
+      );
+    }
+
+    expect(edit.inner.length, `${readingStyle} nested list-block count`).toBe(
+      read.inner.length,
+    );
+    for (let i = 0; i < read.inner.length; i++) {
+      assertBoxMatch(
+        `${readingStyle} inner[${i}]`,
+        read.inner[i],
+        edit.inner[i],
+        r0,
+        e0,
+      );
+    }
+  });
+}
+
+for (const cfg of MATRIX) {
   test(`first-block parity across all block kinds (${cfg.name})`, async ({
     page,
   }) => {
@@ -778,40 +850,44 @@ test("standalone anchors have zero height/gap and match Read and Edit within 0.5
   expect(readAnchors.length).toBe(12);
   expect(readAnchors.every((h) => h === 0)).toBe(true);
 
-  for (const columnWidth of ["window", "measure", "fixed"]) {
-    await page.locator("#weight").click();
-    await page.locator("#column-width").selectOption(columnWidth);
-    await page.locator("#appearance-close").click();
-    await page.keyboard.press("Control+1");
-    await settlePane(page, "#content", "#reader");
-    const read = await snapshotBlocks(page, "read");
-    read.blocks = read.blocks.filter((b) => !b.cls.includes("anchor-only"));
+  for (const readingStyle of ["standard", "relaxed", "compact"]) {
+    for (const columnWidth of ["window", "measure", "fixed"]) {
+      await page.locator("#weight").click();
+      await page.locator("#reading-style").selectOption(readingStyle);
+      await page.locator("#column-width").selectOption(columnWidth);
+      await page.locator("#appearance-close").click();
+      await page.keyboard.press("Control+1");
+      await settlePane(page, "#content", "#reader");
+      const read = await snapshotBlocks(page, "read");
+      read.blocks = read.blocks.filter((b) => !b.cls.includes("anchor-only"));
 
-    await page.keyboard.press("Control+2");
-    await expect(page.locator("#rich-reader")).toBeVisible();
-    await settlePane(page, "#rich", "#rich-reader");
-    const edit = await snapshotBlocks(page, "edit");
-    edit.blocks = edit.blocks.filter((b) => !b.cls.includes("anchor-only"));
+      await page.keyboard.press("Control+2");
+      await expect(page.locator("#rich-reader")).toBeVisible();
+      await settlePane(page, "#rich", "#rich-reader");
+      const edit = await snapshotBlocks(page, "edit");
+      edit.blocks = edit.blocks.filter((b) => !b.cls.includes("anchor-only"));
 
-    expect(edit.blocks.length, `${columnWidth} visible count`).toBe(
-      read.blocks.length,
-    );
-    const r0 = read.blocks[0].top;
-    const e0 = edit.blocks[0].top;
-    for (let i = 0; i < read.blocks.length; i++) {
-      assertBoxMatch(
-        `anchors-${columnWidth} block[${i}]`,
-        read.blocks[i],
-        edit.blocks[i],
-        r0,
-        e0,
+      expect(
+        edit.blocks.length,
+        `${readingStyle}/${columnWidth} visible count`,
+      ).toBe(read.blocks.length);
+      const r0 = read.blocks[0].top;
+      const e0 = edit.blocks[0].top;
+      for (let i = 0; i < read.blocks.length; i++) {
+        assertBoxMatch(
+          `anchors-${readingStyle}-${columnWidth} block[${i}]`,
+          read.blocks[i],
+          edit.blocks[i],
+          r0,
+          e0,
+        );
+      }
+      const editAnchors = await measureAnchorsZero(
+        "#rich .ProseMirror p.anchor-only",
       );
+      expect(editAnchors.length).toBe(12);
+      expect(editAnchors.every((h) => h === 0)).toBe(true);
     }
-    const editAnchors = await measureAnchorsZero(
-      "#rich .ProseMirror p.anchor-only",
-    );
-    expect(editAnchors.length).toBe(12);
-    expect(editAnchors.every((h) => h === 0)).toBe(true);
   }
 
   // Clicking the margin `#` marker in Edit reveals `<a id="..."></a>` source.

@@ -7,7 +7,7 @@
   width: fit-content;
   max-width: 100%;
   overflow-x: auto;
-  margin: var(--gap-block, 0.95em) 0;
+  margin: var(--gap-table-y, 0.95em) 0;
   border: 1px solid color-mix(in srgb, var(--table-line) 75%, transparent);
   border-radius: 8px;
   background: var(--table-paper);
@@ -22,7 +22,10 @@
   > .table-scroll:nth-child(
     1 of :not(.fm-none, .rich-properties:empty, .anchor-only)
   ),
-.prose .section-body > .table-scroll:nth-child(1 of :not(.anchor-only)) {
+:root[data-reading-style="compact"]
+  .prose
+  .section-body
+  > .table-scroll:nth-child(1 of :not(.anchor-only)) {
   margin-top: 0;
 }
 :is(.prose, .prose .ProseMirror)
@@ -40,14 +43,14 @@
   border-spacing: 0;
   margin: 0;
   font-size: 1em;
-  line-height: 1.5;
+  line-height: var(--table-lh, 1.5);
 }
 .table-scroll :is(th, td),
 .prose .table-scroll :is(th, td) {
   border: 0;
   border-bottom: 1px solid
     color-mix(in srgb, var(--table-line) 65%, transparent);
-  padding: 0.45em 0.8em;
+  padding: var(--pad-table-cell, 0.45em 0.8em);
   min-width: 2.5em;
   vertical-align: top;
   overflow-wrap: anywhere;

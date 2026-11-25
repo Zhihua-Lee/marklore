@@ -114,33 +114,36 @@ export default {
   "浓 550": "Heavy 550",
   "系统字体非可变字体，细微浓度不明显":
     "System fonts are static; fine weight steps need a built-in font",
+  排版风格: "Reading style",
+  舒展: "Relaxed",
+  "标准（默认）": "Standard (default)",
+  紧凑: "Compact",
+  "只改行高、段距和标题大小；栏宽在下面单独设置":
+    "Changes line height, spacing, and heading scale only; column width is set below",
   正文栏宽: "Column width",
-  "随窗口（默认）": "Fit window (default)",
+  随窗口: "Fit window",
   按字数: "By line length",
-  固定: "Fixed (680 px)",
+  "固定（默认）": "Fixed (680 px, default)",
   默认排版: "Default typography",
   恢复默认排版: "Reset default typography",
   "排版对照（测试版）": "Typography comparison (beta)",
   全部旧: "All v0.6.4",
+  默认: "Default",
   全部新: "All new",
   "浮在正文旁，边拨开关边看笔记；Ctrl+Alt+L 开关":
     "Floats beside the note so you can switch and read; Ctrl+Alt+L toggles it",
   打开对照面板: "Open comparison panel",
   关闭对照面板: "Close comparison panel",
-  "开 = 新，关 = v0.6.4": "On = new, off = v0.6.4",
-  "行高：v0.6.4 1.7–1.8 ↔ 新 1.7": "Line height: v0.6.4 1.7–1.8 ↔ New 1.7",
-  "块距：v0.6.4 多套边距 ↔ 新 4 档节奏":
-    "Block spacing: v0.6.4 varied ↔ New 4 tokens",
-  "标题字阶：v0.6.4 1.85–0.95 ↔ 新 1.60–0.94":
-    "Heading scale: v0.6.4 1.85–0.95 ↔ New 1.60–0.94",
-  "宽屏字号：v0.6.4 固定 ↔ 新 1366→1920 渐大 9%":
-    "Wide-screen size: v0.6.4 fixed ↔ New +9% at 1366→1920",
-  "正文栏宽：v0.6.4 固定 680 px ↔ 新 当前栏宽":
-    "Column width: v0.6.4 fixed 680 px ↔ New current",
-  "自动浓度：v0.6.4 恒为 400 ↔ 新 按屏幕 400/450":
-    "Auto weight: v0.6.4 always 400 ↔ New 400/450 by screen",
-  "中文字体：v0.6.4 系统字体 ↔ 新 内置思源黑体":
-    "Chinese font: v0.6.4 system ↔ New built-in Noto Sans SC",
+  "开 = 新，关 = v0.6.4（括号标注当前默认）":
+    "On = new, off = v0.6.4 (default marked)",
+  "宽屏字号：v0.6.4 固定 ↔ 1366→1920 渐大 9%（默认）":
+    "Wide-screen size: v0.6.4 fixed ↔ +9% at 1366→1920 (default)",
+  "正文栏宽：v0.6.4（默认） 680 px ↔ next-test-18 随窗口":
+    "Column width: v0.6.4 (default) 680 px ↔ next-test-18 fit window",
+  "自动浓度：v0.6.4 恒为 400 ↔ 按屏幕 400/450（默认）":
+    "Auto weight: v0.6.4 always 400 ↔ 400/450 by screen (default)",
+  "中文字体：v0.6.4 系统字体 ↔ 内置思源黑体（默认）":
+    "Chinese font: v0.6.4 system ↔ built-in Noto Sans SC (default)",
   "Literata 与代码字体已内置；中文使用本机字体。公式保留专用字体和粗斜体含义。":
     "Literata and the code font are built in; Chinese text uses system fonts. Formulas keep their own font and the meaning of bold and italic.",
   表格风格: "Table style",

@@ -5,6 +5,61 @@
 * {
   box-sizing: border-box;
 }
+:root {
+  --gap-scale: 1;
+  --exp-lh: 1.8;
+  --exp-head-lh: 1.35;
+  --h1-scale: 1.85;
+  --h2-scale: 1.5;
+  --h3-scale: 1.25;
+  --h4-scale: 1.1;
+  --h5-scale: 1;
+  --h6-scale: 0.95;
+  --exp-h1-m: 0 0 calc(0.8em * var(--gap-scale));
+  --exp-h2-m: calc(1.6em * var(--gap-scale)) 0 calc(0.7em * var(--gap-scale));
+  --exp-h3-m: calc(1.5em * var(--gap-scale)) 0 calc(0.65em * var(--gap-scale));
+  --exp-h4-m: calc(1.33em * var(--gap-scale)) 0 calc(0.65em * var(--gap-scale));
+  --exp-h5-m: calc(1.33em * var(--gap-scale)) 0 calc(0.65em * var(--gap-scale));
+  --exp-h6-m: calc(1.33em * var(--gap-scale)) 0 calc(0.65em * var(--gap-scale));
+  --exp-p-mb: calc(1em * var(--gap-scale));
+  --exp-list-m: calc(0.75em * var(--gap-scale)) 0 calc(1em * var(--gap-scale));
+  --exp-li-y: calc(0.35em * var(--gap-scale));
+  --exp-li-p-y: calc(0.4em * var(--gap-scale));
+  --exp-sublist-y: calc(0.3em * var(--gap-scale)) 0;
+  --exp-hr-y: calc(2em * var(--gap-scale));
+  --exp-img-y: calc(1.2em * var(--gap-scale));
+  --gap-row-y: calc(1.2em * var(--gap-scale));
+  --gap-col-y: calc(1em * var(--gap-scale));
+  --pad-pre: 14px;
+  --exp-pre-y: calc(1em * var(--gap-scale));
+  --exp-pre-lh: 1.65;
+  --exp-bq-m: calc(1.2em * var(--gap-scale)) 0;
+  --pad-bq: 0.65em 1.1em;
+  --exp-bq-border: 4px solid #246d5d;
+  --exp-bq-bg: #eef2ed;
+  --exp-bq-radius: 0;
+  --gap-table-y: calc(1.4em * var(--gap-scale));
+  --table-lh: 1.6;
+  --pad-table-cell: 0.62em 1em;
+  --exp-table-m: calc(1.2em * var(--gap-scale)) 0;
+  --exp-cell-pad: 0.5em 0.7em;
+  --exp-details-m: calc(1em * var(--gap-scale)) 0;
+  --pad-details: 12px 16px;
+  --exp-math-y: calc(1.75em * var(--gap-scale));
+  --pad-math-y: 0.5em;
+  --fn-sep-display: block;
+  --exp-fn-size: 0.85em;
+  --exp-fn-lh: inherit;
+  --exp-fn-border: 1px solid #d9ddda;
+  --exp-fn-mt: calc(2em * var(--gap-scale));
+  --exp-fn-pt: 0px;
+  --exp-fn-color: inherit;
+  --exp-fn-list-m: calc(0.75em * var(--gap-scale)) 0
+    calc(1em * var(--gap-scale));
+  --exp-fn-li-y: calc(0.35em * var(--gap-scale));
+  --exp-fn-p-y: calc(0.4em * var(--gap-scale));
+  --exp-fn-p2-mt: calc(0.4em * var(--gap-scale));
+}
 html {
   color-scheme: light;
   background: #fff;
@@ -12,12 +67,10 @@ html {
 body {
   margin: 0;
   color: #202625;
-  font:
-    400 16px/1.7 "Literata Variable",
-    "Noto Sans SC",
-    "Microsoft YaHei",
-    "PingFang SC",
-    serif;
+  font-size: 16px;
+  line-height: var(--exp-lh);
+  font-family:
+    "Literata Variable", "Noto Sans SC", "Microsoft YaHei", "PingFang SC", serif;
   letter-spacing: normal;
 }
 article {
@@ -32,45 +85,45 @@ h3,
 h4,
 h5,
 h6 {
-  line-height: 1.3;
+  line-height: var(--exp-head-lh);
   color: #202625;
   break-after: avoid;
 }
 h1 {
-  font-size: 1.6em;
+  font-size: calc(1em * var(--h1-scale));
   font-weight: 600;
-  margin: 0 0 0.95em;
+  margin: var(--exp-h1-m);
 }
 h2 {
-  font-size: 1.32em;
+  font-size: calc(1em * var(--h2-scale));
   font-weight: 600;
-  margin: 1.55em 0 0.45em;
+  margin: var(--exp-h2-m);
 }
 h3 {
-  font-size: 1.15em;
+  font-size: calc(1em * var(--h3-scale));
   font-weight: 600;
-  margin: 1.55em 0 0.45em;
+  margin: var(--exp-h3-m);
 }
 strong {
   font-weight: 600;
 }
 h4 {
-  font-size: 1.05em;
+  font-size: calc(1em * var(--h4-scale));
   font-weight: 600;
-  margin: 0.95em 0 0.45em;
+  margin: var(--exp-h4-m);
 }
 h5 {
-  font-size: 1em;
+  font-size: calc(1em * var(--h5-scale));
   font-weight: 600;
-  margin: 0.95em 0 0.45em;
+  margin: var(--exp-h5-m);
 }
 h6 {
-  font-size: 0.94em;
+  font-size: calc(1em * var(--h6-scale));
   font-weight: 600;
-  margin: 0.95em 0 0.45em;
+  margin: var(--exp-h6-m);
 }
 p {
-  margin: 0 0 0.95em;
+  margin: 0 0 var(--exp-p-mb);
 }
 .formula {
   white-space: nowrap;
@@ -83,18 +136,18 @@ p {
 }
 ul,
 ol {
-  margin: 0.95em 0;
+  margin: var(--exp-list-m);
   padding-left: 1.6em;
 }
 li {
-  margin-block: 0.28em;
+  margin-block: var(--exp-li-y);
 }
 li > p {
-  margin-block: 0.95em;
+  margin-block: var(--exp-li-p-y);
 }
 li > ul,
 li > ol {
-  margin-block: 0.45em;
+  margin-block: var(--exp-sublist-y);
 }
 /* A task's box hangs where a bullet would be (as on screen). */
 .task-list-item {
@@ -111,7 +164,7 @@ hr {
   height: 1px;
   width: 100%;
   background: #dcdad5;
-  margin: 0.95em auto;
+  margin: var(--exp-hr-y) auto;
 }
 a {
   color: #20675d;
@@ -123,19 +176,19 @@ img {
   height: auto;
   max-height: 240mm;
   object-fit: contain;
-  margin: 0.95em auto;
+  margin: var(--exp-img-y) auto;
   break-inside: avoid;
 }
 pre {
-  padding: 12px 16px 14px;
-  margin: 0.95em 0;
+  padding: var(--pad-pre);
+  margin: var(--exp-pre-y) 0;
   background: #1e1e1e;
   color: #d4d4d4;
   border: 1px solid #333;
   border-radius: 5px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  line-height: 1.5;
+  line-height: var(--exp-pre-lh);
   font-size: 0.82em;
   font-variation-settings: normal;
 }
@@ -150,13 +203,13 @@ code {
   font-size: 0.88em;
 }
 blockquote {
-  margin: 0.95em 0;
-  padding: 0.45em 1.05em;
-  border-left: 3px solid color-mix(in srgb, #246d5d 42%, transparent);
+  margin: var(--exp-bq-m);
+  padding: var(--pad-bq);
+  border-left: var(--exp-bq-border);
   color: #292e2d;
   font-weight: inherit;
-  background: color-mix(in srgb, #246d5d 3.5%, #ffffff);
-  border-radius: 0 4px 4px 0;
+  background: var(--exp-bq-bg);
+  border-radius: var(--exp-bq-radius);
 }
 blockquote > :last-child {
   margin-bottom: 0;
@@ -165,12 +218,12 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 1em;
-  line-height: 1.5;
-  margin: 0.95em 0;
+  line-height: var(--table-lh);
+  margin: var(--exp-table-m);
 }
 th,
 td {
-  padding: 0.45em 0.8em;
+  padding: var(--exp-cell-pad);
   border: 1px solid #d9ddda;
   vertical-align: top;
 }
@@ -185,10 +238,10 @@ tr {
   break-inside: avoid;
 }
 details {
-  padding: 10px 14px;
+  padding: var(--pad-details);
   border: 1px solid #d9ddda;
   border-radius: 5px;
-  margin: 0.95em 0;
+  margin: var(--exp-details-m);
 }
 summary {
   font-weight: 600;
@@ -216,8 +269,8 @@ summary {
 }
 .math-block {
   break-inside: avoid;
-  margin: 0.95em 0;
-  padding: 0.08em 0;
+  margin: var(--exp-math-y) 0;
+  padding: var(--pad-math-y) 0;
 }
 .math-error,
 .diagram-error,
@@ -249,17 +302,27 @@ summary {
   --ondine-font: "Inter Variable", "Noto Sans SC", "Segoe UI", sans-serif;
 }
 .footnotes-sep {
-  display: none;
+  display: var(--fn-sep-display);
 }
 .footnotes {
-  font-size: 0.88em;
-  line-height: 1.65;
-  border-top: 1px solid #d9ddda;
-  margin-top: 1.55em;
-  padding-top: 0.95em;
+  font-size: var(--exp-fn-size);
+  line-height: var(--exp-fn-lh);
+  border-top: var(--exp-fn-border);
+  margin-top: var(--exp-fn-mt);
+  padding-top: var(--exp-fn-pt);
+  color: var(--exp-fn-color);
 }
 .footnotes > ol {
-  margin: 0;
+  margin: var(--exp-fn-list-m);
+}
+.footnotes li {
+  margin-block: var(--exp-fn-li-y);
+}
+.footnotes li > p {
+  margin-block: var(--exp-fn-p-y);
+}
+.footnotes li > p + p {
+  margin-top: var(--exp-fn-p2-mt);
 }
 .hljs-comment,
 .hljs-quote {

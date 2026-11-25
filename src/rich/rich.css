@@ -26,7 +26,7 @@
 /* A loose list (blank lines between its items) is read with its items'
    paragraphs spaced as paragraphs (style.css): the same height here. */
 #rich .ProseMirror :is(ul, ol):not([data-tight]) > li > p:not(.anchor-only) {
-  margin-block: var(--gap-block);
+  margin-block: var(--gap-li-p-y);
 }
 #rich .ProseMirror :is(ul, ol)[data-tight] > li > p:not(.anchor-only) {
   margin-block: 0;
@@ -90,7 +90,7 @@
   color: var(--accent);
 }
 #rich .raw-block[data-kind="diagram"] {
-  margin: var(--gap-block) 0;
+  margin: var(--gap-code-y) 0;
 }
 #rich .ProseMirror > .raw-block[data-kind="diagram"]:first-child {
   margin-top: 0;
@@ -103,7 +103,7 @@
 }
 #rich .raw-block[data-kind="text"] pre,
 #rich .raw-block[data-kind="frontmatter"] pre {
-  margin: var(--gap-block) 0;
+  margin: var(--gap-raw-pre-y) 0;
   padding: 6px 10px;
   color: var(--muted);
   background: color-mix(in srgb, var(--reading-ink) 4%, transparent);
@@ -510,24 +510,48 @@
   width: calc(100% - 18px * var(--rich-depth, 0));
 }
 #rich .ProseMirror > h1:not([data-rich-sec-mt]) {
-  margin: 0 0 var(--gap-block);
+  margin: 0 0 var(--gap-h1-mb);
+}
+#rich .ProseMirror > [data-rich-head="1"] {
+  --rich-head-scale: var(--h1-scale);
+}
+#rich .ProseMirror > [data-rich-head="2"] {
+  --rich-head-scale: var(--h2-scale);
+}
+#rich .ProseMirror > [data-rich-head="3"] {
+  --rich-head-scale: var(--h3-scale);
+}
+#rich .ProseMirror > [data-rich-head="4"] {
+  --rich-head-scale: var(--h4-scale);
+}
+#rich .ProseMirror > [data-rich-head="5"] {
+  --rich-head-scale: var(--h5-scale);
+}
+#rich .ProseMirror > [data-rich-head="6"] {
+  --rich-head-scale: var(--h6-scale);
+}
+#rich .ProseMirror > [data-rich-head] {
+  --rich-head-mb: calc(
+    var(--rich-head-offset, 1) * 0.65 * var(--rich-head-scale) *
+      var(--note-size) * var(--gap-scale)
+  );
 }
 #rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt] {
-  margin-bottom: var(--gap-inner);
+  margin-bottom: var(--gap-sec-head-mb);
 }
 #rich .ProseMirror > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="zero"] {
   margin-top: 0;
 }
 #rich .ProseMirror > :is(h1, h2, h3)[data-rich-sec-mt="normal"] {
-  margin-top: var(--gap-section);
+  margin-top: var(--gap-sec-y);
 }
 #rich .ProseMirror > :is(h4, h5, h6)[data-rich-sec-mt="normal"] {
-  margin-top: var(--gap-block);
+  margin-top: var(--gap-sec-small-y);
 }
 #rich
   .ProseMirror
   > :is(h1, h2, h3, h4, h5, h6)[data-rich-sec-mt="nested-first"] {
-  margin-top: var(--gap-block);
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-rich-sec-nested-mt));
 }
 #rich .ProseMirror > :is(h1, h2, h3)[data-rich-sec-mt="after-empty"],
 #rich
@@ -537,7 +561,7 @@
     [data-rich-head="2"],
     [data-rich-head="3"]
   ) {
-  margin-top: var(--gap-section);
+  margin-top: var(--gap-sec-y);
 }
 #rich
   .ProseMirror
@@ -546,9 +570,10 @@
     [data-rich-head="5"],
     [data-rich-head="6"]
   ) {
-  margin-top: var(--gap-block);
+  margin-top: var(--gap-sec-small-y);
 }
-#rich .ProseMirror > [data-rich-sec-first],
+:root[data-reading-style="compact"] #rich .ProseMirror > [data-rich-sec-first],
+#rich .ProseMirror > p[data-rich-sec-first]:not(.image-line, .image-row),
 #rich .ProseMirror > .image-line[data-rich-sec-first] > img:first-child,
 #rich
   .ProseMirror
@@ -556,6 +581,60 @@
   > img.ProseMirror-separator:first-child
   + img {
   margin-top: 0;
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > :is(ul, ol)[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-list-mt));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > blockquote[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-bq-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > :is(.code-block, .raw-block[data-kind="diagram"])[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-code-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > .math-block[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-math-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > .table-scroll[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-table-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > hr[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-hr-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > .rich-details[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-details-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > .columns[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-col-y));
+}
+:root:not([data-reading-style="compact"])
+  #rich
+  .ProseMirror
+  > :is(.image-line, .image-row)[data-rich-sec-first] {
+  margin-top: calc(var(--rich-head-mb, 0px) + var(--gap-img-y));
 }
 #rich .ProseMirror > [data-rich-sec-last],
 #rich .ProseMirror > p.image-row[data-rich-sec-last],
@@ -637,8 +716,8 @@
    marker before the summary folds and unfolds. */
 #rich .rich-details {
   position: relative;
-  margin: var(--gap-block) 0;
-  padding: 10px 14px;
+  margin: var(--gap-details-y) 0;
+  padding: var(--pad-details);
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
@@ -677,7 +756,7 @@
   display: none;
 }
 #rich .rich-details:not(.rich-folded) > :nth-child(2 of :not(.anchor-only)) {
-  margin-top: var(--gap-inner);
+  margin-top: var(--gap-details-inner);
 }
 #rich
   .rich-details:not(.rich-folded)
@@ -841,10 +920,13 @@
   margin-bottom: 0;
 }
 #rich .rich-properties .fm-title:has(+ details.front-matter) {
-  margin-bottom: var(--gap-inner);
+  margin-bottom: var(--gap-fm-title-pair-mb);
 }
-#rich .rich-properties:has(> details.front-matter, > .fm-title) {
-  margin-bottom: var(--gap-block);
+#rich .rich-properties:has(> details.front-matter) {
+  margin-bottom: var(--gap-fm-wrap-mb);
+}
+#rich .rich-properties:has(> .fm-title):not(:has(> details.front-matter)) {
+  margin-bottom: var(--gap-fm-title-only-wrap-mb);
 }
 #rich .rich-properties .fm-value[role="button"] {
   cursor: text;
@@ -925,7 +1007,7 @@
 /* A note without properties: the fields for its first one above its first
    line, there only while they are open. */
 #rich .fm-first {
-  margin: 0 0 var(--gap-inner);
+  margin: 0 0 var(--gap-fm-first-mb);
   font: 12.5px var(--font-ui);
 }
 /* The languages under the field, narrowed as one types. */

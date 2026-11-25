@@ -38,7 +38,8 @@ export const appearanceMarkup = `
     ${row("typeface", t("正文字体"), `<select id="typeface"><option value="literata">${t("Literata + 思源黑体（内置）")}</option><option value="balanced">${t("思源黑体（内置）")}</option><option value="classic">${t("Arial / 微软雅黑")}</option><option value="book">${t("Cambria / 宋体")}</option></select>`)}
     <div class="setting"><span class="setting-text"><span>${t("字号")}</span></span><div class="zoom-control" role="group" aria-label="${t("字号")}"><button id="zoom-out" aria-label="${t("缩小字号")}">${icon("minus")}</button><button id="zoom-reset" title="${t("重置字号")}">100%</button><button id="zoom-in" aria-label="${t("放大字号")}">${icon("plus")}</button></div></div>
     ${row("text-weight", t("正文浓度"), `<select id="text-weight"><option value="auto">${t("自动（按屏幕）")}</option><option value="300">${t("细 300")}</option><option value="350">${t("较细 350")}</option><option value="400">${t("标准 400")}</option><option value="450">${t("适中 450")}</option><option value="500">${t("较浓 500")}</option><option value="550">${t("浓 550")}</option></select>`, '<span id="weight-note"></span>')}
-    ${row("column-width", t("正文栏宽"), `<select id="column-width"><option value="window">${t("随窗口（默认）")}</option><option value="measure">${t("按字数")}</option><option value="fixed">${t("固定")}</option></select>`)}
+    ${row("reading-style", t("排版风格"), `<select id="reading-style"><option value="relaxed">${t("舒展")}</option><option value="standard">${t("标准（默认）")}</option><option value="compact">${t("紧凑")}</option></select>`, t("只改行高、段距和标题大小；栏宽在下面单独设置"))}
+    ${row("column-width", t("正文栏宽"), `<select id="column-width"><option value="window">${t("随窗口")}</option><option value="measure">${t("按字数")}</option><option value="fixed">${t("固定（默认）")}</option></select>`)}
     ${row("cjk-emphasis", t("中文旁的粗体与斜体"), '<input id="cjk-emphasis" type="checkbox" class="switch">', t("**定义：**其中 这样标点收尾、紧接中文的写法也显示为粗体；其他严格遵循 CommonMark 的软件仍显示星号"))}
     <div class="setting"><span class="setting-text"><span>${t("默认排版")}</span></span><span class="setting-actions"><button id="reset-typography" type="button">${t("恢复默认排版")}</button></span></div>
   </fieldset>
@@ -92,7 +93,8 @@ ${desktopSettingsMarkup}
 export function applyAppearance(settings, typoLab = null) {
   const root = document.documentElement;
   root.dataset.typeface = settings.typeface;
-  root.dataset.columnWidth = settings.columnWidth || "window";
+  root.dataset.readingStyle = settings.readingStyle || "standard";
+  root.dataset.columnWidth = settings.columnWidth || "fixed";
   root.dataset.tableStyle = settings.tableStyle;
   root.dataset.tableWidth = settings.tableWidth;
   root.style.setProperty("--navigation-size", settings.navigationSize + "px");
@@ -165,7 +167,8 @@ export function applyAppearance(settings, typoLab = null) {
   $("#sidebar-toggle").setAttribute("aria-expanded", String(settings.sidebar));
   $("#outline-toggle").setAttribute("aria-expanded", String(settings.outline));
   $("#typeface").value = settings.typeface;
-  $("#column-width").value = settings.columnWidth || "window";
+  $("#reading-style").value = settings.readingStyle || "standard";
+  $("#column-width").value = settings.columnWidth || "fixed";
   $("#table-style").value = settings.tableStyle;
   $("#table-width").value = settings.tableWidth;
   $("#navigation-scope").value = settings.navigationScope;
@@ -289,6 +292,8 @@ export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
   });
   $("#appearance-close").onclick = () => dialog.close();
   $("#typeface").onchange = (event) => change({ typeface: event.target.value });
+  $("#reading-style").onchange = (event) =>
+    change({ readingStyle: event.target.value });
   $("#column-width").onchange = (event) =>
     change({ columnWidth: event.target.value });
   $("#table-style").onchange = (event) =>
@@ -335,7 +340,8 @@ export function wireAppearance(change, { getSettings, typoLab = null } = {}) {
       typeface: "literata",
       zoom: 100,
       weight: "auto",
-      columnWidth: "window",
+      readingStyle: "standard",
+      columnWidth: "fixed",
     });
   typoLab?.mount(getSettings, change);
   $("#color-theme").onchange = (event) => change({ theme: event.target.value });

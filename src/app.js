@@ -2800,6 +2800,7 @@ function changeSettings(patch) {
     [
       "zoom",
       "typeface",
+      "readingStyle",
       "columnWidth",
       "weight",
       "wide",

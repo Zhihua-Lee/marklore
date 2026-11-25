@@ -34,7 +34,8 @@ export function defaultSettings() {
     navigationSize: 12,
     tabSize: 11,
     typeface: "literata",
-    columnWidth: "window",
+    readingStyle: "standard",
+    columnWidth: "fixed",
     wide: false,
     tableStyle: "soft",
     tableWidth: "auto",
@@ -100,11 +101,16 @@ export function normalizeSettings(saved = {}) {
   )
     ? settings.typeface
     : "literata";
+  settings.readingStyle = ["relaxed", "standard", "compact"].includes(
+    settings.readingStyle,
+  )
+    ? settings.readingStyle
+    : "standard";
   settings.columnWidth = ["window", "measure", "fixed"].includes(
     settings.columnWidth,
   )
     ? settings.columnWidth
-    : "window";
+    : "fixed";
   settings.wide = settings.wide === true;
   settings.tabGroups = Array.isArray(settings.tabGroups)
     ? settings.tabGroups

@@ -123,6 +123,11 @@ export default {
   "排版对照（测试版）": "Typography comparison (beta)",
   全部旧: "All v0.6.4",
   全部新: "All new",
+  "浮在正文旁，边拨开关边看笔记；Ctrl+Alt+L 开关":
+    "Floats beside the note so you can switch and read; Ctrl+Alt+L toggles it",
+  打开对照面板: "Open comparison panel",
+  关闭对照面板: "Close comparison panel",
+  "开 = 新，关 = v0.6.4": "On = new, off = v0.6.4",
   "行高：v0.6.4 1.7–1.8 ↔ 新 1.7": "Line height: v0.6.4 1.7–1.8 ↔ New 1.7",
   "块距：v0.6.4 多套边距 ↔ 新 4 档节奏":
     "Block spacing: v0.6.4 varied ↔ New 4 tokens",

@@ -54,18 +54,41 @@ export function injectStyle() {
   document.head.append(style);
 }
 
+// The switches float beside the note (a modal Settings dialog would hide the
+// very text being compared); Settings only opens them.
 export function mount(settings, change) {
   injectStyle();
   const fieldset = document.getElementById("settings-reading");
   if (!fieldset || document.getElementById("typo-lab")) return;
-  const section = document.createElement("section");
+  const row = document.createElement("div");
+  row.className = "setting";
+  row.innerHTML = `<span class="setting-text"><span>${t("排版对照（测试版）")}</span><small>${t("浮在正文旁，边拨开关边看笔记；Ctrl+Alt+L 开关")}</small></span><span class="setting-actions"><button id="typo-lab-open" type="button">${t("打开对照面板")}</button></span>`;
+  fieldset.append(row);
+  const section = document.createElement("aside");
   section.id = "typo-lab";
   section.className = "typo-lab";
-  section.innerHTML = `<div class="typo-lab-head"><h3>${t("排版对照（测试版）")}</h3><span class="typo-lab-bulk"><button id="typo-lab-all-old" type="button">${t("全部旧")}</button><button id="typo-lab-all-new" type="button">${t("全部新")}</button></span></div>${ITEMS.map(
-    ({ key, label }) =>
-      `<div class="setting"><span class="setting-text"><label for="lab-${key}">${label}</label></span><input id="lab-${key}" type="checkbox" class="switch" data-lab-key="${key}"></div>`,
+  section.hidden = true;
+  section.setAttribute("aria-label", t("排版对照（测试版）"));
+  section.innerHTML = `<div class="typo-lab-head"><h3>${t("排版对照（测试版）")}</h3><span class="typo-lab-bulk"><button id="typo-lab-all-old" type="button">${t("全部旧")}</button><button id="typo-lab-all-new" type="button">${t("全部新")}</button><button id="typo-lab-close" type="button" aria-label="${t("关闭对照面板")}">×</button></span></div><p class="typo-lab-hint">${t("开 = 新，关 = v0.6.4")}</p>${ITEMS.map(
+    ({ key, label }) => {
+      // "行高：v0.6.4 … ↔ 新 …": the name on one line, the two values under it.
+      const [name, values = ""] = label.split(/：|: /);
+      return `<div class="setting"><label for="lab-${key}" class="typo-lab-label"><span>${name}</span><small>${values}</small></label><input id="lab-${key}" type="checkbox" class="switch" data-lab-key="${key}"></div>`;
+    },
   ).join("")}`;
-  fieldset.append(section);
+  document.body.append(section);
+  const show = (open) => {
+    section.hidden = !open;
+    if (open) document.getElementById("appearance")?.close();
+  };
+  row.querySelector("#typo-lab-open").onclick = () => show(true);
+  section.querySelector("#typo-lab-close").onclick = () => show(false);
+  document.addEventListener("keydown", (event) => {
+    if (event.ctrlKey && event.altKey && event.code === "KeyL") {
+      event.preventDefault();
+      show(section.hidden);
+    }
+  });
 
   const update = (patch) => {
     const next = { ...normalizeLab(settings()), ...patch };

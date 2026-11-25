@@ -692,11 +692,14 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
     return;
   }
 
+  // Settings only opens the panel; it floats beside the note, Settings closed.
   await page.locator("#weight").click();
+  await expect(page.locator("#typo-lab")).toBeHidden();
+  await page.locator("#typo-lab-open").click();
+  await expect(page.locator("#appearance")).not.toHaveAttribute("open", "");
   await expect(page.locator("#typo-lab")).toBeVisible();
   await expect(page.locator("#typo-lab input[type=checkbox]")).toHaveCount(7);
   await page.locator("#typo-lab-all-old").click();
-  await page.locator("#appearance-close").click();
 
   const oldMetrics = await page.evaluate(() => {
     const p = document.querySelector("#content p");
@@ -750,9 +753,9 @@ test("build-gated typography comparison lab toggles Read and Edit live when enab
   expect(oldEdit.w).toBe(680);
   expect(oldEdit.fw).toBe("400");
 
-  await page.locator("#weight").click();
+  // The panel stays open beside the note while switching modes.
+  await expect(page.locator("#typo-lab")).toBeVisible();
   await page.locator("#typo-lab-all-new").click();
-  await page.locator("#appearance-close").click();
   const newEdit = await page.evaluate(() => {
     const p = document.querySelector("#rich .ProseMirror p");
     return {

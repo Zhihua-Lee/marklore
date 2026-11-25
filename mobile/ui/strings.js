@@ -35,7 +35,8 @@ export const STRINGS = {
   syncDaysAgo: (n) => `${n} 天前同步`,
   notesCount: (n) => `${n} 篇笔记`,
   imagesCount: (n) => `${n} 张图片`,
-  syncListing: "正在列出云端文件…",
+  syncListing: (n) =>
+    n ? `正在列出云端文件…已找到 ${n} 项` : "正在列出云端文件…",
   syncDownloading: (done, total) =>
     total > 0 ? `正在下载 ${done}/${total}` : "正在下载笔记…",
   syncDone: "同步完成",
@@ -99,7 +100,8 @@ export function formatRelativeSync(timestamp, now = Date.now()) {
  */
 export function formatSyncProgress(progress) {
   if (!progress) return STRINGS.syncing;
-  if (progress.phase === "listing") return STRINGS.syncListing;
+  if (progress.phase === "listing")
+    return STRINGS.syncListing(progress.done ?? 0);
   if (progress.phase === "downloading")
     return STRINGS.syncDownloading(progress.done ?? 0, progress.total ?? 0);
   if (progress.phase === "done") return STRINGS.syncDone;

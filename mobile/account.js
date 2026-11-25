@@ -69,6 +69,8 @@ export function createAccount({ auth, graph, internal, onError = () => {} }) {
       emit("progress", { phase, done, total, message });
     try {
       progress("listing");
+      // Found so far, so a long listing shows it is moving.
+      const listed = (n) => progress("listing", n);
       const items = new Map(
         Object.entries((await internal.getMeta("items", {})) || {}),
       );
@@ -78,7 +80,11 @@ export function createAccount({ auth, graph, internal, onError = () => {} }) {
       if (!link) items.clear();
       let page;
       try {
-        ({ items: page, deltaLink: link } = await graph.delta(folder.id, link));
+        ({ items: page, deltaLink: link } = await graph.delta(
+          folder.id,
+          link,
+          listed,
+        ));
       } catch (e) {
         if (e.status === 410) {
           // The delta link expired: start over from a full listing.
@@ -86,6 +92,7 @@ export function createAccount({ auth, graph, internal, onError = () => {} }) {
           ({ items: page, deltaLink: link } = await graph.delta(
             folder.id,
             null,
+            listed,
           ));
         } else if (
           [400, 403, 404, 501].includes(e.status) &&
@@ -93,7 +100,7 @@ export function createAccount({ auth, graph, internal, onError = () => {} }) {
         ) {
           // Delta below the root is not offered (work or school accounts).
           items.clear();
-          page = await graph.walk(folder.id);
+          page = await graph.walk(folder.id, listed);
           link = null;
         } else throw e;
       }

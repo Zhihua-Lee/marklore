@@ -225,11 +225,19 @@ test("sign in, sync a folder, then follow renames, deletions and edits", async (
   expect(folders).toEqual([
     { id: "R", name: "数学笔记", path: "/数学笔记", childCount: 3 },
   ]);
+  await api(page, () => {
+    window.listing = [];
+    window.markloreReader.account.onProgress(
+      (p) => p.phase === "listing" && window.listing.push(p.done),
+    );
+  });
   const first = await api(
     page,
     (f) => window.markloreReader.account.chooseFolder(f),
     folders[0],
   );
+  // The listing reports what it found page by page (two pages here).
+  expect(await api(page, () => window.listing)).toEqual([0, 3, 6]);
   expect(first.failed).toEqual([]);
   expect(first.added).toBe(3);
   // Notes come down; the image is only listed until a note shows it.

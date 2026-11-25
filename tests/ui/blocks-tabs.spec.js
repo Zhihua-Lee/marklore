@@ -127,11 +127,14 @@ test("code blocks copy exact text and other block types retain semantics in both
       (theme) => (document.documentElement.dataset.theme = theme),
       theme,
     );
+    // Code is set at the reading weight, as the text around it.
     const styles = await first.locator("pre").evaluate((el) => ({
       weight: getComputedStyle(el).fontWeight,
+      body: getComputedStyle(el.closest(".prose")).fontWeight,
       code: getComputedStyle(el.querySelector("code")).fontFamily,
     }));
-    expect(styles.weight).toBe("400");
+    expect(styles.weight).toBe(styles.body);
+    expect(["400", "450"]).toContain(styles.weight);
     expect(styles.code).toContain("JetBrains");
     await first.scrollIntoViewIfNeeded();
     await page.screenshot({ path: `.local/blocks-${theme}-v014.png` });

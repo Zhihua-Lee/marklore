@@ -96,6 +96,44 @@ function finished(el) {
   return true;
 }
 
+// Code point ranges of a face's unicode-range ("U+0-FF, U+4E??"), or null
+// when it cannot be read (then the face is taken to cover everything).
+export function unicodeRanges(text) {
+  const ranges = [];
+  for (const part of String(text || "").split(",")) {
+    const m = /^\s*U\+([0-9A-F?]+)(?:-([0-9A-F]+))?\s*$/i.exec(part);
+    if (!m) return null;
+    const from = parseInt(m[1].replace(/\?/g, "0"), 16);
+    const to = parseInt(m[2] ?? m[1].replace(/\?/g, "F"), 16);
+    ranges.push([from, to]);
+  }
+  return ranges.length ? ranges : null;
+}
+
+// Whether faces that just loaded can change the note's layout: a face of a
+// family the note is set in (`families`: its font-family stacks) or of the
+// formulas, covering a character the note's text has.
+export function fontsMatter(faces, { families, text }) {
+  if (!faces.length) return true;
+  const used = String(families).toLowerCase();
+  let points = null;
+  return faces.some((face) => {
+    const name = String(face.family)
+      .replace(/^["']|["']$/g, "")
+      .toLowerCase();
+    if (!name.startsWith("katex") && !used.includes(name)) return false;
+    const ranges = unicodeRanges(face.unicodeRange);
+    if (!ranges) return true;
+    if (!points) {
+      points = new Set();
+      for (const c of text) points.add(c.codePointAt(0));
+    }
+    for (const cp of points)
+      if (ranges.some(([from, to]) => cp >= from && cp <= to)) return true;
+    return false;
+  });
+}
+
 export function skipOffscreenBlocks(host, scroller) {
   const verdicts = new WeakMap(),
     generations = new WeakMap();
@@ -347,7 +385,24 @@ export function skipOffscreenBlocks(host, scroller) {
     signature = next;
     reset();
   }).observe(root, { attributes: true });
-  document.fonts?.addEventListener("loadingdone", reset);
+  // Fonts arriving re-wrap the blocks set in them. The interface's own (the
+  // labels of the format toolbar the first time it shows) bring subsets the
+  // note may not use at all; a reset for those restyled the whole note. The
+  // code face counts only in a note with code (its stack shares the
+  // interface's Chinese face, and the text holds every formula's source).
+  document.fonts?.addEventListener("loadingdone", (event) => {
+    const style = getComputedStyle(host);
+    const code = host.querySelector("code, pre")
+      ? "," + style.getPropertyValue("--font-code")
+      : "";
+    if (
+      fontsMatter(event.fontfaces || [], {
+        families: style.fontFamily + code,
+        text: host.textContent,
+      })
+    )
+      reset();
+  });
   scroller.addEventListener(
     "scroll",
     () => {

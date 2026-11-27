@@ -2,12 +2,114 @@
   background: transparent !important;
   padding: 12px !important;
   white-space: normal;
+  position: relative;
 }
 .diagram svg {
   display: block;
   max-width: 100%;
   height: auto;
   margin: auto;
+}
+/* Taller than the cap: cut off, fading out at the bottom (diagrams.js). */
+.diagram.diagram-clipped {
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 32px), transparent);
+}
+.diagram-view {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-height: 0;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--reading-paper);
+  color: var(--muted);
+  opacity: 0;
+}
+.diagram-view .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+.diagram-view:hover:not(:disabled) {
+  background: var(--reading-paper);
+  color: var(--reading-ink);
+}
+.diagram-host.diagram-reduced:hover > .diagram-view,
+.diagram-view:focus-visible {
+  opacity: 1;
+}
+@media (hover: none) {
+  .diagram-reduced > .diagram-view {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .diagram-view {
+    transition: opacity 140ms;
+  }
+}
+dialog.diagram-viewer {
+  width: calc(100vw - 48px);
+  height: calc(100vh - 48px);
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  overflow: hidden;
+  background: var(--reading-paper);
+  color: var(--reading-ink);
+}
+.diagram-viewer-stage {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+.diagram-viewer-stage.dragging {
+  cursor: grabbing;
+}
+.diagram-viewer-stage svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: none;
+  margin: 0;
+  transform-origin: 0 0;
+}
+.diagram-viewer-bar {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--muted);
+  font: 12px var(--font-ui);
+}
+.diagram-viewer-bar button {
+  display: grid;
+  place-items: center;
+  min-width: 28px;
+  min-height: 0;
+  height: 28px;
+  padding: 0 4px;
+}
+.diagram-viewer-bar .ui-icon {
+  width: 16px;
+  height: 16px;
+}
+.diagram-viewer-zoom {
+  min-width: 48px;
+  font-variant-numeric: tabular-nums;
 }
 /* Ondine draws with these; they follow the theme without a new drawing.
    A diagram's own classDef/style still wins for its nodes. */

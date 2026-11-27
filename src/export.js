@@ -31,8 +31,8 @@ async function completeDiagrams(host) {
     }, 15000);
     function check() {
       if (
-        !blocks.every(
-          (code) => code.parentElement.dataset.diagramTheme === "light",
+        !blocks.every((code) =>
+          code.parentElement.dataset.diagramTheme?.startsWith("light/"),
         )
       )
         return;
@@ -45,7 +45,7 @@ async function completeDiagrams(host) {
       childList: true,
       attributes: true,
     });
-    renderDiagrams(host, "light", check);
+    renderDiagrams(host, "light", check, { fit: false });
   });
 }
 

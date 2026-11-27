@@ -211,7 +211,7 @@ export class DrawnView {
     this.dom.classList.remove("rich-picked");
   }
   stopEvent(event) {
-    return !!event.target.closest?.(".code-copy");
+    return !!event.target.closest?.(".code-copy,.diagram-view");
   }
   ignoreMutation() {
     return true;

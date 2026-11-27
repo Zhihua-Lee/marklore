@@ -832,6 +832,7 @@ const pageClasses = [
   "reading-skip",
   "reading-columns",
   "diagram-host",
+  "diagram-reduced",
 ];
 // The attributes the page sets on rendered elements. A mark the page puts
 // on a selected formula belongs here (or in pageClasses, if a class).

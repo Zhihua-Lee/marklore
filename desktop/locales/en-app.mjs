@@ -377,6 +377,12 @@ export default {
   "图表超过 50,000 字符，请缩小后查看":
     "The diagram is over 50,000 characters. Shorten it to view it",
   "图表语法错误：{message}": "Diagram syntax error: {message}",
+  放大查看图表: "View diagram larger",
+  图表: "Diagram",
+  缩小: "Zoom out",
+  放大: "Zoom in",
+  "适合窗口（0）": "Fit to window (0)",
+  "缩放 {pct}，适合窗口": "Zoom {pct}, fit to window",
   界面语言: "Language",
   跟随系统: "System default",
   关: "Off",

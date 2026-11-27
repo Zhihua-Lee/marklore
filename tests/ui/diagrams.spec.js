@@ -61,3 +61,60 @@ test("what Ondine cannot read shows its error under the source", async ({
   expect(await mermaidLoaded(page)).toBe(false);
   await expect(page.locator("pre code.language-mermaid")).toBeVisible();
 });
+
+test("a diagram is drawn as a figure: smaller text, capped height, whole in the viewer", async ({
+  page,
+}) => {
+  // A long top-down chain is far taller than the cap.
+  const chain = Array.from({ length: 24 }, (_, i) => `  N${i} --> N${i + 1}`);
+  await draw(page, "flowchart TB\n" + chain.join("\n"));
+  const diagram = page.locator(".diagram");
+  await expect(diagram.locator(":scope > svg")).toBeVisible({ timeout: 20000 });
+  // Its text is 0.8 of the note's.
+  const { text, note } = await diagram.evaluate((el) => ({
+    text: parseFloat(
+      getComputedStyle(el.querySelector(":scope > svg text")).fontSize,
+    ),
+    note: parseFloat(getComputedStyle(el.closest(".prose") || el).fontSize),
+  }));
+  expect(text).toBe(Math.round(note * 0.8));
+  // Cut off at the cap with a fade, drawn at 0.8 of its size.
+  await expect(diagram).toHaveClass(/diagram-clipped/);
+  const box = await diagram.boundingBox();
+  const cap = await page.evaluate(() => Math.min(480, innerHeight * 0.6));
+  expect(box.height).toBeLessThanOrEqual(cap + 1);
+  const scale = await diagram.evaluate(
+    (el) =>
+      el.querySelector(":scope > svg").getBoundingClientRect().width /
+      Number(el.dataset.width),
+  );
+  expect(scale).toBeGreaterThan(0.79);
+  expect(scale).toBeLessThanOrEqual(0.81);
+  // The viewer shows all of it: fitted, zoomed, reset with 0, closed with Esc.
+  await page.locator("#content pre").hover();
+  await page.getByRole("button", { name: "放大查看图表" }).click();
+  const viewer = page.locator("dialog.diagram-viewer");
+  await expect(viewer).toBeVisible();
+  const zoom = viewer.locator(".diagram-viewer-zoom");
+  const fitted = await zoom.textContent();
+  await viewer.getByRole("button", { name: "放大", exact: true }).click();
+  await expect(zoom).not.toHaveText(fitted);
+  await page.keyboard.press("0");
+  await expect(zoom).toHaveText(fitted);
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+});
+
+test("a small diagram keeps its size and needs no viewer", async ({ page }) => {
+  await draw(page, "flowchart LR\n  A --> B");
+  const diagram = page.locator(".diagram");
+  await expect(diagram.locator(":scope > svg")).toBeVisible({ timeout: 20000 });
+  await expect(diagram).not.toHaveClass(/diagram-clipped/);
+  await expect(page.locator("#content pre")).not.toHaveClass(/diagram-reduced/);
+  const width = await diagram.evaluate(
+    (el) => el.querySelector(":scope > svg").getBoundingClientRect().width,
+  );
+  expect(
+    Math.abs(width - Number(await diagram.getAttribute("data-width"))),
+  ).toBeLessThan(1.5);
+});

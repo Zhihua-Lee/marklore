@@ -447,7 +447,7 @@ test("a diagram detached before its queued render can render after tab restorati
   });
   await expect(page.locator("#cached-diagram-test pre")).toHaveAttribute(
     "data-diagram-theme",
-    "light",
+    /^light\//,
   );
 });
 
